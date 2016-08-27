@@ -86,12 +86,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   The CodeSourcery Toolchain (2009q1)
   -----------------------------------
   The CodeSourcery toolchain (2009q1) does not work with default optimization
@@ -179,7 +173,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -239,8 +233,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -388,7 +382,7 @@ Configuration Options:
   CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2 is defined.
   CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
   CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
-  CONFIG_CAN_REGDEBUG - If CONFIG_DEBUG is set, this will generate an
+  CONFIG_STM32_CAN_REGDEBUG - If CONFIG_DEBUG_FEATURES is set, this will generate an
     dump of all CAN registers.
 
 FPU
@@ -816,7 +810,7 @@ STM3240G-EVAL-specific Configuration Options
     CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2 is defined.
     CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
     CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
-    CONFIG_CAN_REGDEBUG - If CONFIG_DEBUG is set, this will generate an
+    CONFIG_STM32_CAN_REGDEBUG - If CONFIG_DEBUG_FEATURES is set, this will generate an
       dump of all CAN registers.
 
   STM3240G-EVAL LCD Hardware Configuration
@@ -883,9 +877,9 @@ STM3240G-EVAL-specific Configuration Options
    CONFIG_STM32_OTGFS_SOFINTR - Enable SOF interrupts.  Why would you ever
      want to do that?
    CONFIG_STM32_USBHOST_REGDEBUG - Enable very low-level register access
-     debug.  Depends on CONFIG_DEBUG.
+     debug.  Depends on CONFIG_DEBUG_FEATURES.
    CONFIG_STM32_USBHOST_PKTDUMP - Dump all incoming and outgoing USB
-     packets. Depends on CONFIG_DEBUG.
+     packets. Depends on CONFIG_DEBUG_FEATURES.
 
 Configurations
 ==============
@@ -913,7 +907,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -972,7 +966,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -995,16 +989,16 @@ Where <subdir> is one of the following:
        CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y : CodeSourcery under Windows
        CONFIG_CXX_NEWLONG=n                    : size_t is unsigned int (maybe?)
 
-    3. In addition to the the kernel mode build, this NxWM configuration
+    3. In addition to the protected mode build, this NxWM configuration
        differences from the nxwm configuration in that:
 
        a. Networking is disabled.  There are issues with some of the network-
-          related NSH commands and with Telnet in the kernel build (see the
+          related NSH commands and with Telnet in the protected build (see the
           top-level TODO file).  Without these NSH commands, there is no use
           for networking in this configuration.
 
-       b. The NxConsole windows are disabled. There are also issues with the
-          NxConsole build now (see the top-level TODO file).
+       b. The NxTerm windows are disabled. There are also issues with the
+          NxTerm build now (see the top-level TODO file).
 
        c. The initialization sequence is quite different:  NX and the
           touchscreen are initialized in kernel mode by logic in this src/
@@ -1067,6 +1061,14 @@ Where <subdir> is one of the following:
        you do this a lot, you will probably want to invest a little time
        to develop a tool to automate these steps.
 
+       STATUS:
+       2014-10-11:  This worked at one time, but today I am getting a
+         failure inside of the GCC library.  This occurred with the
+         computations at the end of touchscreen calibration. The
+         NuttX code seems to be working correctly, but there is some
+         problem with how the GCC integer math is hooked in???  I did
+         not dig into this very deeply.
+
   nettest:
   -------
 
@@ -1087,7 +1089,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -1108,7 +1110,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -1163,13 +1165,13 @@ Where <subdir> is one of the following:
 
        Special PWM-only debug options:
 
-       CONFIG_DEBUG_PWM
+       CONFIG_DEBUG_PWM_INFO
 
     5. This example supports the CAN loopback test (apps/examples/can) but this
        must be manually enabled by selecting:
 
        CONFIG_CAN=y             : Enable the generic CAN infrastructure
-       CONFIG_CAN_EXID=y or n   : Enable to support extended ID frames
+       CONFIG_CAN_EXTID=y or n  : Enable to support extended ID frames
        CONFIG_STM32_CAN1=y      : Enable CAN1
        CONFIG_CAN_LOOPBACK=y    : Enable CAN loopback mode
 
@@ -1177,8 +1179,8 @@ Where <subdir> is one of the following:
 
        Special CAN-only debug options:
 
-       CONFIG_DEBUG_CAN
-       CONFIG_CAN_REGDEBUG
+       CONFIG_DEBUG_CAN_INFO
+       CONFIG_STM32_CAN_REGDEBUG
 
     6. This example can support an FTP client.  In order to build in FTP client
        support simply uncomment the following lines in the defconfig file (before
@@ -1325,7 +1327,6 @@ Where <subdir> is one of the following:
 
     There are some special settings to make life with only a Telnet
 
-    CONFIG_SYSLOG=y - Enables the System Logging feature.
     CONFIG_RAMLOG=y - Enable the RAM-based logging feature.
     CONFIG_RAMLOG_CONSOLE=y - Use the RAM logger as the default console.
       This means that any console output from non-Telnet threads will
@@ -1346,7 +1347,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -1396,10 +1397,10 @@ Where <subdir> is one of the following:
 
        There is nothing in the DMA driver to prevent this now.
 
-  nxconsole:
+  nxterm:
   ----------
     This is yet another NSH configuration.  This NSH configuration differs
-    from the others, however, in that it uses the NxConsole driver to host
+    from the others, however, in that it uses the NxTerm driver to host
     the NSH shell.
 
     NOTES:
@@ -1408,7 +1409,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -1421,14 +1422,14 @@ Where <subdir> is one of the following:
          CONFG_NX_MULTIUSER=y
          CONFIG_DISABLE_MQUEUE=n
 
-       The following definition in the defconfig file to enables the NxConsole
+       The following definition in the defconfig file to enables the NxTerm
        driver:
 
-         CONFIG_NXCONSOLE=y
+         CONFIG_NXTERM=y
 
-       And this selects examples/nxconsole instead of examples/nsh:
+       And this selects examples/nxterm instead of examples/nsh:
 
-         CONFIG_EXAMPLES_NXCONSOLE=y
+         CONFIG_EXAMPLES_NXTERM=y
 
        LCD Orientation:
 
@@ -1511,7 +1512,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.

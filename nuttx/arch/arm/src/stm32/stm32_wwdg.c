@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/stm32/stm32_wwdg.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,7 +44,8 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <nuttx/watchdog.h>
+#include <nuttx/irq.h>
+#include <nuttx/timers/watchdog.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
@@ -54,7 +55,7 @@
 #if defined(CONFIG_WATCHDOG) && defined(CONFIG_STM32_WWDG)
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Clocking *****************************************************************/
 /* The minimum frequency of the WWDG clock is:
@@ -80,18 +81,8 @@
 #  define CONFIG_STM32_WWDG_DEFTIMOUT WWDG_MAXTIMEOUT
 #endif
 
-/* Debug ********************************************************************/
-/* Non-standard debug that may be enabled just for testing the watchdog
- * driver.  NOTE: that only lldbg types are used so that the output is
- * immediately available.
- */
-
-#ifdef CONFIG_DEBUG_WATCHDOG
-#  define wddbg    lldbg
-#  define wdvdbg   llvdbg
-#else
-#  define wddbg(x...)
-#  define wdvdbg(x...)
+#ifndef CONFIG_DEBUG_WATCHDOG_INFO
+#  undef CONFIG_STM32_WWDG_REGDEBUG
 #endif
 
 /****************************************************************************
@@ -118,7 +109,7 @@ struct stm32_lowerhalf_s
  ****************************************************************************/
 /* Register operations ******************************************************/
 
-#if defined(CONFIG_STM32_WWDG_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_STM32_WWDG_REGDEBUG
 static uint16_t stm32_getreg(uint32_t addr);
 static void     stm32_putreg(uint16_t val, uint32_t addr);
 #else
@@ -178,7 +169,7 @@ static struct stm32_lowerhalf_s g_wdgdev;
  *
  ****************************************************************************/
 
-#if defined(CONFIG_STM32_WWDG_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_STM32_WWDG_REGDEBUG
 static uint16_t stm32_getreg(uint32_t addr)
 {
   static uint32_t prevaddr = 0;
@@ -197,10 +188,11 @@ static uint16_t stm32_getreg(uint32_t addr)
     {
       if (count == 0xffffffff || ++count > 3)
         {
-           if (count == 4)
-             {
-               lldbg("...\n");
-             }
+          if (count == 4)
+            {
+              wdinfo("...\n");
+            }
+
           return val;
         }
     }
@@ -209,25 +201,25 @@ static uint16_t stm32_getreg(uint32_t addr)
 
   else
     {
-       /* Did we print "..." for the previous value? */
+      /* Did we print "..." for the previous value? */
 
-       if (count > 3)
-         {
-           /* Yes.. then show how many times the value repeated */
+      if (count > 3)
+        {
+          /* Yes.. then show how many times the value repeated */
 
-           lldbg("[repeats %d more times]\n", count-3);
-         }
+          wdinfo("[repeats %d more times]\n", count-3);
+        }
 
-       /* Save the new address, value, and count */
+      /* Save the new address, value, and count */
 
-       prevaddr = addr;
-       preval   = val;
-       count    = 1;
+      prevaddr = addr;
+      preval   = val;
+      count    = 1;
     }
 
   /* Show the register value read */
 
-  lldbg("%08x->%04x\n", addr, val);
+  wdinfo("%08x->%04x\n", addr, val);
   return val;
 }
 #endif
@@ -240,12 +232,12 @@ static uint16_t stm32_getreg(uint32_t addr)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_STM32_WWDG_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_STM32_WWDG_REGDEBUG
 static void stm32_putreg(uint16_t val, uint32_t addr)
 {
   /* Show the register value being written */
 
-  lldbg("%08x<-%04x\n", addr, val);
+  wdinfo("%08x<-%04x\n", addr, val);
 
   /* Write the value */
 
@@ -346,7 +338,7 @@ static int stm32_start(FAR struct watchdog_lowerhalf_s *lower)
 {
   FAR struct stm32_lowerhalf_s *priv = (FAR struct stm32_lowerhalf_s *)lower;
 
-  wdvdbg("Entry\n");
+  wdinfo("Entry\n");
   DEBUGASSERT(priv);
 
   /* The watchdog is always disabled after a reset. It is enabled by setting
@@ -381,7 +373,7 @@ static int stm32_stop(FAR struct watchdog_lowerhalf_s *lower)
    * except by a reset.
    */
 
-  wdvdbg("Entry\n");
+  wdinfo("Entry\n");
   return -ENOSYS;
 }
 
@@ -391,7 +383,7 @@ static int stm32_stop(FAR struct watchdog_lowerhalf_s *lower)
  * Description:
  *   Reset the watchdog timer to the current timeout value, prevent any
  *   imminent watchdog timeouts.  This is sometimes referred as "pinging"
- *   the atchdog timer or "petting the dog".
+ *   the watchdog timer or "petting the dog".
  *
  *   The application program must write in the WWDG_CR register at regular
  *   intervals during normal operation to prevent an MCU reset. This operation
@@ -412,7 +404,7 @@ static int stm32_keepalive(FAR struct watchdog_lowerhalf_s *lower)
 {
   FAR struct stm32_lowerhalf_s *priv = (FAR struct stm32_lowerhalf_s *)lower;
 
-  wdvdbg("Entry\n");
+  wdinfo("Entry\n");
   DEBUGASSERT(priv);
 
   /* Write to T[6:0] bits to configure the counter value, no need to do
@@ -430,9 +422,9 @@ static int stm32_keepalive(FAR struct watchdog_lowerhalf_s *lower)
  *   Get the current watchdog timer status
  *
  * Input Parameters:
- *   lower   - A pointer the publicly visible representation of the "lower-half"
- *             driver state structure.
- *   stawtus - The location to return the watchdog status information.
+ *   lower  - A pointer the publicly visible representation of the "lower-half"
+ *            driver state structure.
+ *   status - The location to return the watchdog status information.
  *
  * Returned Values:
  *   Zero on success; a negated errno value on failure.
@@ -446,7 +438,7 @@ static int stm32_getstatus(FAR struct watchdog_lowerhalf_s *lower,
   uint32_t elapsed;
   uint16_t reload;
 
-  wdvdbg("Entry\n");
+  wdinfo("Entry\n");
   DEBUGASSERT(priv);
 
   /* Return the status bit */
@@ -472,10 +464,10 @@ static int stm32_getstatus(FAR struct watchdog_lowerhalf_s *lower,
   elapsed = priv->reload - reload;
   status->timeleft = (priv->timeout * elapsed) / (priv->reload + 1);
 
-  wdvdbg("Status     :\n");
-  wdvdbg("  flags    : %08x\n", status->flags);
-  wdvdbg("  timeout  : %d\n", status->timeout);
-  wdvdbg("  timeleft : %d\n", status->flags);
+  wdinfo("Status     :\n");
+  wdinfo("  flags    : %08x\n", status->flags);
+  wdinfo("  timeout  : %d\n", status->timeout);
+  wdinfo("  timeleft : %d\n", status->flags);
   return OK;
 }
 
@@ -486,9 +478,9 @@ static int stm32_getstatus(FAR struct watchdog_lowerhalf_s *lower,
  *   Set a new timeout value (and reset the watchdog timer)
  *
  * Input Parameters:
- *   lower   - A pointer the publicly visible representation of the "lower-half"
- *             driver state structure.
- *   timeout - The new timeout value in millisecnds.
+ *   lower   - A pointer the publicly visible representation of the
+ *             "lower-half" driver state structure.
+ *   timeout - The new timeout value in milliseconds.
  *
  * Returned Values:
  *   Zero on success; a negated errno value on failure.
@@ -505,13 +497,13 @@ static int stm32_settimeout(FAR struct watchdog_lowerhalf_s *lower,
   int wdgtb;
 
   DEBUGASSERT(priv);
-  wdvdbg("Entry: timeout=%d\n", timeout);
+  wdinfo("Entry: timeout=%d\n", timeout);
 
   /* Can this timeout be represented? */
 
   if (timeout < 1 || timeout > WWDG_MAXTIMEOUT)
     {
-      wddbg("Cannot represent timeout=%d > %d\n",
+      wderr("ERROR: Cannot represent timeout=%d > %d\n",
             timeout, WWDG_MAXTIMEOUT);
       return -ERANGE;
     }
@@ -560,12 +552,12 @@ static int stm32_settimeout(FAR struct watchdog_lowerhalf_s *lower,
        */
 
 #if 0
-      wdvdbg("wdgtb=%d fwwdg=%d reload=%d timout=%d\n",
+      wdinfo("wdgtb=%d fwwdg=%d reload=%d timout=%d\n",
              wdgtb, fwwdg, reload,  1000 * (reload + 1) / fwwdg);
 #endif
       if (reload <= WWDG_CR_T_MAX || wdgtb == 3)
         {
-          /* Note that we explicity break out of the loop rather than using
+          /* Note that we explicitly break out of the loop rather than using
            * the 'for' loop termination logic because we do not want the
            * value of wdgtb to be incremented.
            */
@@ -593,7 +585,7 @@ static int stm32_settimeout(FAR struct watchdog_lowerhalf_s *lower,
   priv->fwwdg  = fwwdg;
   priv->reload = reload;
 
-  wdvdbg("wdgtb=%d fwwdg=%d reload=%d timout=%d\n",
+  wdinfo("wdgtb=%d fwwdg=%d reload=%d timout=%d\n",
          wdgtb, fwwdg, reload, priv->timeout);
 
   /* Set WDGTB[1:0] bits according to calculated value */
@@ -642,11 +634,11 @@ static xcpt_t stm32_capture(FAR struct watchdog_lowerhalf_s *lower,
   uint16_t regval;
 
   DEBUGASSERT(priv);
-  wdvdbg("Entry: handler=%p\n", handler);
+  wdinfo("Entry: handler=%p\n", handler);
 
   /* Get the old handler return value */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   oldhandler = priv->handler;
 
   /* Save the new handler */
@@ -675,7 +667,7 @@ static xcpt_t stm32_capture(FAR struct watchdog_lowerhalf_s *lower,
       up_disable_irq(STM32_IRQ_WWDG);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return oldhandler;
 }
 
@@ -689,7 +681,7 @@ static xcpt_t stm32_capture(FAR struct watchdog_lowerhalf_s *lower,
  * Input Parameters:
  *   lower - A pointer the publicly visible representation of the "lower-half"
  *           driver state structure.
- *   cmd   - The ioctol command value
+ *   cmd   - The ioctl command value
  *   arg   - The optional argument that accompanies the 'cmd'.  The
  *           interpretation of this argument depends on the particular
  *           command.
@@ -706,7 +698,7 @@ static int stm32_ioctl(FAR struct watchdog_lowerhalf_s *lower, int cmd,
   int ret = -ENOTTY;
 
   DEBUGASSERT(priv);
-  wdvdbg("Entry: cmd=%d arg=%ld\n", cmd, arg);
+  wdinfo("Entry: cmd=%d arg=%ld\n", cmd, arg);
 
   /* WDIOC_MINTIME: Set the minimum ping time.  If two keepalive ioctls
    * are received within this time, a reset event will be generated.
@@ -759,7 +751,7 @@ void stm32_wwdginitialize(FAR const char *devpath)
 {
   FAR struct stm32_lowerhalf_s *priv = &g_wdgdev;
 
-  wdvdbg("Entry: devpath=%s\n", devpath);
+  wdinfo("Entry: devpath=%s\n", devpath);
 
   /* NOTE we assume that clocking to the IWDG has already been provided by
    * the RCC initialization logic.
@@ -797,9 +789,16 @@ void stm32_wwdginitialize(FAR const char *devpath)
     defined(CONFIG_STM32_JTAG_NOJNTRST_ENABLE) || \
     defined(CONFIG_STM32_JTAG_SW_ENABLE)
     {
+#if defined(CONFIG_STM32_STM32F20XX) || defined(CONFIG_STM32_STM32F30XX) || \
+    defined(CONFIG_STM32_STM32F40XX)
+      uint32_t cr = getreg32(STM32_DBGMCU_APB1_FZ);
+      cr |= DBGMCU_APB1_WWDGSTOP;
+      putreg32(cr, STM32_DBGMCU_APB1_FZ);
+#else /* if defined(CONFIG_STM32_STM32F10XX) */
       uint32_t cr = getreg32(STM32_DBGMCU_CR);
       cr |= DBGMCU_CR_WWDGSTOP;
       putreg32(cr, STM32_DBGMCU_CR);
+#endif
     }
 #endif
 }

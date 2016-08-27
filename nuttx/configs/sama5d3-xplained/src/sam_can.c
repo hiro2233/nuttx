@@ -1,5 +1,5 @@
 /************************************************************************************
- * configs/sama5d3-xplained/src/up_can.c
+ * configs/sama5d3-xplained/src/sam_can.c
  *
  *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -42,7 +42,7 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <nuttx/can.h>
+#include <nuttx/drivers/can.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -69,31 +69,12 @@
 #  define CAN_PORT 1
 #endif
 
-/* Debug ***************************************************************************/
-/* Non-standard debug that may be enabled just for testing CAN */
-
-#ifdef CONFIG_DEBUG_CAN
-#  define candbg    dbg
-#  define canvdbg   vdbg
-#  define canlldbg  lldbg
-#  define canllvdbg llvdbg
-#else
-#  define candbg(x...)
-#  define canvdbg(x...)
-#  define canlldbg(x...)
-#  define canllvdbg(x...)
-#endif
-
-/************************************************************************************
- * Private Functions
- ************************************************************************************/
-
 /************************************************************************************
  * Public Functions
  ************************************************************************************/
 
 /************************************************************************************
- * Name: can_devinit
+ * Name: board_can_initialize
  *
  * Description:
  *   All STM32 architectures must provide the following interface to work with
@@ -101,7 +82,7 @@
  *
  ************************************************************************************/
 
-int can_devinit(void)
+int board_can_initialize(void)
 {
   static bool initialized = false;
   struct can_dev_s *can;
@@ -116,7 +97,7 @@ int can_devinit(void)
       can = sam_caninitialize(CAN_PORT);
       if (can == NULL)
         {
-          candbg("ERROR:  Failed to get CAN interface\n");
+          canerr("ERROR:  Failed to get CAN interface\n");
           return -ENODEV;
         }
 
@@ -125,7 +106,7 @@ int can_devinit(void)
       ret = can_register("/dev/can0", can);
       if (ret < 0)
         {
-          candbg("ERROR: can_register failed: %d\n", ret);
+          canerr("ERROR: can_register failed: %d\n", ret);
           return ret;
         }
 

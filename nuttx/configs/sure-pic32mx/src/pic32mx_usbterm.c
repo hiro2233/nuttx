@@ -47,13 +47,13 @@
 
 #include <nuttx/usb/usbdev.h>
 
-#include "pic32mx-internal.h"
+#include "pic32mx.h"
 #include "sure-pic32mx.h"
 
 #if defined(CONFIG_PIC32MX_USBDEV) && defined(CONFIG_EXAMPLES_USBTERM_DEVINIT)
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /************************************************************************************
@@ -79,7 +79,7 @@ int usbterm_devinit(void)
    * will fake it and tell the USB driver that the USB is connected now.
    *
    * If examples/usbterm is built as an NSH built-in application, then
-   * pic32mx_usbattach() will be called in nsh_archinitialize().
+   * pic32mx_usbattach() will be called in board_app_initialize().
    */
 
 #ifndef CONFIG_NSH_BUILTIN_APPS

@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 comment "USB Device Controller Driver Options"
@@ -88,23 +88,25 @@ config ARCH_USBDEV_STALLQUEUE
 		will enable some hokey and inefficient delay logic to workaround
 		the lack of queuing.
 
-config USBDEV_TRACE
+menuconfig USBDEV_TRACE
 	bool "Enable USB tracing for debug"
 	default n
+	select HAVE_USBTRACE
 	---help---
 		Enables USB tracing for debug
+
+if USBDEV_TRACE
 
 config USBDEV_TRACE_NRECORDS
 	int "Number of trace entries to remember"
 	default 128
-	depends on USBDEV_TRACE
 	---help---
 		Number of trace entries to remember
 
 config USBDEV_TRACE_STRINGS
-bool "Decode device controller events"
+	bool "Decode device controller events"
 	default n
-	depends on USBDEV_TRACE || DEBUG_USB
+	depends on DEBUG_USB
 	---help---
 		If USBDEV_TRACE_STRINGS is defined, then the USB device controller
 		driver must provide arrays of strings to support decoding of device-
@@ -116,9 +118,19 @@ bool "Decode device controller events"
 		extern const struct trace_msg_t g_usb_trace_strings_intdecode[];
 		#endif
 
+config USBDEV_TRACE_INITIALIDSET
+	bool "Initial enable bits"
+	default 0
+	---help---
+		This is the set of initial USB features that are enabled at boot
+		time.  See the event ID class bit definitions in
+		include/nuttx/usbdev_trace.h.
+
+endif # USBDEV_TRACE
+
 comment "USB Device Class Driver Options"
 
-config USBDEV_COMPOSITE
+menuconfig USBDEV_COMPOSITE
 	bool "USB composite device support"
 	default n
 	---help---
@@ -235,17 +247,31 @@ config PL2303_BULKIN_REQLEN
 		on the other hand, request buffer size is always the same as the
 		maxpacket size.
 
+		There is also no reason from PL2303_BULKIN_REQLEN to be greater
+		than PL2303_TXBUFSIZE-1, since a request larger than the TX
+		buffer can never be sent.
+
 config PL2303_RXBUFSIZE
 	int "Receive buffer size"
-	default 256
+	default 513 if USBDEV_DUALSPEED
+	default 257 if !USBDEV_DUALSPEED
 	---help---
-		Size of the serial receive/transmit buffers
+		Size of the serial receive buffers.  The actual amount of data that
+		can be held in the buffer is this number minus one due to the way
+		that the circular buffer is managed.  So an RX buffer size of 257
+		will hold four full-speed, 64 byte packets; a buffer size of 513
+		will hold one high-speed, 512 byte packet.
 
 config PL2303_TXBUFSIZE
 	int "Transmit buffer size"
-	default 256
+	default 769 if USBDEV_DUALSPEED
+	default 193 if !USBDEV_DUALSPEED
 	---help---
-		Size of the serial receive/transmit buffers
+		Size of the serial transmit buffers.  The actual amount of data that
+		can be held in the buffer is this number minus one due to the way
+		that the circular buffer is managed.  So a TX buffer size of 769
+		will hold one request of size 768; a buffer size of 193 will hold
+		two requests of size 96 bytes.
 
 config PL2303_VENDORID
 	hex "Vendor ID"
@@ -264,12 +290,12 @@ config PL2303_PRODUCTSTR
 	default "PL2303 Emulation"
 endif
 
-config CDCACM
-	bool "USB Modem (CDC ACM) support"
+menuconfig CDCACM
+	bool "USB Modem (CDC/ACM) support"
 	default n
 	select SERIAL_REMOVABLE
 	---help---
-		Enables USB Modem (CDC ACM) support
+		Enables USB Modem (CDC/ACM) support
 
 if CDCACM
 
@@ -280,7 +306,15 @@ config CDCACM_CONSOLE
 		Register the USB device as /dev/console so that is will be used
 		as the console device.
 
-config CDCACM_COMPOSITE
+config CDCACM_IFLOWCONTROL
+	bool "CDC/ACM RTS flow control"
+	default n
+	depends on EXPERIMENTAL
+	select SERIAL_IFLOWCONTROL
+	---help---
+		Enable CDC/ACM RTS flow control
+
+menuconfig CDCACM_COMPOSITE
 	bool "CDC/ACM composite support"
 	default n
 	depends on USBDEV_COMPOSITE
@@ -288,10 +322,11 @@ config CDCACM_COMPOSITE
 		Configure the CDC serial driver as part of a composite driver
 		(only if USBDEV_COMPOSITE is also defined)
 
+if CDCACM_COMPOSITE
+
 config CDCACM_IFNOBASE
 	int "Offset the CDC/ACM interface numbers"
 	default 0
-	depends on CDCACM_COMPOSITE
 	---help---
 		If the CDC driver is part of a composite device, then this may need to
 		be defined to offset the CDC/ACM interface numbers so that they are
@@ -300,8 +335,7 @@ config CDCACM_IFNOBASE
 
 config CDCACM_STRBASE
 	int "Offset the CDC/ACM string numbers"
-	default 0
-	depends on CDCACM_COMPOSITE
+	default 4
 	---help---
 		If the CDC driver is part of a composite device, then this may need to
 		be defined to offset the CDC/ACM string numbers so that they are
@@ -309,6 +343,12 @@ config CDCACM_STRBASE
 		correct value for this offset is four (this value actuallly only needs
 		to be defined if names are provided for the Notification interface,
 		config CDCACM_NOTIFSTR, or the data interface, CDCACM_DATAIFSTR).
+
+		The default of four accounts for strings IDs 0-3 used by the composite
+		descriptors.  Any additional CDC/ACM string descripts must then begin
+		with string index four.
+
+endif
 
 config CDCACM_EP0MAXPACKET
 	int "Endpoint 0 max packet size"
@@ -379,13 +419,13 @@ config CDCACM_EPBULKIN_HSSIZE
 		Max package size for the bulk IN endpoint if high speed mode.
 		Default 512.
 
-config CDCACM_NWRREQS
+config CDCACM_NRDREQS
 	int "Number of read requests that can be in flight"
 	default 4
 	---help---
 		The number of read requests that can be in flight
 
-config CDCACM_NRDREQS
+config CDCACM_NWRREQS
 	int "Number of write requests that can be in flight"
 	default 4
 	---help---
@@ -402,17 +442,31 @@ config CDCACM_BULKIN_REQLEN
 		on the other hand, request buffer size is always the same as the
 		maxpacket size.
 
+		There is also no reason from CDCACM_BULKIN_REQLEN to be greater
+		than CDCACM_TXBUFSIZE-1, since a request larger than the TX
+		buffer can never be sent.
+
 config CDCACM_RXBUFSIZE
 	int "Receive buffer size"
-	default 256
+	default 513 if USBDEV_DUALSPEED
+	default 257 if !USBDEV_DUALSPEED
 	---help---
-		Size of the serial receive/transmit buffers
+		Size of the serial receive buffers.  The actual amount of data that
+		can be held in the buffer is this number minus one due to the way
+		that the circular buffer is managed.  So an RX buffer size of 257
+		will hold four full-speed, 64 byte packets; a buffer size of 513
+		will hold one high-speed, 512 byte packet.
 
 config CDCACM_TXBUFSIZE
 	int "Transmit buffer size"
-	default 256
+	default 769 if USBDEV_DUALSPEED
+	default 193 if !USBDEV_DUALSPEED
 	---help---
-		Size of the serial receive/transmit buffers
+		Size of the serial transmit buffers.  The actual amount of data that
+		can be held in the buffer is this number minus one due to the way
+		that the circular buffer is managed.  So a TX buffer size of 769
+		will hold one request of size 768; a buffer size of 193 will hold
+		two requests of size 96 bytes.
 
 config CDCACM_VENDORID
 	hex "Vendor ID"
@@ -438,9 +492,10 @@ config CDCACM_VENDORSTR
 config CDCACM_PRODUCTSTR
 	string "Product string"
 	default "CDC/ACM Serial"
-endif
 
-config USBMSC
+endif # CDCACM
+
+menuconfig USBMSC
 	bool "USB Mass storage class device"
 	default n
 	select FS_READABLE
@@ -488,7 +543,7 @@ config USBMSC_IFNOBASE
 
 config USBMSC_STRBASE
 	int "Offset the mass storage string numbers"
-	default 2
+	default 4
 	depends on USBMSC_COMPOSITE
 	---help---
 		If the CDC driver is part of a composite device, then this may need to
@@ -496,6 +551,10 @@ config USBMSC_STRBASE
 		unique and contiguous.  When used with the CDC/ACM driver, the
 		correct value for this offset is four (or perhaps 5 or 6, depending
 		on if CDCACM_NOTIFSTR or CDCACM_DATAIFSTR are defined).
+
+		String IDS 0-3 are used by the composite descriptors.  This amount
+		may need to be incremented to account for string IDs used by other
+		members of the composite.
 
 config USBMSC_EP0MAXPACKET
 	int "Max packet size for endpoint 0"
@@ -552,7 +611,7 @@ config USBMSC_BULKOUTREQLEN
 		the completed READ request to the caller as each packet is received.
 		Therefore, there is no benefit in increasing the size of this buffer
 		beyond the maximum size of one packet.  Default:  512 or 64 bytes
-		(depending upon if dual speed operatino is supported or not).
+		(depending upon if dual speed operation is supported or not).
 
 config USBMSC_VENDORID
 	hex "Mass storage Vendor ID"

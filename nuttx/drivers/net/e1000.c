@@ -6,7 +6,7 @@
  *
  * This file is a part of NuttX:
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2014 Gregory Nutt. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -47,16 +47,20 @@
 #include <stdbool.h>
 #include <time.h>
 #include <debug.h>
-#include <wdog.h>
 #include <errno.h>
 
-#include <nuttx/irq.h>
-#include <nuttx/arch.h>
-#include <nuttx/kmalloc.h>
+#include <arpa/inet.h>
 
-#include <nuttx/net/uip/uip.h>
+#include <nuttx/arch.h>
+#include <nuttx/irq.h>
+#include <nuttx/wdog.h>
+#include <nuttx/kmalloc.h>
 #include <nuttx/net/arp.h>
-#include <nuttx/net/uip/uip-arch.h>
+#include <nuttx/net/netdev.h>
+
+#ifdef CONFIG_NET_PKT
+#  include <nuttx/net/pkt.h>
+#endif
 
 #include <rgmp/pmap.h>
 #include <rgmp/string.h>
@@ -64,6 +68,7 @@
 #include <rgmp/utils.h>
 #include <rgmp/arch/pci.h>
 #include <rgmp/memio.h>
+
 #include "e1000.h"
 
 /****************************************************************************
@@ -73,7 +78,6 @@
 /* TX poll deley = 1 seconds. CLK_TCK is the number of clock ticks per second */
 
 #define E1000_WDDELAY   (1*CLK_TCK)
-#define E1000_POLLHSEC  (1*2)
 
 /* TX timeout = 1 minute */
 
@@ -81,7 +85,7 @@
 
 /* This is a helper pointer for accessing the contents of the Ethernet header */
 
-#define BUF ((struct uip_eth_hdr *)e1000->uip_dev.d_buf)
+#define BUF ((struct eth_hdr_s *)e1000->netdev.d_buf)
 
 /****************************************************************************
  * Private Types
@@ -119,13 +123,13 @@ struct e1000_dev
 
   /* NuttX net data */
 
-  bool bifup;               /* true:ifup false:ifdown */
-  WDOG_ID txpoll;           /* TX poll timer */
-  WDOG_ID txtimeout;        /* TX timeout timer */
+  bool bifup;                 /* true:ifup false:ifdown */
+  WDOG_ID txpoll;             /* TX poll timer */
+  WDOG_ID txtimeout;          /* TX timeout timer */
 
-  /* This holds the information visible to uIP/NuttX */
+  /* This holds the information visible to the NuttX network */
 
-  struct uip_driver_s uip_dev;  /* Interface understood by uIP */
+  struct net_driver_s netdev; /* Interface understood by networking layer */
 };
 
 struct e1000_dev_head
@@ -137,7 +141,10 @@ struct e1000_dev_head
  * Private Data
  ****************************************************************************/
 
-static struct e1000_dev_head e1000_list = {0};
+static struct e1000_dev_head e1000_list =
+{
+  0
+};
 
 /****************************************************************************
  * Private Function Prototypes
@@ -146,7 +153,7 @@ static struct e1000_dev_head e1000_list = {0};
 /* Common TX logic */
 
 static int  e1000_transmit(struct e1000_dev *e1000);
-static int  e1000_uiptxpoll(struct uip_driver_s *dev);
+static int  e1000_txpoll(struct net_driver_s *dev);
 
 /* Interrupt handling */
 
@@ -159,12 +166,12 @@ static void e1000_txtimeout(int argc, uint32_t arg, ...);
 
 /* NuttX callback functions */
 
-static int e1000_ifup(struct uip_driver_s *dev);
-static int e1000_ifdown(struct uip_driver_s *dev);
-static int e1000_txavail(struct uip_driver_s *dev);
+static int e1000_ifup(struct net_driver_s *dev);
+static int e1000_ifdown(struct net_driver_s *dev);
+static int e1000_txavail(struct net_driver_s *dev);
 #ifdef CONFIG_NET_IGMP
-static int e1000_addmac(struct uip_driver_s *dev, const uint8_t *mac);
-static int e1000_rmmac(struct uip_driver_s *dev, const uint8_t *mac);
+static int e1000_addmac(struct net_driver_s *dev, const uint8_t *mac);
+static int e1000_rmmac(struct net_driver_s *dev, const uint8_t *mac);
 #endif
 
 /****************************************************************************
@@ -190,24 +197,24 @@ void e1000_reset(struct e1000_dev *dev)
   /* Reset the network controller hardware */
 
   dev_control = 0;
-  dev_control |= (1<<0);   /* FD-bit (Full Duplex) */
-  dev_control |= (0<<2);   /* GIOMD-bit (GIO Master Disable) */
-  dev_control |= (1<<3);   /* LRST-bit (Link Reset) */
-  dev_control |= (1<<6);   /* SLU-bit (Set Link Up) */
-  dev_control |= (2<<8);   /* SPEED=2 (1000Mbps) */
-  dev_control |= (0<<11);  /* FRCSPD-bit (Force Speed) */
-  dev_control |= (0<<12);  /* FRCDPLX-bit (Force Duplex) */
-  dev_control |= (0<<20);  /* ADVD3WUC-bit (Advertise D3 Wake Up Cap) */
-  dev_control |= (1<<26);  /* RST-bit (Device Reset) */
-  dev_control |= (1<<27);  /* RFCE-bit (Receive Flow Control Enable) */
-  dev_control |= (1<<28);  /* TFCE-bit (Transmit Flow Control Enable) */
-  dev_control |= (0<<30);  /* VME-bit (VLAN Mode Enable) */
-  dev_control |= (0<<31);  /* PHY_RST-bit (PHY Reset) */
+  dev_control |= (1 << 0);   /* FD-bit (Full Duplex) */
+  dev_control |= (0 << 2);   /* GIOMD-bit (GIO Master Disable) */
+  dev_control |= (1 << 3);   /* LRST-bit (Link Reset) */
+  dev_control |= (1 << 6);   /* SLU-bit (Set Link Up) */
+  dev_control |= (2 << 8);   /* SPEED=2 (1000Mbps) */
+  dev_control |= (0 << 11);  /* FRCSPD-bit (Force Speed) */
+  dev_control |= (0 << 12);  /* FRCDPLX-bit (Force Duplex) */
+  dev_control |= (0 << 20);  /* ADVD3WUC-bit (Advertise D3 Wake Up Cap) */
+  dev_control |= (1 << 26);  /* RST-bit (Device Reset) */
+  dev_control |= (1 << 27);  /* RFCE-bit (Receive Flow Control Enable) */
+  dev_control |= (1 << 28);  /* TFCE-bit (Transmit Flow Control Enable) */
+  dev_control |= (0 << 30);  /* VME-bit (VLAN Mode Enable) */
+  dev_control |= (0 << 31);  /* PHY_RST-bit (PHY Reset) */
 
   e1000_outl(dev, E1000_IMC, 0xFFFFFFFF);
   e1000_outl(dev, E1000_STATUS, 0x00000000);
   e1000_outl(dev, E1000_CTRL, dev_control);
-  dev_control &= ~(1<<26);  /* clear RST-bit (Device Reset) */
+  dev_control &= ~(1 << 26);  /* clear RST-bit (Device Reset) */
   e1000_outl(dev, E1000_CTRL, dev_control);
   up_mdelay(10);
   e1000_outl(dev, E1000_CTRL_EXT, 0x001401C0);
@@ -223,13 +230,13 @@ void e1000_turn_on(struct e1000_dev *dev)
   /* turn on the controller's receive engine */
 
   rx_control = e1000_inl(dev, E1000_RCTL);
-  rx_control |= (1<<1);
+  rx_control |= (1 << 1);
   e1000_outl(dev, E1000_RCTL, rx_control);
 
   /* turn on the controller's transmit engine */
 
   tx_control = e1000_inl(dev, E1000_TCTL);
-  tx_control |= (1<<1);
+  tx_control |= (1 << 1);
   e1000_outl(dev, E1000_TCTL, tx_control);
 
   /* enable the controller's interrupts */
@@ -237,11 +244,11 @@ void e1000_turn_on(struct e1000_dev *dev)
   e1000_outl(dev, E1000_ICR, 0xFFFFFFFF);
   e1000_outl(dev, E1000_IMC, 0xFFFFFFFF);
 
-  ims |= 1<<0;      /* TXDW */
-  ims |= 1<<1;      /* TXQE */
-  ims |= 1<<2;      /* LSC */
-  ims |= 1<<4;      /* RXDMT0 */
-  ims |= 1<<7;      /* RXT0 */
+  ims |= 1 << 0;      /* TXDW */
+  ims |= 1 << 1;      /* TXQE */
+  ims |= 1 << 2;      /* LSC */
+  ims |= 1 << 4;      /* RXDMT0 */
+  ims |= 1 << 7;      /* RXT0 */
   e1000_outl(dev, E1000_IMS, ims);
 }
 
@@ -253,13 +260,13 @@ void e1000_turn_off(struct e1000_dev *dev)
   /* turn off the controller's receive engine */
 
   rx_control = e1000_inl(dev, E1000_RCTL);
-  rx_control &= ~(1<<1);
+  rx_control &= ~(1 << 1);
   e1000_outl(dev, E1000_RCTL, rx_control);
 
   /* turn off the controller's transmit engine */
 
   tx_control = e1000_inl(dev, E1000_TCTL);
-  tx_control &= ~(1<<1);
+  tx_control &= ~(1 << 1);
   e1000_outl(dev, E1000_TCTL, tx_control);
 
   /* turn off the controller's interrupts */
@@ -269,7 +276,7 @@ void e1000_turn_off(struct e1000_dev *dev)
 
 void e1000_init(struct e1000_dev *dev)
 {
-  uint32_t rxd_phy;
+  uint32_t rxd_phys;
   uint32_t txd_phys;
   uint32_t kmem_phys;
   uint32_t rx_control;
@@ -282,39 +289,39 @@ void e1000_init(struct e1000_dev *dev)
   /* configure the controller's 'receive' engine */
 
   rx_control = 0;
-  rx_control |= (0<<1);   /* EN-bit (Enable) */
-  rx_control |= (0<<2);   /* SPB-bit (Store Bad Packets) */
-  rx_control |= (0<<3);   /* UPE-bit (Unicast Promiscuous Mode) */
-  rx_control |= (1<<4);   /* MPE-bit (Multicast Promiscuous Mode) */
-  rx_control |= (0<<5);   /* LPE-bit (Long Packet Enable) */
-  rx_control |= (0<<6);   /* LBM=0 (Loop-Back Mode) */
-  rx_control |= (0<<8);   /* RDMTS=0 (Rx Descriptor Min Threshold Size) */
-  rx_control |= (0<<10);  /* DTYPE=0 (Descriptor Type) */
-  rx_control |= (0<<12);  /* MO=0 (Multicast Offset) */
-  rx_control |= (1<<15);  /* BAM-bit (Broadcast Address Mode) */
-  rx_control |= (0<<16);  /* BSIZE=0 (Buffer Size = 2048) */
-  rx_control |= (0<<18);  /* VLE-bit (VLAN filter Enable) */
-  rx_control |= (0<<19);  /* CFIEN-bit (Canonical Form Indicator Enable) */
-  rx_control |= (0<<20);  /* CFI-bit (Canonical Form Indicator) */
-  rx_control |= (1<<22);  /* DPF-bit (Discard Pause Frames) */
-  rx_control |= (0<<23);  /* PMCF-bit (Pass MAC Control Frames) */
-  rx_control |= (0<<25);  /* BSEX=0 (Buffer Size EXtension) */
-  rx_control |= (1<<26);  /* SECRC-bit (Strip Ethernet CRC) */
-  rx_control |= (0<<27);  /* FLEXBUF=0 (Flexible Buffer size) */
+  rx_control |= (0 << 1);   /* EN-bit (Enable) */
+  rx_control |= (0 << 2);   /* SPB-bit (Store Bad Packets) */
+  rx_control |= (0 << 3);   /* UPE-bit (Unicast Promiscuous Mode) */
+  rx_control |= (1 << 4);   /* MPE-bit (Multicast Promiscuous Mode) */
+  rx_control |= (0 << 5);   /* LPE-bit (Long Packet Enable) */
+  rx_control |= (0 << 6);   /* LBM=0 (Loop-Back Mode) */
+  rx_control |= (0 << 8);   /* RDMTS=0 (Rx Descriptor Min Threshold Size) */
+  rx_control |= (0 << 10);  /* DTYPE=0 (Descriptor Type) */
+  rx_control |= (0 << 12);  /* MO=0 (Multicast Offset) */
+  rx_control |= (1 << 15);  /* BAM-bit (Broadcast Address Mode) */
+  rx_control |= (0 << 16);  /* BSIZE=0 (Buffer Size = 2048) */
+  rx_control |= (0 << 18);  /* VLE-bit (VLAN filter Enable) */
+  rx_control |= (0 << 19);  /* CFIEN-bit (Canonical Form Indicator Enable) */
+  rx_control |= (0 << 20);  /* CFI-bit (Canonical Form Indicator) */
+  rx_control |= (1 << 22);  /* DPF-bit (Discard Pause Frames) */
+  rx_control |= (0 << 23);  /* PMCF-bit (Pass MAC Control Frames) */
+  rx_control |= (0 << 25);  /* BSEX=0 (Buffer Size EXtension) */
+  rx_control |= (1 << 26);  /* SECRC-bit (Strip Ethernet CRC) */
+  rx_control |= (0 << 27);  /* FLEXBUF=0 (Flexible Buffer size) */
   e1000_outl(dev, E1000_RCTL, rx_control);
 
   /* configure the controller's 'transmit' engine */
 
   tx_control = 0;
-  tx_control |= (0<<1);    /* EN-bit (Enable) */
-  tx_control |= (1<<3);    /* PSP-bit (Pad Short Packets) */
-  tx_control |= (15<<4);   /* CT=15 (Collision Threshold) */
-  tx_control |= (63<<12);  /* COLD=63 (Collision Distance) */
-  tx_control |= (0<<22);   /* SWXOFF-bit (Software XOFF) */
-  tx_control |= (1<<24);   /* RTLC-bit (Re-Transmit on Late Collision) */
-  tx_control |= (0<<25);   /* UNORTX-bit (Underrun No Re-Transmit) */
-  tx_control |= (0<<26);   /* TXCSCMT=0 (TxDesc Mininum Threshold) */
-  tx_control |= (0<<28);   /* MULR-bit (Multiple Request Support) */
+  tx_control |= (0 << 1);    /* EN-bit (Enable) */
+  tx_control |= (1 << 3);    /* PSP-bit (Pad Short Packets) */
+  tx_control |= (15 << 4);   /* CT=15 (Collision Threshold) */
+  tx_control |= (63 << 12);  /* COLD=63 (Collision Distance) */
+  tx_control |= (0 << 22);   /* SWXOFF-bit (Software XOFF) */
+  tx_control |= (1 << 24);   /* RTLC-bit (Re-Transmit on Late Collision) */
+  tx_control |= (0 << 25);   /* UNORTX-bit (Underrun No Re-Transmit) */
+  tx_control |= (0 << 26);   /* TXCSCMT=0 (TxDesc Mininum Threshold) */
+  tx_control |= (0 << 28);   /* MULR-bit (Multiple Request Support) */
   e1000_outl(dev, E1000_TCTL, tx_control);
 
   /* hardware flow control */
@@ -323,27 +330,27 @@ void e1000_init(struct e1000_dev *dev)
 
   /* get receive FIFO size */
 
-  pba = (pba & 0x000000ff)<<10;
+  pba = (pba & 0x000000ff) << 10;
   e1000_outl(dev, E1000_FCAL, 0x00C28001);
   e1000_outl(dev, E1000_FCAH, 0x00000100);
   e1000_outl(dev, E1000_FCT, 0x00008808);
   e1000_outl(dev, E1000_FCTTV, 0x00000680);
-  e1000_outl(dev, E1000_FCRTL, (pba*8/10)|0x80000000);
-  e1000_outl(dev, E1000_FCRTH, pba*9/10);
+  e1000_outl(dev, E1000_FCRTL, (pba * 8 / 10) | 0x80000000);
+  e1000_outl(dev, E1000_FCRTH, pba * 9 / 10);
 
   /* setup tx rings */
 
   txd_phys = PADDR((uintptr_t)dev->tx_ring.desc);
   kmem_phys = PADDR((uintptr_t)dev->tx_ring.buf);
-  for (i=0; i<CONFIG_E1000_N_TX_DESC; i++,kmem_phys+=CONFIG_E1000_BUFF_SIZE)
+  for (i = 0; i < CONFIG_E1000_N_TX_DESC; i++, kmem_phys += CONFIG_E1000_BUFF_SIZE)
     {
-      dev->tx_ring.desc[i].base_address = kmem_phys;
+      dev->tx_ring.desc[i].base_address  = kmem_phys;
       dev->tx_ring.desc[i].packet_length = 0;
-      dev->tx_ring.desc[i].cksum_offset = 0;
-      dev->tx_ring.desc[i].cksum_origin = 0;
-      dev->tx_ring.desc[i].desc_status = 1;
-      dev->tx_ring.desc[i].desc_command = (1<<0)|(1<<1)|(1<<3);
-      dev->tx_ring.desc[i].special_info = 0;
+      dev->tx_ring.desc[i].cksum_offset  = 0;
+      dev->tx_ring.desc[i].cksum_origin  = 0;
+      dev->tx_ring.desc[i].desc_status   = 1;
+      dev->tx_ring.desc[i].desc_command  = (1 << 0) | (1 << 1) | (1 << 3);
+      dev->tx_ring.desc[i].special_info  = 0;
     }
 
   dev->tx_ring.tail = 0;
@@ -354,14 +361,14 @@ void e1000_init(struct e1000_dev *dev)
 
   e1000_outl(dev, E1000_TDBAL, txd_phys);
   e1000_outl(dev, E1000_TDBAH, 0x00000000);
-  e1000_outl(dev, E1000_TDLEN, CONFIG_E1000_N_TX_DESC*16);
+  e1000_outl(dev, E1000_TDLEN, CONFIG_E1000_N_TX_DESC * 16);
   e1000_outl(dev, E1000_TXDCTL, 0x01010000);
 
   /* setup rx rings */
 
   rxd_phys = PADDR((uintptr_t)dev->rx_ring.desc);
   kmem_phys = PADDR((uintptr_t)dev->rx_ring.buf);
-  for (i=0; i<CONFIG_E1000_N_RX_DESC; i++,kmem_phys+=CONFIG_E1000_BUFF_SIZE)
+  for (i = 0; i < CONFIG_E1000_N_RX_DESC; i++, kmem_phys += CONFIG_E1000_BUFF_SIZE)
     {
       dev->rx_ring.desc[i].base_address = kmem_phys;
       dev->rx_ring.desc[i].packet_length = 0;
@@ -415,7 +422,7 @@ static int e1000_transmit(struct e1000_dev *e1000)
   int tail = e1000->tx_ring.tail;
   unsigned char *cp = (unsigned char *)
       (e1000->tx_ring.buf + tail * CONFIG_E1000_BUFF_SIZE);
-  int count = e1000->uip_dev.d_len;
+  int count = e1000->netdev.d_len;
 
   /* Verify that the hardware is ready to send another packet.  If we get
    * here, then we are committed to sending a packet; Higher level logic
@@ -427,15 +434,13 @@ static int e1000_transmit(struct e1000_dev *e1000)
       return -1;
     }
 
-  /* Increment statistics */
-
   /* Send the packet: address=skel->sk_dev.d_buf, length=skel->sk_dev.d_len */
 
-  memcpy(cp, e1000->uip_dev.d_buf, e1000->uip_dev.d_len);
+  memcpy(cp, e1000->netdev.d_buf, e1000->netdev.d_len);
 
   /* prepare the transmit-descriptor */
 
-  e1000->tx_ring.desc[tail].packet_length = count<60 ? 60:count;
+  e1000->tx_ring.desc[tail].packet_length = count < 60 ? 60 : count;
   e1000->tx_ring.desc[tail].desc_status = 0;
 
   /* give ownership of this descriptor to the network controller */
@@ -448,16 +453,17 @@ static int e1000_transmit(struct e1000_dev *e1000)
 
   /* Setup the TX timeout watchdog (perhaps restarting the timer) */
 
-  wd_start(e1000->txtimeout, E1000_TXTIMEOUT, e1000_txtimeout, 1, (uint32_t)e1000);
+  wd_start(e1000->txtimeout, E1000_TXTIMEOUT, e1000_txtimeout, 1,
+           (wdparm_t)e1000);
   return OK;
 }
 
 /****************************************************************************
- * Function: e1000_uiptxpoll
+ * Function: e1000_txpoll
  *
  * Description:
- *   The transmitter is available, check if uIP has any outgoing packets ready
- *   to send.  This is a callback from uip_poll().  uip_poll() may be called:
+ *   The transmitter is available, check if the network has any outgoing packets ready
+ *   to send.  This is a callback from devif_poll().  devif_poll() may be called:
  *
  *   1. When the preceding TX packet send is complete,
  *   2. When the preceding TX packet send timesout and the interface is reset
@@ -476,7 +482,7 @@ static int e1000_transmit(struct e1000_dev *e1000)
  *
  ****************************************************************************/
 
-static int e1000_uiptxpoll(struct uip_driver_s *dev)
+static int e1000_txpoll(struct net_driver_s *dev)
 {
   struct e1000_dev *e1000 = (struct e1000_dev *)dev->d_private;
   int tail = e1000->tx_ring.tail;
@@ -485,9 +491,32 @@ static int e1000_uiptxpoll(struct uip_driver_s *dev)
    * the field d_len is set to a value > 0.
    */
 
-  if (e1000->uip_dev.d_len > 0)
+  if (e1000->netdev.d_len > 0)
     {
-      arp_out(&e1000->uip_dev);
+      /* Look up the destination MAC address and add it to the Ethernet
+       * header.
+       */
+
+#ifdef CONFIG_NET_IPv4
+#ifdef CONFIG_NET_IPv6
+      if (IFF_IS_IPv4(e1000->netdev.d_flags))
+#endif
+        {
+          arp_out(&e1000->netdev);
+        }
+#endif /* CONFIG_NET_IPv4 */
+
+#ifdef CONFIG_NET_IPv6
+#ifdef CONFIG_NET_IPv4
+      else
+#endif
+        {
+          neighbor_out(&e1000->netdev);
+        }
+#endif /* CONFIG_NET_IPv6 */
+
+      /* Send the packet */
+
       e1000_transmit(e1000);
 
       /* Check if there is room in the device to hold another packet. If not,
@@ -533,8 +562,6 @@ static void e1000_receive(struct e1000_dev *e1000)
 
   while (e1000->rx_ring.desc[head].desc_status)
     {
-      /* Check for errors and update statistics */
-
       /* Here we do not handle packets that exceed packet-buffer size */
 
       if ((e1000->rx_ring.desc[head].desc_status & 3) == 1)
@@ -543,62 +570,126 @@ static void e1000_receive(struct e1000_dev *e1000)
           goto next;
         }
 
-      /* Check if the packet is a valid size for the uIP buffer configuration */
+      /* Check if the packet is a valid size for the network buffer configuration */
 
       /* get the number of actual data-bytes in this packet */
 
       cnt = e1000->rx_ring.desc[head].packet_length;
 
-      if (cnt > CONFIG_NET_BUFSIZE || cnt < 14)
+      if (cnt > CONFIG_NET_ETH_MTU || cnt < 14)
         {
           cprintf("NIC READ: invalid package size\n");
           goto next;
         }
 
-      /* Copy the data data from the hardware to e1000->uip_dev.d_buf.  Set
-       * amount of data in e1000->uip_dev.d_len
+      /* Copy the data data from the hardware to e1000->netdev.d_buf.  Set
+       * amount of data in e1000->netdev.d_len
        */
 
       /* now we try to copy these data-bytes to the UIP buffer */
 
-      memcpy(e1000->uip_dev.d_buf, cp, cnt);
-      e1000->uip_dev.d_len = cnt;
+      memcpy(e1000->netdev.d_buf, cp, cnt);
+      e1000->netdev.d_len = cnt;
+
+#ifdef CONFIG_NET_PKT
+      /* When packet sockets are enabled, feed the frame into the packet tap */
+
+       pkt_input(&e1000->netdev);
+#endif
 
       /* We only accept IP packets of the configured type and ARP packets */
 
-#ifdef CONFIG_NET_IPv6
-      if (BUF->type == HTONS(UIP_ETHTYPE_IP6))
-#else
+#ifdef CONFIG_NET_IPv4
+      if (BUF->type == HTONS(ETHTYPE_IP))
         {
-          if (BUF->type == HTONS(UIP_ETHTYPE_IP))
+          ninfo("IPv4 frame\n");
+
+          /* Handle ARP on input then give the IPv4 packet to the network
+           * layer
+           */
+
+          arp_ipin(&e1000->netdev);
+          ipv4_input(&e1000->netdev);
+
+          /* If the above function invocation resulted in data that should be
+           * sent out on the network, the field  d_len will set to a value > 0.
+           */
+
+          if (e1000->netdev.d_len > 0)
+            {
+              /* Update the Ethernet header with the correct MAC address */
+
+#ifdef CONFIG_NET_IPv6
+              if (IFF_IS_IPv4(e1000->netdev.d_flags))
 #endif
-            {
-              arp_ipin(&e1000->uip_dev);
-              uip_input(&e1000->uip_dev);
-
-              /* If the above function invocation resulted in data that should be
-               * sent out on the network, the field  d_len will set to a value > 0.
-               */
-
-              if (e1000->uip_dev.d_len > 0)
                 {
-                  arp_out(&e1000->uip_dev);
-                  e1000_transmit(e1000);
+                  arp_out(&e1000->netdev);
                 }
-            }
-          else if (BUF->type == htons(UIP_ETHTYPE_ARP))
-            {
-              arp_arpin(&e1000->uip_dev);
-
-              /* If the above function invocation resulted in data that should be
-               * sent out on the network, the field  d_len will set to a value > 0.
-               */
-
-              if (e1000->uip_dev.d_len > 0)
+#ifdef CONFIG_NET_IPv6
+              else
                 {
-                  e1000_transmit(e1000);
+                  neighbor_out(&e1000->netdev);
                 }
+#endif
+
+              /* And send the packet */
+
+              e1000_transmit(e1000);
             }
+        }
+      else
+#endif
+#ifdef CONFIG_NET_IPv6
+      if (BUF->type == HTONS(ETHTYPE_IP6))
+        {
+          ninfo("Iv6 frame\n");
+
+          /* Give the IPv6 packet to the network layer */
+
+          ipv6_input(&e1000->netdev);
+
+          /* If the above function invocation resulted in data that should be
+           * sent out on the network, the field  d_len will set to a value > 0.
+           */
+
+          if (e1000->netdev.d_len > 0)
+           {
+              /* Update the Ethernet header with the correct MAC address */
+
+#ifdef CONFIG_NET_IPv4
+              if (IFF_IS_IPv4(e1000->netdev.d_flags))
+                {
+                  arp_out(&e1000->netdev);
+                }
+              else
+#endif
+#ifdef CONFIG_NET_IPv6
+                {
+                  neighbor_out(&e1000->netdev);
+                }
+#endif
+
+              /* And send the packet */
+
+              e1000_transmit(e1000);
+            }
+        }
+      else
+#endif
+#ifdef CONFIG_NET_ARP
+      if (BUF->type == htons(ETHTYPE_ARP))
+        {
+          arp_arpin(&e1000->netdev);
+
+          /* If the above function invocation resulted in data that should be
+           * sent out on the network, the field  d_len will set to a value > 0.
+           */
+
+          if (e1000->netdev.d_len > 0)
+            {
+              e1000_transmit(e1000);
+            }
+#endif
         }
 
 next:
@@ -633,15 +724,13 @@ static void e1000_txtimeout(int argc, uint32_t arg, ...)
 {
   struct e1000_dev *e1000 = (struct e1000_dev *)arg;
 
-  /* Increment statistics and dump debug info */
-
   /* Then reset the hardware */
 
   e1000_init(e1000);
 
-  /* Then poll uIP for new XMIT data */
+  /* Then poll the network for new XMIT data */
 
-  (void)uip_poll(&e1000->uip_dev, e1000_uiptxpoll);
+  (void)devif_poll(&e1000->netdev, e1000_txpoll);
 }
 
 /****************************************************************************
@@ -676,16 +765,17 @@ static void e1000_polltimer(int argc, uint32_t arg, ...)
       return;
     }
 
-  /* If so, update TCP timing states and poll uIP for new XMIT data. Hmmm..
+  /* If so, update TCP timing states and poll the network for new XMIT data. Hmmm..
    * might be bug here.  Does this mean if there is a transmit in progress,
    * we will missing TCP time state updates?
    */
 
-  (void)uip_timer(&e1000->uip_dev, e1000_uiptxpoll, E1000_POLLHSEC);
+  (void)devif_timer(&e1000->netdev, e1000_txpoll);
 
   /* Setup the watchdog poll timer again */
 
-  (void)wd_start(e1000->txpoll, E1000_WDDELAY, e1000_polltimer, 1, arg);
+  (void)wd_start(e1000->txpoll, E1000_WDDELAY, e1000_polltimer, 1,
+                 (wdparm_t)arg);
 }
 
 /****************************************************************************
@@ -705,13 +795,13 @@ static void e1000_polltimer(int argc, uint32_t arg, ...)
  *
  ****************************************************************************/
 
-static int e1000_ifup(struct uip_driver_s *dev)
+static int e1000_ifup(struct net_driver_s *dev)
 {
   struct e1000_dev *e1000 = (struct e1000_dev *)dev->d_private;
 
-  ndbg("Bringing up: %d.%d.%d.%d\n",
-       dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
-       (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24 );
+  ninfo("Bringing up: %d.%d.%d.%d\n",
+        dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
+        (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24);
 
   /* Initialize PHYs, the Ethernet interface, and setup up Ethernet interrupts */
 
@@ -719,7 +809,8 @@ static int e1000_ifup(struct uip_driver_s *dev)
 
   /* Set and activate a timer process */
 
-  (void)wd_start(e1000->txpoll, E1000_WDDELAY, e1000_polltimer, 1, (uint32_t)e1000);
+  (void)wd_start(e1000->txpoll, E1000_WDDELAY, e1000_polltimer, 1,
+                 (wdparm_t)e1000);
 
   if (e1000_inl(e1000, E1000_STATUS) & 2)
     {
@@ -749,14 +840,14 @@ static int e1000_ifup(struct uip_driver_s *dev)
  *
  ****************************************************************************/
 
-static int e1000_ifdown(struct uip_driver_s *dev)
+static int e1000_ifdown(struct net_driver_s *dev)
 {
   struct e1000_dev *e1000 = (struct e1000_dev *)dev->d_private;
   irqstate_t flags;
 
   /* Disable the Ethernet interrupt */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   e1000_turn_off(e1000);
 
@@ -775,7 +866,7 @@ static int e1000_ifdown(struct uip_driver_s *dev)
   /* Mark the device "down" */
 
   e1000->bifup = false;
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   return OK;
 }
@@ -799,7 +890,7 @@ static int e1000_ifdown(struct uip_driver_s *dev)
  *
  ****************************************************************************/
 
-static int e1000_txavail(struct uip_driver_s *dev)
+static int e1000_txavail(struct net_driver_s *dev)
 {
   struct e1000_dev *e1000 = (struct e1000_dev *)dev->d_private;
   int tail = e1000->tx_ring.tail;
@@ -809,7 +900,7 @@ static int e1000_txavail(struct uip_driver_s *dev)
    * level processing.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Ignore the notification if the interface is not yet up */
 
@@ -819,11 +910,11 @@ static int e1000_txavail(struct uip_driver_s *dev)
 
       if (e1000->tx_ring.desc[tail].desc_status)
         {
-          (void)uip_poll(&e1000->uip_dev, e1000_uiptxpoll);
+          (void)devif_poll(&e1000->netdev, e1000_txpoll);
         }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -846,7 +937,7 @@ static int e1000_txavail(struct uip_driver_s *dev)
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IGMP
-static int e1000_addmac(struct uip_driver_s *dev, const uint8_t *mac)
+static int e1000_addmac(struct net_driver_s *dev, const uint8_t *mac)
 {
   /* Add the MAC address to the hardware multicast routing table */
 
@@ -873,7 +964,7 @@ static int e1000_addmac(struct uip_driver_s *dev, const uint8_t *mac)
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IGMP
-static int e1000_rmmac(struct uip_driver_s *dev, const uint8_t *mac)
+static int e1000_rmmac(struct net_driver_s *dev, const uint8_t *mac)
 {
   /* Add the MAC address to the hardware multicast routing table */
 
@@ -901,7 +992,7 @@ static irqreturn_t e1000_interrupt_handler(int irq, void *dev_id)
 
   /* Link status change */
 
-  if (intr_cause & (1<<2))
+  if (intr_cause & (1 << 2))
     {
       if (e1000_inl(e1000, E1000_STATUS) & 2)
         {
@@ -917,34 +1008,28 @@ static irqreturn_t e1000_interrupt_handler(int irq, void *dev_id)
 
   /* Rx-descriptor Timer expired */
 
-  if (intr_cause & (1<<7))
+  if (intr_cause & (1 << 7))
     {
       e1000_receive(e1000);
     }
 
   /* Tx queue empty */
 
-  if (intr_cause & (1<<1))
+  if (intr_cause & (1 << 1))
     {
       wd_cancel(e1000->txtimeout);
     }
 
-  /* Check is a packet transmission just completed.  If so, call skel_txdone.
-   * This may disable further Tx interrupts if there are no pending
-   * tansmissions.
-   */
-
   /* Tx-descriptor Written back */
 
-  if (intr_cause & (1<<0))
+  if (intr_cause & (1 << 0))
     {
-      uip_poll(&e1000->uip_dev, e1000_uiptxpoll);
+      devif_poll(&e1000->netdev, e1000_txpoll);
     }
-
 
   /* Rx-Descriptors Low */
 
-  if (intr_cause & (1<<4))
+  if (intr_cause & (1 << 4))
     {
       int tail;
 
@@ -962,26 +1047,56 @@ static irqreturn_t e1000_interrupt_handler(int irq, void *dev_id)
 
 static pci_id_t e1000_id_table[] =
 {
-  {.sep = {INTEL_VENDERID, E1000_82573L}},
-  {.sep = {INTEL_VENDERID, E1000_82540EM}},
-  {.sep = {INTEL_VENDERID, E1000_82574L}},
-  {.sep = {INTEL_VENDERID, E1000_82567LM}},
-  {.sep = {INTEL_VENDERID, E1000_82541PI}},
-  {.sep = {0,0}}
+  {
+    .sep =
+    {
+      INTEL_VENDERID, E1000_82573L
+    }
+  },
+  {
+    .sep =
+    {
+      INTEL_VENDERID, E1000_82540EM
+    }
+  },
+  {
+    .sep =
+    {
+      INTEL_VENDERID, E1000_82574L
+    }
+  },
+  {
+    .sep =
+    {
+      INTEL_VENDERID, E1000_82567LM
+    }
+  },
+  {
+    .sep =
+    {
+      INTEL_VENDERID, E1000_82541PI
+    }
+  },
+  {
+    .sep =
+    {
+      0, 0
+    }
+  }
 };
 
 static int e1000_probe(uint16_t addr, pci_id_t id)
 {
   uint32_t mmio_base, mmio_size;
   uint32_t size;
-  int err;
+  int errcode;
   void *kmem;
   void *omem;
   struct e1000_dev *dev;
 
   /* alloc e1000_dev memory */
 
-  if ((dev = kzalloc(sizeof(struct e1000_dev))) == NULL)
+  if ((dev = kmm_zalloc(sizeof(struct e1000_dev))) == NULL)
     {
       return -1;
     }
@@ -992,7 +1107,7 @@ static int e1000_probe(uint16_t addr, pci_id_t id)
 
   /* enable device */
 
-  if ((err = pci_enable_device(addr, PCI_BUS_MASTER)) < 0)
+  if ((errcode = pci_enable_device(addr, PCI_BUS_MASTER)) < 0)
     {
       goto error;
     }
@@ -1005,8 +1120,8 @@ static int e1000_probe(uint16_t addr, pci_id_t id)
 
   mmio_base = pci_resource_start(addr, 0);
   mmio_size = pci_resource_len(addr, 0);
-  err = rgmp_memmap_nocache(mmio_base, mmio_size, mmio_base);
-  if (err)
+  errcode = rgmp_memmap_nocache(mmio_base, mmio_size, mmio_base);
+  if (errcode)
     {
       goto error;
     }
@@ -1024,7 +1139,7 @@ static int e1000_probe(uint16_t addr, pci_id_t id)
 
   dev->int_desc.handler = e1000_interrupt_handler;
   dev->int_desc.dev_id = dev;
-  if ((err = pci_request_irq(addr, &dev->int_desc, 0)) < 0)
+  if ((errcode = pci_request_irq(addr, &dev->int_desc, 0)) < 0)
     {
       goto err0;
     }
@@ -1036,8 +1151,8 @@ static int e1000_probe(uint16_t addr, pci_id_t id)
    * access performance. The page size alloc will restrict
    * this bad effect only within the memory we alloc here.
    *
-   * NEED FIX: the memalign may alloc memory continous in
-   * virtual address but dis-continous in physical address
+   * NEED FIX: the memalign may alloc memory continuous in
+   * virtual address but dis-continuous in physical address
    * due to RGMP memory setup.
    */
 
@@ -1049,7 +1164,7 @@ static int e1000_probe(uint16_t addr, pci_id_t id)
   omem = kmem = memalign(PGSIZE, size);
   if (kmem == NULL)
     {
-      err = -ENOMEM;
+      errcode = -ENOMEM;
       goto err1;
     }
 
@@ -1057,32 +1172,32 @@ static int e1000_probe(uint16_t addr, pci_id_t id)
 
   /* alloc memory for tx ring */
 
-  dev->tx_ring.desc = (struct tx_desc*)kmem;
+  dev->tx_ring.desc = (FAR struct tx_desc *)kmem;
   kmem += CONFIG_E1000_N_TX_DESC * sizeof(struct tx_desc);
   dev->tx_ring.buf = kmem;
   kmem += CONFIG_E1000_N_TX_DESC * CONFIG_E1000_BUFF_SIZE;
 
   /* alloc memory for rx rings */
 
-  dev->rx_ring.desc = (struct rx_desc*)kmem;
+  dev->rx_ring.desc = (FAR struct rx_desc *)kmem;
   kmem += CONFIG_E1000_N_RX_DESC * sizeof(struct rx_desc);
   dev->rx_ring.buf = kmem;
 
   /* Initialize the driver structure */
 
-  dev->uip_dev.d_ifup    = e1000_ifup;     /* I/F up (new IP address) callback */
-  dev->uip_dev.d_ifdown  = e1000_ifdown;   /* I/F down callback */
-  dev->uip_dev.d_txavail = e1000_txavail;  /* New TX data callback */
+  dev->netdev.d_ifup    = e1000_ifup;     /* I/F up (new IP address) callback */
+  dev->netdev.d_ifdown  = e1000_ifdown;   /* I/F down callback */
+  dev->netdev.d_txavail = e1000_txavail;  /* New TX data callback */
 #ifdef CONFIG_NET_IGMP
-  dev->uip_dev.d_addmac  = e1000_addmac;   /* Add multicast MAC address */
-  dev->uip_dev.d_rmmac   = e1000_rmmac;    /* Remove multicast MAC address */
+  dev->netdev.d_addmac  = e1000_addmac;   /* Add multicast MAC address */
+  dev->netdev.d_rmmac   = e1000_rmmac;    /* Remove multicast MAC address */
 #endif
-  dev->uip_dev.d_private = dev;            /* Used to recover private state from dev */
+  dev->netdev.d_private = dev;            /* Used to recover private state from dev */
 
   /* Create a watchdog for timing polling for and timing of transmisstions */
 
-  dev->txpoll       = wd_create();         /* Create periodic poll timer */
-  dev->txtimeout    = wd_create();         /* Create TX timeout timer */
+  dev->txpoll       = wd_create();        /* Create periodic poll timer */
+  dev->txtimeout    = wd_create();        /* Create TX timeout timer */
 
   /* Put the interface in the down state.
    * e1000 reset
@@ -1092,12 +1207,12 @@ static int e1000_probe(uint16_t addr, pci_id_t id)
 
   /* Read the MAC address from the hardware */
 
-  memcpy(dev->uip_dev.d_mac.ether_addr_octet, (void *)(dev->io_mem_base+E1000_RA), 6);
+  memcpy(dev->netdev.d_mac.ether_addr_octet, (void *)(dev->io_mem_base+E1000_RA), 6);
 
   /* Register the device with the OS so that socket IOCTLs can be performed */
 
-  err = netdev_register(&dev->uip_dev);
-  if (err)
+  errcode = netdev_register(&dev->netdev, NET_LL_ETHERNET);
+  if (errcode)
     {
       goto err2;
     }
@@ -1118,9 +1233,9 @@ err1:
 err0:
   rgmp_memunmap(mmio_base, mmio_size);
 error:
-  kfree(dev);
-  cprintf("e1000 device probe fail: %d\n", err);
-  return err;
+  kmm_free(dev);
+  cprintf("e1000 device probe fail: %d\n", errcode);
+  return errcode;
 }
 
 /****************************************************************************
@@ -1143,9 +1258,9 @@ void e1000_mod_exit(void)
         CONFIG_E1000_N_RX_DESC * CONFIG_E1000_BUFF_SIZE;
   size = ROUNDUP(size, PGSIZE);
 
-  for (dev=e1000_list.next; dev!=NULL; dev=dev->next)
+  for (dev = e1000_list.next; dev != NULL; dev = dev->next)
     {
-      netdev_unregister(&dev->uip_dev);
+      netdev_unregister(&dev->netdev);
       e1000_reset(dev);
       wd_delete(dev->txpoll);
       wd_delete(dev->txtimeout);
@@ -1153,7 +1268,7 @@ void e1000_mod_exit(void)
       free(dev->tx_ring.desc);
       pci_free_irq(dev->pci_addr);
       rgmp_memunmap((uintptr_t)dev->io_mem_base, dev->mem_size);
-      kfree(dev);
+      kmm_free(dev);
     }
 
   e1000_list.next = NULL;

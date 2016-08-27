@@ -227,12 +227,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   The CodeSourcery Toolchain (2009q1)
   -----------------------------------
   The CodeSourcery toolchain (2009q1) does not work with default optimization
@@ -315,7 +309,7 @@ NuttX EABI buildroot Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -352,8 +346,8 @@ NuttX EABI buildroot Toolchain
      -export TOOLCHAIN_BIN="/cygdrive/c/Program Files (x86)/CodeSourcery/Sourcery G++ Lite/bin"
      +#export TOOLCHAIN_BIN="/cygdrive/c/Program Files (x86)/CodeSourcery/Sourcery G++ Lite/bin"
 
-     -#export TOOLCHAIN_BIN="${WD}/../misc/buildroot/build_arm_nofpu/staging_dir/bin"
-     +export TOOLCHAIN_BIN="${WD}/../misc/buildroot/build_arm_nofpu/staging_dir/bin"
+     -#export TOOLCHAIN_BIN="${WD}/../buildroot/build_arm_nofpu/staging_dir/bin"
+     +export TOOLCHAIN_BIN="${WD}/../buildroot/build_arm_nofpu/staging_dir/bin"
 
   See the file configs/README.txt in the buildroot source tree.  That has more
   detailed PLUS some special instructions that you will need to follow if you are
@@ -390,8 +384,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -441,7 +435,7 @@ events as follows:
    * If LED1, LED2, LED3 are statically on, then NuttX probably failed to boot
      and these LEDs will give you some indication of where the failure was
   ** The normal state is LED1 ON and LED1 faintly glowing.  This faint glow
-     is because of timer interupts that result in the LED being illuminated
+     is because of timer interrupts that result in the LED being illuminated
      on a small proportion of the time.
  *** LED2 may also flicker normally if signals are processed.
 **** LED4 may not be available if RS-485 is also used. For RS-485, it will
@@ -657,7 +651,7 @@ Cloudctrl-specific Configuration Options
     CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2 is defined.
     CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
     CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
-    CONFIG_CAN_REGDEBUG - If CONFIG_DEBUG is set, this will generate an
+    CONFIG_STM32_CAN_REGDEBUG - If CONFIG_DEBUG_FEATURES is set, this will generate an
       dump of all CAN registers.
 
   Cloudctrl LCD Hardware Configuration
@@ -714,9 +708,9 @@ Cloudctrl-specific Configuration Options
    CONFIG_STM32_OTGFS_SOFINTR - Enable SOF interrupts.  Why would you ever
      want to do that?
    CONFIG_STM32_USBHOST_REGDEBUG - Enable very low-level register access
-     debug.  Depends on CONFIG_DEBUG.
+     debug.  Depends on CONFIG_DEBUG_FEATURES.
    CONFIG_STM32_USBHOST_PKTDUMP - Dump all incoming and outgoing USB
-     packets. Depends on CONFIG_DEBUG.
+     packets. Depends on CONFIG_DEBUG_FEATURES.
 
 Configurations
 ==============

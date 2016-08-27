@@ -2,7 +2,7 @@
  * netutils/webclient/webclient.c
  * Implementation of the HTTP client.
  *
- *   Copyright (C) 2007, 2009, 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2011-2012, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Based on uIP which also has a BSD style license:
@@ -55,33 +55,30 @@
 #endif
 
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <netdb.h>
 #include <string.h>
 #include <errno.h>
-
-#ifdef CONFIG_HAVE_GETHOSTBYNAME
-#  include <netdb.h>
-#else
-#  include <apps/netutils/dnsclient.h>
-#endif
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
 #include <nuttx/version.h>
-#include <apps/netutils/uiplib.h>
-#include <apps/netutils/webclient.h>
+
+#include "netutils/netlib.h"
+#include "netutils/webclient.h"
 
 #if defined(CONFIG_NETUTILS_CODECS)
 #  if defined(CONFIG_CODECS_URLCODE)
 #    define WGET_USE_URLENCODE 1
-#    include <apps/netutils/urldecode.h>
+#    include "netutils/urldecode.h"
 #  endif
 #  if defined(CONFIG_CODECS_BASE64)
-#    include <apps/netutils/base64.h>
+#    include "netutils/base64.h"
 #  endif
 #else
 #  undef CONFIG_CODECS_URLCODE
@@ -99,10 +96,12 @@
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
-#define WEBCLIENT_TIMEOUT          100
+#ifndef CONFIG_WEBCLIENT_TIMEOUT
+#  define CONFIG_WEBCLIENT_TIMEOUT 10
+#endif
 
 #define WEBCLIENT_STATE_STATUSLINE 0
 #define WEBCLIENT_STATE_HEADERS    1
@@ -335,7 +334,8 @@ static inline int wget_parseheaders(struct wget_s *ws)
                   if (dest != NULL)
                     {
                       *dest = 0;
-                   }
+                    }
+
                   strncpy(ws->mimetype, ws->line + strlen(g_httpcontenttype), sizeof(ws->mimetype));
                 }
               else
@@ -347,10 +347,10 @@ static inline int wget_parseheaders(struct wget_s *ws)
                    * retain the current location.
                    */
 
-                  (void)uip_parsehttpurl(ws->line + strlen(g_httplocation), &ws->port,
+                  (void)netlib_parsehttpurl(ws->line + strlen(g_httplocation), &ws->port,
                                          ws->hostname, CONFIG_WEBCLIENT_MAXHOSTNAME,
                                          ws->filename, CONFIG_WEBCLIENT_MAXFILENAME);
-                  nvdbg("New hostname='%s' filename='%s'\n", ws->hostname, ws->filename);
+                  ninfo("New hostname='%s' filename='%s'\n", ws->hostname, ws->filename);
                 }
             }
 
@@ -364,12 +364,49 @@ static inline int wget_parseheaders(struct wget_s *ws)
         {
           ndx++;
         }
+
       offset++;
     }
 
 exit:
-  ws->offset = offset;
+  ws->offset = ++offset;
   ws->ndx    = ndx;
+  return OK;
+}
+
+/****************************************************************************
+ * Name: wget_gethostip
+ *
+ * Description:
+ *   Call gethostbyname() to get the IPv4 address associated with a hostname.
+ *
+ * Input Parameters
+ *   hostname - The host name to use in the nslookup.
+ *   ipv4addr - The location to return the IPv4 address.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+static int wget_gethostip(FAR char *hostname, in_addr_t *ipv4addr)
+{
+  FAR struct hostent *he;
+
+  he = gethostbyname(hostname);
+  if (he == NULL)
+    {
+      nwarn("WARNING: gethostbyname failed: %d\n", h_errno);
+      return -ENOENT;
+    }
+  else if (he->h_addrtype != AF_INET)
+    {
+      nwarn("WARNING: gethostbyname returned an address of type: %d\n",
+           he->h_addrtype);
+      return -ENOEXEC;
+    }
+
+  memcpy(ipv4addr, he->h_addr, sizeof(in_addr_t));
   return OK;
 }
 
@@ -408,6 +445,7 @@ static int wget_base(FAR const char *url, FAR char *buffer, int buflen,
 {
   struct sockaddr_in server;
   struct wget_s ws;
+  struct timeval tv;
   bool redirected;
   char *dest,post_size[8];
   int sockfd;
@@ -423,17 +461,17 @@ static int wget_base(FAR const char *url, FAR char *buffer, int buflen,
 
   /* Parse the hostname (with optional port number) and filename from the URL */
 
-  ret = uip_parsehttpurl(url, &ws.port,
-                         ws.hostname, CONFIG_WEBCLIENT_MAXHOSTNAME,
-                         ws.filename, CONFIG_WEBCLIENT_MAXFILENAME);
+  ret = netlib_parsehttpurl(url, &ws.port,
+                            ws.hostname, CONFIG_WEBCLIENT_MAXHOSTNAME,
+                            ws.filename, CONFIG_WEBCLIENT_MAXFILENAME);
   if (ret != 0)
     {
-      ndbg("Malformed HTTP URL: %s\n", url);
+      nwarn("WARNING: Malformed HTTP URL: %s\n", url);
       set_errno(-ret);
       return ERROR;
     }
 
-  nvdbg("hostname='%s' filename='%s'\n", ws.hostname, ws.filename);
+  ninfo("hostname='%s' filename='%s'\n", ws.hostname, ws.filename);
 
   /* The following sequence may repeat indefinitely if we are redirected */
 
@@ -456,20 +494,30 @@ static int wget_base(FAR const char *url, FAR char *buffer, int buflen,
         {
           /* socket failed.  It will set the errno appropriately */
 
-          ndbg("socket failed: %d\n", errno);
+          nerr("ERROR: socket failed: %d\n", errno);
           return ERROR;
         }
 
-      /* Get the server adddress from the host name */
+      /* Set send and receive timeout values */
+
+      tv.tv_sec  = CONFIG_WEBCLIENT_TIMEOUT;
+      tv.tv_usec = 0;
+
+      (void)setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (FAR const void *)&tv,
+                       sizeof(struct timeval));
+      (void)setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (FAR const void *)&tv,
+                       sizeof(struct timeval));
+
+      /* Get the server address from the host name */
 
       server.sin_family = AF_INET;
       server.sin_port   = htons(ws.port);
-      ret = dns_gethostip(ws.hostname, &server.sin_addr.s_addr);
+      ret = wget_gethostip(ws.hostname, &server.sin_addr.s_addr);
       if (ret < 0)
         {
           /* Could not resolve host (or malformed IP address) */
 
-          ndbg("Failed to resolve hostname\n");
+          nwarn("WARNING: Failed to resolve hostname\n");
           ret = -EHOSTUNREACH;
           goto errout_with_errno;
         }
@@ -482,7 +530,7 @@ static int wget_base(FAR const char *url, FAR char *buffer, int buflen,
       ret = connect(sockfd, (struct sockaddr *)&server, sizeof(struct sockaddr_in));
       if (ret < 0)
         {
-          ndbg("connect failed: %d\n", errno);
+          nerr("ERROR: connect failed: %d\n", errno);
           goto errout;
         }
 
@@ -537,7 +585,7 @@ static int wget_base(FAR const char *url, FAR char *buffer, int buflen,
       ret = send(sockfd, buffer, len, 0);
       if (ret < 0)
         {
-          ndbg("send failed: %d\n", errno);
+          nerr("ERROR: send failed: %d\n", errno);
           goto errout;
         }
 
@@ -553,13 +601,13 @@ static int wget_base(FAR const char *url, FAR char *buffer, int buflen,
           ws.datend = recv(sockfd, ws.buffer, ws.buflen, 0);
           if (ws.datend < 0)
             {
-              ndbg("recv failed: %d\n", errno);
+              nerr("ERROR: recv failed: %d\n", errno);
               ret = ws.datend;
               goto errout_with_errno;
             }
           else if (ws.datend == 0)
             {
-              nvdbg("Connection lost\n");
+              ninfo("Connection lost\n");
               close(sockfd);
               break;
             }
@@ -607,6 +655,7 @@ static int wget_base(FAR const char *url, FAR char *buffer, int buflen,
         }
     }
   while (redirected);
+
   return OK;
 
 errout_with_errno:

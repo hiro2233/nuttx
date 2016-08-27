@@ -49,7 +49,7 @@
  * Public Data
  ****************************************************************************/
 
-/* Class API call strings that may be enabled for more desciptive USB trace
+/* Class API call strings that may be enabled for more descriptive USB trace
  * output.
  */
 
@@ -72,7 +72,7 @@ const struct trace_msg_t g_usb_trace_strings_clsapi[] =
   TRACE_STR_END
 };
 
-/* Class state strings that may be enabled for more desciptive USB trace
+/* Class state strings that may be enabled for more descriptive USB trace
  * output.
  */
 
@@ -97,7 +97,7 @@ const struct trace_msg_t g_usb_trace_strings_clsstate[] =
   TRACE_STR_END
 };
 
-/* Class error strings that may be enabled for more desciptive USB trace
+/* Class error strings that may be enabled for more descriptive USB trace
  * output.
  */
 
@@ -177,7 +177,7 @@ const struct trace_msg_t g_usb_trace_strings_clserror[] =
   TRACE_STR(USBMSC_TRACEERR_CMDREADREADFAIL),
   TRACE_STR(USBMSC_TRACEERR_CMDREADSUBMIT),
   TRACE_STR(USBMSC_TRACEERR_CMDREADWRRQEMPTY),
-  TRACE_STR(USBMSC_TRACEERR_CMDSTATUSRDREQLISTEMPTY),
+  TRACE_STR(USBMSC_TRACEERR_CMDSTATUSWRREQLISTEMPTY),
   TRACE_STR(USBMSC_TRACEERR_CMDUNEVIOLATION),
   TRACE_STR(USBMSC_TRACEERR_CMDWRITERDSUBMIT),
   TRACE_STR(USBMSC_TRACEERR_CMDWRITERDRQEMPTY),

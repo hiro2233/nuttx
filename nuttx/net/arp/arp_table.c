@@ -51,21 +51,16 @@
 #include <debug.h>
 
 #include <netinet/in.h>
-
 #include <net/ethernet.h>
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip-arch.h>
+
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/netdev.h>
 #include <nuttx/net/arp.h>
+#include <nuttx/net/ip.h>
+
+#include <arp/arp.h>
 
 #ifdef CONFIG_NET_ARP
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
 
 /****************************************************************************
  * Private Data
@@ -77,25 +72,21 @@ static struct arp_entry g_arptable[CONFIG_NET_ARPTAB_SIZE];
 static uint8_t g_arptime;
 
 /****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: arp_init
+ * Name: arp_reset
  *
  * Description:
- *   Initialize the ARP module. This function must be called before any of
- *   the other ARP functions.
+ *   Re-initialize the ARP table.
  *
  ****************************************************************************/
 
-void arp_init(void)
+void arp_reset(void)
 {
   int i;
+
   for (i = 0; i < CONFIG_NET_ARPTAB_SIZE; ++i)
     {
       memset(&g_arptable[i].at_ipaddr, 0, sizeof(in_addr_t));
@@ -115,14 +106,16 @@ void arp_init(void)
 
 void arp_timer(void)
 {
-  struct arp_entry *tabptr;
+  FAR struct arp_entry *tabptr;
   int i;
 
   ++g_arptime;
   for (i = 0; i < CONFIG_NET_ARPTAB_SIZE; ++i)
     {
       tabptr = &g_arptable[i];
-      if (tabptr->at_ipaddr != 0 && g_arptime - tabptr->at_time >= UIP_ARP_MAXAGE)
+
+      if (tabptr->at_ipaddr != 0 &&
+          g_arptime - tabptr->at_time >= CONFIG_NET_ARP_MAXAGE)
         {
           tabptr->at_ipaddr = 0;
         }
@@ -137,18 +130,21 @@ void arp_timer(void)
  *   address of an existing association.
  *
  * Input parameters:
- *   pipaddr - Refers to an IP address uint16_t[2]
+ *   ipaddr  - The IP address as an inaddr_t
  *   ethaddr - Refers to a HW address uint8_t[IFHWADDRLEN]
  *
+ * Returned Value:
+ *   Zero (OK) if the ARP table entry was successfully modified.  A negated
+ *   errno value is returned on any error.
+ *
  * Assumptions
- *   Interrupts are disabled
+ *   The network is locked to assure exclusive access to the ARP table
  *
  ****************************************************************************/
 
-void arp_update(uint16_t *pipaddr, uint8_t *ethaddr)
+int arp_update(in_addr_t ipaddr, FAR uint8_t *ethaddr)
 {
   struct arp_entry *tabptr = NULL;
-  in_addr_t         ipaddr = uip_ip4addr_conv(pipaddr);
   int               i;
 
   /* Walk through the ARP mapping table and try to find an entry to
@@ -168,19 +164,18 @@ void arp_update(uint16_t *pipaddr, uint8_t *ethaddr)
            * the IP address in this ARP table entry.
            */
 
-          if (uip_ipaddr_cmp(ipaddr, tabptr->at_ipaddr))
+          if (net_ipv4addr_cmp(ipaddr, tabptr->at_ipaddr))
             {
               /* An old entry found, update this and return. */
 
               memcpy(tabptr->at_ethaddr.ether_addr_octet, ethaddr, ETHER_ADDR_LEN);
               tabptr->at_time = g_arptime;
-              return;
+              return OK;
             }
         }
     }
 
   /* If we get here, no existing ARP table entry was found, so we create one. */
-
   /* First, we try to find an unused entry in the ARP table. */
 
   for (i = 0; i < CONFIG_NET_ARPTAB_SIZE; ++i)
@@ -222,6 +217,36 @@ void arp_update(uint16_t *pipaddr, uint8_t *ethaddr)
   tabptr->at_ipaddr = ipaddr;
   memcpy(tabptr->at_ethaddr.ether_addr_octet, ethaddr, ETHER_ADDR_LEN);
   tabptr->at_time = g_arptime;
+  return OK;
+}
+
+/****************************************************************************
+ * Name: arp_hdr_update
+ *
+ * Description:
+ *   Add the IP/HW address mapping to the ARP table -OR- change the IP
+ *   address of an existing association.
+ *
+ * Input parameters:
+ *   pipaddr - Refers to an IP address uint16_t[2] in network order
+ *   ethaddr - Refers to a HW address uint8_t[IFHWADDRLEN]
+ *
+ * Returned Value:
+ *   Zero (OK) if the ARP table entry was successfully modified.  A negated
+ *   errno value is returned on any error.
+ *
+ * Assumptions
+ *   The network is locked to assure exclusive access to the ARP table
+ *
+ ****************************************************************************/
+
+void arp_hdr_update(FAR uint16_t *pipaddr, FAR uint8_t *ethaddr)
+{
+  in_addr_t ipaddr = net_ip4addr_conv32(pipaddr);
+
+  /* Update the ARP table */
+
+  (void)arp_update(ipaddr, ethaddr);
 }
 
 /****************************************************************************
@@ -235,19 +260,19 @@ void arp_update(uint16_t *pipaddr, uint8_t *ethaddr)
  *
  * Assumptions
  *   Interrupts are disabled; Returned value will become unstable when
- *   interrupts are re-enabled or if any other uIP APIs are called.
+ *   interrupts are re-enabled or if any other network APIs are called.
  *
  ****************************************************************************/
 
-struct arp_entry *arp_find(in_addr_t ipaddr)
+FAR struct arp_entry *arp_find(in_addr_t ipaddr)
 {
-  struct arp_entry *tabptr;
+  FAR struct arp_entry *tabptr;
   int i;
 
   for (i = 0; i < CONFIG_NET_ARPTAB_SIZE; ++i)
     {
       tabptr = &g_arptable[i];
-      if (uip_ipaddr_cmp(ipaddr, tabptr->at_ipaddr))
+      if (net_ipv4addr_cmp(ipaddr, tabptr->at_ipaddr))
         {
           return tabptr;
         }

@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/sam4s-xplained/src/sam_userleds.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,46 +52,14 @@
 #ifndef CONFIG_ARCH_LEDS
 
 /****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg  lldbg
-#  define ledvdbg llvdbg
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Protototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: sam_ledinit
+ * Name: board_userled_initialize
  ****************************************************************************/
 
-void sam_ledinit(void)
+void board_userled_initialize(void)
 {
   /* Configure D9-2 GPIOs for output */
 
@@ -100,10 +68,10 @@ void sam_ledinit(void)
 }
 
 /****************************************************************************
- * Name: sam_setled
+ * Name: board_userled
  ****************************************************************************/
 
-void sam_setled(int led, bool ledon)
+void board_userled(int led, bool ledon)
 {
   uint32_t ledcfg;
 
@@ -124,10 +92,10 @@ void sam_setled(int led, bool ledon)
 }
 
 /****************************************************************************
- * Name: sam_setleds
+ * Name: board_userled_all
  ****************************************************************************/
 
-void sam_setleds(uint8_t ledset)
+void board_userled_all(uint8_t ledset)
 {
   bool ledon;
 

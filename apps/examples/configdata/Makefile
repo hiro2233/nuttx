@@ -33,64 +33,17 @@
 #
 ############################################################################
 
--include $(TOPDIR)/.config
 -include $(TOPDIR)/Make.defs
-include $(APPDIR)/Make.defs
 
 # CONFIGDATA Unit Test
 
+APPNAME = configdata
+
 ASRCS =
-CSRCS = configdata_main.c
+CSRCS =
+MAINSRC = configdata_main.c
 
-AOBJS = $(ASRCS:.S=$(OBJEXT))
-COBJS = $(CSRCS:.c=$(OBJEXT))
+CONFIG_XYZ_PROGNAME ?= configdata$(EXEEXT)
+PROGNAME = $(CONFIG_XYZ_PROGNAME)
 
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-ifeq ($(CONFIG_WINDOWS_NATIVE),y)
-  BIN = ..\..\libapps$(LIBEXT)
-else
-ifeq ($(WINTOOL),y)
-  BIN = ..\\..\\libapps$(LIBEXT)
-else
-  BIN = ../../libapps$(LIBEXT)
-endif
-endif
-
-ROOTDEPPATH = --dep-path .
-
-# Common build
-
-VPATH =
-
-all: .built
-.PHONY: clean depend distclean
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-.built: $(OBJS)
-	$(call ARCHIVE, $(BIN), $(OBJS))
-	@touch .built
-
-context:
-
-.depend: Makefile $(SRCS)
-	@$(MKDEP) $(ROOTDEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make.dep
-	@touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, .built)
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(APPDIR)/Application.mk

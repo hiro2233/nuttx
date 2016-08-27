@@ -28,6 +28,7 @@ Contents
   o USB Interface
   o microSD Card Interface
   o ViewTool DP83848 Ethernet Module
+  o Freescale MPL115A barometer sensor
   o LCD/Touchscreen Interface
   o Toolchains
     - NOTE about Windows native toolchains
@@ -371,8 +372,8 @@ ViewTool DP83848 Ethernet Module
       CONFIG_NSOCKET_DESCRIPTORS=10          : Socket-related
       CONFIG_NET_SOCKOPTS=y
 
-      CONFIG_NET_BUFSIZE=650                 : Maximum packet size
-      CONFIG_NET_RECEIVE_WINDOW=650
+      CONFIG_NET_ETH_MTU=650                 : Maximum packet size
+      CONFIG_NET_ETH_TCP_RECVWNDO=650
       CONFIG_NET_TCP_READAHEAD=y             : Enable read-ahead buffering
       CONFIG_NET_TCP_READAHEAD_BUFSIZE=650
 
@@ -397,6 +398,35 @@ ViewTool DP83848 Ethernet Module
 
       (also FTP, TFTP, WGET, NFS, etc. if you also have a mass storage
       device).
+
+Freescale MPL115A barometer sensor
+==================================
+
+  This board support package includes hooks that can be used to enable
+  testing of a Freescale MPL115A barometer sensor connected via SPI3 with
+  chip select on PB6,
+
+  Here are the configuration settings that would have to be included to
+  enabled support for the barometer:
+
+    System Type -> Peripherals
+      CONFIG_STM32_SPI3=y
+
+    Drivers -> SPI
+      CONFIG_SPI=y
+      CONFIG_SPI_EXCHANGE=y
+
+    Drivers -> Sensors
+      CONFIG_SENSORS=y
+      CONFIG_MPL115A=y
+      CONFIG_NSH_ARCHINIT=y
+
+
+  Note: this driver uses SPI3 then since PB3 pin is also use to JTAG TDO you
+  need to disable JTAG support to get this driver working:
+
+    System Type
+      CONFIG_STM32_JTAG_DISABLE=y
 
 LCD/Touchscreen Interface
 =========================
@@ -496,12 +526,6 @@ Toolchains
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
 Configurations
 ==============
 
@@ -533,7 +557,7 @@ Configurations
     change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -592,7 +616,7 @@ Configurations
 
     3. Since networking is enabled, you will see some boot-up delays when
        the network connection is established.  These delays can be quite
-       large is no network is attached (A production design to bring up the
+       large if no network is attached (A production design to bring up the
        network asynchronously to avoid these start up delays).
 
     4. This configuration uses the default USART1 serial console.  That
@@ -696,7 +720,7 @@ Configurations
             CONFIG_EXAMPLES_NXLINES_CIRCLECOLOR=0xf7bb
             CONFIG_EXAMPLES_NXLINES_BPP=16
 
-       STATUS: Now working; reads 0x8999 as device ID.  This may perhaps
+       STATUS: Not working; reads 0x8999 as device ID.  This may perhaps
                be due to incorrect jumper settings
 
     6. This configuration has been used for verifying the touchscreen on
@@ -716,7 +740,6 @@ Configurations
           Device Drivers
             CONFIG_SPI=y                       : Enable SPI support
             CONFIG_SPI_EXCHANGE=y              : The exchange() method is supported
-            CONFIG_SPI_OWNBUS=y                : Smaller code if this is the only SPI device
 
             CONFIG_INPUT=y                     : Enable support for input devices
             CONFIG_INPUT_ADS7843E=y            : Enable support for the XPT2046
@@ -743,8 +766,8 @@ Configurations
           debug output on USART1 can be enabled with:
 
           Build Setup:
-            CONFIG_DEBUG=y                     : Enable debug features
-            CONFIG_DEBUG_VERBOSE=y             : Enable verbose debug output
+            CONFIG_DEBUG_FEATURES=y            : Enable debug features
+            CONFIG_DEBUG_INFO=y                : Enable verbose debug output
             CONFIG_DEBUG_INPUT=y               : Enable debug output from input devices
 
        STATUS: Working

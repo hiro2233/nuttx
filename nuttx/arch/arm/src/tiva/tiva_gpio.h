@@ -1,8 +1,10 @@
-/************************************************************************************
+/****************************************************************************
  * arch/arm/src/tiva/tiva_gpio.h
  *
- *   Copyright (C) 2009-2010, 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2010, 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
+ *
+ * With modifications from Calvin Maguranis <calvin.maguranis@trd2inc.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,35 +33,154 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
 #ifndef __ARCH_ARM_SRC_TIVA_TIVA_GPIO_H
 #define __ARCH_ARM_SRC_TIVA_TIVA_GPIO_H
 
-/************************************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <nuttx/compiler.h>
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <debug.h>
+
+#include <nuttx/irq.h>
 
 #include "up_internal.h"
 #include "chip.h"
 
-/************************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- ************************************************************************************/
+ ****************************************************************************/
+
+/* Configuration ************************************************************/
+
+#if defined(CONFIG_ARCH_CHIP_LM3S) || defined(CONFIG_ARCH_CHIP_LM4F) || \
+    defined(CONFIG_ARCH_CHIP_CC3200)
+
+  /* I don't believe that any of these families support interrupts on port J.  Many
+   * do not support interrupts on port H either.
+   */
+
+#  undef CONFIG_TIVA_GPIOJ_IRQS
+
+#elif defined(CONFIG_ARCH_CHIP_TM4C)
+
+/* The TM4C123GH6PMI supports ports A-F of which any can support interrupts */
+
+#  if defined(CONFIG_ARCH_CHIP_TM4C123GH6PMI)
+#    undef CONFIG_TIVA_GPIOP_IRQS /* P-Q */
+#    undef CONFIG_TIVA_GPIOQ_IRQS
+
+/* The TM4C123GH6PGE supports interrupts only on port P */
+
+#  elif defined(CONFIG_ARCH_CHIP_TM4C123GH6PGE)
+#    undef CONFIG_TIVA_GPIOA_IRQS /* A-F */
+#    undef CONFIG_TIVA_GPIOB_IRQS
+#    undef CONFIG_TIVA_GPIOC_IRQS
+#    undef CONFIG_TIVA_GPIOD_IRQS
+#    undef CONFIG_TIVA_GPIOE_IRQS
+#    undef CONFIG_TIVA_GPIOF_IRQS
+
+#    undef CONFIG_TIVA_GPIOQ_IRQS /* Q */
+
+/* The TM4C123GH6ZRB and the TM4C129x support interrupts only on ports P and Q. */
+
+#  else
+#    undef CONFIG_TIVA_GPIOA_IRQS /* A-F */
+#    undef CONFIG_TIVA_GPIOB_IRQS
+#    undef CONFIG_TIVA_GPIOC_IRQS
+#    undef CONFIG_TIVA_GPIOD_IRQS
+#    undef CONFIG_TIVA_GPIOE_IRQS
+#    undef CONFIG_TIVA_GPIOF_IRQS
+
+#  endif
+
+/* No supported architecture supports interrupts on ports G-N or R-T */
+
+#  undef CONFIG_TIVA_GPIOG_IRQS /* G-N */
+#  undef CONFIG_TIVA_GPIOH_IRQS
+#  undef CONFIG_TIVA_GPIOJ_IRQS
+#  undef CONFIG_TIVA_GPIOK_IRQS
+#  undef CONFIG_TIVA_GPIOL_IRQS
+#  undef CONFIG_TIVA_GPIOM_IRQS
+#  undef CONFIG_TIVA_GPION_IRQS
+
+#  undef CONFIG_TIVA_GPIOR_IRQS /* R-T */
+#  undef CONFIG_TIVA_GPIOS_IRQS
+#  undef CONFIG_TIVA_GPIOT_IRQS
+
+#endif
+
+/* Mark GPIO interrupts as disabled for non-existent GPIO ports. */
+
+#if TIVA_NPORTS < 1
+#  undef CONFIG_TIVA_GPIOA_IRQS
+#endif
+#if TIVA_NPORTS < 2
+#  undef CONFIG_TIVA_GPIOB_IRQS
+#endif
+#if TIVA_NPORTS < 3
+#  undef CONFIG_TIVA_GPIOC_IRQS
+#endif
+#if TIVA_NPORTS < 4
+#  undef CONFIG_TIVA_GPIOD_IRQS
+#endif
+#if TIVA_NPORTS < 5
+#  undef CONFIG_TIVA_GPIOE_IRQS
+#endif
+#if TIVA_NPORTS < 6
+#  undef CONFIG_TIVA_GPIOF_IRQS
+#endif
+#if TIVA_NPORTS < 7
+#  undef CONFIG_TIVA_GPIOG_IRQS
+#endif
+#if TIVA_NPORTS < 8
+#  undef CONFIG_TIVA_GPIOH_IRQS
+#endif
+#if TIVA_NPORTS < 9
+#  undef CONFIG_TIVA_GPIOJ_IRQS
+#endif
+#if TIVA_NPORTS < 10
+#  undef CONFIG_TIVA_GPIOK_IRQS
+#endif
+#if TIVA_NPORTS < 11
+#  undef CONFIG_TIVA_GPIOL_IRQS
+#endif
+#if TIVA_NPORTS < 12
+#  undef CONFIG_TIVA_GPIOM_IRQS
+#endif
+#if TIVA_NPORTS < 13
+#  undef CONFIG_TIVA_GPION_IRQS
+#endif
+#if TIVA_NPORTS < 14
+#  undef CONFIG_TIVA_GPIOP_IRQS
+#endif
+#if TIVA_NPORTS < 15
+#  undef CONFIG_TIVA_GPIOQ_IRQS
+#endif
+#if TIVA_NPORTS < 16
+#  undef CONFIG_TIVA_GPIOQ_IRQS
+#endif
+#if TIVA_NPORTS < 17
+#  undef CONFIG_TIVA_GPIOQ_IRQS
+#endif
+#if TIVA_NPORTS < 18
+#  undef CONFIG_TIVA_GPIOQ_IRQS
+#endif
 
 /* Bit-encoded input to tiva_configgpio() *******************************************/
 
 /* Encoding:
  *
- * LM3S: FFFS SPPP III. .... .... .... VPPP PBBB
- * LM4F: FFFS SPPP III. AAAA .... .... VPPP PBBB
- * TM4C: FFFS SPPP III. AAAA .... .... VPPP PBBB
+ * LM3S: FFFS SPPP III. .... .... ...V PPPP PBBB
+ * LM4F: FFFS SPPP III. AAAA .... ...V PPPP PBBB
+ * TM4C: FFFS SPPP III. AAAA .... ...V PPPP PBBB
  *
  * TODO: The LM4F/TM4C also support configuration of pins to trigger ADC and/or uDMA.
  * That configuration is not addressed in this this encoding.
@@ -150,10 +271,10 @@
 #endif
 
 /* If the pin is an GPIO digital output, then this identifies the initial output value:
- * .... .... .... .... .... .... V... ....
+ * .... .... .... .... .... ...V .... ....
  */
 
-#define GPIO_VALUE_SHIFT              7                          /* Bit 7: If output, inital value of output */
+#define GPIO_VALUE_SHIFT              8                          /* Bit 8: If output, inital value of output */
 #define GPIO_VALUE_MASK               (1 << GPIO_VALUE_SHIFT)
 #  define GPIO_VALUE_ZERO             (0 << GPIO_VALUE_SHIFT)    /*   Initial value is zero */
 #  define GPIO_VALUE_ONE              (1 << GPIO_VALUE_SHIFT)    /*   Initial value is one */
@@ -162,8 +283,8 @@
  * .... .... .... .... .... .... .PPP P...
  */
 
-#define GPIO_PORT_SHIFT               3                          /* Bit 3-6:  Port number */
-#define GPIO_PORT_MASK                (15 << GPIO_PORT_SHIFT)
+#define GPIO_PORT_SHIFT               3                          /* Bit 3-7:  Port number */
+#define GPIO_PORT_MASK                (31 << GPIO_PORT_SHIFT)
 #  define GPIO_PORTA                  (0 << GPIO_PORT_SHIFT)     /*   GPIOA */
 #  define GPIO_PORTB                  (1 << GPIO_PORT_SHIFT)     /*   GPIOB */
 #  define GPIO_PORTC                  (2 << GPIO_PORT_SHIFT)     /*   GPIOC */
@@ -179,6 +300,9 @@
 #  define GPIO_PORTN                  (12 << GPIO_PORT_SHIFT)    /*   GPION */
 #  define GPIO_PORTP                  (13 << GPIO_PORT_SHIFT)    /*   GPIOP */
 #  define GPIO_PORTQ                  (14 << GPIO_PORT_SHIFT)    /*   GPIOQ */
+#  define GPIO_PORTR                  (15 << GPIO_PORT_SHIFT)    /*   GPIOR */
+#  define GPIO_PORTS                  (16 << GPIO_PORT_SHIFT)    /*   GPIOS */
+#  define GPIO_PORTT                  (17 << GPIO_PORT_SHIFT)    /*   GPIOT */
 
 /* This identifies the pin number in the port:
  * .... .... .... .... .... .... .... .BBB
@@ -195,78 +319,162 @@
 #  define GPIO_PIN_6                  (6 << GPIO_PIN_SHIFT)
 #  define GPIO_PIN_7                  (7 << GPIO_PIN_SHIFT)
 
-/************************************************************************************
- * Public Types
- ************************************************************************************/
-
-/************************************************************************************
- * Inline Functions
- ************************************************************************************/
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
 
 #ifndef __ASSEMBLY__
-
-/************************************************************************************
- * Public Data
- ************************************************************************************/
 
 #if defined(__cplusplus)
 extern "C"
 {
 #endif
 
-/************************************************************************************
- * Public Function Prototypes
- ************************************************************************************/
+uintptr_t tiva_gpiobaseaddress(unsigned int port);
 
-/************************************************************************************
+/****************************************************************************
  * Name: tiva_configgpio
  *
  * Description:
  *   Configure a GPIO pin based on bit-encoded description of the pin.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
-int tiva_configgpio(uint32_t cfgset);
+int tiva_configgpio(uint32_t pinset);
 
-/************************************************************************************
+/****************************************************************************
  * Name: tiva_gpiowrite
  *
  * Description:
  *   Write one or zero to the selected GPIO pin
  *
- ************************************************************************************/
+ ****************************************************************************/
 
 void tiva_gpiowrite(uint32_t pinset, bool value);
 
-/************************************************************************************
+/****************************************************************************
  * Name: tiva_gpioread
  *
  * Description:
  *   Read one or zero from the selected GPIO pin
  *
- ************************************************************************************/
+ ****************************************************************************/
 
-bool tiva_gpioread(uint32_t pinset, bool value);
+bool tiva_gpioread(uint32_t pinset);
 
-/************************************************************************************
+/****************************************************************************
  * Function:  tiva_dumpgpio
  *
  * Description:
  *   Dump all GPIO registers associated with the provided base address
  *
- ************************************************************************************/
+ ****************************************************************************/
 
 int tiva_dumpgpio(uint32_t pinset, const char *msg);
 
-/************************************************************************************
+/****************************************************************************
+ * Name: tiva_gpio_lockport
+ *
+ * Description:
+ *   Certain pins require to be unlocked from the NMI to use for normal GPIO
+ *   use. See table 10-10 in datasheet for pins with special considerations.
+ *
+ ****************************************************************************/
+
+void tiva_gpio_lockport(uint32_t pinset, bool lock);
+
+/****************************************************************************
+ * Function:  tiva_dumpgpio
+ *
+ * Description:
+ *   Dump all GPIO registers associated with the provided base address
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_DEBUG_GPIO_INFO
+void tiva_gpio_dumpconfig(uint32_t pinset);
+#else
+# define tiva_gpio_dumpconfig(p)
+#endif
+
+#ifdef CONFIG_TIVA_GPIO_IRQS
+/****************************************************************************
  * Name: gpio_irqinitialize
  *
  * Description:
  *   Initialize all vectors to the unexpected interrupt handler
  *
- ************************************************************************************/
+ ****************************************************************************/
 
-int weak_function gpio_irqinitialize(void);
+int weak_function tiva_gpioirqinitialize(void);
+
+/****************************************************************************
+ * Name: tiva_gpioirqattach
+ *
+ * Description:
+ *   Attach a GPIO interrupt to the provided 'isr'
+ *
+ * Returns:
+ *   oldhandler - the old interrupt handler assigned to this pin.
+ *
+ ****************************************************************************/
+
+xcpt_t tiva_gpioirqattach(uint32_t pinset, xcpt_t isr);
+#  define tiva_gpioirqdetach(pinset) tiva_gpioirqattach(pinset, NULL)
+
+/****************************************************************************
+ * Name: tiva_gpioportirqattach
+ *
+ * Description:
+ *   Attach 'isr' to the GPIO port. Only use this if you want to handle
+ *   the entire ports interrupts explicitly.
+ *
+ ****************************************************************************/
+
+void tiva_gpioportirqattach(uint8_t port, xcpt_t isr);
+#  define tiva_gpioportirqdetach(port) tiva_gpioportirqattach(port, NULL)
+
+/****************************************************************************
+ * Name: tiva_gpioirqenable
+ *
+ * Description:
+ *   Enable the GPIO port IRQ
+ *
+ ****************************************************************************/
+
+void tiva_gpioirqenable(uint8_t port, uint8_t pin);
+
+/****************************************************************************
+ * Name: tiva_gpioirqdisable
+ *
+ * Description:
+ *   Disable the GPIO port IRQ
+ *
+ ****************************************************************************/
+
+void tiva_gpioirqdisable(uint8_t port, uint8_t pin);
+
+/****************************************************************************
+ * Name: tiva_gpioirqstatus
+ *
+ * Description:
+ *   Returns raw or masked interrupt status.
+ *
+ ****************************************************************************/
+
+uint32_t tiva_gpioirqstatus(uint8_t port, bool masked);
+
+/****************************************************************************
+ * Name: tiva_gpioirqclear
+ *
+ * Description:
+ *   Clears the interrupt status of the input base
+ *
+ ****************************************************************************/
+
+void tiva_gpioirqclear(uint8_t port, uint32_t pinmask);
+
+#endif /* CONFIG_TIVA_GPIO_IRQS */
 
 #if defined(__cplusplus)
 }

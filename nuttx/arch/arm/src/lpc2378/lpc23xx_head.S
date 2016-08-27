@@ -46,7 +46,7 @@
 #include <arch/board/board.h>
 
 #include "arm.h"
-#include "internal.h"
+#include "lpc2378.h"
 #include "up_arch.h"
 #include "lpc23xx_uart.h"
 #include "lpc23xx_scb.h"
@@ -60,7 +60,7 @@
  * modify r0, r1, r2 and r14
  */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 	.macro	showprogress, code
 	mov	r0, #\code
 	bl	up_lowputc
@@ -193,7 +193,7 @@ __start:
 	/* Initialize onboard LEDs */
 
 #ifdef CONFIG_ARCH_LEDS
-	bl	board_led_initialize
+	bl	board_autoled_initialize
 #endif
 
 	/* Then jump to OS entry */

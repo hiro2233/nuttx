@@ -46,7 +46,7 @@
 #include "nxfe.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -86,7 +86,7 @@
 
 int nx_setsize(NXWINDOW hwnd, FAR const struct nxgl_size_s *size)
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!hwnd || !size)
     {
       errno = EINVAL;

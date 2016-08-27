@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/include/irq.h
  *
- *   Copyright (C) 2007-2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,12 +53,18 @@
 #include <arch/chip/irq.h>
 
 /* Include ARM architecture-specific IRQ definitions (including register
- * save structure and irqsave()/irqrestore() macros)
+ * save structure and up_irq_save()/up_irq_restore() functions)
  */
 
-#if defined(CONFIG_ARCH_CORTEXA5) || defined(CONFIG_ARCH_CORTEXA8)
+#if defined(CONFIG_ARCH_CORTEXA5) || defined(CONFIG_ARCH_CORTEXA8) || \
+    defined(CONFIG_ARCH_CORTEXA9)
 #  include <arch/armv7-a/irq.h>
-#elif defined(CONFIG_ARCH_CORTEXM3) || defined(CONFIG_ARCH_CORTEXM4)
+#elif defined(CONFIG_ARCH_CORTEXR4) || defined(CONFIG_ARCH_CORTEXR4F) || \
+      defined(CONFIG_ARCH_CORTEXR5) || defined(CONFIG_ARCH_CORTEXR5F) || \
+      defined(CONFIG_ARCH_CORTEXR7) || defined(CONFIG_ARCH_CORTEXR7F)
+#  include <arch/armv7-r/irq.h>
+#elif defined(CONFIG_ARCH_CORTEXM3) || defined(CONFIG_ARCH_CORTEXM4) || \
+      defined(CONFIG_ARCH_CORTEXM7)
 #  include <arch/armv7-m/irq.h>
 #elif defined(CONFIG_ARCH_CORTEXM0)
 #  include <arch/armv6-m/irq.h>
@@ -67,7 +73,7 @@
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -79,7 +85,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -89,7 +95,8 @@
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

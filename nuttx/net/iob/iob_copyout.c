@@ -39,7 +39,7 @@
 
 #include <nuttx/config.h>
 
-#if defined(CONFIG_DEBUG) && defined(CONFIG_IOB_DEBUG)
+#if defined(CONFIG_DEBUG_FEATURES) && defined(CONFIG_IOB_DEBUG)
 /* Force debug output (from this file only) */
 
 #  undef  CONFIG_DEBUG_NET
@@ -61,18 +61,6 @@
 #ifndef MIN
 #  define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -101,6 +89,12 @@ int iob_copyout(FAR uint8_t *dest, FAR const struct iob_s *iob,
     {
       offset -= iob->io_len;
       iob     = iob->io_flink;
+      if (iob == NULL)
+        {
+          /* We have no requested data in iob chain */
+
+          return 0;
+        }
     }
 
   /* Then loop until all of the I/O data is copied to the user buffer */

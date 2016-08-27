@@ -47,7 +47,7 @@
 #include "nxglib_bitblit.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #ifndef NXGLIB_SUFFIX
@@ -82,7 +82,7 @@
  *
  ****************************************************************************/
 
-void NXGL_FUNCNAME(nxgl_fillrectangle,NXGLIB_SUFFIX)
+void NXGL_FUNCNAME(nxgl_fillrectangle, NXGLIB_SUFFIX)
   (FAR struct fb_planeinfo_s *pinfo,
    FAR const struct nxgl_rect_s *rect,
    NXGL_PIXEL_T color)

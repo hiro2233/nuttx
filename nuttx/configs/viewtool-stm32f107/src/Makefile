@@ -35,16 +35,8 @@
 
 -include $(TOPDIR)/Make.defs
 
-CFLAGS += -I$(TOPDIR)/sched
-
 ASRCS =
-AOBJS = $(ASRCS:.S=$(OBJEXT))
-
 CSRCS = stm32_boot.c stm32_leds.c stm32_spi.c
-
-ifeq ($(CONFIG_HAVE_CXX),y)
-CSRCS += stm32_cxxinitialize.c
-endif
 
 ifeq ($(CONFIG_CAN),y)
 CSRCS += stm32_can.c
@@ -62,6 +54,10 @@ CSRCS += stm32_usbdev.c
 endif
 endif
 
+ifeq ($(CONFIG_MPL115A),y)
+CSRCS += stm32_mpl115a.c
+endif
+
 ifeq ($(CONFIG_INPUT_ADS7843E),y) # F103
 CSRCS += stm32_touchscreen.c
 endif
@@ -70,8 +66,8 @@ ifeq ($(CONFIG_LCD_SSD1289),y) # F103
 CSRCS += stm32_ssd1289.c
 endif
 
-ifeq ($(CONFIG_NSH_ARCHINIT),y)
-CSRCS += stm32_nsh.c
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+CSRCS += stm32_appinit.c
 endif
 
 ifeq ($(CONFIG_USBMSC),y)
@@ -86,43 +82,4 @@ ifeq ($(CONFIG_VIEWTOOL_HIGHPRI),y)
 CSRCS += stm32_highpri.c
 endif
 
-COBJS = $(CSRCS:.c=$(OBJEXT))
-
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-ARCH_SRCDIR	= $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(WINTOOL),y)
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
-    -I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
-    -I "${shell cygpath -w $(ARCH_SRCDIR)/armv7-m}"
-else
-  CFLAGS += -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/armv7-m
-endif
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

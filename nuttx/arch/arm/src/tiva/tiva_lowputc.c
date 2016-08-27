@@ -1,4 +1,4 @@
-/**************************************************************************
+/****************************************************************************
  * arch/arm/src/tiva/tiva_lowputc.c
  *
  *   Copyright (C) 2009-2010, 2014 Gregory Nutt. All rights reserved.
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Included Files
- **************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <stdint.h>
@@ -46,61 +46,72 @@
 #include "up_arch.h"
 #include "up_internal.h"
 
+#include "tiva_enablepwr.h"
+#include "tiva_enableclks.h"
+#include "tiva_periphrdy.h"
 #include "tiva_gpio.h"
 #include "chip/tiva_pinmap.h"
 
 #include "tiva_lowputc.h"
 
-/**************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- **************************************************************************/
+ ****************************************************************************/
 /* Configuration **********************************************************/
 
 /* Select UART parameters for the selected console */
 
 #if defined(CONFIG_UART0_SERIAL_CONSOLE)
+#  define TIVA_CONSOLE_UART     0
 #  define TIVA_CONSOLE_BASE     TIVA_UART0_BASE
 #  define TIVA_CONSOLE_BAUD     CONFIG_UART0_BAUD
 #  define TIVA_CONSOLE_BITS     CONFIG_UART0_BITS
 #  define TIVA_CONSOLE_PARITY   CONFIG_UART0_PARITY
 #  define TIVA_CONSOLE_2STOP    CONFIG_UART0_2STOP
 #elif defined(CONFIG_UART1_SERIAL_CONSOLE)
+#  define TIVA_CONSOLE_UART     1
 #  define TIVA_CONSOLE_BASE     TIVA_UART1_BASE
 #  define TIVA_CONSOLE_BAUD     CONFIG_UART1_BAUD
 #  define TIVA_CONSOLE_BITS     CONFIG_UART1_BITS
 #  define TIVA_CONSOLE_PARITY   CONFIG_UART1_PARITY
 #  define TIVA_CONSOLE_2STOP    CONFIG_UART1_2STOP
 #elif defined(CONFIG_UART2_SERIAL_CONSOLE)
+#  define TIVA_CONSOLE_UART     2
 #  define TIVA_CONSOLE_BASE     TIVA_UART2_BASE
 #  define TIVA_CONSOLE_BAUD     CONFIG_UART2_BAUD
 #  define TIVA_CONSOLE_BITS     CONFIG_UART2_BITS
 #  define TIVA_CONSOLE_PARITY   CONFIG_UART2_PARITY
 #  define TIVA_CONSOLE_2STOP    CONFIG_UART2_2STOP
 #elif defined(CONFIG_UART3_SERIAL_CONSOLE)
+#  define TIVA_CONSOLE_UART     3
 #  define TIVA_CONSOLE_BASE     TIVA_UART3_BASE
 #  define TIVA_CONSOLE_BAUD     CONFIG_UART3_BAUD
 #  define TIVA_CONSOLE_BITS     CONFIG_UART3_BITS
 #  define TIVA_CONSOLE_PARITY   CONFIG_UART3_PARITY
 #  define TIVA_CONSOLE_2STOP    CONFIG_UART3_2STOP
 #elif defined(CONFIG_UART4_SERIAL_CONSOLE)
+#  define TIVA_CONSOLE_UART     4
 #  define TIVA_CONSOLE_BASE     TIVA_UART4_BASE
 #  define TIVA_CONSOLE_BAUD     CONFIG_UART4_BAUD
 #  define TIVA_CONSOLE_BITS     CONFIG_UART4_BITS
 #  define TIVA_CONSOLE_PARITY   CONFIG_UART4_PARITY
 #  define TIVA_CONSOLE_2STOP    CONFIG_UART4_2STOP
 #elif defined(CONFIG_UART5_SERIAL_CONSOLE)
+#  define TIVA_CONSOLE_UART     5
 #  define TIVA_CONSOLE_BASE     TIVA_UART5_BASE
 #  define TIVA_CONSOLE_BAUD     CONFIG_UART5_BAUD
 #  define TIVA_CONSOLE_BITS     CONFIG_UART5_BITS
 #  define TIVA_CONSOLE_PARITY   CONFIG_UART5_PARITY
 #  define TIVA_CONSOLE_2STOP    CONFIG_UART5_2STOP
 #elif defined(CONFIG_UART6_SERIAL_CONSOLE)
+#  define TIVA_CONSOLE_UART     6
 #  define TIVA_CONSOLE_BASE     TIVA_UART6_BASE
 #  define TIVA_CONSOLE_BAUD     CONFIG_UART6_BAUD
 #  define TIVA_CONSOLE_BITS     CONFIG_UART6_BITS
 #  define TIVA_CONSOLE_PARITY   CONFIG_UART6_PARITY
 #  define TIVA_CONSOLE_2STOP    CONFIG_UART6_2STOP
 #elif defined(CONFIG_UART7_SERIAL_CONSOLE)
+#  define TIVA_CONSOLE_UART     7
 #  define TIVA_CONSOLE_BASE     TIVA_UART7_BASE
 #  define TIVA_CONSOLE_BAUD     CONFIG_UART7_BAUD
 #  define TIVA_CONSOLE_BITS     CONFIG_UART7_BITS
@@ -189,52 +200,52 @@
  * Which should yied BAUD = 50,000,000 / (16 * (27 + 8/64)) = 115207.37
  */
 
-/**************************************************************************
+/****************************************************************************
  * Private Types
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Private Function Prototypes
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
- * Global Variables
- **************************************************************************/
+/****************************************************************************
+ * Public Data
+ ****************************************************************************/
 
-/**************************************************************************
- * Private Variables
- **************************************************************************/
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Private Functions
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Public Functions
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Name: up_lowputc
  *
  * Description:
  *   Output one byte on the serial console
  *
- **************************************************************************/
+ ****************************************************************************/
 
 void up_lowputc(char ch)
 {
 #ifdef HAVE_SERIAL_CONSOLE
   /* Wait until the TX FIFO is not full */
 
-  while ((getreg32(TIVA_CONSOLE_BASE+TIVA_UART_FR_OFFSET) & UART_FR_TXFF) != 0);
+  while ((getreg32(TIVA_CONSOLE_BASE + TIVA_UART_FR_OFFSET) & UART_FR_TXFF) != 0);
 
   /* Then send the character */
 
-  putreg32((uint32_t)ch, TIVA_CONSOLE_BASE+TIVA_UART_DR_OFFSET);
+  putreg32((uint32_t)ch, TIVA_CONSOLE_BASE + TIVA_UART_DR_OFFSET);
 #endif
 }
 
-/**************************************************************************
+/****************************************************************************
  * Name: up_lowsetup
  *
  * Description:
@@ -242,11 +253,10 @@ void up_lowputc(char ch)
  *   console.  Its purpose is to get the console output availabe as soon
  *   as possible.
  *
- **************************************************************************/
+ ****************************************************************************/
 
 void up_lowsetup(void)
 {
-  uint32_t regval;
 #if defined(HAVE_SERIAL_CONSOLE) && !defined(CONFIG_SUPPRESS_UART_CONFIG)
   uint32_t ctl;
 #endif
@@ -254,75 +264,74 @@ void up_lowsetup(void)
   /* Enable the selected UARTs and configure GPIO pins needed by the
    * the selected UARTs.  NOTE: The serial driver later depends on
    * this pin configuration -- whether or not a serial console is selected.
+   *
+   * - Enable Power (TM4C129 family only):  Applies power (only) to the UART
+   *   peripheral.  This is not an essential step since enabling clocking
+   *   will also apply power.  The only significance is that the UART state
+   *   will be retained if the UART clocking is subsequently disabled.
+   * - Enable Clocking (All families):  Applies both power and clocking to
+   *   the UART peripheral, bringing it a fully functional state.
    */
 
 #ifdef CONFIG_TIVA_UART0
-  regval  = getreg32(TIVA_SYSCON_RCGC1);
-  regval |= SYSCON_RCGC1_UART0;
-  putreg32(regval, TIVA_SYSCON_RCGC1);
+  tiva_uart0_enablepwr();
+  tiva_uart0_enableclk();
 
   tiva_configgpio(GPIO_UART0_RX);
   tiva_configgpio(GPIO_UART0_TX);
 #endif
 
 #ifdef CONFIG_TIVA_UART1
-  regval  = getreg32(TIVA_SYSCON_RCGC1);
-  regval |= SYSCON_RCGC1_UART1;
-  putreg32(regval, TIVA_SYSCON_RCGC1);
+  tiva_uart1_enablepwr();
+  tiva_uart1_enableclk();
 
   tiva_configgpio(GPIO_UART1_RX);
   tiva_configgpio(GPIO_UART1_TX);
 #endif
 
 #ifdef CONFIG_TIVA_UART2
-  regval  = getreg32(TIVA_SYSCON_RCGC1);
-  regval |= SYSCON_RCGC1_UART2;
-  putreg32(regval, TIVA_SYSCON_RCGC1);
+  tiva_uart2_enablepwr();
+  tiva_uart2_enableclk();
 
   tiva_configgpio(GPIO_UART2_RX);
   tiva_configgpio(GPIO_UART2_TX);
 #endif
 
 #ifdef CONFIG_TIVA_UART3
-  regval  = getreg32(TIVA_SYSCON_RCGCUART);
-  regval |= SYSCON_RCGCUART_R3;
-  putreg32(regval, TIVA_SYSCON_RCGCUART);
+  tiva_uart3_enablepwr();
+  tiva_uart3_enableclk();
 
   tiva_configgpio(GPIO_UART3_RX);
   tiva_configgpio(GPIO_UART3_TX);
 #endif
 
 #ifdef CONFIG_TIVA_UART4
-  regval  = getreg32(TIVA_SYSCON_RCGCUART);
-  regval |= SYSCON_RCGCUART_R4;
-  putreg32(regval, TIVA_SYSCON_RCGCUART);
+  tiva_uart4_enablepwr();
+  tiva_uart4_enableclk();
 
   tiva_configgpio(GPIO_UART4_RX);
   tiva_configgpio(GPIO_UART4_TX);
 #endif
 
 #ifdef CONFIG_TIVA_UART5
-  regval  = getreg32(TIVA_SYSCON_RCGCUART);
-  regval |= SYSCON_RCGCUART_R5;
-  putreg32(regval, TIVA_SYSCON_RCGCUART);
+  tiva_uart5_enablepwr();
+  tiva_uart5_enableclk();
 
   tiva_configgpio(GPIO_UART5_RX);
   tiva_configgpio(GPIO_UART5_TX);
 #endif
 
 #ifdef CONFIG_TIVA_UART6
-  regval  = getreg32(TIVA_SYSCON_RCGCUART);
-  regval |= SYSCON_RCGCUART_R6;
-  putreg32(regval, TIVA_SYSCON_RCGCUART);
+  tiva_uart6_enablepwr();
+  tiva_uart6_enableclk();
 
   tiva_configgpio(GPIO_UART6_RX);
   tiva_configgpio(GPIO_UART6_TX);
 #endif
 
 #ifdef CONFIG_TIVA_UART7
-  regval  = getreg32(TIVA_SYSCON_RCGCUART);
-  regval |= SYSCON_RCGCUART_R7;
-  putreg32(regval, TIVA_SYSCON_RCGCUART);
+  tiva_uart7_enablepwr();
+  tiva_uart7_enableclk();
 
   tiva_configgpio(GPIO_UART7_RX);
   tiva_configgpio(GPIO_UART7_TX);
@@ -331,27 +340,36 @@ void up_lowsetup(void)
   /* Enable the selected console device */
 
 #if defined(HAVE_SERIAL_CONSOLE) && !defined(CONFIG_SUPPRESS_UART_CONFIG)
+#ifdef TIVA_SYSCON_PRUART
+  /* Wait for the console UART to be ready before writing to the UART
+   * registers.
+   */
+
+  while (!tiva_periphrdy(TIVA_SYSCON_PRUART,
+                         SYSCON_PRUART(TIVA_CONSOLE_UART)));
+#endif
+
   /* Disable the UART by clearing the UARTEN bit in the UART CTL register */
 
-  ctl = getreg32(TIVA_CONSOLE_BASE+TIVA_UART_CTL_OFFSET);
+  ctl = getreg32(TIVA_CONSOLE_BASE + TIVA_UART_CTL_OFFSET);
   ctl &= ~UART_CTL_UARTEN;
-  putreg32(ctl, TIVA_CONSOLE_BASE+TIVA_UART_CTL_OFFSET);
+  putreg32(ctl, TIVA_CONSOLE_BASE + TIVA_UART_CTL_OFFSET);
 
   /* Write the integer portion of the BRD to the UART IBRD register */
 
-  putreg32(TIVA_BRDI, TIVA_CONSOLE_BASE+TIVA_UART_IBRD_OFFSET);
+  putreg32(TIVA_BRDI, TIVA_CONSOLE_BASE + TIVA_UART_IBRD_OFFSET);
 
   /* Write the fractional portion of the BRD to the UART FBRD register */
 
-  putreg32(TIVA_DIVFRAC, TIVA_CONSOLE_BASE+TIVA_UART_FBRD_OFFSET);
+  putreg32(TIVA_DIVFRAC, TIVA_CONSOLE_BASE + TIVA_UART_FBRD_OFFSET);
 
   /* Write the desired serial parameters to the UART LCRH register */
 
-  putreg32(UART_LCRH_VALUE, TIVA_CONSOLE_BASE+TIVA_UART_LCRH_OFFSET);
+  putreg32(UART_LCRH_VALUE, TIVA_CONSOLE_BASE + TIVA_UART_LCRH_OFFSET);
 
   /* Enable the UART by setting the UARTEN bit in the UART CTL register */
 
-  ctl |= (UART_CTL_UARTEN|UART_CTL_TXE|UART_CTL_RXE);
-  putreg32(ctl, TIVA_CONSOLE_BASE+TIVA_UART_CTL_OFFSET);
+  ctl |= (UART_CTL_UARTEN | UART_CTL_TXE | UART_CTL_RXE);
+  putreg32(ctl, TIVA_CONSOLE_BASE + TIVA_UART_CTL_OFFSET);
 #endif
 }

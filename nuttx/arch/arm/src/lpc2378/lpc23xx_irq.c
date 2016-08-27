@@ -51,10 +51,10 @@
 
 #include "arm.h"
 #include "chip.h"
+#include "up_internal.h"
 #include "up_arch.h"
-#include "os_internal.h"
 
-#include "internal.h"
+#include "lpc2378.h"
 #include "lpc23xx_vic.h"
 
 /****************************************************************************
@@ -65,7 +65,13 @@
  * Public Data
  ****************************************************************************/
 
-volatile uint32_t *current_regs;
+/* g_current_regs[] holds a references to the current interrupt level
+ * register storage structure.  If is non-NULL only during interrupt
+ * processing.  Access to g_current_regs[] must be through the macro
+ * CURRENT_REGS for portability.
+ */
+
+volatile uint32_t *g_current_regs[1];
 
 /****************************************************************************
  * Private Data
@@ -107,19 +113,19 @@ void up_irqinitialize(void)
 
   /* currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  CURRENT_REGS = NULL;
 
   /* Enable global ARM interrupts */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
-  irqrestore(SVC_MODE | PSR_F_BIT);
+  up_irq_restore(SVC_MODE | PSR_F_BIT);
 #endif
 }
 
-/***********************************************************************
+/****************************************************************************
  * Name: up_enable_irq_protect
  * VIC registers can be accessed in User or privileged mode
- ***********************************************************************/
+ ****************************************************************************/
 
 #if 0 /* Not used */
 static void up_enable_irq_protect(void)
@@ -128,10 +134,10 @@ static void up_enable_irq_protect(void)
 }
 #endif
 
-/***********************************************************************
+/****************************************************************************
  * Name: up_disable_irq_protect
  * VIC registers can only be accessed in privileged mode
- ***********************************************************************/
+ ****************************************************************************/
 
 #if 0 /* Not used */
 static void up_disable_irq_protect(void)
@@ -140,13 +146,13 @@ static void up_disable_irq_protect(void)
 }
 #endif
 
-/***********************************************************************
+/****************************************************************************
  * Name: up_disable_irq
  *
  * Description:
  *   Disable the IRQ specified by 'irq'
  *
- ***********************************************************************/
+ ****************************************************************************/
 
 void up_disable_irq(int irq)
 {
@@ -162,13 +168,13 @@ void up_disable_irq(int irq)
     }
 }
 
-/***********************************************************************
+/****************************************************************************
  * Name: up_enable_irq
  *
  * Description:
  *   Enable the IRQ specified by 'irq'
  *
- ***********************************************************************/
+ ****************************************************************************/
 
 void up_enable_irq(int irq)
 {
@@ -178,7 +184,7 @@ void up_enable_irq(int irq)
     {
       /* Disable all interrupts */
 
-      irqstate_t flags = irqsave();
+      irqstate_t flags = enter_critical_section();
 
       /* Enable the irq by setting the corresponding bit in the VIC Interrupt
        * Enable register.
@@ -186,19 +192,19 @@ void up_enable_irq(int irq)
 
       uint32_t val = vic_getreg(VIC_INTENABLE_OFFSET);
       vic_putreg(val | (1 << irq), VIC_INTENABLE_OFFSET);
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 }
 
 /****************************************************************************
- * Name: up_maskack_irq
+ * Name: up_ack_irq
  *
  * Description:
- *   Mask the IRQ and acknowledge it
+ *   Acknowledge the interrupt
  *
  ****************************************************************************/
 
-void up_maskack_irq(int irq)
+void up_ack_irq(int irq)
 {
   uint32_t reg32;
 
@@ -264,7 +270,7 @@ void up_attach_vector(int irq, int vector, vic_vector_t handler)
 
       /* Disable all interrupts */
 
-      irqstate_t flags = irqsave();
+      irqstate_t flags = enter_critical_section();
 
       /* Save the vector address */
 
@@ -281,7 +287,7 @@ void up_attach_vector(int irq, int vector, vic_vector_t handler)
       uint32_t val = vic_getreg(VIC_INTENABLE_OFFSET);
       vic_putreg(val | (1 << irq), VIC_INTENABLE_OFFSET);
 
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 }
 #endif

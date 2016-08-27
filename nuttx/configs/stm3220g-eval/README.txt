@@ -91,12 +91,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   The CodeSourcery Toolchain (2009q1)
   -----------------------------------
   The CodeSourcery toolchain (2009q1) does not work with default optimization
@@ -191,6 +185,90 @@ IDEs
   one time from the Cygwin command line in order to obtain the pre-built
   startup object needed by RIDE.
 
+  Export nuttx to IAR or uVision workspace
+  ----------------------------------------
+  The script nuttx/tools/ide_exporter.py will help to create nuttx project in
+  these IDEs.  Here are few simple the steps to export the IDE workspaces:
+
+  1) Start the NuttX build from the Cygwin command line before trying to
+     create your project by running:
+
+       make V=1 |& tee build_log
+
+     This is necessary to certain auto-generated files and directories that
+     will be needed.   This will provide the build log to construct the IDE
+     project also.
+
+  2) Export the IDE project base on that make log. The script usage:
+
+     usage: ide_exporter.py [-h] [-v] [-o OUT_DIR] [-d] build_log {iar,uvision_armcc,uvision_gcc} template_dir
+
+     positional arguments:
+       build_log             Log file from make V=1
+       {iar,uvision_armcc,uvision_gcc}
+                             The target IDE: iar, uvision_gcc, (uvision_armcc is experimental)
+       template_dir          Directory that contains IDEs template projects
+
+     optional arguments:
+       -h, --help            show this help message and exit
+       -v, --version         show program's version number and exit
+       -o OUT_DIR, --output OUT_DIR
+                             Output directory
+       -d, --dump            Dump project structure tree
+
+     Example:
+        cd nuttx
+        make V=1 |& tee build_log
+
+        ./tools/ide_exporter.py makelog_f2nsh_c  iar ./configs/stm3220g-eval/ide/template/iar -o ./configs/stm3220g-eval/ide/nsh/iar
+
+        or
+
+        ./tools/ide_exporter.py makelog_f2nsh_c  uvision_gcc ./configs/stm3220g-eval/ide/template/uvision_gcc/ -o ./configs/stm3220g-eval/ide/nsh/uvision
+
+  3) Limitations:
+     - IAR supports C only. Iar C++ does not compatible with g++ so disable
+       C++ if you want to use IAR.
+     - uvision_armcc : nuttx asm (inline and .asm) can't be compiled with
+       armcc so do not use this option.
+     - uvision_gcc : uvision project that uses gcc. Need to specify path to
+       gnu toolchain.
+       In uVison menu, select:
+
+         Project/Manage/Project Items.../FolderExtension/Use GCC compiler/ PreFix, Folder
+
+  4) Template projects' constrains:
+     - mcu, core, link script shall be configured in template project
+     - Templates' name are fixed:
+        - template_nuttx.eww  : IAR nuttx workspace template
+        - template_nuttx_lib.ewp : IAR nuttx library project template
+        - template_nuttx_main.ewp : IAR nuttx main project template
+        - template_nuttx.uvmpw : uVision workspace
+        - template_nuttx_lib.uvproj : uVision library project
+        - template_nuttx_main.uvproj : uVision main project
+     - iar:
+        - Library option shall be set to 'None' so that IAR could use nuttx libc
+        - __ASSEMBLY__ symbol shall be defined in assembler
+     - uVision_gcc:
+        - There should be one fake .S file in projects that has been defined __ASSEMBLY__ in assembler.
+        - In Option/CC tab : disable warning
+        - In Option/CC tab : select Compile thump code (or Misc control = -mthumb)
+        - template_nuttx_lib.uvproj shall add 'Post build action' to copy .a file to .\lib
+        - template_nuttx_main.uvproj Linker:
+          - Select 'Do not use Standard System Startup Files' and 'Do not use Standard System Libraries'
+          - Do not select 'Use Math libraries'
+          - Misc control = --entry=__start
+
+    5) How to create template for other configurations:
+        1) uVision with gcc toolchain:
+            - Copy 3 uVision project files
+            - Select the MCU for main and lib project
+            - Correct the path to ld script if needed
+        2) iar:
+            - Check if the arch supportes IAR (only armv7-m is support IAR now)
+            - Select the MCU for main and lib project
+            - Add new ld script file for IAR
+
 NuttX EABI "buildroot" Toolchain
 ================================
 
@@ -199,7 +277,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -259,8 +337,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -323,7 +401,7 @@ events as follows:
   * If LED1, LED2, LED3 are statically on, then NuttX probably failed to boot
     and these LEDs will give you some indication of where the failure was
  ** The normal state is LED3 ON and LED1 faintly glowing.  This faint glow
-    is because of timer interupts that result in the LED being illuminated
+    is because of timer interrupts that result in the LED being illuminated
     on a small proportion of the time.
 *** LED2 may also flicker normally if signals are processed.
 
@@ -408,7 +486,7 @@ Configuration Options:
   CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2 is defined.
   CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
   CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
-  CONFIG_CAN_REGDEBUG - If CONFIG_DEBUG is set, this will generate an
+  CONFIG_STM32_CAN_REGDEBUG - If CONFIG_DEBUG_FEATURES is set, this will generate an
     dump of all CAN registers.
 
 FSMC SRAM
@@ -739,7 +817,7 @@ STM3220G-EVAL-specific Configuration Options
     CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2 is defined.
     CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
     CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
-    CONFIG_CAN_REGDEBUG - If CONFIG_DEBUG is set, this will generate an
+    CONFIG_STM32_CAN_REGDEBUG - If CONFIG_DEBUG_FEATURES is set, this will generate an
       dump of all CAN registers.
 
   STM3220G-EVAL LCD Hardware Configuration
@@ -764,9 +842,9 @@ STM3220G-EVAL-specific Configuration Options
    CONFIG_STM32_OTGFS_SOFINTR - Enable SOF interrupts.  Why would you ever
      want to do that?
    CONFIG_STM32_USBHOST_REGDEBUG - Enable very low-level register access
-     debug.  Depends on CONFIG_DEBUG.
+     debug.  Depends on CONFIG_DEBUG_FEATURES.
    CONFIG_STM32_USBHOST_PKTDUMP - Dump all incoming and outgoing USB
-     packets. Depends on CONFIG_DEBUG.
+     packets. Depends on CONFIG_DEBUG_FEATURES.
 
 Configurations
 ==============
@@ -794,7 +872,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -827,7 +905,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -856,7 +934,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -911,13 +989,13 @@ Where <subdir> is one of the following:
 
        Special PWM-only debug options:
 
-       CONFIG_DEBUG_PWM
+       CONFIG_DEBUG_PWM_INFO
 
     5. This example supports the CAN loopback test (apps/examples/can) but this
        must be manually enabled by selecting:
 
        CONFIG_CAN=y             : Enable the generic CAN infrastructure
-       CONFIG_CAN_EXID=y or n   : Enable to support extended ID frames
+       CONFIG_CAN_EXTID=y or n  : Enable to support extended ID frames
        CONFIG_STM32_CAN1=y      : Enable CAN1
        CONFIG_CAN_LOOPBACK=y    : Enable CAN loopback mode
 
@@ -925,8 +1003,8 @@ Where <subdir> is one of the following:
 
        Special CAN-only debug options:
 
-       CONFIG_DEBUG_CAN
-       CONFIG_CAN_REGDEBUG
+       CONFIG_DEBUG_CAN_INFO
+       CONFIG_STM32_CAN_REGDEBUG
 
     6. This example can support an FTP client.  In order to build in FTP client
        support simply reconfigure NuttX, adding:
@@ -1009,7 +1087,6 @@ Where <subdir> is one of the following:
 
     There are some special settings to make life with only a Telnet
 
-    CONFIG_SYSLOG=y - Enables the System Logging feature.
     CONFIG_RAMLOG=y - Enable the RAM-based logging feature.
     CONFIG_RAMLOG_CONSOLE=y - Use the RAM logger as the default console.
       This means that any console output from non-Telnet threads will
@@ -1030,7 +1107,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -1130,7 +1207,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -1155,7 +1232,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.

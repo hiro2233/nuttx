@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sama5/sam_tsd.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -57,12 +57,13 @@
 #include <semaphore.h>
 #include <fcntl.h>
 #include <poll.h>
-#include <wdog.h>
 #include <errno.h>
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
+#include <nuttx/wdog.h>
 #include <nuttx/wqueue.h>
 #include <nuttx/clock.h>
 #include <nuttx/input/touchscreen.h>
@@ -89,7 +90,7 @@
 
 /* Poll the pen position while the pen is down at this rate (50MS): */
 
-#define TSD_WDOG_DELAY      ((50 + (MSEC_PER_TICK-1))/ MSEC_PER_TICK)
+#define TSD_WDOG_DELAY      MSEC2TICK(50)
 
 /* This is a value for the threshold that guantees a big difference on the
  * first pendown (but can't overflow).
@@ -284,7 +285,7 @@ static void sam_tsd_notify(struct sam_tsd_s *priv)
       if (fds)
         {
           fds->revents |= POLLIN;
-          ivdbg("Report events: %02x\n", fds->revents);
+          iinfo("Report events: %02x\n", fds->revents);
           sem_post(fds->sem);
         }
     }
@@ -305,7 +306,7 @@ static int sam_tsd_sample(struct sam_tsd_s *priv, struct sam_sample_s *sample)
    * from changing until it has been reported.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Is there new touchscreen sample data available? */
 
@@ -315,7 +316,7 @@ static int sam_tsd_sample(struct sam_tsd_s *priv, struct sam_sample_s *sample)
        * sampled data.
        */
 
-      memcpy(sample, &priv->sample, sizeof(struct sam_sample_s ));
+      memcpy(sample, &priv->sample, sizeof(struct sam_sample_s));
 
       /* Now manage state transitions */
 
@@ -330,17 +331,17 @@ static int sam_tsd_sample(struct sam_tsd_s *priv, struct sam_sample_s *sample)
           priv->id++;
         }
       else if (sample->contact == CONTACT_DOWN)
-       {
+        {
           /* First report -- next report will be a movement */
 
-         priv->sample.contact = CONTACT_MOVE;
-       }
+          priv->sample.contact = CONTACT_MOVE;
+        }
 
       priv->penchange = false;
       ret = OK;
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return ret;
 }
 
@@ -362,7 +363,7 @@ static int sam_tsd_waitsample(struct sam_tsd_s *priv, struct sam_sample_s *sampl
    */
 
   sched_lock();
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Now release the semaphore that manages mutually exclusive access to
    * the device structure.  This may cause other tasks to become ready to
@@ -379,7 +380,7 @@ static int sam_tsd_waitsample(struct sam_tsd_s *priv, struct sam_sample_s *sampl
     {
       /* Wait for a sample data */
 
-      ivdbg("Waiting..\n");
+      iinfo("Waiting..\n");
       priv->nwaiters++;
       ret = sem_wait(&priv->waitsem);
       priv->nwaiters--;
@@ -390,16 +391,16 @@ static int sam_tsd_waitsample(struct sam_tsd_s *priv, struct sam_sample_s *sampl
            * the failure now.
            */
 
-          idbg("ERROR: sem_wait: %d\n", errno);
+          ierr("ERROR: sem_wait: %d\n", errno);
           DEBUGASSERT(errno == EINTR);
           ret = -EINTR;
           goto errout;
         }
     }
 
-  ivdbg("Sampled\n");
+  iinfo("Sampled\n");
 
-   /* Re-acquire the semaphore that manages mutually exclusive access to
+  /* Re-acquire the semaphore that manages mutually exclusive access to
    * the device structure.  We may have to wait here.  But we have our sample.
    * Interrupts and pre-emption will be re-enabled while we wait.
    */
@@ -412,7 +413,7 @@ errout:
    * have pre-emption disabled.
    */
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   /* Restore pre-emption.  We might get suspended here but that is okay
    * because we already have our sample.  Note:  this means that if there
@@ -537,7 +538,7 @@ static void sam_tsd_bottomhalf(void *arg)
 
   /* Handle the change from pen down to pen up */
 
-  ivdbg("pending: %08x pendown: %d contact: %d\n",
+  iinfo("pending: %08x pendown: %d contact: %d\n",
         pending, pendown, priv->sample.contact);
 
   if (!pendown)
@@ -571,15 +572,15 @@ static void sam_tsd_bottomhalf(void *arg)
 
        priv->sample.contact = CONTACT_UP;
 
-       /* Stop periodic trigger & enable pen */
+      /* Stop periodic trigger & enable pen */
 
-       sam_tsd_setaverage(priv, ADC_TSMR_TSAV_NOFILTER);
-       sam_tsd_debounce(priv, BOARD_TSD_DEBOUNCE);
+      sam_tsd_setaverage(priv, ADC_TSMR_TSAV_NOFILTER);
+      sam_tsd_debounce(priv, BOARD_TSD_DEBOUNCE);
 
-       regval  = sam_adc_getreg(priv->adc, SAM_ADC_TRGR);
-       regval &= ~ADC_TRGR_TRGMOD_MASK;
-       regval |= ADC_TRGR_TRGMOD_PEN;
-       sam_adc_putreg(priv->adc, SAM_ADC_TRGR, regval);
+      regval  = sam_adc_getreg(priv->adc, SAM_ADC_TRGR);
+      regval &= ~ADC_TRGR_TRGMOD_MASK;
+      regval |= ADC_TRGR_TRGMOD_PEN;
+      sam_adc_putreg(priv->adc, SAM_ADC_TRGR, regval);
     }
 
   /* It is a pen down event.  If the last loss-of-contact event has not been
@@ -596,9 +597,9 @@ static void sam_tsd_bottomhalf(void *arg)
        * this case; we rely on the timer expiry to get us going again.
        */
 
-       wd_start(priv->wdog, TSD_WDOG_DELAY, sam_tsd_expiry, 1, (uint32_t)priv);
-       ier = 0;
-       goto ignored;
+      wd_start(priv->wdog, TSD_WDOG_DELAY, sam_tsd_expiry, 1, (uint32_t)priv);
+      ier = 0;
+      goto ignored;
     }
   else
     {
@@ -643,7 +644,7 @@ static void sam_tsd_bottomhalf(void *arg)
 
       if (xraw == 0 || xraw >= xscale || yraw == 0 || yraw > yscale)
         {
-          idbg("Discarding: x %d:%d y %d:%d\n", xraw, xscale);
+          iwarn("WARNING: Discarding: x %d:%d y %d:%d\n", xraw, xscale);
           goto ignored;
         }
 
@@ -697,7 +698,7 @@ static void sam_tsd_bottomhalf(void *arg)
       priv->threshx  = x;
       priv->threshy  = y;
 
-     /* Update the x/y position in the sample data */
+      /* Update the x/y position in the sample data */
 
       priv->sample.x = MIN(x, UINT16_MAX);
       priv->sample.y = MIN(y, UINT16_MAX);
@@ -798,7 +799,7 @@ static int sam_tsd_schedule(struct sam_tsd_s *priv)
   ret = work_queue(HPWORK, &priv->work, sam_tsd_bottomhalf, priv, 0);
   if (ret != 0)
     {
-      illdbg("Failed to queue work: %d\n", ret);
+      ierr("ERROR: Failed to queue work: %d\n", ret);
     }
 
   return OK;
@@ -833,7 +834,7 @@ static int sam_tsd_open(struct file *filep)
   uint8_t tmp;
   int ret;
 
-  ivdbg("crefs: %d\n", priv->crefs);
+  iinfo("crefs: %d\n", priv->crefs);
 
   /* Get exclusive access to the device structures */
 
@@ -882,7 +883,7 @@ static int sam_tsd_close(struct file *filep)
   FAR struct inode *inode = filep->f_inode;
   FAR struct sam_tsd_s *priv = inode->i_private;
 
-  ivdbg("crefs: %d\n", priv->crefs);
+  iinfo("crefs: %d\n", priv->crefs);
 
   /* Get exclusive access to the ADC device */
 
@@ -918,7 +919,7 @@ static ssize_t sam_tsd_read(struct file *filep, char *buffer, size_t len)
   struct sam_sample_s sample;
   int ret;
 
-  ivdbg("buffer:%p len:%d\n", buffer, len);
+  iinfo("buffer:%p len:%d\n", buffer, len);
   DEBUGASSERT(filep);
   inode = filep->f_inode;
 
@@ -935,7 +936,7 @@ static ssize_t sam_tsd_read(struct file *filep, char *buffer, size_t len)
        * handle smaller reads... but why?
        */
 
-      idbg("ERROR: Unsupported read size: %d\n", len);
+      ierr("ERROR: Unsupported read size: %d\n", len);
       return -ENOSYS;
     }
 
@@ -953,12 +954,12 @@ static ssize_t sam_tsd_read(struct file *filep, char *buffer, size_t len)
        * option, then just return an error.
        */
 
-      ivdbg("Sample data is not available\n");
+      iinfo("Sample data is not available\n");
       if (filep->f_oflags & O_NONBLOCK)
         {
           ret = -EAGAIN;
           goto errout;
-       }
+        }
 
       /* Wait for sample data */
 
@@ -967,7 +968,7 @@ static ssize_t sam_tsd_read(struct file *filep, char *buffer, size_t len)
         {
           /* We might have been awakened by a signal */
 
-          idbg("ERROR: sam_tsd_waitsample: %d\n", ret);
+          ierr("ERROR: sam_tsd_waitsample: %d\n", ret);
           goto errout;
         }
     }
@@ -990,10 +991,10 @@ static ssize_t sam_tsd_read(struct file *filep, char *buffer, size_t len)
 
   if (sample.contact == CONTACT_UP)
     {
-       /* Pen is now up.  Is the positional data valid?  This is important
-        * to know because the release will be sent to the window based on
-        * its last positional data.
-        */
+      /* Pen is now up.  Is the positional data valid?  This is important
+       * to know because the release will be sent to the window based on
+       * its last positional data.
+       */
 
       if (sample.valid)
         {
@@ -1017,16 +1018,16 @@ static ssize_t sam_tsd_read(struct file *filep, char *buffer, size_t len)
       report->point[0].flags  = TSD_PENMOVE;
     }
 
-  ivdbg("  id:      %d\n", report->point[0].id);
-  ivdbg("  flags:   %02x\n", report->point[0].flags);
-  ivdbg("  x:       %d\n", report->point[0].x);
-  ivdbg("  y:       %d\n", report->point[0].y);
+  iinfo("  id:      %d\n", report->point[0].id);
+  iinfo("  flags:   %02x\n", report->point[0].flags);
+  iinfo("  x:       %d\n", report->point[0].x);
+  iinfo("  y:       %d\n", report->point[0].y);
 
   ret = SIZEOF_TOUCH_SAMPLE_S(1);
 
 errout:
   sam_adc_unlock(priv->adc);
-  ivdbg("Returning: %d\n", ret);
+  iinfo("Returning: %d\n", ret);
   return (ssize_t)ret;
 }
 
@@ -1040,7 +1041,7 @@ static int sam_tsd_ioctl(struct file *filep, int cmd, unsigned long arg)
   struct sam_tsd_s *priv;
   int ret;
 
-  ivdbg("cmd: %d arg: %ld\n", cmd, arg);
+  iinfo("cmd: %d arg: %ld\n", cmd, arg);
   DEBUGASSERT(filep);
   inode = filep->f_inode;
 
@@ -1076,7 +1077,7 @@ static int sam_tsd_poll(struct file *filep, struct pollfd *fds, bool setup)
   int ret = OK;
   int i;
 
-  ivdbg("setup: %d\n", (int)setup);
+  iinfo("setup: %d\n", (int)setup);
   DEBUGASSERT(filep && fds);
   inode = filep->f_inode;
 
@@ -1441,10 +1442,10 @@ static void sam_tsd_debounce(struct sam_tsd_s *priv, uint32_t time)
 
   div = 1000000000;
   while (div > 1 && (time % 10) == 0)
-   {
+    {
       time /= 10;
       div  /= 10;
-   }
+    }
 
   clk = BOARD_ADCCLK_FREQUENCY;
   while (div > 1 && (clk % 10) == 0)
@@ -1552,7 +1553,7 @@ static void sam_tsd_initialize(struct sam_tsd_s *priv)
 
   sam_adc_getreg(priv->adc, SAM_ADC_XPOSR);
   sam_adc_getreg(priv->adc, SAM_ADC_YPOSR);
-#if CONFIG_SAMA5_TSD_4WIRE
+#ifdef CONFIG_SAMA5_TSD_4WIRE
   sam_adc_getreg(priv->adc, SAM_ADC_PRESSR);
 #endif
 
@@ -1654,7 +1655,7 @@ int sam_tsd_register(struct sam_adc_s *adc, int minor)
   char devname[DEV_NAMELEN];
   int ret;
 
-  ivdbg("minor: %d\n", minor);
+  iinfo("minor: %d\n", minor);
 
   /* Debug-only sanity checks */
 
@@ -1673,12 +1674,12 @@ int sam_tsd_register(struct sam_adc_s *adc, int minor)
   /* Register the device as an input device */
 
   (void)snprintf(devname, DEV_NAMELEN, DEV_FORMAT, minor);
-  ivdbg("Registering %s\n", devname);
+  iinfo("Registering %s\n", devname);
 
   ret = register_driver(devname, &g_tsdops, 0666, priv);
   if (ret < 0)
     {
-      idbg("ERROR: register_driver() failed: %d\n", ret);
+      ierr("ERROR: register_driver() failed: %d\n", ret);
       goto errout_with_priv;
     }
 
@@ -1723,7 +1724,7 @@ void sam_tsd_interrupt(uint32_t pending)
       ret = sam_tsd_schedule(priv);
       if (ret < 0)
         {
-          idbg("ERROR: sam_tsd_schedule failed: %d\n", ret);
+          ierr("ERROR: sam_tsd_schedule failed: %d\n", ret);
         }
     }
 }

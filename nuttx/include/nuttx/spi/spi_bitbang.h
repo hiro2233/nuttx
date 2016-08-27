@@ -49,33 +49,9 @@
 #ifdef CONFIG_SPI_BITBANG
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-/* Debug ********************************************************************/
-/* Check if SPI debut is enabled (non-standard.. no support in
- * include/debug.h
- */
-
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_VERBOSE
-#  undef CONFIG_DEBUG_SPI
-#endif
-
-#ifdef CONFIG_DEBUG_SPI
-#  define spidbg lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define spivdbg lldbg
-#  else
-#    define spivdbg(x...)
-#  endif
-#else
-#  define spidbg(x...)
-#  define spivdbg(x...)
-#endif
-
-/****************************************************************************
  * Private Types
  ****************************************************************************/
+
 #ifndef __ASSEMBLY__
 
 /* These are the lower-half handlers that perform the level-level, platform-
@@ -127,9 +103,7 @@ struct spi_bitbang_s
   FAR const struct spi_bitbang_ops_s *low; /* Low-level operations */
   uint32_t         holdtime;               /* SCK hold time to achieve requested frequency */
   bitexchange_t    exchange;               /* The select bit exchange function */
-#ifndef CONFIG_SPI_OWNBUS
   sem_t            exclsem;                /* Supports mutually exclusive access to SPI */
-#endif
 #ifdef CONFIG_SPI_BITBANG_VARWIDTH
   uint8_t          nbits;                  /* Number of bits in the transfer */
 #endif

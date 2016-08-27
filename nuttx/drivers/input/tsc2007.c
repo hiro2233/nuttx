@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/input/tsc2007.c
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -62,10 +62,11 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/arch.h>
 #include <nuttx/fs/fs.h>
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/wqueue.h>
 
 #include <nuttx/input/touchscreen.h>
@@ -84,7 +85,7 @@
 #undef CONFIG_TSC2007_REFCNT
 
 /* I don't think that it is necessary to activate the converters before
- * making meaurements.  However, I will keep this functionality enabled
+ * making measurements.  However, I will keep this functionality enabled
  * until I have a change to prove that that activation is unnecessary.
  */
 
@@ -128,7 +129,7 @@
 
 /* This describes the state of one contact */
 
-enum tsc2007_contact_3
+enum tsc2007_contact_e
 {
   CONTACT_NONE = 0,                    /* No contact */
   CONTACT_DOWN,                        /* First contact */
@@ -165,7 +166,7 @@ struct tsc2007_dev_s
   sem_t waitsem;                       /* Used to wait for the availability of data */
 
   FAR struct tsc2007_config_s *config; /* Board configuration data */
-  FAR struct i2c_dev_s *i2c;           /* Saved I2C driver instance */
+  FAR struct i2c_master_s *i2c;        /* Saved I2C driver instance */
   struct work_s work;                  /* Supports the interrupt handling "bottom half" */
   struct tsc2007_sample_s sample;      /* Last sampled touch point data */
 
@@ -277,7 +278,7 @@ static void tsc2007_notify(FAR struct tsc2007_dev_s *priv)
       if (fds)
         {
           fds->revents |= POLLIN;
-          ivdbg("Report events: %02x\n", fds->revents);
+          iinfo("Report events: %02x\n", fds->revents);
           sem_post(fds->sem);
         }
     }
@@ -295,11 +296,11 @@ static int tsc2007_sample(FAR struct tsc2007_dev_s *priv,
   int ret = -EAGAIN;
 
   /* Interrupts me be disabled when this is called to (1) prevent posting
-   * of semphores from interrupt handlers, and (2) to prevent sampled data
+   * of semaphores from interrupt handlers, and (2) to prevent sampled data
    * from changing until it has been reported.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Is there new TSC2007 sample data available? */
 
@@ -309,7 +310,7 @@ static int tsc2007_sample(FAR struct tsc2007_dev_s *priv,
        * sampled data.
        */
 
-      memcpy(sample, &priv->sample, sizeof(struct tsc2007_sample_s ));
+      memcpy(sample, &priv->sample, sizeof(struct tsc2007_sample_s));
 
       /* Now manage state transitions */
 
@@ -334,7 +335,7 @@ static int tsc2007_sample(FAR struct tsc2007_dev_s *priv,
       ret = OK;
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return ret;
 }
 
@@ -349,7 +350,7 @@ static int tsc2007_waitsample(FAR struct tsc2007_dev_s *priv,
   int ret;
 
   /* Interrupts me be disabled when this is called to (1) prevent posting
-   * of semphores from interrupt handlers, and (2) to prevent sampled data
+   * of semaphores from interrupt handlers, and (2) to prevent sampled data
    * from changing until it has been reported.
    *
    * In addition, we will also disable pre-emption to prevent other threads
@@ -357,7 +358,7 @@ static int tsc2007_waitsample(FAR struct tsc2007_dev_s *priv,
    */
 
   sched_lock();
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Now release the semaphore that manages mutually exclusive access to
    * the device structure.  This may cause other tasks to become ready to
@@ -367,7 +368,7 @@ static int tsc2007_waitsample(FAR struct tsc2007_dev_s *priv,
   sem_post(&priv->devsem);
 
   /* Try to get the a sample... if we cannot, then wait on the semaphore
-   * that is posted when new sample data is availble.
+   * that is posted when new sample data is available.
    */
 
   while (tsc2007_sample(priv, sample) < 0)
@@ -403,7 +404,7 @@ errout:
    * have pre-emption disabled.
    */
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   /* Restore pre-emption.  We might get suspended here but that is okay
    * because we already have our sample.  Note:  this means that if there
@@ -430,12 +431,13 @@ static int tsc2007_activate(FAR struct tsc2007_dev_s *priv, uint8_t cmd)
    * activation command (ACKed).
    */
 
-   data = TSC2007_SETUP;
+   data          = TSC2007_SETUP;
 
-   msg.addr   = priv->config->address; /* 7-bit address */
-   msg.flags  = 0;                     /* Write transaction, beginning with START */
-   msg.buffer = &data;                 /* Transfer from this address */
-   msg.length = 1;                     /* Send one byte following the address */
+   msg.frequency = priv->config->frequency;   /* I2C frequency */
+   msg.addr      = priv->config->address;     /* 7-bit address */
+   msg.flags     = 0;                         /* Write transaction, beginning with START */
+   msg.buffer    = &data;                     /* Transfer from this address */
+   msg.length    = 1;                         /* Send one byte following the address */
 
    /* Ignore errors from the setup command (because it is not ACKed) */
 
@@ -443,17 +445,18 @@ static int tsc2007_activate(FAR struct tsc2007_dev_s *priv, uint8_t cmd)
 
    /* Now activate the A/D converter */
 
-   data = cmd;
+   data          = cmd;
 
-   msg.addr   = priv->config->address; /* 7-bit address */
-   msg.flags  = 0;                     /* Write transaction, beginning with START */
-   msg.buffer = &data;                 /* Transfer from this address */
-   msg.length = 1;                     /* Send one byte following the address */
+   msg.frequency = priv->config->frequency;   /* I2C frequency */
+   msg.addr      = priv->config->address;     /* 7-bit address */
+   msg.flags     = 0;                         /* Write transaction, beginning with START */
+   msg.buffer    = &data;                     /* Transfer from this address */
+   msg.length    = 1;                         /* Send one byte following the address */
 
    ret = I2C_TRANSFER(priv->i2c, &msg, 1);
    if (ret < 0)
      {
-       idbg("I2C_TRANSFER failed: %d\n", ret);
+       ierr("ERROR: I2C_TRANSFER failed: %d\n", ret);
      }
    return ret;
 }
@@ -483,15 +486,16 @@ static int tsc2007_transfer(FAR struct tsc2007_dev_s *priv, uint8_t cmd)
    *  STOP condition...
    */
 
-   msg.addr   = priv->config->address; /* 7-bit address */
-   msg.flags  = 0;                     /* Write transaction, beginning with START */
-   msg.buffer = &cmd;                  /* Transfer from this address */
-   msg.length = 1;                     /* Send one byte following the address */
+   msg.frequency = priv->config->frequency;   /* I2C frequency */
+   msg.addr      = priv->config->address;     /* 7-bit address */
+   msg.flags     = 0;                         /* Write transaction, beginning with START */
+   msg.buffer    = &cmd;                      /* Transfer from this address */
+   msg.length    = 1;                         /* Send one byte following the address */
 
    ret = I2C_TRANSFER(priv->i2c, &msg, 1);
    if (ret < 0)
      {
-       idbg("I2C_TRANSFER failed: %d\n", ret);
+       ierr("ERROR: I2C_TRANSFER failed: %d\n", ret);
        return ret;
      }
 
@@ -527,25 +531,26 @@ static int tsc2007_transfer(FAR struct tsc2007_dev_s *priv, uint8_t cmd)
    *  data byte has been received...
    */
 
-   msg.addr   = priv->config->address; /* 7-bit address */
-   msg.flags  = I2C_M_READ;            /* Read transaction, beginning with START */
-   msg.buffer = data12;                /* Transfer to this address */
-   msg.length = 2;                     /* Read two bytes following the address */
+   msg.frequency = priv->config->frequency;   /* I2C frequency */
+   msg.addr      = priv->config->address;     /* 7-bit address */
+   msg.flags     = I2C_M_READ;                /* Read transaction, beginning with START */
+   msg.buffer    = data12;                    /* Transfer to this address */
+   msg.length    = 2;                         /* Read two bytes following the address */
 
    ret = I2C_TRANSFER(priv->i2c, &msg, 1);
    if (ret < 0)
      {
-       idbg("I2C_TRANSFER failed: %d\n", ret);
+       ierr("ERROR: I2C_TRANSFER failed: %d\n", ret);
        return ret;
      }
 
-   /* Get the MS 8 bits from the first byte and the remaining LS 4 bits from
-    * the second byte.  The valid range of data is then from 0 to 4095 with
-    * the LSB unit corresponding to Vref/4096.
-    */
+  /* Get the MS 8 bits from the first byte and the remaining LS 4 bits from
+   * the second byte.  The valid range of data is then from 0 to 4095 with
+   * the LSB unit corresponding to Vref/4096.
+   */
 
    ret = (unsigned int)data12[0] << 4 | (unsigned int)data12[1] >> 4;
-   ivdbg("data: 0x%04x\n", ret);
+   iinfo("data: 0x%04x\n", ret);
    return ret;
 }
 
@@ -667,7 +672,7 @@ static void tsc2007_worker(FAR void *arg)
 
       if (z1 == 0)
         {
-          idbg("Z1 zero\n");
+          ierr("ERROR: Z1 zero\n");
           pressure = 0;
         }
       else
@@ -675,14 +680,14 @@ static void tsc2007_worker(FAR void *arg)
           pressure = (x * config->rxplate * (z2 - z1)) / z1;
           pressure = (pressure + 2048) >> 12;
 
-          ivdbg("Position: (%d,%4d) pressure: %u z1/2: (%d,%d)\n",
+          iinfo("Position: (%d,%4d) pressure: %u z1/2: (%d,%d)\n",
                 x, y, pressure, z1, z2);
 
           /* Ignore out of range caculcations */
 
           if (pressure > 0x0fff)
             {
-              idbg("Dropped out-of-range pressure: %d\n", pressure);
+              ierr("ERROR: Dropped out-of-range pressure: %d\n", pressure);
               pressure = 0;
             }
         }
@@ -699,7 +704,7 @@ static void tsc2007_worker(FAR void *arg)
 
   if (pendown)
     {
-      /* If this is the first (acknowledged) pend down report, then report
+      /* If this is the first (acknowledged) pen down report, then report
        * this as the first contact.  If contact == CONTACT_DOWN, it will be
        * set to set to CONTACT_MOVE after the contact is first sampled.
        */
@@ -726,7 +731,7 @@ static void tsc2007_worker(FAR void *arg)
   priv->sample.id = priv->id;
   priv->penchange = true;
 
-  /* Notify any waiters that nes TSC2007 data is available */
+  /* Notify any waiters that new TSC2007 data is available */
 
   tsc2007_notify(priv);
 
@@ -778,7 +783,7 @@ static int tsc2007_interrupt(int irq, FAR void *context)
   ret = work_queue(HPWORK, &priv->work, tsc2007_worker, priv, 0);
   if (ret != 0)
     {
-      illdbg("Failed to queue work: %d\n", ret);
+      ierr("ERROR: Failed to queue work: %d\n", ret);
     }
 
   /* Clear any pending interrupts and return success */
@@ -810,7 +815,7 @@ static int tsc2007_open(FAR struct file *filep)
   ret = sem_wait(&priv->devsem);
   if (ret < 0)
     {
-      /* This should only happen if the wait was canceled by an signal */
+      /* This should only happen if the wait was cancelled by an signal */
 
       DEBUGASSERT(errno == EINTR);
       return -EINTR;
@@ -865,7 +870,7 @@ static int tsc2007_close(FAR struct file *filep)
   ret = sem_wait(&priv->devsem);
   if (ret < 0)
     {
-      /* This should only happen if the wait was canceled by an signal */
+      /* This should only happen if the wait was cancelled by an signal */
 
       DEBUGASSERT(errno == EINTR);
       return -EINTR;
@@ -922,7 +927,7 @@ static ssize_t tsc2007_read(FAR struct file *filep, FAR char *buffer, size_t len
   ret = sem_wait(&priv->devsem);
   if (ret < 0)
     {
-      /* This should only happen if the wait was canceled by an signal */
+      /* This should only happen if the wait was cancelled by an signal */
 
       DEBUGASSERT(errno == EINTR);
       return -EINTR;
@@ -971,8 +976,8 @@ static ssize_t tsc2007_read(FAR struct file *filep, FAR char *buffer, size_t len
 
   if (sample.contact == CONTACT_UP)
     {
-       /* Pen is now up.  Is the positional data valid?  This is important to
-        * know because the release will be sent to the window based on its
+      /* Pen is now up.  Is the positional data valid?  This is important to
+       * know because the release will be sent to the window based on its
        * last positional data.
        */
 
@@ -990,7 +995,7 @@ static ssize_t tsc2007_read(FAR struct file *filep, FAR char *buffer, size_t len
     {
       if (sample.contact == CONTACT_DOWN)
         {
-          /* First contact */
+          /* Loss of contact */
 
           report->point[0].flags  = TOUCH_DOWN | TOUCH_ID_VALID | TOUCH_POS_VALID;
         }
@@ -1026,7 +1031,7 @@ static int tsc2007_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   FAR struct tsc2007_dev_s *priv;
   int                       ret;
 
-  ivdbg("cmd: %d arg: %ld\n", cmd, arg);
+  iinfo("cmd: %d arg: %ld\n", cmd, arg);
   DEBUGASSERT(filep);
   inode = filep->f_inode;
 
@@ -1038,7 +1043,7 @@ static int tsc2007_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   ret = sem_wait(&priv->devsem);
   if (ret < 0)
     {
-      /* This should only happen if the wait was canceled by an signal */
+      /* This should only happen if the wait was cancelled by an signal */
 
       DEBUGASSERT(errno == EINTR);
       return -EINTR;
@@ -1068,7 +1073,7 @@ static int tsc2007_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         {
           FAR uint32_t *ptr = (FAR uint32_t *)((uintptr_t)arg);
           DEBUGASSERT(priv->config != NULL && ptr != NULL);
-          priv->config->frequency = I2C_SETFREQUENCY(priv->i2c, *ptr);
+          priv->config->frequency = *ptr;
         }
         break;
 
@@ -1102,7 +1107,7 @@ static int tsc2007_poll(FAR struct file *filep, FAR struct pollfd *fds,
   int                       ret;
   int                       i;
 
-  ivdbg("setup: %d\n", (int)setup);
+  iinfo("setup: %d\n", (int)setup);
   DEBUGASSERT(filep && fds);
   inode = filep->f_inode;
 
@@ -1114,7 +1119,7 @@ static int tsc2007_poll(FAR struct file *filep, FAR struct pollfd *fds,
   ret = sem_wait(&priv->devsem);
   if (ret < 0)
     {
-      /* This should only happen if the wait was canceled by an signal */
+      /* This should only happen if the wait was cancelled by an signal */
 
       DEBUGASSERT(errno == EINTR);
       return -EINTR;
@@ -1126,7 +1131,7 @@ static int tsc2007_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
       if ((fds->events & POLLIN) == 0)
         {
-          idbg("Missing POLLIN: revents: %08x\n", fds->revents);
+          ierr("ERROR: Missing POLLIN: revents: %08x\n", fds->revents);
           ret = -EDEADLK;
           goto errout;
         }
@@ -1151,7 +1156,7 @@ static int tsc2007_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
       if (i >= CONFIG_TSC2007_NPOLLWAITERS)
         {
-          idbg("No availabled slot found: %d\n", i);
+          ierr("ERROR: No available slot found: %d\n", i);
           fds->priv    = NULL;
           ret          = -EBUSY;
           goto errout;
@@ -1210,7 +1215,7 @@ errout:
  *
  ****************************************************************************/
 
-int tsc2007_register(FAR struct i2c_dev_s *dev,
+int tsc2007_register(FAR struct i2c_master_s *dev,
                      FAR struct tsc2007_config_s *config, int minor)
 {
   FAR struct tsc2007_dev_s *priv;
@@ -1220,7 +1225,7 @@ int tsc2007_register(FAR struct i2c_dev_s *dev,
 #endif
   int ret;
 
-  ivdbg("dev: %p minor: %d\n", dev, minor);
+  iinfo("dev: %p minor: %d\n", dev, minor);
 
   /* Debug-only sanity checks */
 
@@ -1234,10 +1239,10 @@ int tsc2007_register(FAR struct i2c_dev_s *dev,
 #ifndef CONFIG_TSC2007_MULTIPLE
   priv = &g_tsc2007;
 #else
-  priv = (FAR struct tsc2007_dev_s *)kmalloc(sizeof(struct tsc2007_dev_s));
+  priv = (FAR struct tsc2007_dev_s *)kmm_malloc(sizeof(struct tsc2007_dev_s));
   if (!priv)
     {
-      idbg("kmalloc(%d) failed\n", sizeof(struct tsc2007_dev_s));
+      ierr("ERROR: kmm_malloc(%d) failed\n", sizeof(struct tsc2007_dev_s));
       return -ENOMEM;
     }
 #endif
@@ -1250,19 +1255,6 @@ int tsc2007_register(FAR struct i2c_dev_s *dev,
   sem_init(&priv->devsem,  0, 1); /* Initialize device structure semaphore */
   sem_init(&priv->waitsem, 0, 0); /* Initialize pen event wait semaphore */
 
-  /* Set the I2C frequency (saving the actual frequency) */
-
-  config->frequency = I2C_SETFREQUENCY(dev, config->frequency);
-
-  /* Set the I2C address and address size */
-
-  ret = I2C_SETADDRESS(dev, config->address, 7);
-  if (ret < 0)
-    {
-      idbg("I2C_SETADDRESS failed: %d\n", ret);
-      goto errout_with_priv;
-    }
-
   /* Make sure that interrupts are disabled */
 
   config->clear(config);
@@ -1273,7 +1265,7 @@ int tsc2007_register(FAR struct i2c_dev_s *dev,
   ret = config->attach(config, tsc2007_interrupt);
   if (ret < 0)
     {
-      idbg("Failed to attach interrupt\n");
+      ierr("ERROR: Failed to attach interrupt\n");
       goto errout_with_priv;
     }
 
@@ -1284,19 +1276,19 @@ int tsc2007_register(FAR struct i2c_dev_s *dev,
   ret = tsc2007_transfer(priv, TSC2007_ENABLE_PENIRQ);
   if (ret < 0)
     {
-      idbg("tsc2007_transfer failed: %d\n", ret);
+      ierr("ERROR: tsc2007_transfer failed: %d\n", ret);
       goto errout_with_priv;
     }
 
   /* Register the device as an input device */
 
   (void)snprintf(devname, DEV_NAMELEN, DEV_FORMAT, minor);
-  ivdbg("Registering %s\n", devname);
+  iinfo("Registering %s\n", devname);
 
   ret = register_driver(devname, &tsc2007_fops, 0666, priv);
   if (ret < 0)
     {
-      idbg("register_driver() failed: %d\n", ret);
+      ierr("ERROR: register_driver() failed: %d\n", ret);
       goto errout_with_priv;
     }
 
@@ -1306,10 +1298,10 @@ int tsc2007_register(FAR struct i2c_dev_s *dev,
    */
 
 #ifdef CONFIG_TSC2007_MULTIPLE
-  flags         = irqsave();
+  flags         = enter_critical_section();
   priv->flink   = g_tsc2007list;
   g_tsc2007list = priv;
-  irqrestore(flags);
+  leave_critical_section(flags);
 #endif
 
   /* Schedule work to perform the initial sampling and to set the data
@@ -1319,7 +1311,7 @@ int tsc2007_register(FAR struct i2c_dev_s *dev,
   ret = work_queue(HPWORK, &priv->work, tsc2007_worker, priv, 0);
   if (ret != 0)
     {
-      idbg("Failed to queue work: %d\n", ret);
+      ierr("ERROR: Failed to queue work: %d\n", ret);
       goto errout_with_priv;
     }
 
@@ -1330,7 +1322,7 @@ int tsc2007_register(FAR struct i2c_dev_s *dev,
 errout_with_priv:
   sem_destroy(&priv->devsem);
 #ifdef CONFIG_TSC2007_MULTIPLE
-  kfree(priv);
+  kmm_free(priv);
 #endif
   return ret;
 }

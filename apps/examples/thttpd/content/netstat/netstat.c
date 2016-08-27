@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/thttpd/netstat/netstat.c
  *
- *   Copyright (C) 2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,9 +43,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <netinet/in.h>
 #include <netinet/ether.h>
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip-arch.h>
+
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/netdev.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -81,7 +83,7 @@
  *    dangerous to reference global variables in the callback function.
  */
 
-/* static */ int netdev_callback(FAR struct uip_driver_s *dev, void *arg)
+/* static */ int netdev_callback(FAR struct net_driver_s *dev, void *arg)
 {
   struct in_addr addr;
 
@@ -102,12 +104,16 @@
  * Public Functions
  ****************************************************************************/
 
+#ifdef CONFIG_THTTPD_BINFS
+int netstat_main(int argc, char *argv[])
+#else
 int main(int argc, char *argv[])
+#endif
 {
   puts(
-	"Content-type: text/html\r\n"
-	"Status: 200/html\r\n"
-	"\r\n"
+    "Content-type: text/html\r\n"
+    "Status: 200/html\r\n"
+    "\r\n"
     "<html>\r\n"
       "<head>\r\n"
         "<title>Network Status</title>\r\n"

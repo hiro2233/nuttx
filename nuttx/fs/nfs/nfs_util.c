@@ -61,22 +61,6 @@
 #include "xdr_subs.h"
 
 /****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Public Variables
- ****************************************************************************/
-
-/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
@@ -90,7 +74,7 @@ static inline int nfs_pathsegment(FAR const char **path, FAR char *buffer,
 
   /* Loop until the name is successfully parsed or an error occurs */
 
-  for (;;)
+  for (; ; )
     {
       /* Get the next byte from the path */
 
@@ -102,7 +86,7 @@ static inline int nfs_pathsegment(FAR const char **path, FAR char *buffer,
         {
           /* This logic just suppors "//" sequences in the path name */
 
-          if (ch == '\0' || nbytes > 0 )
+          if (ch == '\0' || nbytes > 0)
             {
               /* NULL terminate the parsed path segment */
 
@@ -119,7 +103,7 @@ static inline int nfs_pathsegment(FAR const char **path, FAR char *buffer,
         }
       else if (nbytes >= NAME_MAX)
         {
-          fdbg("File name segment is too long: %d\n", *path);
+          ferr("ERROR: File name segment is too long: %d\n", *path);
           return EFBIG;
         }
       else
@@ -131,6 +115,7 @@ static inline int nfs_pathsegment(FAR const char **path, FAR char *buffer,
         }
     }
 }
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -220,7 +205,7 @@ tryagain:
                           request, reqlen, response, resplen);
   if (error != 0)
     {
-      fdbg("ERROR: rpcclnt_request failed: %d\n", error);
+      ferr("ERROR: rpcclnt_request failed: %d\n", error);
       return error;
     }
 
@@ -252,11 +237,11 @@ tryagain:
           goto tryagain;
         }
 
-      fdbg("ERROR: NFS error %d from server\n", error);
+      ferr("ERROR: NFS error %d from server\n", error);
       return error;
     }
 
-  fvdbg("NFS_SUCCESS\n");
+  finfo("NFS_SUCCESS\n");
   return OK;
 }
 
@@ -292,7 +277,7 @@ int nfs_lookup(struct nfsmount *nmp, FAR const char *filename,
   namelen = strlen(filename);
   if (namelen > NAME_MAX)
     {
-      fdbg("Length of the string is too big: %d\n", namelen);
+      ferr("ERROR: Length of the string is too long: %d\n", namelen);
       return E2BIG;
     }
 
@@ -327,7 +312,7 @@ int nfs_lookup(struct nfsmount *nmp, FAR const char *filename,
 
   if (error)
     {
-      fdbg("ERROR: nfs_request failed: %d\n", error);
+      ferr("ERROR: nfs_request failed: %d\n", error);
       return error;
     }
 
@@ -344,7 +329,7 @@ int nfs_lookup(struct nfsmount *nmp, FAR const char *filename,
   value = fxdr_unsigned(uint32_t, value);
   if (value > NFSX_V3FHMAX)
     {
-      fdbg("ERROR: Bad file handle length: %d\n", value);
+      ferr("ERROR: Bad file handle length: %d\n", value);
       return EIO;
     }
 
@@ -433,7 +418,7 @@ int nfs_findnode(struct nfsmount *nmp, FAR const char *relpath,
    * to the path is found.
    */
 
-  for (;;)
+  for (; ; )
     {
       /* Extract the next path segment name. */
 
@@ -442,7 +427,7 @@ int nfs_findnode(struct nfsmount *nmp, FAR const char *relpath,
         {
           /* The filename segment contains is too long. */
 
-          fdbg("nfs_pathsegment of \"%s\" failed after \"%s\": %d\n",
+          ferr("ERROR: nfs_pathsegment of \"%s\" failed after \"%s\": %d\n",
                relpath, buffer, error);
           return error;
         }
@@ -452,7 +437,7 @@ int nfs_findnode(struct nfsmount *nmp, FAR const char *relpath,
       error = nfs_lookup(nmp, buffer, fhandle, obj_attributes, dir_attributes);
       if (error != OK)
         {
-          fdbg("nfs_lookup of \"%s\" failed at \"%s\": %d\n",
+          ferr("ERROR: nfs_lookup of \"%s\" failed at \"%s\": %d\n",
                 relpath, buffer, error);
           return error;
         }
@@ -481,7 +466,7 @@ int nfs_findnode(struct nfsmount *nmp, FAR const char *relpath,
         {
           /* Ooops.. we found something else */
 
-          fdbg("ERROR: Intermediate segment \"%s\" of \'%s\" is not a directory\n",
+          ferr("ERROR: Intermediate segment \"%s\" of \'%s\" is not a directory\n",
                buffer, path);
           return ENOTDIR;
         }
@@ -494,7 +479,7 @@ int nfs_findnode(struct nfsmount *nmp, FAR const char *relpath,
  * Desciption:
  *   Given a path to something that may or may not be in the file system,
  *   return the handle of the entry of the directory containing the requested
-*    object.
+ *   object.
  *
  * Return Value:
  *   Zero on success; a positive errno value on failure.
@@ -527,7 +512,7 @@ int nfs_finddir(struct nfsmount *nmp, FAR const char *relpath,
 
   /* Loop until the directory entry containing the path is found. */
 
-  for (;;)
+  for (; ; )
     {
       /* Extract the next path segment name. */
 
@@ -536,7 +521,7 @@ int nfs_finddir(struct nfsmount *nmp, FAR const char *relpath,
         {
           /* The filename segment contains is too long. */
 
-          fdbg("nfs_pathsegment of \"%s\" failed after \"%s\": %d\n",
+          ferr("ERROR: nfs_pathsegment of \"%s\" failed after \"%s\": %d\n",
                relpath, filename, error);
           return error;
         }
@@ -560,7 +545,7 @@ int nfs_finddir(struct nfsmount *nmp, FAR const char *relpath,
       error = nfs_lookup(nmp, filename, fhandle, attributes, NULL);
       if (error != OK)
         {
-          fdbg("nfs_lookup of \"%s\" failed at \"%s\": %d\n",
+          ferr("ERROR: fs_lookup of \"%s\" failed at \"%s\": %d\n",
                 relpath, filename, error);
           return error;
         }
@@ -572,7 +557,7 @@ int nfs_finddir(struct nfsmount *nmp, FAR const char *relpath,
         {
           /* Ooops.. we found something else */
 
-          fdbg("ERROR: Intermediate segment \"%s\" of \'%s\" is not a directory\n",
+          ferr("ERROR: Intermediate segment \"%s\" of \'%s\" is not a directory\n",
                filename, path);
           return ENOTDIR;
         }

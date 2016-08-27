@@ -45,6 +45,7 @@
 #include <assert.h>
 #include <errno.h>
 
+#include <nuttx/board.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/spi/spi_bitbang.h>
 #include <nuttx/input/touchscreen.h>
@@ -65,7 +66,7 @@
     defined(CONFIG_INPUT_ADS7843E)
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 
@@ -265,7 +266,7 @@ static int tsc_attach(FAR struct ads7843e_config_s *state, xcpt_t isr)
 {
   /* Attach the XPT2046 interrupt */
 
-  ivdbg("Attaching %p to IRQ %d\n", isr, SAM_TSC_IRQ);
+  iinfo("Attaching %p to IRQ %d\n", isr, SAM_TSC_IRQ);
   return irq_attach(SAM_TSC_IRQ, isr);
 }
 
@@ -273,7 +274,7 @@ static void tsc_enable(FAR struct ads7843e_config_s *state, bool enable)
 {
   /* Attach and enable, or detach and disable */
 
-  ivdbg("IRQ:%d enable:%d\n", SAM_TSC_IRQ, enable);
+  iinfo("IRQ:%d enable:%d\n", SAM_TSC_IRQ, enable);
   if (enable)
     {
       sam_gpioirqenable(SAM_TSC_IRQ);
@@ -299,7 +300,7 @@ static bool tsc_pendown(FAR struct ads7843e_config_s *state)
   /* The /PENIRQ value is active low */
 
   bool pendown = !sam_gpioread(GPIO_TSC_IRQ);
-  ivdbg("pendown:%d\n", pendown);
+  iinfo("pendown:%d\n", pendown);
   return pendown;
 }
 
@@ -335,7 +336,7 @@ static FAR struct spi_dev_s *sam_tsc_spiinitialize(void)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: arch_tcinitialize
+ * Name: board_tsc_setup
  *
  * Description:
  *   Each board that supports a touchscreen device must provide this function.
@@ -352,13 +353,13 @@ static FAR struct spi_dev_s *sam_tsc_spiinitialize(void)
  *
  ****************************************************************************/
 
-int arch_tcinitialize(int minor)
+int board_tsc_setup(int minor)
 {
   FAR struct spi_dev_s *dev;
   static bool initialized = false;
   int ret;
 
-  idbg("minor %d\n", minor);
+  iinfo("minor %d\n", minor);
   DEBUGASSERT(minor == 0);
 
   /* Have we already initialized?  Since we never uninitialize we must prevent
@@ -382,7 +383,7 @@ int arch_tcinitialize(int minor)
       dev = sam_tsc_spiinitialize();
       if (!dev)
         {
-          idbg("Failed to initialize bit bang SPI\n");
+          ierr("ERROR: Failed to initialize bit bang SPI\n");
           return -ENODEV;
         }
 
@@ -391,7 +392,7 @@ int arch_tcinitialize(int minor)
       ret = ads7843e_register(dev, &g_tscinfo, CONFIG_ADS7843E_DEVMINOR);
       if (ret < 0)
         {
-          idbg("Failed to register touchscreen device\n");
+          ierr("ERROR: Failed to register touchscreen device\n");
           /* up_spiuninitialize(dev); */
           return -ENODEV;
         }
@@ -405,7 +406,7 @@ int arch_tcinitialize(int minor)
 }
 
 /****************************************************************************
- * Name: arch_tcuninitialize
+ * Name: board_tsc_teardown
  *
  * Description:
  *   Each board that supports a touchscreen device must provide this function.
@@ -420,7 +421,7 @@ int arch_tcinitialize(int minor)
  *
  ****************************************************************************/
 
-void arch_tcuninitialize(void)
+void board_tsc_teardown(void)
 {
   /* No support for un-initializing the touchscreen XPT2046 device.  It will
    * continue to run and process touch interrupts in the background.

@@ -44,14 +44,14 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 
 #include "up_arch.h"
 #include "chip.h"
 #include "lpc17_gpio.h"
 
-#ifdef CONFIG_GPIO_IRQ
+#ifdef CONFIG_LPC17_GPIOIRQ
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -121,7 +121,7 @@ static void lpc17_setintedge(uint32_t intbase, unsigned int pin,
 
   /* These must be atomic */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Set/clear the rising edge enable bit */
 
@@ -150,7 +150,7 @@ static void lpc17_setintedge(uint32_t intbase, unsigned int pin,
     }
 
   putreg32(regval, intbase + LPC17_GPIOINT_INTENF_OFFSET);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -163,10 +163,10 @@ static void lpc17_setintedge(uint32_t intbase, unsigned int pin,
 
 static int lpc17_irq2port(int irq)
 {
- /* Set 1:
-  *   LPC176x: 12 interrupts p0.0-p0.11
-  *   LPC178x: 16 interrupts p0.0-p0.15
-  */
+  /* Set 1:
+   *   LPC176x: 12 interrupts p0.0-p0.11
+   *   LPC178x: 16 interrupts p0.0-p0.15
+   */
 
   if (irq >= LPC17_VALID_FIRST0L &&
       irq < (LPC17_VALID_FIRST0L + LPC17_VALID_NIRQS0L))
@@ -364,24 +364,24 @@ static void lpc17_gpiodemux(uint32_t intbase, uint32_t intmask,
 
       if ((intmask & bit) != 0)
         {
-           /* This pin can support an interrupt.  Is there an interrupt pending
-            * and enabled?
-            */
+          /* This pin can support an interrupt.  Is there an interrupt pending
+           * and enabled?
+           */
 
-           if ((intstatus & bit) != 0)
-             {
-               /* Clear the interrupt status */
+          if ((intstatus & bit) != 0)
+            {
+              /* Clear the interrupt status */
 
-               putreg32(bit, intbase + LPC17_GPIOINT_INTCLR_OFFSET);
+              putreg32(bit, intbase + LPC17_GPIOINT_INTCLR_OFFSET);
 
-               /* And dispatch the interrupt */
+              /* And dispatch the interrupt */
 
-               irq_dispatch(irq, context);
-             }
+              irq_dispatch(irq, context);
+            }
 
-           /* Increment the IRQ number on each interrupt pin */
+          /* Increment the IRQ number on each interrupt pin */
 
-           irq++;
+          irq++;
         }
 
       /* Next bit */
@@ -440,7 +440,7 @@ static int lpc17_gpiointerrupt(int irq, void *context)
 }
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -454,7 +454,7 @@ static int lpc17_gpiointerrupt(int irq, void *context)
 
 void lpc17_gpioirqinitialize(void)
 {
-   /* Disable all GPIO interrupts */
+  /* Disable all GPIO interrupts */
 
   putreg32(0, LPC17_GPIOINT0_INTENR);
   putreg32(0, LPC17_GPIOINT0_INTENF);
@@ -543,5 +543,4 @@ void lpc17_gpioirqdisable(int irq)
     }
 }
 
-#endif /* CONFIG_GPIO_IRQ */
-
+#endif /* CONFIG_LPC17_GPIOIRQ */

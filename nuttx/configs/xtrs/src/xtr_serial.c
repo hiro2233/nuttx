@@ -58,13 +58,12 @@
 #include <arch/z80/io.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 #ifdef USE_SERIALDRIVER
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 #define TRSDOS 0 /* TRSDOS 1.3 */
 #define LDOS 1 /* LDOS 5.3.1 */
@@ -119,7 +118,7 @@ static bool up_txready(FAR struct uart_dev_s *dev);
 static bool up_txempty(FAR struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =

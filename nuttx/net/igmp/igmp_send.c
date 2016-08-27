@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/igmp/igmp_send.c
  *
- *   Copyright (C) 2010 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,13 +42,16 @@
 #include <debug.h>
 #include <arpa/inet.h>
 
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip.h>
-#include <nuttx/net/uip/uip-arch.h>
-#include <nuttx/net/uip/uip-ipopt.h>
-#include <nuttx/net/uip/uip-igmp.h>
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/netdev.h>
+#include <nuttx/net/netstats.h>
+#include <nuttx/net/ip.h>
+#include <nuttx/net/ipopt.h>
+#include <nuttx/net/tcp.h>
+#include <nuttx/net/igmp.h>
 
-#include "uip/uip_internal.h"
+#include "devif/devif.h"
+#include "igmp/igmp.h"
 
 #ifdef CONFIG_NET_IGMP
 
@@ -73,23 +76,15 @@
 /* Buffer layout */
 
 #define RASIZE      (4)
-#define IGMPBUF     ((struct uip_igmphdr_s *)&dev->d_buf[UIP_LLH_LEN])
-
-/****************************************************************************
- * Public Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Variables
- ****************************************************************************/
+#define IGMPBUF     ((struct igmp_iphdr_s *)&dev->d_buf[NET_LL_HDRLEN(dev)])
 
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
 
-static uint16_t uip_igmpchksum(FAR uint8_t *buffer, int buflen)
+static uint16_t igmp_chksum(FAR uint8_t *buffer, int buflen)
 {
-  uint16_t sum = uip_chksum((FAR uint16_t*)buffer, buflen);
+  uint16_t sum = net_chksum((FAR uint16_t *)buffer, buflen);
   return sum ? sum : 0xffff;
 }
 
@@ -98,7 +93,7 @@ static uint16_t uip_igmpchksum(FAR uint8_t *buffer, int buflen)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: uip_igmpsend
+ * Name: igmp_send
  *
  * Description:
  *   Sends an IGMP IP packet on a network interface. This function constructs
@@ -118,20 +113,20 @@ static uint16_t uip_igmpchksum(FAR uint8_t *buffer, int buflen)
  *
  ****************************************************************************/
 
-void uip_igmpsend(FAR struct uip_driver_s *dev, FAR struct igmp_group_s *group,
-                  FAR uip_ipaddr_t *destipaddr)
+void igmp_send(FAR struct net_driver_s *dev, FAR struct igmp_group_s *group,
+               FAR in_addr_t *destipaddr)
 {
-  nllvdbg("msgid: %02x destipaddr: %08x\n", group->msgid, (int)*destipaddr);
+  ninfo("msgid: %02x destipaddr: %08x\n", group->msgid, (int)*destipaddr);
 
   /* The total length to send is the size of the IP and IGMP headers and 4
    * bytes for the ROUTER ALERT (and, eventually, the Ethernet header)
    */
 
-  dev->d_len           = UIP_IPIGMPH_LEN;
+  dev->d_len           = IPIGMP_HDRLEN;
 
   /* The total size of the data is the size of the IGMP header */
 
-  dev->d_sndlen        = UIP_IGMPH_LEN;
+  dev->d_sndlen        = IGMP_HDRLEN;
 
   /* Add the router alert option */
 
@@ -147,36 +142,36 @@ void uip_igmpsend(FAR struct uip_driver_s *dev, FAR struct igmp_group_s *group,
   ++g_ipid;
   IGMPBUF->ipid[0]     = g_ipid >> 8;
   IGMPBUF->ipid[1]     = g_ipid & 0xff;
-  IGMPBUF->ipoffset[0] = UIP_TCPFLAG_DONTFRAG >> 8;
-  IGMPBUF->ipoffset[1] = UIP_TCPFLAG_DONTFRAG & 0xff;
+  IGMPBUF->ipoffset[0] = IP_FLAG_DONTFRAG >> 8;
+  IGMPBUF->ipoffset[1] = IP_FLAG_DONTFRAG & 0xff;
   IGMPBUF->ttl         = IGMP_TTL;
-  IGMPBUF->proto       = UIP_PROTO_IGMP;
+  IGMPBUF->proto       = IP_PROTO_IGMP;
 
-  uiphdr_ipaddr_copy(IGMPBUF->srcipaddr, &dev->d_ipaddr);
-  uiphdr_ipaddr_copy(IGMPBUF->destipaddr, destipaddr);
+  net_ipv4addr_hdrcopy(IGMPBUF->srcipaddr, &dev->d_ipaddr);
+  net_ipv4addr_hdrcopy(IGMPBUF->destipaddr, destipaddr);
 
   /* Calculate IP checksum. */
 
   IGMPBUF->ipchksum    = 0;
-  IGMPBUF->ipchksum    = ~uip_igmpchksum((FAR uint8_t *)IGMPBUF, UIP_IPH_LEN + RASIZE);
+  IGMPBUF->ipchksum    = ~igmp_chksum((FAR uint8_t *)IGMPBUF, IPv4_HDRLEN + RASIZE);
 
   /* Set up the IGMP message */
 
   IGMPBUF->type        = group->msgid;
   IGMPBUF->maxresp     = 0;
-  uiphdr_ipaddr_copy(IGMPBUF->grpaddr, &group->grpaddr);
+  net_ipv4addr_hdrcopy(IGMPBUF->grpaddr, &group->grpaddr);
 
   /* Calculate the IGMP checksum. */
 
   IGMPBUF->chksum      = 0;
-  IGMPBUF->chksum      = ~uip_igmpchksum(&IGMPBUF->type, UIP_IPIGMPH_LEN);
+  IGMPBUF->chksum      = ~igmp_chksum(&IGMPBUF->type, IPIGMP_HDRLEN);
 
-  IGMP_STATINCR(uip_stat.igmp.poll_send);
-  IGMP_STATINCR(uip_stat.ip.sent);
+  IGMP_STATINCR(g_netstats.igmp.poll_send);
+  IGMP_STATINCR(g_netstats.ipv4.sent);
 
-  nllvdbg("Outgoing IGMP packet length: %d (%d)\n",
+  ninfo("Outgoing IGMP packet length: %d (%d)\n",
           dev->d_len, (IGMPBUF->len[0] << 8) | IGMPBUF->len[1]);
-  igmp_dumppkt(RA, UIP_IPIGMPH_LEN + RASIZE);
+  igmp_dumppkt(RA, IPIGMP_HDRLEN + RASIZE);
 }
 
 #endif /* CONFIG_NET_IGMP */

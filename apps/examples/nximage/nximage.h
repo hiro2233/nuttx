@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/nximage/nximage.h
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,7 +50,7 @@
 #include <nuttx/nx/nxglib.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Configuration ************************************************************/
@@ -105,26 +105,6 @@
 #  undef CONFIG_EXAMPLES_NXIMAGE_YSCALE1p5
 #  undef CONFIG_EXAMPLES_NXIMAGE_YSCALE2p0
 #  define CONFIG_EXAMPLES_NXIMAGE_YSCALE1p0 1
-#endif
-
-/* Debug ********************************************************************/
-
-#ifdef CONFIG_CPP_HAVE_VARARGS
-#  ifdef CONFIG_DEBUG
-#    define message(...) lowsyslog(__VA_ARGS__)
-#    define msgflush()
-#  else
-#    define message(...) printf(__VA_ARGS__)
-#    define msgflush() fflush(stdout)
-#  endif
-#else
-#  ifdef CONFIG_DEBUG
-#    define message lowsyslog
-#    define msgflush()
-#  else
-#    define message printf
-#    define msgflush() fflush(stdout)
-#  endif
 #endif
 
 /* Image Information ********************************************************/
@@ -187,7 +167,7 @@ struct nximage_data_s
 };
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /* NXIMAGE state data */
@@ -202,18 +182,14 @@ extern const struct nx_callback_s g_nximagecb;
  * Public Function Prototypes
  ****************************************************************************/
 
-#ifdef CONFIG_EXAMPLES_NXIMAGE_EXTERNINIT
-extern FAR NX_DRIVERTYPE *up_nxdrvinit(unsigned int devno);
-#endif
-
 /* Background window interfaces */
 
-extern void nximage_image(NXWINDOW hwnd);
+void nximage_image(NXWINDOW hwnd);
 
 /* Image interfaces */
 
-extern nxgl_mxpixel_t nximage_bgcolor(void);
-extern nxgl_mxpixel_t nximage_avgcolor(nxgl_mxpixel_t color1, nxgl_mxpixel_t color2);
-extern void nximage_blitrow(FAR nxgl_mxpixel_t *run, FAR const void **state);
+nxgl_mxpixel_t nximage_bgcolor(void);
+nxgl_mxpixel_t nximage_avgcolor(nxgl_mxpixel_t color1, nxgl_mxpixel_t color2);
+void nximage_blitrow(FAR nxgl_mxpixel_t *run, FAR const void **state);
 
 #endif /* __APPS_EXAMPLES_NXIMAGE_NXIMAGE_H */

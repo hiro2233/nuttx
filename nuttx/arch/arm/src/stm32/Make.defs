@@ -1,7 +1,7 @@
 ############################################################################
 # arch/arm/src/stm32/Make.defs
 #
-#   Copyright (C) 2009, 2011-2014 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2009, 2011-2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -43,19 +43,27 @@ CMN_UASRCS =
 CMN_UCSRCS =
 
 CMN_ASRCS  = up_saveusercontext.S up_fullcontextrestore.S up_switchcontext.S
-CMN_ASRCS += vfork.S
+CMN_ASRCS += up_testset.S vfork.S
 
 CMN_CSRCS  = up_assert.c up_blocktask.c up_copyfullstate.c
 CMN_CSRCS += up_createstack.c up_mdelay.c up_udelay.c up_exit.c
 CMN_CSRCS += up_initialize.c up_initialstate.c up_interruptcontext.c
 CMN_CSRCS += up_memfault.c up_modifyreg8.c up_modifyreg16.c up_modifyreg32.c
 CMN_CSRCS += up_releasepending.c up_releasestack.c up_reprioritizertr.c
-CMN_CSRCS += up_schedulesigaction.c up_sigdeliver.c up_systemreset.c
-CMN_CSRCS += up_unblocktask.c up_usestack.c up_doirq.c up_hardfault.c
-CMN_CSRCS += up_svcall.c up_vfork.c
+CMN_CSRCS += up_schedulesigaction.c up_sigdeliver.c up_stackframe.c
+CMN_CSRCS += up_systemreset.c up_unblocktask.c up_usestack.c up_doirq.c
+CMN_CSRCS += up_hardfault.c up_svcall.c up_vfork.c
+
+ifeq ($(CONFIG_ARMV7M_STACKCHECK),y)
+CMN_CSRCS += up_stackcheck.c
+endif
 
 ifeq ($(CONFIG_ARMV7M_CMNVECTOR),y)
+ifeq ($(CONFIG_ARMV7M_LAZYFPU),y)
+CMN_ASRCS += up_lazyexception.S
+else
 CMN_ASRCS += up_exception.S
+endif
 CMN_CSRCS += up_vectors.c
 endif
 
@@ -67,19 +75,21 @@ ifeq ($(CONFIG_ARCH_MEMCPY),y)
 CMN_ASRCS += up_memcpy.S
 endif
 
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
-CMN_CSRCS += up_mpu.c up_task_start.c up_pthread_start.c up_stackframe.c
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
+CMN_CSRCS += up_mpu.c up_task_start.c up_pthread_start.c
 ifneq ($(CONFIG_DISABLE_SIGNALS),y)
 CMN_CSRCS += up_signal_dispatch.c
 CMN_UASRCS += up_signal_handler.S
 endif
 endif
 
-ifeq ($(CONFIG_DEBUG_STACK),y)
+ifeq ($(CONFIG_STACK_COLORATION),y)
 CMN_CSRCS += up_checkstack.c
 endif
 
 ifeq ($(CONFIG_ELF),y)
+CMN_CSRCS += up_elf.c
+else ifeq ($(CONFIG_MODULE),y)
 CMN_CSRCS += up_elf.c
 endif
 
@@ -87,22 +97,51 @@ ifeq ($(CONFIG_ARCH_FPU),y)
 CMN_ASRCS += up_fpu.S
 ifneq ($(CONFIG_ARMV7M_CMNVECTOR),y)
 CMN_CSRCS += up_copyarmstate.c
+else ifeq ($(CONFIG_ARMV7M_LAZYFPU),y)
+CMN_CSRCS += up_copyarmstate.c
 endif
+endif
+
+ifeq ($(CONFIG_ARMV7M_ITMSYSLOG),y)
+CMN_CSRCS += up_itm_syslog.c
 endif
 
 CHIP_ASRCS  =
 
 CHIP_CSRCS  = stm32_allocateheap.c stm32_start.c stm32_rcc.c stm32_lse.c
-CHIP_CSRCS += stm32_lsi.c stm32_gpio.c stm32_exti_gpio.c stm32_flash.c stm32_irq.c
-CHIP_CSRCS += stm32_timerisr.c stm32_dma.c stm32_lowputc.c stm32_serial.c
-CHIP_CSRCS += stm32_spi.c stm32_sdio.c stm32_tim.c stm32_waste.c stm32_ccm.c
+CHIP_CSRCS += stm32_lsi.c stm32_gpio.c stm32_exti_gpio.c stm32_flash.c
+CHIP_CSRCS += stm32_irq.c stm32_dma.c stm32_lowputc.c stm32_getc.c
+CHIP_CSRCS += stm32_serial.c stm32_spi.c stm32_sdio.c stm32_tim.c
+CHIP_CSRCS += stm32_waste.c stm32_ccm.c stm32_uid.c stm32_capture.c
+
+ifeq ($(CONFIG_TIMER),y)
+CHIP_CSRCS += stm32_tim_lowerhalf.c
+endif
+
+ifneq ($(CONFIG_SCHED_TICKLESS),y)
+CHIP_CSRCS += stm32_timerisr.c
+else
+CHIP_CSRCS += stm32_tickless.c
+endif
+
+ifeq ($(CONFIG_STM32_ONESHOT),y)
+CHIP_CSRCS += stm32_oneshot.c stm32_oneshot_lowerhalf.c
+endif
+
+ifeq ($(CONFIG_STM32_FREERUN),y)
+CHIP_CSRCS += stm32_freerun.c
+endif
 
 ifeq ($(CONFIG_ARMV7M_CMNVECTOR),y)
 CHIP_ASRCS += stm32_vectors.S
 endif
 
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
 CHIP_CSRCS += stm32_userspace.c stm32_mpuinit.c
+endif
+
+ifeq ($(CONFIG_STM32_CCM_PROCFS),y)
+CHIP_CSRCS += stm32_procfs_ccm.c
 endif
 
 ifeq ($(CONFIG_STM32_I2C_ALT),y)
@@ -122,8 +161,8 @@ endif
 ifeq ($(CONFIG_STM32_OTGFS),y)
 CHIP_CSRCS += stm32_otgfsdev.c
 endif
-ifeq ($(CONFIG_STM32_OTGFS2),y)
-CHIP_CSRCS += stm32_otgfsdev.c
+ifeq ($(CONFIG_STM32_OTGHS),y)
+CHIP_CSRCS += stm32_otghsdev.c
 endif
 endif
 
@@ -131,8 +170,8 @@ ifeq ($(CONFIG_USBHOST),y)
 ifeq ($(CONFIG_STM32_OTGFS),y)
 CHIP_CSRCS += stm32_otgfshost.c
 endif
-ifeq ($(CONFIG_STM32_OTGFS2),y)
-CHIP_CSRCS += stm32_otgfshost.c
+ifeq ($(CONFIG_STM32_OTGHS),y)
+CHIP_CSRCS += stm32_otghshost.c
 endif
 endif
 
@@ -161,7 +200,7 @@ CHIP_CSRCS += stm32_eth.c
 endif
 
 ifeq ($(CONFIG_STM32_PWR),y)
-CHIP_CSRCS += stm32_pwr.c
+CHIP_CSRCS += stm32_pwr.c stm32_exti_pwr.c
 endif
 
 ifeq ($(CONFIG_RTC),y)
@@ -169,9 +208,12 @@ CHIP_CSRCS += stm32_rtc.c
 ifeq ($(CONFIG_RTC_ALARM),y)
 CHIP_CSRCS += stm32_exti_alarm.c
 endif
+ifeq ($(CONFIG_RTC_DRIVER),y)
+CHIP_CSRCS += stm32_rtc_lowerhalf.c
+endif
 endif
 
-ifeq ($(CONFIG_ADC),y)
+ifeq ($(CONFIG_STM32_ADC),y)
 CHIP_CSRCS += stm32_adc.c
 endif
 
@@ -179,12 +221,20 @@ ifeq ($(CONFIG_DAC),y)
 CHIP_CSRCS += stm32_dac.c
 endif
 
-ifeq ($(CONFIG_DEV_RANDOM),y)
+ifeq ($(CONFIG_STM32_1WIREDRIVER),y)
+CHIP_CSRCS += stm32_1wire.c
+endif
+
+ifeq ($(CONFIG_STM32_RNG),y)
 CHIP_CSRCS += stm32_rng.c
 endif
 
 ifeq ($(CONFIG_STM32_LTDC),y)
 CHIP_CSRCS += stm32_ltdc.c
+endif
+
+ifeq ($(CONFIG_STM32_DMA2D),y)
+CHIP_CSRCS += stm32_dma2d.c
 endif
 
 ifeq ($(CONFIG_PWM),y)
@@ -207,6 +257,14 @@ ifeq ($(CONFIG_STM32_WWDG),y)
 CHIP_CSRCS += stm32_wwdg.c
 endif
 
-ifeq ($(CONFIG_DEBUG),y)
+ifeq ($(CONFIG_DEBUG_FEATURES),y)
 CHIP_CSRCS += stm32_dumpgpio.c
+endif
+
+ifeq ($(CONFIG_STM32_AES),y)
+CHIP_CSRCS += stm32_aes.c
+endif
+
+ifeq ($(CONFIG_STM32_BBSRAM),y)
+CHIP_CSRCS += stm32_bbsram.c
 endif

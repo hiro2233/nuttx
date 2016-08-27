@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/armv7-m/up_svcall.c
  *
- *   Copyright (C) 2009, 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,42 +46,15 @@
 
 #include <arch/irq.h>
 #include <nuttx/sched.h>
+#include <nuttx/userspace.h>
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_LIB_SYSCALL
 #  include <syscall.h>
 #endif
 
 #include "svcall.h"
 #include "exc_return.h"
-#include "os_internal.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-/* Configuration ************************************************************/
-
-/* Debug ********************************************************************/
-/* Debug output from this file may interfere with context switching!  To get
- * debug output you must enabled the following in your NuttX configuration:
- *
- * - CONFIG_DEBUG and CONFIG_DEBUG_SYSCALL (shows only syscalls)
- * - CONFIG_DEBUG and CONFIG_DEBUG_SVCALL  (shows everything)
- */
-
-#if defined(CONFIG_DEBUG_SYSCALL) || defined(CONFIG_DEBUG_SVCALL)
-# define svcdbg(format, ...) lldbg(format, ##__VA_ARGS__)
-#else
-# define svcdbg(x...)
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -117,7 +90,7 @@
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_LIB_SYSCALL
 static void dispatch_syscall(void) naked_function;
 static void dispatch_syscall(void)
 {
@@ -130,7 +103,7 @@ static void dispatch_syscall(void)
     " str lr, [sp, #12]\n"         /* Save lr in the stack frame */
     " ldr ip, =g_stublookup\n"     /* R12=The base of the stub lookup table */
     " ldr ip, [ip, r0, lsl #2]\n"  /* R12=The address of the stub for this syscall */
-    " blx ip\n"                    /* Call the stub (modifies lr)*/
+    " blx ip\n"                    /* Call the stub (modifies lr) */
     " ldr lr, [sp, #12]\n"         /* Restore lr */
     " add sp, sp, #16\n"           /* Destroy the stack frame */
     " mov r2, r0\n"                /* R2=Save return value in R2 */
@@ -154,33 +127,33 @@ static void dispatch_syscall(void)
 
 int up_svcall(int irq, FAR void *context)
 {
-  uint32_t *regs = (uint32_t*)context;
+  uint32_t *regs = (uint32_t *)context;
   uint32_t cmd;
 
-  DEBUGASSERT(regs && regs == current_regs);
+  DEBUGASSERT(regs && regs == CURRENT_REGS);
   cmd = regs[REG_R0];
 
   /* The SVCall software interrupt is called with R0 = system call command
    * and R1..R7 =  variable number of arguments depending on the system call.
    */
 
-#if defined(CONFIG_DEBUG_SYSCALL) || defined(CONFIG_DEBUG_SVCALL)
+#ifdef CONFIG_DEBUG_SYSCALL_INFO
 # ifndef CONFIG_DEBUG_SVCALL
   if (cmd > SYS_switch_context)
 # endif
     {
-      svcdbg("SVCALL Entry: regs: %p cmd: %d\n", regs, cmd);
-      svcdbg("  R0: %08x %08x %08x %08x %08x %08x %08x %08x\n",
-             regs[REG_R0],  regs[REG_R1],  regs[REG_R2],  regs[REG_R3],
-             regs[REG_R4],  regs[REG_R5],  regs[REG_R6],  regs[REG_R7]);
-      svcdbg("  R8: %08x %08x %08x %08x %08x %08x %08x %08x\n",
-             regs[REG_R8],  regs[REG_R9],  regs[REG_R10], regs[REG_R11],
-             regs[REG_R12], regs[REG_R13], regs[REG_R14], regs[REG_R15]);
+      svcinfo("SVCALL Entry: regs: %p cmd: %d\n", regs, cmd);
+      svcinfo("  R0: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+              regs[REG_R0],  regs[REG_R1],  regs[REG_R2],  regs[REG_R3],
+              regs[REG_R4],  regs[REG_R5],  regs[REG_R6],  regs[REG_R7]);
+      svcinfo("  R8: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+              regs[REG_R8],  regs[REG_R9],  regs[REG_R10], regs[REG_R11],
+              regs[REG_R12], regs[REG_R13], regs[REG_R14], regs[REG_R15]);
 # ifdef REG_EXC_RETURN
-      svcdbg(" PSR: %08x EXC_RETURN: %08x\n",
-             regs[REG_XPSR], regs[REG_EXC_RETURN]);
+      svcinfo(" PSR: %08x EXC_RETURN: %08x\n",
+              regs[REG_XPSR], regs[REG_EXC_RETURN]);
 # else
-      svcdbg(" PSR: %08x\n", regs[REG_XPSR]);
+      svcinfo(" PSR: %08x\n", regs[REG_XPSR]);
 # endif
     }
 #endif
@@ -205,9 +178,10 @@ int up_svcall(int irq, FAR void *context)
       case SYS_save_context:
         {
           DEBUGASSERT(regs[REG_R1] != 0);
-          memcpy((uint32_t*)regs[REG_R1], regs, XCPTCONTEXT_SIZE);
-#if defined(CONFIG_ARCH_FPU) && !defined(CONFIG_ARMV7M_CMNVECTOR)
-          up_savefpu((uint32_t*)regs[REG_R1]);
+          memcpy((uint32_t *)regs[REG_R1], regs, XCPTCONTEXT_SIZE);
+#if defined(CONFIG_ARCH_FPU) && \
+    (!defined(CONFIG_ARMV7M_CMNVECTOR) || defined(CONFIG_ARMV7M_LAZYFPU))
+          up_savefpu((uint32_t *)regs[REG_R1]);
 #endif
         }
         break;
@@ -221,16 +195,16 @@ int up_svcall(int irq, FAR void *context)
        *   R0 = SYS_restore_context
        *   R1 = restoreregs
        *
-       * In this case, we simply need to set current_regs to restore register
-       * area referenced in the saved R1. context == current_regs is the normal
-       * exception return.  By setting current_regs = context[R1], we force
+       * In this case, we simply need to set CURRENT_REGS to restore register
+       * area referenced in the saved R1. context == CURRENT_REGS is the normal
+       * exception return.  By setting CURRENT_REGS = context[R1], we force
        * the return to the saved context referenced in R1.
        */
 
       case SYS_restore_context:
         {
           DEBUGASSERT(regs[REG_R1] != 0);
-          current_regs = (uint32_t*)regs[REG_R1];
+          CURRENT_REGS = (uint32_t *)regs[REG_R1];
         }
         break;
 
@@ -246,18 +220,19 @@ int up_svcall(int irq, FAR void *context)
        *
        * In this case, we do both: We save the context registers to the save
        * register area reference by the saved contents of R1 and then set
-       * current_regs to to the save register area referenced by the saved
+       * CURRENT_REGS to to the save register area referenced by the saved
        * contents of R2.
        */
 
       case SYS_switch_context:
         {
           DEBUGASSERT(regs[REG_R1] != 0 && regs[REG_R2] != 0);
-          memcpy((uint32_t*)regs[REG_R1], regs, XCPTCONTEXT_SIZE);
-#if defined(CONFIG_ARCH_FPU) && !defined(CONFIG_ARMV7M_CMNVECTOR)
-          up_savefpu((uint32_t*)regs[REG_R1]);
+          memcpy((uint32_t *)regs[REG_R1], regs, XCPTCONTEXT_SIZE);
+#if defined(CONFIG_ARCH_FPU) && \
+    (!defined(CONFIG_ARMV7M_CMNVECTOR) || defined(CONFIG_ARMV7M_LAZYFPU))
+          up_savefpu((uint32_t *)regs[REG_R1]);
 #endif
-          current_regs = (uint32_t*)regs[REG_R2];
+          CURRENT_REGS = (uint32_t *)regs[REG_R2];
         }
         break;
 
@@ -273,7 +248,7 @@ int up_svcall(int irq, FAR void *context)
        * unprivileged thread mode.
        */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_LIB_SYSCALL
       case SYS_syscall_return:
         {
           struct tcb_s *rtcb = sched_self();
@@ -312,7 +287,7 @@ int up_svcall(int irq, FAR void *context)
        *   R3 = argv
        */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
       case SYS_task_start:
         {
           /* Set up to return to the user-space task start-up function in
@@ -344,7 +319,7 @@ int up_svcall(int irq, FAR void *context)
        *   R2 = arg
        */
 
-#if defined(CONFIG_NUTTX_KERNEL) && !defined(CONFIG_DISABLE_PTHREAD)
+#if defined(CONFIG_BUILD_PROTECTED) && !defined(CONFIG_DISABLE_PTHREAD)
       case SYS_pthread_start:
         {
           /* Set up to return to the user-space pthread start-up function in
@@ -378,7 +353,7 @@ int up_svcall(int irq, FAR void *context)
        *        ucontext (on the stack)
        */
 
-#if defined(CONFIG_NUTTX_KERNEL) && !defined(CONFIG_DISABLE_SIGNALS)
+#if defined(CONFIG_BUILD_PROTECTED) && !defined(CONFIG_DISABLE_SIGNALS)
       case SYS_signal_handler:
         {
           struct tcb_s *rtcb   = sched_self();
@@ -407,7 +382,7 @@ int up_svcall(int irq, FAR void *context)
            * parameter will reside at an offset of 4 from the stack pointer.
            */
 
-          regs[REG_R3]         = *(uint32_t*)(regs[REG_SP+4]);
+          regs[REG_R3]         = *(uint32_t *)(regs[REG_SP]+4);
         }
         break;
 #endif
@@ -421,7 +396,7 @@ int up_svcall(int irq, FAR void *context)
        *   R0 = SYS_signal_handler_return
        */
 
-#if defined(CONFIG_NUTTX_KERNEL) && !defined(CONFIG_DISABLE_SIGNALS)
+#if defined(CONFIG_BUILD_PROTECTED) && !defined(CONFIG_DISABLE_SIGNALS)
       case SYS_signal_handler_return:
         {
           struct tcb_s *rtcb   = sched_self();
@@ -444,7 +419,7 @@ int up_svcall(int irq, FAR void *context)
 
       default:
         {
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_LIB_SYSCALL
           FAR struct tcb_s *rtcb = sched_self();
           int index = rtcb->xcp.nsyscalls;
 
@@ -471,7 +446,7 @@ int up_svcall(int irq, FAR void *context)
 
           regs[REG_R0] -= CONFIG_SYS_RESERVED;
 #else
-          slldbg("ERROR: Bad SYS call: %d\n", regs[REG_R0]);
+          svcerr("ERROR: Bad SYS call: %d\n", regs[REG_R0]);
 #endif
         }
         break;
@@ -479,31 +454,35 @@ int up_svcall(int irq, FAR void *context)
 
   /* Report what happened.  That might difficult in the case of a context switch */
 
-#if defined(CONFIG_DEBUG_SYSCALL) || defined(CONFIG_DEBUG_SVCALL)
+#ifdef CONFIG_DEBUG_SYSCALL_INFO
 # ifndef CONFIG_DEBUG_SVCALL
   if (cmd > SYS_switch_context)
 # else
-  if (regs != current_regs)
+  if (regs != CURRENT_REGS)
 # endif
     {
-      svcdbg("SVCall Return:\n");
-      svcdbg("  R0: %08x %08x %08x %08x %08x %08x %08x %08x\n",
-             current_regs[REG_R0],  current_regs[REG_R1],  current_regs[REG_R2],  current_regs[REG_R3],
-             current_regs[REG_R4],  current_regs[REG_R5],  current_regs[REG_R6],  current_regs[REG_R7]);
-      svcdbg("  R8: %08x %08x %08x %08x %08x %08x %08x %08x\n",
-             current_regs[REG_R8],  current_regs[REG_R9],  current_regs[REG_R10], current_regs[REG_R11],
-             current_regs[REG_R12], current_regs[REG_R13], current_regs[REG_R14], current_regs[REG_R15]);
+      svcinfo("SVCall Return:\n");
+      svcinfo("  R0: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+              CURRENT_REGS[REG_R0],  CURRENT_REGS[REG_R1],
+              CURRENT_REGS[REG_R2],  CURRENT_REGS[REG_R3],
+              CURRENT_REGS[REG_R4],  CURRENT_REGS[REG_R5],
+              CURRENT_REGS[REG_R6],  CURRENT_REGS[REG_R7]);
+      svcinfo("  R8: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+              CURRENT_REGS[REG_R8],  CURRENT_REGS[REG_R9],
+              CURRENT_REGS[REG_R10], CURRENT_REGS[REG_R11],
+              CURRENT_REGS[REG_R12], CURRENT_REGS[REG_R13],
+              CURRENT_REGS[REG_R14], CURRENT_REGS[REG_R15]);
 # ifdef REG_EXC_RETURN
-      svcdbg(" PSR: %08x EXC_RETURN: %08x\n",
-             current_regs[REG_XPSR], current_regs[REG_EXC_RETURN]);
+      svcinfo(" PSR: %08x EXC_RETURN: %08x\n",
+              CURRENT_REGS[REG_XPSR], CURRENT_REGS[REG_EXC_RETURN]);
 # else
-      svcdbg(" PSR: %08x\n", current_regs[REG_XPSR]);
+      svcinfo(" PSR: %08x\n", CURRENT_REGS[REG_XPSR]);
 # endif
     }
 # ifdef CONFIG_DEBUG_SVCALL
   else
     {
-      svcdbg("SVCall Return: %d\n", regs[REG_R0]);
+      svcinfo("SVCall Return: %d\n", regs[REG_R0]);
     }
 # endif
 #endif

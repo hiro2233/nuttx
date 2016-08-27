@@ -295,12 +295,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -347,7 +341,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -407,8 +401,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -622,15 +616,15 @@ LM4F120 LaunchPad Configuration Options
   Additional interrupt support can be disabled if desired to reduce memory
   footprint.
 
-    CONFIG_TIVA_DISABLE_GPIOA_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOB_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOC_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOD_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOE_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOF_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOG_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOH_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOJ_IRQS=y
+    CONFIG_TIVA_GPIOA_IRQS=y
+    CONFIG_TIVA_GPIOB_IRQS=y
+    CONFIG_TIVA_GPIOC_IRQS=y
+    CONFIG_TIVA_GPIOD_IRQS=y
+    CONFIG_TIVA_GPIOE_IRQS=y
+    CONFIG_TIVA_GPIOF_IRQS=y
+    CONFIG_TIVA_GPIOG_IRQS=y
+    CONFIG_TIVA_GPIOH_IRQS=y
+    CONFIG_TIVA_GPIOJ_IRQS=n << Always
 
   LM4F120 specific device driver settings
 
@@ -645,8 +639,8 @@ LM4F120 LaunchPad Configuration Options
     CONFIG_UARTn_PARTIY - 0=no parity, 1=odd parity, 2=even parity
     CONFIG_UARTn_2STOP - Two stop bits
 
-    CONFIG_SSI0_DISABLE - Select to disable support for SSI0
-    CONFIG_SSI1_DISABLE - Select to disable support for SSI1
+    CONFIG_TIVA_SSI0 - Select to enable support for SSI0
+    CONFIG_TIVA_SSI1 - Select to enable support for SSI1
     CONFIG_SSI_POLLWAIT - Select to disable interrupt driven SSI support.
       Poll-waiting is recommended if the interrupt rate would be to
       high in the interrupt driven case.
@@ -694,7 +688,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.

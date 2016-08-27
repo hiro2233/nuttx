@@ -1,5 +1,5 @@
 /****************************************************************************
- * include/nuttx/mtd/mtd_nandscheme.c
+ * drivers/mtd/mtd_nandscheme.c
  *
  *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -327,12 +327,12 @@ void nandscheme_writeextra(FAR const struct nand_scheme_s *scheme,
                            FAR uint8_t *spare, FAR const void *extra,
                            unsigned int size, unsigned int offset)
 {
-    DEBUGASSERT((size + offset) < scheme->nxbytes);
+  DEBUGASSERT((size + offset) < scheme->nxbytes);
 
-    uint32_t i;
-    for (i = 0; i < size; i++) {
-
-        spare[scheme->xbytepos[i+offset]] = ((uint8_t *) extra)[i];
+  uint32_t i;
+  for (i = 0; i < size; i++)
+    {
+      spare[scheme->xbytepos[i+offset]] = ((uint8_t *) extra)[i];
     }
 }
 

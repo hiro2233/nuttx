@@ -37,8 +37,8 @@
  * only indirectly through nuttx/irq.h
  */
 
-#ifndef __ARCH_ARM_INCLUDE_STM32F10XXX_IRQ_H
-#define __ARCH_ARM_INCLUDE_STM32F10XXX_IRQ_H
+#ifndef __ARCH_ARM_INCLUDE_STM32_STM32F10XXX_IRQ_H
+#define __ARCH_ARM_INCLUDE_STM32_STM32F10XXX_IRQ_H
 
 /************************************************************************************
  * Included Files
@@ -48,7 +48,7 @@
 #include <nuttx/irq.h>
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* IRQ numbers.  The IRQ number corresponds vector number and hence map directly to
@@ -120,7 +120,7 @@
 #  define STM32_IRQ_TIM5        (66) /* 50: TIM5 global interrupt */
 #  define STM32_IRQ_SPI3        (67) /* 51: SPI3 global interrupt */
 #  define STM32_IRQ_UART4       (68) /* 52: USART2 global interrupt */
-#  define STM32_IRQ_UART5       (69) /* 53: USART5 global interrupt */
+#  define STM32_IRQ_UART5       (69) /* 53: UART5 global interrupt */
 #  define STM32_IRQ_TIM6        (70) /* 54: TIM6 global interrupt */
 #  define STM32_IRQ_TIM7        (71) /* 55: TIM7 global interrupt */
 #  define STM32_IRQ_DMA2CH1     (72) /* 56: DMA2 Channel 1 global interrupt */
@@ -199,7 +199,7 @@
 #  define STM32_IRQ_ETH         (77) /* 61: Ethernet global interrupt */
 #  define STM32_IRQ_ETHWKUP     (78) /* 62: Ethernet Wakeup through EXTI line interrupt */
 #  define STM32_IRQ_CAN2TX      (79) /* 63: CAN2 TX interrupts */
-#  define STM32_IRQ_CAN2RX0     (70) /* 64: CAN2 RX0 interrupts */
+#  define STM32_IRQ_CAN2RX0     (80) /* 64: CAN2 RX0 interrupts */
 #  define STM32_IRQ_CAN2RX1     (81) /* 65: CAN2 RX1 interrupt */
 #  define STM32_IRQ_CAN2SCE     (82) /* 66: CAN2 SCE interrupt */
 #  define STM32_IRQ_OTGFS       (83) /* 67: USB On The Go FS global interrupt */
@@ -293,7 +293,8 @@
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -308,5 +309,5 @@ extern "C" {
 #endif
 #endif
 
-#endif /* __ARCH_ARM_INCLUDE_STM32F10XXX_IRQ_H */
+#endif /* __ARCH_ARM_INCLUDE_STM32_STM32F10XXX_IRQ_H */
 

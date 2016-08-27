@@ -417,8 +417,8 @@ static int sst39vf_chiperase(FAR struct sst39vf_dev_s *priv)
 {
 #if 0
   struct sst39vf_wrinfo_s wrinfo;
-  uint32_t start;
-  uint32_t elapsed;
+  systime_t start;
+  systime_t elapsed;
 #endif
 
   /* Send the sequence to erase the chip */
@@ -435,7 +435,7 @@ static int sst39vf_chiperase(FAR struct sst39vf_dev_s *priv)
   wrinfo.data    = 0xffff;
 
   start = clock_systimer();
-  while (delay < SST39VF_TSCE_MSEC * MSEC_PER_TICK)
+  while (delay < MSEC2TICK(SST39VF_TSCE_MSEC))
     {
       /* Check if the erase is complete */
 
@@ -447,14 +447,14 @@ static int sst39vf_chiperase(FAR struct sst39vf_dev_s *priv)
       /* No, check if the timeout has elapsed */
 
       elapsed = clock_systimer() - start;
-      if (elapsed > SST39VF_TSCE_MSEC * MSEC_PER_TICK)
+      if (elapsed > MSEC2TICK(SST39VF_TSCE_MSEC))
         {
           return -ETIMEDOUT;
         }
 
       /* No, wait one system clock tick */
 
-      usleep(MSEC_PER_TICK * USEC_PER_MSEC);
+      usleep(USEC_PER_TICK);
     }
 #else
   /* Delay the maximum amount of time for the chip erase to complete. */
@@ -488,8 +488,8 @@ static int sst39vf_sectorerase(FAR struct sst39vf_dev_s *priv,
 {
   struct sst39vf_wrinfo_s wrinfo;
 #if 0
-  uint32_t start;
-  uint32_t elapsed;
+  systime_t start;
+  systime_t elapsed;
 #endif
 
   /* Set up the sector address */
@@ -511,7 +511,7 @@ static int sst39vf_sectorerase(FAR struct sst39vf_dev_s *priv,
 
 #if 0
   start = clock_systimer();
-  while (delay < SST39VF_TSE_MSEC * MSEC_PER_TICK)
+  while (delay < MSEC2TICK(SST39VF_TSE_MSEC))
     {
       /* Check if the erase is complete */
 
@@ -523,14 +523,14 @@ static int sst39vf_sectorerase(FAR struct sst39vf_dev_s *priv,
       /* No, check if the timeout has elapsed */
 
       elapsed = clock_systimer() - start;
-      if (elapsed > SST39VF_TSE_MSEC * MSEC_PER_TICK)
+      if (elapsed > MSEC2TICK(SST39VF_TSE_MSEC))
         {
           return -ETIMEDOUT;
         }
 
       /* No, wait one system clock tick */
 
-      usleep(MSEC_PER_TICK * USEC_PER_MSEC);
+      usleep(USEC_PER_TICK);
     }
 #else
   /* Delay the maximum amount of time for the sector erase to complete. */
@@ -697,7 +697,7 @@ static ssize_t sst39vf_bwrite(FAR struct mtd_dev_s *dev, off_t startblock,
 static ssize_t sst39vf_read(FAR struct mtd_dev_s *dev, off_t offset,
                             size_t nbytes, FAR uint8_t *buffer)
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   FAR struct sst39vf_dev_s *priv = (FAR struct sst39vf_dev_s *)dev;
 #endif
   FAR const uint8_t *source;
@@ -814,12 +814,12 @@ FAR struct mtd_dev_s *sst39vf_initialize(void)
 
   /* Now see if we can suport the part */
 
-  fvdbg("Manufacturer: %02x\n", manufacturer);
-  fvdbg("Chip ID:      %04x\n", chipid);
+  finfo("Manufacturer: %02x\n", manufacturer);
+  finfo("Chip ID:      %04x\n", chipid);
 
   if (manufacturer != SST_MANUFACTURER_ID)
     {
-      fdbg("Unrecognized manufacturer: %02x\n", manufacturer);
+      ferr("ERROR: Unrecognized manufacturer: %02x\n", manufacturer);
       return NULL;
     }
   else if (chipid == g_sst39vf1601.chipid)
@@ -840,7 +840,7 @@ FAR struct mtd_dev_s *sst39vf_initialize(void)
     }
   else
     {
-      fdbg("Unrecognized chip ID: %04x\n", chipid);
+      ferr("ERROR: Unrecognized chip ID: %04x\n", chipid);
       return NULL;
     }
 

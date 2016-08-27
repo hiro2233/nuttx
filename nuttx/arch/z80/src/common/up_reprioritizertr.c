@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z80/src/common/up_reprioritizertr.c
  *
- *   Copyright (C) 2007-2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,23 +45,13 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/sched.h>
 
 #include "chip/chip.h"
 #include "chip/switch.h"
-#include "os_internal.h"
+#include "sched/sched.h"
+#include "group/group.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -105,10 +95,10 @@ void up_reprioritize_rtr(FAR struct tcb_s *tcb, uint8_t priority)
     }
   else
     {
-      FAR struct tcb_s *rtcb = (FAR struct tcb_s*)g_readytorun.head;
+      FAR struct tcb_s *rtcb = this_task();
       bool switch_needed;
 
-      slldbg("TCB=%p PRI=%d\n", tcb, priority);
+      sinfo("TCB=%p PRI=%d\n", tcb, priority);
 
       /* Remove the tcb task from the ready-to-run list.
        * sched_removereadytorun will return true if we just
@@ -145,6 +135,10 @@ void up_reprioritize_rtr(FAR struct tcb_s *tcb, uint8_t priority)
               sched_mergepending();
             }
 
+          /* Update scheduler parameters */
+
+          sched_suspend_scheduler(rtcb);
+
           /* Are we in an interrupt handler? */
 
           if (IN_INTERRUPT())
@@ -156,32 +150,48 @@ void up_reprioritize_rtr(FAR struct tcb_s *tcb, uint8_t priority)
                SAVE_IRQCONTEXT(rtcb);
 
               /* Restore the exception context of the rtcb at the (new) head
-               * of the g_readytorun task list.
+               * of the ready-to-run task list.
                */
 
-              rtcb = (FAR struct tcb_s*)g_readytorun.head;
-              slldbg("New Active Task TCB=%p\n", rtcb);
+              rtcb = this_task();
+
+              /* Update scheduler parameters */
+
+              sched_resume_scheduler(rtcb);
 
               /* Then setup so that the context will be performed on exit
-               * from the interrupt.
+               * from the interrupt.  Any necessary address environment
+               * changes will be made when the interrupt returns.
                */
 
                SET_IRQCONTEXT(rtcb);
             }
 
           /* Copy the exception context into the TCB at the (old) head of the
-           * g_readytorun Task list. if SAVE_USERCONTEXT returns a non-zero
+           * ready-to-run Task list. if SAVE_USERCONTEXT returns a non-zero
            * value, then this is really the previously running task restarting!
            */
 
           else if (!SAVE_USERCONTEXT(rtcb))
             {
               /* Restore the exception context of the rtcb at the (new) head
-               * of the g_readytorun task list.
+               * of the ready-to-run task list.
                */
 
-              rtcb = (FAR struct tcb_s*)g_readytorun.head;
-              slldbg("New Active Task TCB=%p\n", rtcb);
+              rtcb = this_task();
+
+#ifdef CONFIG_ARCH_ADDRENV
+              /* Make sure that the address environment for the previously
+               * running task is closed down gracefully (data caches dump,
+               * MMU flushed) and set up the address environment for the new
+               * thread at the head of the ready-to-run list.
+               */
+
+              (void)group_addrenv(rtcb);
+#endif
+              /* Update scheduler parameters */
+
+              sched_resume_scheduler(rtcb);
 
               /* Then switch contexts */
 

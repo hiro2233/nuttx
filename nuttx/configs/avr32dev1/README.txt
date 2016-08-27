@@ -34,7 +34,7 @@ The only GPIO pin usage is for LEDs (2) and Buttons (2):
   PIN 24  PB2  KEY1
   PIN 25  PB3  KEY2
 
-(See configs/avr32dev/src/avr32dev_internal.h).  And also for
+(See configs/avr32dev1/src/avr32dev1.h).  And also for
 crystals (4), JTAG (1), and USB (1):
 
   PIN 30  PA11 XIN32
@@ -447,7 +447,7 @@ Common Configuration Notes
      change a configurations using that tool, you should:
 
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-        and misc/tools/
+        see additional README.txt files in the NuttX tools repository.
 
      b. Execute 'make menuconfig' in nuttx/ in order to start the
         reconfiguration process.

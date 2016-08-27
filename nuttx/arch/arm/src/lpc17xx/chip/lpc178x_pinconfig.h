@@ -44,7 +44,7 @@
 #include <nuttx/config.h>
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* GPIO pin definitions *************************************************************/
 /* NOTE that functions have a alternate pins that can be selected.  These alternates
@@ -656,4 +656,4 @@
  * Public Function Prototypes
  ************************************************************************************/
 
- #endif /* __ARCH_ARM_SRC_LPC17XX_CHIP_LPC178X_PINCONFIG_H */
+#endif /* __ARCH_ARM_SRC_LPC17XX_CHIP_LPC178X_PINCONFIG_H */

@@ -1,7 +1,7 @@
 ############################################################################
 # configs/freedom-kl25z/src/Makefile
 #
-#   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -35,12 +35,12 @@
 
 -include $(TOPDIR)/Make.defs
 
-CFLAGS += -I$(TOPDIR)/sched
-
 ASRCS =
-AOBJS = $(ASRCS:.S=$(OBJEXT))
-
 CSRCS = kl_boardinitialize.c
+
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+CSRCS += kl_appinit.c
+endif
 
 ifeq ($(CONFIG_WL_CC3000),y)
 CSRCS += kl_wifi.c
@@ -50,8 +50,12 @@ ifeq ($(CONFIG_KL_TSI),y)
 CSRCS += kl_tsi.c
 endif
 
-ifeq ($(CONFIG_KL_SPI),y)
+ifeq ($(CONFIG_KL_SPI0),y)
 CSRCS += kl_spi.c
+else
+ifeq ($(CONFIG_KL_SPI1),y)
+CSRCS += kl_spi.c
+endif
 endif
 
 ifeq ($(CONFIG_HAVE_CXX),y)
@@ -67,7 +71,7 @@ CSRCS += kl_usb.c
 endif
 
 ifeq ($(CONFIG_PWM),y)
-CSRCS += up_pwm.c
+CSRCS += kl_pwm.c
 endif
 
 ifeq ($(CONFIG_QENCODER),y)
@@ -78,51 +82,8 @@ ifeq ($(CONFIG_WATCHDOG),y)
 CSRCS += kl_watchdog.c
 endif
 
-ifeq ($(CONFIG_NSH_LIBRARY),y)
-CSRCS += kl_nsh.c
+ifeq ($(CONFIG_SENSORS_ADXL345),y)
+CSRCS += kl_adxl345.c
 endif
 
-COBJS = $(CSRCS:.c=$(OBJEXT))
-
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-ARCH_SRCDIR = $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(CONFIG_WINDOWS_NATIVE),y)
-  CFLAGS += -I$(ARCH_SRCDIR)\chip -I$(ARCH_SRCDIR)\common -I$(ARCH_SRCDIR)\armv7-m
-else
-ifeq ($(WINTOOL),y)
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
-			-I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
-			-I "${shell cygpath -w $(ARCH_SRCDIR)/armv7-m}"
-else
-  CFLAGS += -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/armv7-m
-endif
-endif
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

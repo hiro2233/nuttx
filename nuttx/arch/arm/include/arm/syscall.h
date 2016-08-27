@@ -51,7 +51,7 @@
 #endif
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define SYS_syscall 0x900001
@@ -77,7 +77,7 @@ static inline uintptr_t sys_call0(unsigned int nbr)
     "swi %1"
     : "=r"(reg0)
     : "i"(SYS_syscall), "r"(reg0)
-    : "memory"
+    : "memory", "r14"
   );
 
   return reg0;
@@ -95,7 +95,7 @@ static inline uintptr_t sys_call1(unsigned int nbr, uintptr_t parm1)
     "swi %1"
     : "=r"(reg0)
     : "i"(SYS_syscall), "r"(reg0), "r"(reg1)
-    : "memory"
+    : "memory", "r14"
   );
 
   return reg0;
@@ -115,7 +115,7 @@ static inline uintptr_t sys_call2(unsigned int nbr, uintptr_t parm1,
     "swi %1"
     : "=r"(reg0)
     : "i"(SYS_syscall), "r"(reg0), "r"(reg1), "r"(reg2)
-    : "memory"
+    : "memory", "r14"
   );
 
   return reg0;
@@ -136,7 +136,7 @@ static inline uintptr_t sys_call3(unsigned int nbr, uintptr_t parm1,
     "swi %1"
     : "=r"(reg0)
     : "i"(SYS_syscall), "r"(reg0), "r"(reg1), "r"(reg2), "r"(reg3)
-    : "memory"
+    : "memory", "r14"
   );
 
   return reg0;
@@ -160,7 +160,7 @@ static inline uintptr_t sys_call4(unsigned int nbr, uintptr_t parm1,
     : "=r"(reg0)
     : "i"(SYS_syscall), "r"(reg0), "r"(reg1), "r"(reg2),
       "r"(reg3), "r"(reg4)
-    : "memory"
+    : "memory", "r14"
   );
 
   return reg0;
@@ -185,7 +185,7 @@ static inline uintptr_t sys_call5(unsigned int nbr, uintptr_t parm1,
     : "=r"(reg0)
     : "i"(SYS_syscall), "r"(reg0), "r"(reg1), "r"(reg2),
       "r"(reg3), "r"(reg4), "r"(reg5)
-    : "memory"
+    : "memory", "r14"
   );
 
   return reg0;
@@ -212,14 +212,14 @@ static inline uintptr_t sys_call6(unsigned int nbr, uintptr_t parm1,
     : "=r"(reg0)
     : "i"(SYS_syscall), "r"(reg0), "r"(reg1), "r"(reg2),
       "r"(reg3), "r"(reg4), "r"(reg5), "r"(reg6)
-    : "memory"
+    : "memory", "r14"
   );
 
   return reg0;
 }
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -228,7 +228,8 @@ static inline uintptr_t sys_call6(unsigned int nbr, uintptr_t parm1,
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

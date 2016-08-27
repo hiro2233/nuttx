@@ -49,12 +49,12 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <apps/netutils/uiplib.h>
-#include <apps/netutils/webclient.h>
-#include <apps/netutils/cJSON.h>
+#include "netutils/netlib.h"
+#include "netutils/webclient.h"
+#include "netutils/cJSON.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #ifndef CONFIG_EXAMPLES_WGETJSON_MAXSIZE
@@ -83,9 +83,9 @@
  * Private Data
  ****************************************************************************/
 
-static char *g_json_buff    = NULL;
-static int   g_json_bufflen = 0;
-static bool  g_has_json     = false;
+static FAR char *g_json_buff = NULL;
+static int  g_json_bufflen   = 0;
+static bool g_has_json       = false;
 
 /****************************************************************************
  * Private Functions
@@ -113,7 +113,9 @@ static void wgetjson_postdebug_callback(FAR char **buffer, int offset,
 static void wgetjson_callback(FAR char **buffer, int offset, int datend,
                               FAR int *buflen, FAR void *arg)
 {
-  int len = datend - offset,org=len;
+  FAR char *new_json_buff;
+  int len = datend - offset;
+  int org = len;
 
   if (len <= 0)
     {
@@ -140,10 +142,14 @@ static void wgetjson_callback(FAR char **buffer, int offset, int datend,
           len = CONFIG_EXAMPLES_WGETJSON_MAXSIZE - g_json_bufflen;
         }
 
-      g_json_buff = realloc(g_json_buff, g_json_bufflen + len + 1);
-      memcpy(&g_json_buff[g_json_bufflen-1], &((*buffer)[offset]), len);
-      g_json_buff[g_json_bufflen + len] = 0;
-      g_json_bufflen += org;
+      new_json_buff = (FAR char *)realloc(g_json_buff, g_json_bufflen + len + 1);
+      if (new_json_buff)
+        {
+          g_json_buff = new_json_buff;
+          memcpy(&g_json_buff[g_json_bufflen-1], &((*buffer)[offset]), len);
+          g_json_buff[g_json_bufflen + len] = 0;
+          g_json_bufflen += org;
+        }
     }
 }
 
@@ -289,7 +295,11 @@ static int wgetjson_json_parse(char *text)
  * Name: wgetjson_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int wgetjson_main(int argc, char *argv[])
+#endif
 {
   char *buffer = NULL;
   int buffer_len = 512;

@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/arm/up_dataabort.c
  *
- *   Copyright (C) 2007-2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2011, 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,34 +44,13 @@
 
 #include <nuttx/irq.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 
 #ifdef CONFIG_PAGING
 #  include <nuttx/page.h>
 #  include "arm.h"
 #endif
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/* Output debug info if stack dump is selected -- even if
- * debug is not selected.
- */
-
-#ifdef CONFIG_ARCH_STACKDUMP
-# undef  lldbg
-# define lldbg lowsyslog
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -102,18 +81,17 @@
 #ifdef CONFIG_PAGING
 void up_dataabort(uint32_t *regs, uint32_t far, uint32_t fsr)
 {
-  FAR struct tcb_s *tcb = (FAR struct tcb_s *)g_readytorun.head;
+  struct tcb_s *tcb = this_task();
 #ifdef CONFIG_PAGING
   uint32_t *savestate;
 
-  /* Save the saved processor context in current_regs where it can be accessed
+  /* Save the saved processor context in CURRENT_REGS where it can be accessed
    * for register dumps and possibly context switching.
    */
 
-
-  savestate    = (uint32_t*)current_regs;
+  savestate    = (uint32_t *)CURRENT_REGS;
 #endif
-  current_regs = regs;
+  CURRENT_REGS = regs;
 
 #ifdef CONFIG_PAGING
   /* In the NuttX on-demand paging implementation, only the read-only, .text
@@ -129,7 +107,7 @@ void up_dataabort(uint32_t *regs, uint32_t far, uint32_t fsr)
    * fatal error.
    */
 
-  pglldbg("FSR: %08x FAR: %08x\n", fsr, far);
+  pginfo("FSR: %08x FAR: %08x\n", fsr, far);
   if ((fsr & FSR_MASK) != FSR_PAGE)
     {
       goto segfault;
@@ -140,7 +118,7 @@ void up_dataabort(uint32_t *regs, uint32_t far, uint32_t fsr)
    * (It has not yet been saved in the register context save area).
    */
 
-  pgllvdbg("VBASE: %08x VEND: %08x\n", PG_PAGED_VBASE, PG_PAGED_VEND);
+  pginfo("VBASE: %08x VEND: %08x\n", PG_PAGED_VBASE, PG_PAGED_VEND);
   if (far < PG_PAGED_VBASE || far >= PG_PAGED_VEND)
     {
       goto segfault;
@@ -168,17 +146,17 @@ void up_dataabort(uint32_t *regs, uint32_t far, uint32_t fsr)
 
   pg_miss();
 
-  /* Restore the previous value of current_regs.  NULL would indicate that
+  /* Restore the previous value of CURRENT_REGS.  NULL would indicate that
    * we are no longer in an interrupt handler.  It will be non-NULL if we
    * are returning from a nested interrupt.
    */
 
-  current_regs = savestate;
+  CURRENT_REGS = savestate;
   return;
 
 segfault:
 #endif
-  lldbg("Data abort. PC: %08x FAR: %08x FSR: %08x\n", regs[REG_PC], far, fsr);
+  _alert("Data abort. PC: %08x FAR: %08x FSR: %08x\n", regs[REG_PC], far, fsr);
   PANIC();
 }
 
@@ -186,15 +164,15 @@ segfault:
 
 void up_dataabort(uint32_t *regs)
 {
-  /* Save the saved processor context in current_regs where it can be accessed
+  /* Save the saved processor context in CURRENT_REGS where it can be accessed
    * for register dumps and possibly context switching.
    */
 
-  current_regs = regs;
+  CURRENT_REGS = regs;
 
   /* Crash -- possibly showing diagnost debug information. */
 
-  lldbg("Data abort. PC: %08x\n", regs[REG_PC]);
+  _alert("Data abort. PC: %08x\n", regs[REG_PC]);
   PANIC();
 }
 

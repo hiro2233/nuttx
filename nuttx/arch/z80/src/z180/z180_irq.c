@@ -51,10 +51,6 @@
 #include "up_internal.h"
 
 /****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Data
  ****************************************************************************/
 
@@ -62,11 +58,11 @@
  * structure.  If is non-NULL only during interrupt processing.
  */
 
-volatile chipreg_t *current_regs;
+volatile chipreg_t *g_current_regs;
 
 /* This holds the value of the MMU's CBR register.  This value is set to the
  * interrupted tasks's CBR on interrupt entry, changed to the new task's CBR if
- * an interrrupt level context switch occurs, and restored on interrupt exit.  In
+ * an interrupt level context switch occurs, and restored on interrupt exit.  In
  * this way, the CBR is always correct on interrupt exit.
  */
 
@@ -77,10 +73,6 @@ uint8_t current_cbr;
  */
 
 extern uintptr_t up_vectors[16];
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -97,8 +89,8 @@ extern uintptr_t up_vectors[16];
 static void z180_seti(uint8_t value) __naked
 {
   __asm
-	ld      a, 4(ix)	;value
-	ld      l, a
+	ld	a, 4(ix)	; value
+	ld	l, a
   __endasm;
 }
 
@@ -107,14 +99,14 @@ static void z180_seti(uint8_t value) __naked
  ****************************************************************************/
 
 /****************************************************************************
- * Name: irqsave
+ * Name: up_irq_save
  *
  * Description:
  *   Disable all interrupts; return previous interrupt state
  *
  ****************************************************************************/
 
-irqstate_t irqsave(void) __naked
+irqstate_t up_irq_save(void) __naked
 {
   __asm
 	ld	a, i		; AF Parity bit holds interrupt state
@@ -126,14 +118,14 @@ irqstate_t irqsave(void) __naked
 }
 
 /****************************************************************************
- * Name: irqrestore
+ * Name: up_irq_restore
  *
  * Description:
  *   Restore previous interrupt state
  *
  ****************************************************************************/
 
-void irqrestore(irqstate_t flags) __naked
+void up_irq_restore(irqstate_t flags) __naked
 {
   __asm
 	di			; Assume disabled
@@ -178,6 +170,6 @@ void up_irqinitialize(void)
   /* And finally, enable interrupts (including the timer) */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
-  irqrestore(Z180_C_FLAG);
+  up_irq_restore(Z180_C_FLAG);
 #endif
 }

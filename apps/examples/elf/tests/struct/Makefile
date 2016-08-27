@@ -1,7 +1,7 @@
 ############################################################################
-# examples/elf/tests/hello/Makefile
+# examples/elf/tests/struct/Makefile
 #
-#   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2012, 2014, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -35,21 +35,53 @@
 
 -include $(TOPDIR)/Make.defs
 
+OBJEXT ?= .o
+DELIM ?= /
+
 CELFFLAGS += -I.
+
+ifeq ($(WINTOOL),y)
+NUTTXLIB = "${shell cygpath -w $(TOPDIR)$(DELIM)lib}"
+else
+NUTTXLIB = "$(TOPDIR)$(DELIM)lib"
+endif
+
+ifeq ($(CONFIG_EXAMPLES_ELF_SYSCALL),y)
+LDELFFLAGS += -Bstatic
+LDLIBPATH += -L $(NUTTXLIB)
+else
+ifeq ($(CONFIG_EXAMPLES_ELF_LIBC),y)
+LDELFFLAGS += -Bstatic
+LDLIBPATH +=  -L $(NUTTXLIB)
+endif
+endif
+
+ifeq ($(CONFIG_EXAMPLES_ELF_LIBC),y)
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
+LDLIBS += -luc
+else
+LDLIBS += -lc
+endif
+endif
+
+ifeq ($(CONFIG_EXAMPLES_ELF_SYSCALL),y)
+LDLIBS += -lproxies
+endif
 
 BIN  = struct
 SRCS = struct_main.c struct_dummy.c
-OBJS = $(SRCS:.c=.o)
+OBJS = $(SRCS:.c=$(OBJEXT))
 
 all: $(BIN)
+.PHONY: clean install
 
-$(OBJS): %.o: %.c
+$(OBJS): %$(OBJEXT): %.c
 	@echo "CC: $<"
 	$(Q) $(CC) -c $(CELFFLAGS) $< -o $@
 
 $(BIN): $(OBJS)
 	@echo "LD: $<"
-	$(Q) $(LD) $(LDELFFLAGS) -o $@ $^
+	$(Q) $(LD) $(LDELFFLAGS) $(LDLIBPATH) -o $@ $(ARCHCRT0OBJ) $^ $(LDLIBS)
 
 clean:
 	$(call DELFILE, $(BIN))

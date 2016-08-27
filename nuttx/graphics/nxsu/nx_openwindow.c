@@ -49,7 +49,7 @@
 #include "nxfe.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -95,7 +95,7 @@ NXWINDOW nx_openwindow(NXHANDLE handle, FAR const struct nx_callback_s *cb,
   FAR struct nxbe_window_s *wnd;
   int ret;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!handle || !cb)
     {
       errno = EINVAL;
@@ -107,7 +107,7 @@ NXWINDOW nx_openwindow(NXHANDLE handle, FAR const struct nx_callback_s *cb,
    * available) for compatibility with the multi-user implementation.
    */
 
-  wnd = (FAR struct nxbe_window_s *)kuzalloc(sizeof(struct nxbe_window_s));
+  wnd = (FAR struct nxbe_window_s *)kumm_zalloc(sizeof(struct nxbe_window_s));
   if (!wnd)
     {
       errno = ENOMEM;

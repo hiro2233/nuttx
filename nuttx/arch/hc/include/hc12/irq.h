@@ -48,7 +48,7 @@
 #include <nuttx/irq.h>
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /************************************************************************************
@@ -67,16 +67,25 @@ struct xcptcontext
  * Inline functions
  ****************************************************************************/
 
+/* Name: up_irq_save, up_irq_restore, and friends.
+ *
+ * NOTE: This function should never be called from application code and,
+ * as a general rule unless you really know what you are doing, this
+ * function should not be called directly from operation system code either:
+ * Typically, the wrapper functions, enter_critical_section() and
+ * leave_critical section(), are probably what you really want.
+ */
+
 /* Save the current interrupt enable state & disable IRQs */
 
-static inline irqstate_t irqsave(void)
+static inline irqstate_t up_irq_save(void)
 {
   /* To be provided */
 }
 
 /* Restore saved IRQ & FIQ state */
 
-static inline void irqrestore(irqstate_t flags)
+static inline void up_irq_restore(irqstate_t flags)
 {
   /* To be provided */
 }
@@ -93,7 +102,8 @@ static inline void system_call3(unsigned int nbr, uintptr_t parm1,
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

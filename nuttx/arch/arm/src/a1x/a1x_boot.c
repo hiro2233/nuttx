@@ -81,14 +81,14 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 extern uint32_t _vector_start; /* Beginning of vector block */
 extern uint32_t _vector_end;   /* End+1 of vector block */
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 /* This table describes how to map a set of 1Mb pages to space the physical
@@ -268,9 +268,9 @@ static void a1x_copyvectorblock(void)
    *                      0xffff0000)
    */
 
-  src  = (uint32_t*)&_vector_start;
-  end  = (uint32_t*)&_vector_end;
-  dest = (uint32_t*)(A1X_VECTOR_VSRAM + VECTOR_TABLE_OFFSET);
+  src  = (uint32_t *)&_vector_start;
+  end  = (uint32_t *)&_vector_end;
+  dest = (uint32_t *)(A1X_VECTOR_VSRAM + VECTOR_TABLE_OFFSET);
 
   while (src < end)
     {
@@ -289,7 +289,7 @@ static void a1x_copyvectorblock(void)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_boot
+ * Name: arm_boot
  *
  * Description:
  *   Complete boot operations started in arm_head.S
@@ -305,7 +305,7 @@ static void a1x_copyvectorblock(void)
  *
  ****************************************************************************/
 
-void up_boot(void)
+void arm_boot(void)
 {
 #ifndef CONFIG_ARCH_ROMPGTABLE
   /* __start provided the basic MMU mappings for SRAM.  Now provide mappings
@@ -354,16 +354,6 @@ void up_boot(void)
    */
 
   up_earlyserialinit();
-#endif
-
-#ifdef CONFIG_NUTTX_KERNEL
-  /* For the case of the separate user-/kernel-space build, perform whatever
-   * platform specific initialization of the user memory is required.
-   * Normally this just means initializing the user space .data and .bss
-   * segments.
-   */
-
-  a1x_userspace();
 #endif
 
   /* Perform board-specific initialization,  This must include:

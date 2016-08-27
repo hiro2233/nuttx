@@ -14,7 +14,7 @@ README
     - IS66WV51216DBLL ISSI SRAM 8Mb 512K x 16 55ns PSRAM 2.5v-3.6v
     - Four Atmel QTouch buttons
     - External voltage input
-    - Four LEDs, two controllable from software
+    - Two LEDs, one controllable from software
     - Xplained expansion headers
     - Footprint for external serial Flash (not fitted)
 
@@ -133,12 +133,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: Older CodeSourcery toolchains (2009q1) do not work with default
   optimization level of -Os (See Make.defs).  It will work with -O0, -O1, or
   -O2, but not with -Os.
@@ -188,7 +182,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -248,8 +242,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -288,37 +282,40 @@ Buttons and LEDs
 
   LEDs
   ----
-
-  There are four LEDs on board the SAM4X Xplained board, two of these can be
+=======================
+  There is one LED on board the SAM4S Xplained board Pro that can be
   controlled by software in the SAM4S:
 
-      LED              GPIO
-      ---------------- -----
-      D9  Yellow LED   PC10
-      D10 Yellow LED   PC17
+    LED              GPIO
+    ---------------- -----
+    LED0 Yellow LED   PC23
 
-  Both can be illuminated by driving the GPIO output to ground (low).
+  It can be illuminated by driving the GPIO output to ground (low).
 
-  These LEDs are not used by the board port unless CONFIG_ARCH_LEDS is
+  If CONFIG_ARCH_LEDs is defined, then NuttX will control the LED on
+  board the SAM4S Xplained Pro, otherwise it can controlled by the user
+  with functions defined into boards file src/sam_userleds.c.
+
+  The user LED is not used by the board port unless CONFIG_ARCH_LEDS is
   defined.  In that case, the usage by the board port is defined in
-  include/board.h and src/sam_leds.c. The LEDs are used to encode OS-related
-  events as follows:
+  include/board.h and src/sam_leds.c. The LEDs are used to encode OS-
+  related events as follows:
 
-    SYMBOL                Meaning                     LED state
-                                                    D9       D10
-    -------------------  -----------------------  -------- --------
-    LED_STARTED          NuttX has been started     OFF      OFF
-    LED_HEAPALLOCATE     Heap has been allocated    OFF      OFF
-    LED_IRQSENABLED      Interrupts enabled         OFF      OFF
-    LED_STACKCREATED     Idle stack created         ON       OFF
-    LED_INIRQ            In an interrupt              No change
-    LED_SIGNAL           In a signal handler          No change
-    LED_ASSERTION        An assertion failed          No change
-    LED_PANIC            The system has crashed     OFF      Blinking
-    LED_IDLE             MCU is is sleep mode         Not used
+    SYMBOL                Meaning                   LED state
+                                                    LED0
+    -------------------  -----------------------  -----------
+    LED_STARTED          NuttX has been started     OFF
+    LED_HEAPALLOCATE     Heap has been allocated    OFF
+    LED_IRQSENABLED      Interrupts enabled         OFF
+    LED_STACKCREATED     Idle stack created         ON
+    LED_INIRQ            In an interrupt            No change
+    LED_SIGNAL           In a signal handler        No change
+    LED_ASSERTION        An assertion failed        No change
+    LED_PANIC            The system has crashed     OFF
+    LED_IDLE             MCU is is sleep mode       Not used
 
-  Thus if D9 is statically on, NuttX has successfully booted and is,
-  apparently, running normmally.  If D10 is flashing at approximately
+  Thus if LED0 is statically on, NuttX has successfully booted and is,
+  apparently, running normally.  If LED0 is flashing at approximately
   2Hz, then a fatal error has been detected and the system has halted.
 
 Serial Consoles
@@ -467,10 +464,10 @@ SAM4S Xplained-specific Configuration Options
     CONFIG_GPIOA_IRQ
     CONFIG_GPIOB_IRQ
     CONFIG_GPIOC_IRQ
-    CONFIG_USART0_ISUART
-    CONFIG_USART1_ISUART
-    CONFIG_USART2_ISUART
-    CONFIG_USART3_ISUART
+    CONFIG_USART0_SERIALDRIVER
+    CONFIG_USART1_SERIALDRIVER
+    CONFIG_USART2_SERIALDRIVER
+    CONFIG_USART3_SERIALDRIVER
 
   ST91SAM4S specific device driver settings
 
@@ -514,7 +511,7 @@ Configurations
     change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.

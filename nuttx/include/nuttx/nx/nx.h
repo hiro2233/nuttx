@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/nx/nx.h
  *
- *   Copyright (C) 2008-2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,8 +48,19 @@
 #include <nuttx/nx/nxglib.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
+/* Configuration ************************************************************/
+
+#ifndef CONFIG_NX_NPLANES
+#  define CONFIG_NX_NPLANES   1  /* Max number of color planes supported */
+#endif
+
+/* Check if the underlying graphic device supports read operations */
+
+#if !defined(CONFIG_NX_WRITEONLY) && defined(CONFIG_NX_LCDDRIVER) && defined(CONFIG_LCD_NOGETRUN)
+#  define CONFIG_NX_WRITEONLY 1
+#endif
 
 /* Default server MQ name used by nx_run() macro */
 
@@ -62,21 +73,16 @@
 #define NX_MOUSE_CENTERBUTTON 0x02
 #define NX_MOUSE_RIGHTBUTTON  0x04
 
+/* Line caps */
+
+#define NX_LINECAP_NONE       0x00  /* No line caps */
+#define NX_LINECAP_PT1        0x01  /* Line cap on pt1 of the vector only */
+#define NX_LINECAP_PT2        0x02  /* Line cap on pt2 of the vector only */
+#define NX_LINECAP_BOTH       0x03  /* Line cap on both ends of the vector only */
+
 /****************************************************************************
  * Public Types
  ****************************************************************************/
-/* Configuration ************************************************************/
-
-#ifndef CONFIG_NX_NPLANES
-#  define CONFIG_NX_NPLANES      1  /* Max number of color planes supported */
-#endif
-
-/* Check if the underlying graphic device supports read operations */
-
-#if !defined(CONFIG_NX_WRITEONLY) && defined(CONFIG_NX_LCDDRIVER) && defined(CONFIG_LCD_NOGETRUN)
-#  define CONFIG_NX_WRITEONLY 1
-#endif
-
 /* Handles ******************************************************************/
 
 /* The interface to the NX server is managed using a opaque handle: */
@@ -164,7 +170,7 @@ struct nx_callback_s
    *
    **************************************************************************/
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
   void (*mousein)(NXWINDOW hwnd, FAR const struct nxgl_point_s *pos,
                   uint8_t buttons, FAR void *arg);
 #endif
@@ -776,6 +782,8 @@ int nx_filltrapezoid(NXWINDOW hwnd, FAR const struct nxgl_rect_s *clip,
  *   vector - Describes the line to be drawn
  *   width  - The width of the line
  *   color  - The color to use to fill the line
+ *   caps   - Draw a circular on the both ends of the line to support better
+ *            line joins
  *
  * Return:
  *   OK on success; ERROR on failure with errno set appropriately
@@ -783,7 +791,8 @@ int nx_filltrapezoid(NXWINDOW hwnd, FAR const struct nxgl_rect_s *clip,
  ****************************************************************************/
 
 int nx_drawline(NXWINDOW hwnd, FAR struct nxgl_vector_s *vector,
-                nxgl_coord_t width, nxgl_mxpixel_t color[CONFIG_NX_NPLANES]);
+                nxgl_coord_t width, nxgl_mxpixel_t color[CONFIG_NX_NPLANES],
+                uint8_t caps);
 
 /****************************************************************************
  * Name: nx_drawcircle
@@ -893,6 +902,32 @@ int nx_bitmap(NXWINDOW hwnd, FAR const struct nxgl_rect_s *dest,
               FAR const struct nxgl_point_s *origin, unsigned int stride);
 
 /****************************************************************************
+ * Name: nx_notify_rectangle
+ *
+ * Description:
+ *   When CONFIG_NX_UPDATE=y, then the graphics system will callout to
+ *   inform some external module that the display has been updated.  This
+ *   would be useful in a couple for cases.
+ *
+ *   - When a serial LCD is used, but a framebuffer is used to access the
+ *     LCD.  In this case, the update callout can be used to refresh the
+ *     affected region of the display.
+ *
+ *   - When VNC is enabled.  This is case, this callout is necessary to
+ *     update the remote frame buffer to match the local framebuffer.
+ *
+ * When this feature is enabled, some external logic must provide this
+ * interface.  This is the function that will handle the notification.  It
+ * receives the rectangular region that was updated on the provided plane.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_NX_UPDATE
+void nx_notify_rectangle(FAR NX_PLANEINFOTYPE *pinfo,
+                         FAR const struct nxgl_rect_s *rect);
+#endif
+
+/****************************************************************************
  * Name: nx_kbdin
  *
  * Description:
@@ -917,7 +952,7 @@ int nx_kbdin(NXHANDLE handle, uint8_t nch, FAR const uint8_t *ch);
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
 int nx_mousein(NXHANDLE handle, nxgl_coord_t x, nxgl_coord_t y, uint8_t buttons);
 #endif
 

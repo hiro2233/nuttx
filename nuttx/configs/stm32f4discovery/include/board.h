@@ -1,8 +1,7 @@
 /************************************************************************************
  * configs/stm32f4discovery/include/board.h
- * include/arch/board/board.h
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2014-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,15 +43,18 @@
 #include <nuttx/config.h>
 
 #ifndef __ASSEMBLY__
-# include <stdint.h>
+#  include <stdint.h>
+#  include <stdbool.h>
 #endif
 
-#include "stm32_rcc.h"
-#include "stm32_sdio.h"
-#include "stm32.h"
+#ifdef __KERNEL__
+#  include "stm32_rcc.h"
+#  include "stm32_sdio.h"
+#  include "stm32.h"
+#endif
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
@@ -154,15 +156,51 @@
  * Note: TIM1,8 are on APB2, others on APB1
  */
 
-#define STM32_TIM18_FREQUENCY   STM32_HCLK_FREQUENCY
-#define STM32_TIM27_FREQUENCY   (STM32_HCLK_FREQUENCY/2)
+#define BOARD_TIM1_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM2_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM3_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM4_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM5_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM6_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM7_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM8_FREQUENCY    STM32_HCLK_FREQUENCY
+
+/* SDIO dividers.  Note that slower clocking is required when DMA is disabled
+ * in order to avoid RX overrun/TX underrun errors due to delayed responses
+ * to service FIFOs in interrupt driven mode.  These values have not been
+ * tuned!!!
+ *
+ * SDIOCLK=48MHz, SDIO_CK=SDIOCLK/(118+2)=400 KHz
+ */
+
+#define SDIO_INIT_CLKDIV        (118 << SDIO_CLKCR_CLKDIV_SHIFT)
+
+/* DMA ON:  SDIOCLK=48MHz, SDIO_CK=SDIOCLK/(1+2)=16 MHz
+ * DMA OFF: SDIOCLK=48MHz, SDIO_CK=SDIOCLK/(2+2)=12 MHz
+ */
+
+#ifdef CONFIG_SDIO_DMA
+#  define SDIO_MMCXFR_CLKDIV    (1 << SDIO_CLKCR_CLKDIV_SHIFT)
+#else
+#  define SDIO_MMCXFR_CLKDIV    (2 << SDIO_CLKCR_CLKDIV_SHIFT)
+#endif
+
+/* DMA ON:  SDIOCLK=48MHz, SDIO_CK=SDIOCLK/(1+2)=16 MHz
+ * DMA OFF: SDIOCLK=48MHz, SDIO_CK=SDIOCLK/(2+2)=12 MHz
+ */
+
+#ifdef CONFIG_SDIO_DMA
+#  define SDIO_SDXFR_CLKDIV     (1 << SDIO_CLKCR_CLKDIV_SHIFT)
+#else
+#  define SDIO_SDXFR_CLKDIV     (2 << SDIO_CLKCR_CLKDIV_SHIFT)
+#endif
 
 /* LED definitions ******************************************************************/
 /* If CONFIG_ARCH_LEDS is not defined, then the user can control the LEDs in any
  * way.  The following definitions are used to access individual LEDs.
  */
 
-/* LED index values for use with stm32_setled() */
+/* LED index values for use with board_userled() */
 
 #define BOARD_LED1        0
 #define BOARD_LED2        1
@@ -175,7 +213,7 @@
 #define BOARD_LED_RED     BOARD_LED3
 #define BOARD_LED_BLUE    BOARD_LED4
 
-/* LED bits for use with stm32_setleds() */
+/* LED bits for use with board_userled_all() */
 
 #define BOARD_LED1_BIT    (1 << BOARD_LED1)
 #define BOARD_LED2_BIT    (1 << BOARD_LED2)
@@ -199,22 +237,49 @@
 /* The STM32F4 Discovery supports one button: */
 
 #define BUTTON_USER        0
-
 #define NUM_BUTTONS        1
-
 #define BUTTON_USER_BIT    (1 << BUTTON_USER)
 
 /* Alternate function pin selections ************************************************/
+/* CAN */
+
+#ifndef CONFIG_STM32_FSMC
+#  define GPIO_CAN1_RX GPIO_CAN1_RX_3
+#  define GPIO_CAN1_TX GPIO_CAN1_TX_3
+#endif
+
+#ifndef CONFIG_STM32_ETHMAC
+#  define GPIO_CAN2_RX GPIO_CAN2_RX_1
+#  define GPIO_CAN2_TX GPIO_CAN2_TX_1
+#endif
 
 /* UART2:
  *
  * The STM32F4 Discovery has no on-board serial devices, but the console is
- * brought out to PA2 (TX) and PA3 (RX) for connection to an external serial device.
- * (See the README.txt file for other options)
+ * brought out to PA2 (TX) and PA3 (RX) for connection to an external serial
+ * device. (See the README.txt file for other options)
+ *
+ * These pins selections, however, conflict with pin usage on the STM32F4DIS-BB.
  */
 
-#define GPIO_USART2_RX GPIO_USART2_RX_1
-#define GPIO_USART2_TX GPIO_USART2_TX_1
+#ifndef CONFIG_STM32F4DISBB
+#  define GPIO_USART2_RX GPIO_USART2_RX_1
+#  define GPIO_USART2_TX GPIO_USART2_TX_1
+#endif
+
+/* UART3: (Used in pseudoterm configuration) */
+
+#define GPIO_USART3_TX GPIO_USART3_TX_1
+#define GPIO_USART3_RX GPIO_USART3_RX_1
+
+/* UART6:
+ *
+ * The STM32F4DIS-BB base board provides RS-232 drivers and a DB9 connector
+ * for USART6.  This is the preferred serial console for use with the STM32F4DIS-BB.
+ */
+
+#define GPIO_USART6_RX GPIO_USART6_RX_1
+#define GPIO_USART6_TX GPIO_USART6_TX_1
 
 /* PWM
  *
@@ -224,11 +289,31 @@
 
 #define GPIO_TIM4_CH2OUT GPIO_TIM4_CH2OUT_2
 
+/* RGB LED
+ *
+ * R = TIM1 CH1 on PE9 | G = TIM2 CH2 on PA1 | B = TIM3 CH3 on PB0
+ */
+
+#define GPIO_TIM1_CH1OUT GPIO_TIM1_CH1OUT_2
+#define GPIO_TIM2_CH2OUT GPIO_TIM2_CH2OUT_1
+#define GPIO_TIM3_CH3OUT GPIO_TIM3_CH3OUT_1
+
 /* SPI - There is a MEMS device on SPI1 using these pins: */
 
 #define GPIO_SPI1_MISO GPIO_SPI1_MISO_1
 #define GPIO_SPI1_MOSI GPIO_SPI1_MOSI_1
 #define GPIO_SPI1_SCK  GPIO_SPI1_SCK_1
+
+/* SPI2 - Test MAX31855 on SPI2 PB10 = SCK, PB14 = MISO */
+
+#define GPIO_SPI2_MISO   GPIO_SPI2_MISO_1
+#define GPIO_SPI2_MOSI   GPIO_SPI2_MOSI_1
+#define GPIO_SPI2_SCK    GPIO_SPI2_SCK_1
+
+/* I2C config to use with Nunchuk PB7 (SDA) and PB8 (SCL) */
+
+#define GPIO_I2C1_SCL  GPIO_I2C1_SCL_2
+#define GPIO_I2C1_SDA  GPIO_I2C1_SDA_1
 
 /* Timer Inputs/Outputs (see the README.txt file for options) */
 
@@ -237,6 +322,41 @@
 
 #define GPIO_TIM8_CH1IN  GPIO_TIM8_CH1IN_1
 #define GPIO_TIM8_CH2IN  GPIO_TIM8_CH2IN_1
+
+/* Ethernet *************************************************************************/
+
+#if defined(CONFIG_STM32F4DISBB) && defined(CONFIG_STM32_ETHMAC)
+  /* RMII interface to the LAN8720 PHY */
+
+#  ifndef CONFIG_STM32_RMII
+#    error CONFIG_STM32_RMII must be defined
+#  endif
+
+  /* Clocking is provided by an external 25Mhz XTAL */
+
+#  ifndef CONFIG_STM32_RMII_EXTCLK
+#    error CONFIG_STM32_RMII_EXTCLK must be defined
+#  endif
+
+  /* Pin disambiguation */
+
+#  define GPIO_ETH_RMII_TX_EN GPIO_ETH_RMII_TX_EN_1
+#  define GPIO_ETH_RMII_TXD0  GPIO_ETH_RMII_TXD0_1
+#  define GPIO_ETH_RMII_TXD1  GPIO_ETH_RMII_TXD1_1
+#  define GPIO_ETH_PPS_OUT    GPIO_ETH_PPS_OUT_1
+
+#endif
+
+/* DMA Channl/Stream Selections *****************************************************/
+/* Stream selections are arbitrary for now but might become important in the future
+ * if we set aside more DMA channels/streams.
+ *
+ * SDIO DMA
+ *   DMAMAP_SDIO_1 = Channel 4, Stream 3
+ *   DMAMAP_SDIO_2 = Channel 4, Stream 6
+ */
+
+#define DMAMAP_SDIO DMAMAP_SDIO_1
 
 /************************************************************************************
  * Public Data
@@ -247,7 +367,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -255,33 +376,18 @@ extern "C" {
 /************************************************************************************
  * Public Function Prototypes
  ************************************************************************************/
+
 /************************************************************************************
  * Name: stm32_boardinitialize
  *
  * Description:
  *   All STM32 architectures must provide the following entry point.  This entry point
- *   is called early in the intitialization -- after all memory has been configured
+ *   is called early in the initialization -- after all memory has been configured
  *   and mapped but before any devices have been initialized.
  *
  ************************************************************************************/
 
 void stm32_boardinitialize(void);
-
-/************************************************************************************
- * Name:  stm32_ledinit, stm32_setled, and stm32_setleds
- *
- * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board LEDs.  If
- *   CONFIG_ARCH_LEDS is not defined, then the following interfaces are available to
- *   control the LEDs from user applications.
- *
- ************************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-void stm32_ledinit(void);
-void stm32_setled(int led, bool ledon);
-void stm32_setleds(uint8_t ledset);
-#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

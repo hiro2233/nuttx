@@ -52,7 +52,7 @@
 #ifdef CONFIG_NX_KBD
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -96,7 +96,7 @@ void nxmu_kbdin(FAR struct nxfe_state_s *fe, uint8_t nch, FAR uint8_t *ch)
    */
 
   size   = sizeof(struct nxclimsg_kbdin_s) + nch - 1;
-  outmsg = (FAR struct nxclimsg_kbdin_s *)kmalloc(size);
+  outmsg = (FAR struct nxclimsg_kbdin_s *)kmm_malloc(size);
   if (outmsg)
     {
       /* Give the keypad input only to the top child */
@@ -111,7 +111,7 @@ void nxmu_kbdin(FAR struct nxfe_state_s *fe, uint8_t nch, FAR uint8_t *ch)
         }
 
       (void)nxmu_sendclientwindow(fe->be.topwnd, outmsg, size);
-      kfree(outmsg);
+      kmm_free(outmsg);
     }
 }
 

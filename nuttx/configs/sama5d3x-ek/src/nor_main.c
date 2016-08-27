@@ -1,4 +1,4 @@
-/*****************************************************************************
+/****************************************************************************
  * configs/sama5d3x-ek/src/nor_main.c
  *
  *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
@@ -77,10 +77,6 @@
 typedef void (*nor_entry_t)(void);
 
 /****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -143,7 +139,7 @@ int nor_main(int argc, char *argv)
    * are disabled!
    */
 
-  (void)irqsave();
+  (void)up_irq_save();
 
   /* Disable MATRIX write protection */
 
@@ -187,8 +183,8 @@ int nor_main(int argc, char *argv)
 
   /* Invalidate caches and TLBs */
 
-  cp15_invalidate_icache();
-  cp15_invalidate_dcache_all();
+  arch_invalidate_icache();
+  arch_invalidate_dcache_all();
   cp15_invalidate_tlbs();
 
   /* Then jump into NOR flash */

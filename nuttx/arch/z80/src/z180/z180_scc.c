@@ -55,7 +55,6 @@
 #include <arch/io.h>
 
 #include "chip/chip.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 #include "z180_config.h"
@@ -64,7 +63,7 @@
 #ifdef USE_SERIALDRIVER
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -90,7 +89,7 @@ static int  z180_setup(struct uart_dev_s *dev);
 static void z180_shutdown(struct uart_dev_s *dev);
 static int  z180_attach(struct uart_dev_s *dev);
 static void z180_detach(struct uart_dev_s *dev);
-static int  z180_interrrupt(int irq, void *context);
+static int  z180_interrupt(int irq, void *context);
 static int  z180_ioctl(struct file *filep, int cmd, unsigned long arg);
 static int  z180_receive(struct uart_dev_s *dev, unsigned int *status);
 static void z180_rxint(struct uart_dev_s *dev, bool enable);
@@ -101,7 +100,7 @@ static bool z180_txready(struct uart_dev_s *dev);
 static bool z180_txempty(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -439,7 +438,7 @@ static void z180_detach(struct uart_dev_s *dev)
 }
 
 /****************************************************************************
- * Name: z180_interrrupt
+ * Name: z180_interrupt
  *
  * Description:
  *   This is the UART interrupt handler.  It will be invoked
@@ -451,7 +450,7 @@ static void z180_detach(struct uart_dev_s *dev)
  *
  ****************************************************************************/
 
-static int z180_interrrupt(int irq, void *context)
+static int z180_interrupt(int irq, void *context)
 {
 #warning "Missing logic"
 }
@@ -576,8 +575,6 @@ static bool z180_txempty(struct uart_dev_s *dev)
 
 void up_serialinit(void)
 {
-  uint8_t regval;
-
   /* Make sure that all UART interrupts are disabled */
 #warning "Missing logic"
 

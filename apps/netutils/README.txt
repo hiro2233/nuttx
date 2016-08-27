@@ -19,8 +19,6 @@ apps include:
 
   dhcpc     - Dynamic Host Configuration Protocol (DHCP) client.  See
               apps/include/netutils/dhcpc.h for interface information.
-  dnsclient - uIP DNS resolver.  See apps/include/netutils/dnsclient.h
-              for interface information.
   smtp      - Simple Mail Transfer Protocol (SMTP) client.  See
               apps/include/netutils/smtp.h for interface information.
   webclient - HTTP web client.  See apps/include/netutils/webclient.h
@@ -47,6 +45,8 @@ highly influenced by uIP) include:
               device class so that groups of devices can be discovered.
               It is also possible to address all classes with a kind of
               broadcast discover. (Contributed by Max Holtzberg).
+  esp8266   - An ESP8266 networking layer contributed by Pierre-noel
+              Bouteville
   json      - cJSON is an ultra-lightweight, portable, single-file,
               simple-as-can-be ANSI-C compliant JSON parser, under MIT
               license. Embeddable Lightweight XML-RPC Server discussed at
@@ -61,7 +61,7 @@ highly influenced by uIP) include:
               "wrapped" as character devices and mapped to stdin,
               stdout, and stderr.  Now the telnet session can be
               inherited by spawned tasks.
-  ftpc      - FTP client.  See apps/include/ftpc.h for interface
+  ftpc      - FTP client.  See apps/include/netutils/ftpc.h for interface
               information.
   ftpd      - FTP server.   See apps/include/netutils/ftpd.h for interface
               information.
@@ -75,11 +75,21 @@ highly influenced by uIP) include:
               defconfig file to select the appropriate netutils
               libraries:
 
-                CONFIG_NETUTILS_UIPLIB=y
+                CONFIG_NETUTILS_NETLIB=y
                 CONFIG_NETUTILS_THTTPD=y
 
   xmlrpc    - The Embeddable Lightweight XML-RPC Server discussed at
               http://www.drdobbs.com/web-development/an-embeddable-lightweight-xml-rpc-server/184405364
+
+  ping      - This is an unfinished implementation of ping and ping6 using
+              raw sockets.  It is not yet hooked into the configuration or
+              build systems.
+
+              Current ping/ping6 logic in NSH makes illegal calls into the
+              OS in order to implement ping/ping6.  One correct
+              implementation would be to use raw sockets to implement ping/
+              ping6 as a user application.  This is a first cut at such an
+              implementation.
 
 Tips for Using Telnetd
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -92,7 +102,7 @@ Telnetd into your custom applications.
 To enable and link the Telnetd daemon, you need to include the following in
 in your defconfig file:
 
-  CONFIG_NETUTILS_UIPLIB=y
+  CONFIG_NETUTILS_NETLIB=y
   CONFIG_NETUTILS_TELNETD=y
 
 Also if the Telnet console is enabled, make sure that you have the following
@@ -116,7 +126,10 @@ required.  These include:
                              (as well as various other UDP-related
                              configuration settings).
   CONFIG_NET_BROADCAST=y     UDP broadcast support is needed.
-  CONFIG_NET_BUFSIZE=650     The client must be prepared to receive
+  CONFIG_NET_ETH_MTU=650     The client must be prepared to receive
   (or larger)                DHCP messages of up to 576 bytes (excluding
                              Ethernet, IP, or UDP headers and FCS).
+                             NOTE: Note that the actual MTU setting will
+                             depend upon the specific link protocol.
+                             Here Ethernet is indicated.
 

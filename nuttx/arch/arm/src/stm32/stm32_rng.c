@@ -46,16 +46,21 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
+#include <nuttx/fs/fs.h>
+#include <nuttx/drivers/drivers.h>
 
 #include "up_arch.h"
 #include "chip/stm32_rng.h"
 #include "up_internal.h"
 
+#if defined(CONFIG_STM32_RNG)
+#if defined(CONFIG_DEV_RANDOM) || defined(CONFIG_DEV_URANDOM_ARCH)
+
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
-static int stm32_rnginitialize(void);
+static int stm32_rng_initialize(void);
 static int stm32_interrupt(int irq, void *context);
 static void stm32_enable(void);
 static void stm32_disable(void);
@@ -90,7 +95,7 @@ static const struct file_operations g_rngops =
   0,               /* seek */
   0                /* ioctl */
 #ifndef CONFIG_DISABLE_POLL
-  ,0               /* poll */
+  , 0              /* poll */
 #endif
 };
 
@@ -98,11 +103,11 @@ static const struct file_operations g_rngops =
  * Private functions
  ****************************************************************************/
 
-static int stm32_rnginitialize()
+static int stm32_rng_initialize()
 {
   uint32_t regval;
 
-  vdbg("Initializing RNG\n");
+  _info("Initializing RNG\n");
 
   memset(&g_rngdev, 0, sizeof(struct rng_dev_s));
 
@@ -112,7 +117,7 @@ static int stm32_rnginitialize()
     {
       /* We could not attach the ISR to the interrupt */
 
-      vdbg("Could not attach IRQ.\n");
+      _info("Could not attach IRQ.\n");
 
       return -EAGAIN;
     }
@@ -193,7 +198,7 @@ static int stm32_interrupt(int irq, void *context)
   if (g_rngdev.rd_buflen >= 4)
     {
       g_rngdev.rd_buflen -= 4;
-      *(uint32_t*)&g_rngdev.rd_buf[g_rngdev.rd_buflen] = data;
+      *(uint32_t *)&g_rngdev.rd_buf[g_rngdev.rd_buflen] = data;
     }
   else
     {
@@ -258,8 +263,52 @@ static ssize_t stm32_read(struct file *filep, char *buffer, size_t buflen)
  * Public Functions
  ****************************************************************************/
 
-void up_rnginitialize()
+/****************************************************************************
+ * Name: devrandom_register
+ *
+ * Description:
+ *   Initialize the RNG hardware and register the /dev/random driver.
+ *   Must be called BEFORE devurandom_register.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_DEV_RANDOM
+void devrandom_register(void)
 {
-  stm32_rnginitialize();
-  register_driver("/dev/random", &g_rngops, 0444, NULL);
+  stm32_rng_initialize();
+  (void)register_driver("/dev/random", &g_rngops, 0444, NULL);
 }
+#endif
+
+/****************************************************************************
+ * Name: devurandom_register
+ *
+ * Description:
+ *   Register /dev/urandom
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_DEV_URANDOM_ARCH
+void devurandom_register(void)
+{
+#ifndef CONFIG_DEV_RANDOM
+  stm32_rng_initialize();
+#endif
+  (void)register_driver("/dev/urandom", &g_rngops, 0444, NULL);
+}
+#endif
+
+#endif /* CONFIG_DEV_RANDOM || CONFIG_DEV_URANDOM_ARCH */
+#endif /* CONFIG_STM32_RNG */

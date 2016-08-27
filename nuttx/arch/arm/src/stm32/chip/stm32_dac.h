@@ -1,7 +1,7 @@
 /************************************************************************************
  * arch/arm/src/stm32/chip/stm32_dac.h
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -55,7 +55,7 @@
 #define STM32_DAC_DHR12L1_OFFSET  0x000c /* DAC channel1 12-bit left aligned data holding register */
 #define STM32_DAC_DHR8R1_OFFSET   0x0010 /* DAC channel1 8-bit right aligned data holding register */
 #define STM32_DAC_DHR12R2_OFFSET  0x0014 /* DAC channel2 12-bit right aligned data holding register */
-#define STM32_DAC_DHR12L_OFFSET   0x0018 /* DAC channel2 12-bit left aligned data holding register */
+#define STM32_DAC_DHR12L2_OFFSET  0x0018 /* DAC channel2 12-bit left aligned data holding register */
 #define STM32_DAC_DHR8R2_OFFSET   0x001c /* DAC channel2 8-bit right-aligned data holding register */
 #define STM32_DAC_DHR12RD_OFFSET  0x0020 /* Dual DAC 12-bit right-aligned data holding register */
 #define STM32_DAC_DHR12LD_OFFSET  0x0024 /* DUAL DAC 12-bit left aligned data holding register */
@@ -72,7 +72,7 @@
 #define STM32_DAC_DHR12L1         (STM32_DAC_BASE+STM32_DAC_DHR12L1_OFFSET)
 #define STM32_DAC_DHR8R1          (STM32_DAC_BASE+STM32_DAC_DHR8R1_OFFSET)
 #define STM32_DAC_DHR12R2         (STM32_DAC_BASE+STM32_DAC_DHR12R2_OFFSET)
-#define STM32_DAC_DHR12L          (STM32_DAC_BASE+STM32_DAC_DHR12L_OFFSET)
+#define STM32_DAC_DHR12L2         (STM32_DAC_BASE+STM32_DAC_DHR12L2_OFFSET)
 #define STM32_DAC_DHR8R2          (STM32_DAC_BASE+STM32_DAC_DHR8R2_OFFSET)
 #define STM32_DAC_DHR12RD         (STM32_DAC_BASE+STM32_DAC_DHR12RD_OFFSET)
 #define STM32_DAC_DHR12LD         (STM32_DAC_BASE+STM32_DAC_DHR12LD_OFFSET)
@@ -87,7 +87,8 @@
 /* These definitions may be used for 16-bit values of either channel */
 
 #define DAC_CR_EN                (1 << 0)  /* Bit 0:  DAC channel enable */
-#define DAC_CR_BOFF              (1 << 1)  /* Bit 1:  DAC channel output buffer disable */
+#define DAC_CR_BOFF              (1 << 1)  /* Bit 1:  1=DAC channel output buffer disable */
+#define DAC_CR_BOFF_EN           (0 << 1)  /* Bit 1:  0=DAC channel output buffer enable */
 #define DAC_CR_TEN               (1 << 2)  /* Bit 2:  DAC channel trigger enable */
 #define DAC_CR_TSEL_SHIFT        (3)       /* Bits 3-5: DAC channel trigger selection */
 #define DAC_CR_TSEL_MASK         (7 << DAC_CR_TSEL_SHIFT)

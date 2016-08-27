@@ -1,7 +1,7 @@
 /****************************************************************************
  *  arch/arm/src/lpc43/lpc43_spifi.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,7 +53,7 @@
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/mtd/mtd.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
@@ -62,18 +62,19 @@
 #include "lpc43_cgu.h"
 #include "lpc43_spifi.h"
 #include "lpc43_pinconfig.h"
+#include "spifi/inc/spifilib_api.h"
 
-#ifdef CONFIG_LPC43_SPIFI
+#ifdef CONFIG_LPC43_SPIFI_FIXME
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* SPIFI Configuration ******************************************************/
 /* This logic supports some special options that can be used to create an
  * mtd device on the SPIFI FLASH.  NOTE:  CONFIG_LPC43_SPIFI=y must also
  * be defined to enable SPIFI setup support:
  *
- * CONFIG_SPIFI_RDONLY - Create a read only device on SPIFI.
+ * CONFIG_SPIFI_READONLY - Create a read only device on SPIFI.
  * CONFIG_SPIFI_OFFSET - Offset the beginning of the block driver this many
  *   bytes into the device address space.  This offset must be an exact
  *   multiple of the erase block size. Default 0.
@@ -91,7 +92,7 @@
  *   from the SPI address space after each write.
  * CONFIG_DEBUG_SPIFI_DUMP - Debug option to dump read/write buffers.  You
  *   probably do not want to enable this unless you want to dig through a
- *   *lot* of debug output!  Also required CONFIG_DEBUG, CONFIG_DEBUG_VERBOSE,
+ *   *lot* of debug output!  Also required CONFIG_DEBUG_FEATURES, CONFIG_DEBUG_INFO,
  *   and CONFIG_DEBUG_FS,
  */
 
@@ -145,11 +146,11 @@
    priv->spifi->spifi_erase(rom, operands)
 #else
 #  define SPIFI_INIT(priv, rom, cshigh, options, mhz) \
-   spifi_init(rom, cshigh, options, mhz)
+   spifiInit(rom, cshigh, options, mhz)
 #  define SPIFI_PROGRAM(priv, rom, src, operands) \
-   spifi_program(rom, src, operands)
+   spifiProgram(rom, src, operands)
 #  define SPIFI_ERASE(priv, rom, operands) \
-   spifi_erase(rom, operands)
+   spifiErase(rom, operands)
 #endif
 
 /* 512 byte sector simulation */
@@ -241,10 +242,10 @@
  * Compute this from the SPIFI clock period and the minimum high time of CS
  * from the serial flash data sheet:
  *
- *   csHigh = ceiling( min CS high / SPIFI clock period ) - 1
+ *   csHigh = ceiling(min CS high / SPIFI clock period) - 1
  *
  * where ceiling means round up to the next higher integer if the argument
- * isn’t an integer.
+ * isn't an integer.
  */
 
 #define SPIFI_CSHIGH 9
@@ -262,7 +263,7 @@
  * enable this unless you want to dig through a *lot* of debug output!
  */
 
-#if !defined(CONFIG_DEBUG) || !defined(CONFIG_DEBUG_VERBOSE) || !defined(CONFIG_DEBUG_FS)
+#if !defined(CONFIG_DEBUG_FEATURES) || !defined(CONFIG_DEBUG_INFO) || !defined(CONFIG_DEBUG_FS)
 #  undef CONFIG_DEBUG_SPIFI_DUMP
 #endif
 
@@ -381,13 +382,13 @@ static void lpc43_blockerase(struct lpc43_dev_s *priv, off_t sector)
   priv->operands.dest   = SPIFI_BASE + (sector << SPIFI_BLKSHIFT);
   priv->operands.length = SPIFI_BLKSIZE;
 
-  fvdbg("SPIFI_ERASE: dest=%p length=%d\n",
+  finfo("SPIFI_ERASE: dest=%p length=%d\n",
         priv->operands.dest, priv->operands.length);
 
   result = SPIFI_ERASE(priv, &priv->rom, &priv->operands);
   if (result != 0)
     {
-      fdbg("ERROR: SPIFI_ERASE failed: %05x\n", result);
+      ferr("ERROR: SPIFI_ERASE failed: %05x\n", result);
     }
 }
 
@@ -410,13 +411,13 @@ static inline int lpc43_chiperase(struct lpc43_dev_s *priv)
   priv->operands.dest   = SPIFI_BASE;
   priv->operands.length = SPIFI_BLKSIZE * priv->nblocks;
 
-  fvdbg("SPIFI_ERASE: dest=%p length=%d\n",
+  finfo("SPIFI_ERASE: dest=%p length=%d\n",
         priv->operands.dest, priv->operands.length);
 
   result = SPIFI_ERASE(priv, &priv->rom, &priv->operands);
   if (result != 0)
     {
-      fdbg("ERROR: SPIFI_ERASE failed: %05x\n", result);
+      ferr("ERROR: SPIFI_ERASE failed: %05x\n", result);
       return -EIO;
     }
 
@@ -456,13 +457,13 @@ static int lpc43_pagewrite(FAR struct lpc43_dev_s *priv, FAR uint8_t *dest,
   priv->operands.dest   = dest;
   priv->operands.length = nbytes;
 
-  fvdbg("SPIFI_PROGRAM: src=%p dest=%p length=%d\n",
+  finfo("SPIFI_PROGRAM: src=%p dest=%p length=%d\n",
         src, priv->operands.dest, priv->operands.length);
 
   result = SPIFI_PROGRAM(priv, &priv->rom, src, &priv->operands);
   if (result != 0)
     {
-      fdbg("ERROR: SPIFI_PROGRAM failed: %05x\n", result);
+      ferr("ERROR: SPIFI_PROGRAM failed: %05x\n", result);
       return -EIO;
     }
 
@@ -474,7 +475,7 @@ static int lpc43_pagewrite(FAR struct lpc43_dev_s *priv, FAR uint8_t *dest,
   result = lpc43_verify(priv, dest, src, nbytes);
   if (result != 0)
     {
-      fdbg("ERROR: lpc43_verify failed: %05x\n", result);
+      ferr("ERROR: lpc43_verify failed: %05x\n", result);
       return -EIO;
     }
 #endif
@@ -491,7 +492,7 @@ static inline void lpc43_pageread(FAR struct lpc43_dev_s *priv,
                                   FAR uint8_t *dest, FAR const uint8_t *src,
                                   size_t nbytes)
 {
-  fvdbg("src=%p dest=%p length=%d\n", src, dest, nbytes);
+  finfo("src=%p dest=%p length=%d\n", src, dest, nbytes);
   memcpy(dest, src, nbytes);
 }
 
@@ -510,7 +511,7 @@ static void lpc43_cacheflush(struct lpc43_dev_s *priv)
    * the cached erase block to FLASH.
    */
 
-  fvdbg("flags: %02x blkno: %d\n", priv->flags, priv->blkno);
+  finfo("flags: %02x blkno: %d\n", priv->flags, priv->blkno);
   if (IS_DIRTY(priv) || IS_ERASED(priv))
     {
       /* Get the SPIFI address corresponding to the cached erase block */
@@ -522,7 +523,7 @@ static void lpc43_cacheflush(struct lpc43_dev_s *priv)
       ret = lpc43_pagewrite(priv, dest, priv->cache, SPIFI_BLKSIZE);
       if (ret < 0)
         {
-          fdbg("ERROR: lpc43_pagewrite failed: %d\n", ret);
+          ferr("ERROR: lpc43_pagewrite failed: %d\n", ret);
         }
 
       /* The case is no long dirty and the FLASH is no longer erased */
@@ -550,7 +551,7 @@ static FAR uint8_t *lpc43_cacheread(struct lpc43_dev_s *priv, off_t sector)
    */
 
   blkno = sector >> (SPIFI_BLKSHIFT - SPIFI_512SHIFT);
-  fvdbg("sector: %ld blkno: %d\n", sector, blkno);
+  finfo("sector: %ld blkno: %d\n", sector, blkno);
 
   /* Check if the requested erase block is already in the cache */
 
@@ -611,7 +612,7 @@ static void lpc43_cacheerase(struct lpc43_dev_s *priv, off_t sector)
   if (!IS_ERASED(priv))
     {
       off_t blkno  = sector >> (SPIFI_BLKSHIFT - SPIFI_512SHIFT);
-      fvdbg("sector: %ld blkno: %d\n", sector, blkno);
+      finfo("sector: %ld blkno: %d\n", sector, blkno);
 
       lpc43_blockerase(priv, blkno);
       SET_ERASED(priv);
@@ -645,7 +646,7 @@ static void lpc43_cachewrite(FAR struct lpc43_dev_s *priv, FAR const uint8_t *bu
 
       dest = lpc43_cacheread(priv, sector);
 
-      fvdbg("dest=%p src=%p sector: %ld flags: %02x\n",
+      finfo("dest=%p src=%p sector: %ld flags: %02x\n",
             dest, buffer, sector, priv->flags);
 
       /* Erase the block containing this sector if it is not already erased.
@@ -656,7 +657,7 @@ static void lpc43_cachewrite(FAR struct lpc43_dev_s *priv, FAR const uint8_t *bu
       if (!IS_ERASED(priv))
         {
           off_t blkno  = sector >> (SPIFI_BLKSHIFT - SPIFI_512SHIFT);
-          fvdbg("sector: %ld blkno: %d\n", sector, blkno);
+          finfo("sector: %ld blkno: %d\n", sector, blkno);
 
           lpc43_blockerase(priv, blkno);
           SET_ERASED(priv);
@@ -691,7 +692,7 @@ static int lpc43_erase(FAR struct mtd_dev_s *dev, off_t startblock, size_t nbloc
   FAR struct lpc43_dev_s *priv = (FAR struct lpc43_dev_s *)dev;
   size_t blocksleft = nblocks;
 
-  fvdbg("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+  finfo("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 
   while (blocksleft-- > 0)
     {
@@ -725,7 +726,7 @@ static ssize_t lpc43_bread(FAR struct mtd_dev_s *dev, off_t startblock, size_t n
 #ifdef CONFIG_SPIFI_SECTOR512
   ssize_t nbytes;
 
-  fvdbg("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+  finfo("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 
   /* On this device, we can handle the block read just like the byte-oriented read */
 
@@ -742,7 +743,7 @@ static ssize_t lpc43_bread(FAR struct mtd_dev_s *dev, off_t startblock, size_t n
   FAR struct lpc43_dev_s *priv = (FAR struct lpc43_dev_s *)dev;
   ssize_t nbytes;
 
-  fvdbg("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+  finfo("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 
   /* On this device, we can handle the block read just like the byte-oriented read */
 
@@ -773,19 +774,20 @@ static ssize_t lpc43_bwrite(FAR struct mtd_dev_s *dev, off_t startblock, size_t 
 
   FAR struct lpc43_dev_s *priv = (FAR struct lpc43_dev_s *)dev;
 
-  fvdbg("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+  finfo("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 
   lpc43_cachewrite(priv, buffer, startblock, nblocks);
 
   lpc43_dumpbuffer(__func__, buffer, nblocks << SPIFI_512SHIFT)
-  return nblocks;
+  return (ssize_t)nblocks;
 
 #else
 
   FAR struct lpc43_dev_s *priv = (FAR struct lpc43_dev_s *)dev;
   FAR uint8_t *dest;
+  int ret;
 
-  fvdbg("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+  finfo("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 
   /* Get the SPIFI address corresponding to the erase block */
 
@@ -793,15 +795,15 @@ static ssize_t lpc43_bwrite(FAR struct mtd_dev_s *dev, off_t startblock, size_t 
 
   /* Write all of the erase blocks to FLASH */
 
-  ret = lpc43_pagewrite(priv, dest, buffer, nblocks << SPIFI_512SHIFT);
+  ret = lpc43_pagewrite(priv, dest, buffer, nblocks << SPIFI_BLKSHIFT);
   if (ret < 0)
     {
-      fdbg("ERROR: lpc43_pagewrite failed: %d\n", ret);
+      ferr("ERROR: lpc43_pagewrite failed: %d\n", ret);
       return ret;
     }
 
-  lpc43_dumpbuffer(__func__, buffer, nblocks << SPIFI_BLKSHIFT)
-  return nblocks;
+  lpc43_dumpbuffer(__func__, buffer, nblocks << SPIFI_BLKSHIFT);
+  return (ssize_t)nblocks;
 
 #endif
 }
@@ -816,7 +818,7 @@ static ssize_t lpc43_read(FAR struct mtd_dev_s *dev, off_t offset, size_t nbytes
   FAR struct lpc43_dev_s *priv = (FAR struct lpc43_dev_s *)dev;
   FAR const uint8_t *src;
 
-  fvdbg("offset: %08lx nbytes: %d\n", (long)offset, (int)nbytes);
+  finfo("offset: %08lx nbytes: %d\n", (long)offset, (int)nbytes);
 
   /* Get the SPIFI address corresponding sector */
 
@@ -826,7 +828,7 @@ static ssize_t lpc43_read(FAR struct mtd_dev_s *dev, off_t offset, size_t nbytes
 
   lpc43_pageread(priv, buffer, src, nbytes);
 
-  fvdbg("return nbytes: %d\n", (int)nbytes);
+  finfo("return nbytes: %d\n", (int)nbytes);
   return nbytes;
 }
 
@@ -839,7 +841,7 @@ static int lpc43_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
   FAR struct lpc43_dev_s *priv = (FAR struct lpc43_dev_s *)dev;
   int ret = -EINVAL; /* Assume good command with bad parameters */
 
-  fvdbg("cmd: %d \n", cmd);
+  finfo("cmd: %d \n", cmd);
 
   switch (cmd)
     {
@@ -868,7 +870,7 @@ static int lpc43_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
 #endif
               ret               = OK;
 
-              fvdbg("blocksize: %d erasesize: %d neraseblocks: %d\n",
+              finfo("blocksize: %d erasesize: %d neraseblocks: %d\n",
                     geo->blocksize, geo->erasesize, geo->neraseblocks);
             }
         }
@@ -888,7 +890,7 @@ static int lpc43_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
         break;
     }
 
-  fvdbg("return %d\n", ret);
+  finfo("return %d\n", ret);
   return ret;
 }
 
@@ -1022,7 +1024,7 @@ static inline int lpc43_rominit(FAR struct lpc43_dev_s *priv)
                       S_RCVCLK | S_FULLCLK, SCLK_MHZ);
   if (result != 0)
     {
-      fdbg("ERROR: SPIFI_INIT failed: %05x\n", result);
+      ferr("ERROR: SPIFI_INIT failed: %05x\n", result);
 
       /* Try again */
 
@@ -1030,29 +1032,29 @@ static inline int lpc43_rominit(FAR struct lpc43_dev_s *priv)
                           S_RCVCLK | S_FULLCLK, SCLK_MHZ);
       if (result != 0)
         {
-          fdbg("ERROR: SPIFI_INIT failed: %05x\n", result);
+          ferr("ERROR: SPIFI_INIT failed: %05x\n", result);
           return -ENODEV;
         }
     }
 
-  fvdbg("SPFI:\n");
-  fvdbg("      base: %08x\n", priv->rom.base);
-  fvdbg("   regbase: %08x\n", priv->rom.regbase);
-  fvdbg("   devsize: %08x\n", priv->rom.devsize);
-  fvdbg("   memsize: %08x\n", priv->rom.memsize);
-  fvdbg("     mfger: %02x\n", priv->rom.mfger);
-  fvdbg("   devtype: %02x\n", priv->rom.devtype);
-  fvdbg("     devid: %02x\n", priv->rom.devid);
-  fvdbg("      busy: %02x\n", priv->rom.busy);
-  fvdbg("      stat: %04x\n", priv->rom.stat.h);
-  fvdbg("   setprot: %04x\n", priv->rom.setprot);
-  fvdbg(" writeprot: %04x\n", priv->rom.writeprot);
-  fvdbg("    memcmd: %08x\n", priv->rom.memcmd);
-  fvdbg("   progcmd: %08x\n", priv->rom.progcmd);
-  fvdbg("   sectors: %04x\n", priv->rom.sectors);
-  fvdbg(" protbytes: %04x\n", priv->rom.protbytes);
-  fvdbg("      opts: %08x\n", priv->rom.opts);
-  fvdbg("  errcheck: %08x\n", priv->rom.errcheck);
+  finfo("SPFI:\n");
+  finfo("      base: %08x\n", priv->rom.base);
+  finfo("   regbase: %08x\n", priv->rom.regbase);
+  finfo("   devsize: %08x\n", priv->rom.devsize);
+  finfo("   memsize: %08x\n", priv->rom.memsize);
+  finfo("     mfger: %02x\n", priv->rom.mfger);
+  finfo("   devtype: %02x\n", priv->rom.devtype);
+  finfo("     devid: %02x\n", priv->rom.devid);
+  finfo("      busy: %02x\n", priv->rom.busy);
+  finfo("      stat: %04x\n", priv->rom.stat.h);
+  finfo("   setprot: %04x\n", priv->rom.setprot);
+  finfo(" writeprot: %04x\n", priv->rom.writeprot);
+  finfo("    memcmd: %08x\n", priv->rom.memcmd);
+  finfo("   progcmd: %08x\n", priv->rom.progcmd);
+  finfo("   sectors: %04x\n", priv->rom.sectors);
+  finfo(" protbytes: %04x\n", priv->rom.protbytes);
+  finfo("      opts: %08x\n", priv->rom.opts);
+  finfo("  errcheck: %08x\n", priv->rom.errcheck);
 
   /* Get the largest erase block size */
 
@@ -1062,11 +1064,11 @@ static inline int lpc43_rominit(FAR struct lpc43_dev_s *priv)
   sectors = priv->rom.sectors;
   log2    = 0;
 
-  fvdbg("FLASH Geometry:\n");
+  finfo("FLASH Geometry:\n");
 
   while (sectors > 0)
     {
-      fvdbg("  log2: %d rept: %d\n", desc->log2, desc->rept);
+      finfo("  log2: %d rept: %d\n", desc->log2, desc->rept);
 
       /* Check if this is the largest erase block size seen */
 
@@ -1088,12 +1090,12 @@ static inline int lpc43_rominit(FAR struct lpc43_dev_s *priv)
   priv->blksize  = (1 << log2);
   priv->nblocks  = (priv->rom.memsize - CONFIG_SPIFI_OFFSET) / priv->blksize;
 
-  fvdbg("Driver FLASH Geometry:\n");
-  fvdbg("  blkshift: %d\n", priv->blkshift);
-  fvdbg("   blksize: %08x\n", priv->blksize);
-  fvdbg("   nblocks: %d\n", priv->nblocks);
+  finfo("Driver FLASH Geometry:\n");
+  finfo("  blkshift: %d\n", priv->blkshift);
+  finfo("   blksize: %08x\n", priv->blksize);
+  finfo("   nblocks: %d\n", priv->nblocks);
 
-#if CONFIG_SPIFI_SECTOR512
+#ifdef CONFIG_SPIFI_SECTOR512
   DEBUGASSERT(log2 > 9);
 #endif
 
@@ -1103,10 +1105,10 @@ static inline int lpc43_rominit(FAR struct lpc43_dev_s *priv)
 
   priv->nblocks  = ((priv->rom.memsize  - CONFIG_SPIFI_OFFSET) >> SPIFI_BLKSHIFT);
 
-  fvdbg("Driver FLASH Geometry:\n");
-  fvdbg("  blkshift: %d\n", SPIFI_BLKSHIFT);
-  fvdbg("   blksize: %08x\n", SPIFI_BLKSIZE);
-  fvdbg("   nblocks: %d\n", priv->nblocks);
+  finfo("Driver FLASH Geometry:\n");
+  finfo("  blkshift: %d\n", SPIFI_BLKSHIFT);
+  finfo("   blksize: %08x\n", SPIFI_BLKSIZE);
+  finfo("   nblocks: %d\n", priv->nblocks);
 #endif
 
   return OK;
@@ -1161,7 +1163,7 @@ FAR struct mtd_dev_s *lpc43_spifi_initialize(void)
    * CGU registers will be modified.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* The SPIFI will receive clocking from a divider per the settings
    * provided in the board.h file.  Configure PLL1 as the input clock
@@ -1177,15 +1179,15 @@ FAR struct mtd_dev_s *lpc43_spifi_initialize(void)
   /* Configure SPIFI pins */
 
   lpc43_spifi_pinconfig();
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   /* Initialize the SPIFI ROM driver */
 
   ret = lpc43_rominit(priv);
-   if (ret != OK)
-     {
-       return NULL;
-     }
+  if (ret != OK)
+    {
+      return NULL;
+    }
 
   /* Check if we need to emulator a 512 byte sector */
 
@@ -1193,19 +1195,19 @@ FAR struct mtd_dev_s *lpc43_spifi_initialize(void)
 
   /* Allocate a buffer for the erase block cache */
 
-  priv->cache = (FAR uint8_t *)kmalloc(SPIFI_BLKSIZE);
+  priv->cache = (FAR uint8_t *)kmm_malloc(SPIFI_BLKSIZE);
   if (!priv->cache)
     {
       /* Allocation failed! Discard all of that work we just did and return NULL */
 
-      fdbg("ERROR: Allocation failed\n");
+      ferr("ERROR: Allocation failed\n");
       return NULL;
     }
 #endif
 
   /* Return the implementation-specific state structure as the MTD device */
 
-  fvdbg("Return %p\n", priv);
+  finfo("Return %p\n", priv);
   return (FAR struct mtd_dev_s *)priv;
 }
 

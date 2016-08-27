@@ -33,11 +33,11 @@
 #
 ############################################################################
 
--include $(TOPDIR)/.config
 -include $(TOPDIR)/Make.defs
-include $(APPDIR)/Make.defs
 
 # Pascal Add-On Example
+
+APPNAME = pashello
 
 ifeq ($(WINTOOL),y)
 INCDIROPT = -w
@@ -48,57 +48,10 @@ CFLAGS += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" \
   "$(APPDIR)$(DELIM)interpreters$(DELIM)pcode$(DELIM)insn$(DELIM)include"}
 
 ASRCS =
-CSRCS = pashello.c device.c
+CSRCS = device.c
+MAINSRC = pashello.c
 
-AOBJS = $(ASRCS:.S=$(OBJEXT))
-COBJS = $(CSRCS:.c=$(OBJEXT))
+CONFIG_XYZ_PROGNAME ?= pashello$(EXEEXT)
+PROGNAME = $(CONFIG_XYZ_PROGNAME)
 
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-ifeq ($(CONFIG_WINDOWS_NATIVE),y)
-  BIN = ..\..\libapps$(LIBEXT)
-else
-ifeq ($(WINTOOL),y)
-  BIN = ..\\..\\libapps$(LIBEXT)
-else
-  BIN = ../../libapps$(LIBEXT)
-endif
-endif
-
-ROOTDEPPATH = --dep-path .
-
-# Common build
-
-VPATH =
-
-all: .built
-.PHONY: clean depend distclean
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-.built: $(OBJS)
-	$(call ARCHIVE, $(BIN), $(OBJS))
-	@touch .built
-
-context:
-
-.depend: Makefile $(SRCS)
-	@$(MKDEP) $(ROOTDEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make.dep
-	@touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, .built)
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(APPDIR)/Application.mk

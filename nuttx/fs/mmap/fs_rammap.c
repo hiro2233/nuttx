@@ -49,13 +49,13 @@
 
 #include <nuttx/kmalloc.h>
 
-#include "fs_internal.h"
+#include "inode/inode.h"
 #include "fs_rammap.h"
 
 #ifdef CONFIG_FS_RAMMAP
 
 /****************************************************************************
- * Global Data
+ * Public Data
  ****************************************************************************/
 
 /* This is the list of all mapped files */
@@ -63,7 +63,7 @@
 struct fs_allmaps_s g_rammaps;
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -121,7 +121,7 @@ FAR void *rammap(int fd, size_t length, off_t offset)
   FAR uint8_t *rdbuffer;
   ssize_t nread;
   off_t fpos;
-  int err;
+  int errcode;
   int ret;
 
   /* There is a major design flaw that I have not yet thought of fix for:
@@ -139,11 +139,11 @@ FAR void *rammap(int fd, size_t length, off_t offset)
 
   /* Allocate a region of memory of the specified size */
 
-  alloc = (FAR uint8_t *)kumalloc(sizeof(struct fs_rammap_s) + length);
+  alloc = (FAR uint8_t *)kumm_malloc(sizeof(struct fs_rammap_s) + length);
   if (!alloc)
     {
-      fdbg("Region allocation failed, length: %d\n", (int)length);
-      err = ENOMEM;
+      ferr("ERROR: Region allocation failed, length: %d\n", (int)length);
+      errcode = ENOMEM;
       goto errout;
     }
 
@@ -164,8 +164,8 @@ FAR void *rammap(int fd, size_t length, off_t offset)
        * the correct response.
        */
 
-      fdbg("Seek to position %d failed\n", (int)offset);
-      err = EINVAL;
+      ferr("ERROR: Seek to position %d failed\n", (int)offset);
+      errcode = EINVAL;
       goto errout_with_region;
     }
 
@@ -177,24 +177,25 @@ FAR void *rammap(int fd, size_t length, off_t offset)
       nread = read(fd, rdbuffer, length);
       if (nread < 0)
         {
-           /* Handle the special case where the read was interrupted by a
-            * signal.
-            */
+          /* Handle the special case where the read was interrupted by a
+           * signal.
+           */
 
-           err = get_errno();
-           if (err != EINTR)
-             {
-               /* All other read errors are bad.  errno is already set.
-                * (but maybe should be forced to EINVAL?).  NOTE that if
-                * FS DEBUG is enabled, then the following fdbg() macro will
-                * destroy the errno value.
-                */
+          errcode = get_errno();
+          if (errcode != EINTR)
+            {
+              /* All other read errors are bad.  errno is already set.
+               * (but maybe should be forced to EINVAL?).  NOTE that if
+               * FS DEBUG is enabled, then the following ferr() macro will
+               * destroy the errno value.
+               */
 
-               fdbg("Read failed: offset=%d errno=%d\n", (int)offset, err);
+              ferr("ERROR: Read failed: offset=%d errno=%d\n",
+                   (int)offset, errcode);
 #ifdef CONFIG_DEBUG_FS
-               goto errout_with_region;
+              goto errout_with_region;
 #else
-               goto errout_with_errno;
+              goto errout_with_errno;
 #endif
              }
         }
@@ -232,13 +233,13 @@ FAR void *rammap(int fd, size_t length, off_t offset)
   return map->addr;
 
 errout_with_region:
-  kufree(alloc);
+  kumm_free(alloc);
 errout:
-  set_errno(err);
+  set_errno(errcode);
   return MAP_FAILED;
 
 errout_with_errno:
-  kufree(alloc);
+  kumm_free(alloc);
   return MAP_FAILED;
 }
 

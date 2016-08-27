@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/stm32f4discovery/src/stm32_boot.c
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,13 +41,14 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
 #include "stm32f4discovery.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /************************************************************************************
@@ -63,41 +64,59 @@
  *
  * Description:
  *   All STM32 architectures must provide the following entry point.  This entry point
- *   is called early in the intitialization -- after all memory has been configured
+ *   is called early in the initialization -- after all memory has been configured
  *   and mapped but before any devices have been initialized.
  *
  ************************************************************************************/
 
 void stm32_boardinitialize(void)
 {
+#if defined(CONFIG_STM32_SPI1) || defined(CONFIG_STM32_SPI2) || defined(CONFIG_STM32_SPI3)
   /* Configure SPI chip selects if 1) SPI is not disabled, and 2) the weak function
-   * stm32_spiinitialize() has been brought into the link.
+   * stm32_spidev_initialize() has been brought into the link.
    */
 
-#if defined(CONFIG_STM32_SPI1) || defined(CONFIG_STM32_SPI2) || defined(CONFIG_STM32_SPI3)
-  if (stm32_spiinitialize)
+  if (stm32_spidev_initialize)
     {
-      stm32_spiinitialize();
+      stm32_spidev_initialize();
     }
 #endif
 
+#ifdef CONFIG_STM32_OTGFS
   /* Initialize USB if the 1) OTG FS controller is in the configuration and 2)
    * disabled, and 3) the weak function stm32_usbinitialize() has been brought
-   * into the build. Presumeably either CONFIG_USBDEV or CONFIG_USBHOST is also
+   * into the build. Presumably either CONFIG_USBDEV or CONFIG_USBHOST is also
    * selected.
    */
 
-#ifdef CONFIG_STM32_OTGFS
   if (stm32_usbinitialize)
     {
       stm32_usbinitialize();
     }
 #endif
 
-  /* Configure on-board LEDs if LED support has been selected. */
+#ifdef HAVE_NETMONITOR
+  /* Configure board resources to support networking. */
+
+  if (stm32_netinitialize)
+    {
+      stm32_netinitialize();
+    }
+#endif
+
+#ifdef CONFIG_CANUTILS_LIBUAVCAN
+  (void)stm32_configgpio(GPIO_CAN1_RX);
+  (void)stm32_configgpio(GPIO_CAN1_TX);
+#  if CONFIG_LIBUAVCAN_STM32_NUM_IFACES > 1
+  (void)stm32_configgpio(GPIO_CAN2_RX);
+  (void)stm32_configgpio(GPIO_CAN2_TX);
+#  endif
+#endif
 
 #ifdef CONFIG_ARCH_LEDS
-  board_led_initialize();
+  /* Configure on-board LEDs if LED support has been selected. */
+
+  board_autoled_initialize();
 #endif
 }
 
@@ -117,14 +136,8 @@ void stm32_boardinitialize(void)
 #ifdef CONFIG_BOARD_INITIALIZE
 void board_initialize(void)
 {
-  /* Perform NSH initialization here instead of from the NSH.  This
-   * alternative NSH initialization is necessary when NSH is ran in user-space
-   * but the initialization function must run in kernel space.
-   */
+  /* Perform board-specific initialization */
 
-#if defined(CONFIG_NSH_LIBRARY) && !defined(CONFIG_NSH_ARCHINIT)
-  (void)nsh_archinitialize();
-#endif
+  (void)stm32_bringup();
 }
 #endif
-

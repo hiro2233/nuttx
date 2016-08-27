@@ -1,7 +1,7 @@
 /****************************************************************************
  *  arch/x86/src/common/up_unblocktask.c
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,22 +42,12 @@
 #include <sched.h>
 #include <debug.h>
 #include <nuttx/arch.h>
+#include <nuttx/sched.h>
 
-#include "os_internal.h"
-#include "clock_internal.h"
+#include "sched/sched.h"
+#include "group/group.h"
+#include "clock/clock.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -74,13 +64,13 @@
  * Inputs:
  *   tcb: Refers to the tcb to be unblocked.  This tcb is in one of the
  *     waiting tasks lists.  It must be moved to the ready-to-run list and,
- *     if it is the highest priority ready to run taks, executed.
+ *     if it is the highest priority ready to run task, executed.
  *
  ****************************************************************************/
 
 void up_unblock_task(struct tcb_s *tcb)
 {
-  struct tcb_s *rtcb = (struct tcb_s*)g_readytorun.head;
+  struct tcb_s *rtcb = this_task();
 
   /* Verify that the context switch can be performed */
 
@@ -91,41 +81,43 @@ void up_unblock_task(struct tcb_s *tcb)
 
   sched_removeblocked(tcb);
 
-  /* Reset its timeslice.  This is only meaningful for round
-   * robin tasks but it doesn't here to do it for everything
-   */
-
-#if CONFIG_RR_INTERVAL > 0
-  tcb->timeslice = CONFIG_RR_INTERVAL / MSEC_PER_TICK;
-#endif
-
   /* Add the task in the correct location in the prioritized
-   * g_readytorun task list
+   * ready-to-run task list
    */
 
   if (sched_addreadytorun(tcb))
     {
       /* The currently active task has changed! We need to do
        * a context switch to the new task.
-       *
-       * Are we in an interrupt handler?
        */
 
-      if (current_regs)
+      /* Update scheduler parameters */
+
+      sched_suspend_scheduler(rtcb);
+
+      /* Are we in an interrupt handler? */
+
+      if (g_current_regs)
         {
           /* Yes, then we have to do things differently.
-           * Just copy the current_regs into the OLD rtcb.
+           * Just copy the g_current_regs into the OLD rtcb.
            */
 
           up_savestate(rtcb->xcp.regs);
 
           /* Restore the exception context of the rtcb at the (new) head
-           * of the g_readytorun task list.
+           * of the ready-to-run task list.
            */
 
-          rtcb = (struct tcb_s*)g_readytorun.head;
+          rtcb = this_task();
 
-          /* Then switch contexts */
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
+
+          /* Then switch contexts.  Any necessary address environment
+           * changes will be made when the interrupt returns.
+           */
 
           up_restorestate(rtcb->xcp.regs);
         }
@@ -140,10 +132,23 @@ void up_unblock_task(struct tcb_s *tcb)
         {
           /* Restore the exception context of the new task that is ready to
            * run (probably tcb).  This is the new rtcb at the head of the
-           * g_readytorun task list.
+           * ready-to-run task list.
            */
 
-          rtcb = (struct tcb_s*)g_readytorun.head;
+          rtcb = this_task();
+
+#ifdef CONFIG_ARCH_ADDRENV
+         /* Make sure that the address environment for the previously
+          * running task is closed down gracefully (data caches dump,
+          * MMU flushed) and set up the address environment for the new
+          * thread at the head of the ready-to-run list.
+          */
+
+         (void)group_addrenv(rtcb);
+#endif
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
 
           /* Then switch contexts */
 

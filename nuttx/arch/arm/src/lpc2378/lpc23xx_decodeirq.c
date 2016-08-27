@@ -54,12 +54,11 @@
 #include <arch/board/board.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
-#include "internal.h"
+#include "lpc2378.h"
 #include "lpc23xx_vic.h"
 
 /********************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ********************************************************************************/
 
 /********************************************************************************
@@ -79,7 +78,7 @@
  ********************************************************************************/
 
 /********************************************************************************
- * Public Funstions
+ * Public Functions
  ********************************************************************************/
 
 /********************************************************************************
@@ -111,9 +110,9 @@ static void lpc23xx_decodeirq(uint32_t *regs)
 #endif
 {
 #ifdef CONFIG_SUPPRESS_INTERRUPTS
-  lowsyslog("Unexpected IRQ\n");
-  current_regs = regs;
   PANIC();
+  err("ERROR: Unexpected IRQ\n");
+  CURRENT_REGS = regs;
 #else
 
   /* Check which IRQ fires */
@@ -134,26 +133,26 @@ static void lpc23xx_decodeirq(uint32_t *regs)
        uint32_t *savestate;
 
       /* Current regs non-zero indicates that we are processing an interrupt;
-       * current_regs is also used to manage interrupt level context switches.
+       * CURRENT_REGS is also used to manage interrupt level context switches.
        */
 
-      savestate    = (uint32_t*)current_regs;
-      current_regs = regs;
+      savestate    = (uint32_t *)CURRENT_REGS;
+      CURRENT_REGS = regs;
 
-      /* Mask and acknowledge the interrupt */
+      /* Acknowledge the interrupt */
 
-      up_maskack_irq(irq);
+      up_ack_irq(irq);
 
       /* Deliver the IRQ */
 
       irq_dispatch(irq, regs);
 
-      /* Restore the previous value of current_regs.  NULL would indicate that
+      /* Restore the previous value of CURRENT_REGS.  NULL would indicate that
        * we are no longer in an interrupt handler.  It will be non-NULL if we
        * are returning from a nested interrupt.
        */
 
-      current_regs = savestate;
+      CURRENT_REGS = savestate;
     }
 
 #endif
@@ -164,13 +163,15 @@ void up_decodeirq(uint32_t *regs)
 {
   vic_vector_t vector = (vic_vector_t) vic_getreg(VIC_ADDRESS_OFFSET);
 
-  /* Mask and acknowledge the interrupt */
+  /* Acknowledge the interrupt */
 
-  up_maskack_irq(irq);
+  up_ack_irq(irq);
 
   /* Valid Interrupt */
 
   if (vector != NULL)
-    (vector) (regs);
+    {
+      (vector)(regs);
+    }
 }
 #endif

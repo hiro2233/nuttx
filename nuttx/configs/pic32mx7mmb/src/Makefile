@@ -35,68 +35,26 @@
 
 -include $(TOPDIR)/Make.defs
 
-CFLAGS		+= -I$(TOPDIR)/sched
-
-ASRCS		=
-CSRCS		= up_boot.c up_leds.c up_spi.c up_mio283qt2.c
+ASRCS =
+CSRCS = pic32_boot.c pic32_leds.c pic32_spi.c pic32_mio283qt2.c
 
 ifeq ($(CONFIG_PIC32MX_USBDEV),y)
-CSRCS		+= up_usbdev.c
+CSRCS += pic32_usbdev.c
 ifeq ($(CONFIG_EXAMPLES_USBTERM_DEVINIT),y)
-CSRCS		+= up_usbterm.c
+CSRCS += pic32_usbterm.c
 endif
 endif
 
-ifeq ($(CONFIG_NSH_ARCHINIT),y)
-CSRCS		+= up_nsh.c
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+CSRCS += pic32_appinit.c
 endif
 
 ifeq ($(CONFIG_USBMSC),y)
-CSRCS		+= up_usbmsc.c
+CSRCS += pic32_usbmsc.c
 endif
 
 ifeq ($(CONFIG_INPUT),y)
-CSRCS		+= up_touchscreen.c
+CSRCS += pic32_touchscreen.c
 endif
 
-AOBJS		= $(ASRCS:.S=$(OBJEXT))
-COBJS		= $(CSRCS:.c=$(OBJEXT))
-
-SRCS		= $(ASRCS) $(CSRCS)
-OBJS		= $(AOBJS) $(COBJS)
-
-ARCH_SRCDIR	= $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(WINTOOL),y)
-  CFLAGS	+= -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/mips32}"
-else
-  CFLAGS	+= -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/mips32
-endif
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

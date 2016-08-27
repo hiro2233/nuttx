@@ -1,5 +1,7 @@
-/*
- * FreeModbus Libary: A portable Modbus implementation for Modbus ASCII/RTU.
+/****************************************************************************
+ * apps/modbus/tcp/mbtcp.h
+ *
+ * FreeModbus Library: A portable Modbus implementation for Modbus ASCII/RTU.
  * Copyright (c) 2006 Christian Walter <wolti@sil.at>
  * All rights reserved.
  *
@@ -25,29 +27,36 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * File: $Id: mbtcp.h,v 1.2 2006/12/07 22:10:34 wolti Exp $
- */
+ ****************************************************************************/
 
-#ifndef _MB_TCP_H
-#define _MB_TCP_H
+#ifndef __APPS_MODBUS_TCP_MBTCP_H
+#define __APPS_MODBUS_TCP_MBTCP_H
 
 #ifdef __cplusplus
-PR_BEGIN_EXTERN_C
+extern "C"
+{
 #endif
 
-/* ----------------------- Defines ------------------------------------------*/
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
 #define MB_TCP_PSEUDO_ADDRESS   255
 
-/* ----------------------- Function prototypes ------------------------------*/
-    eMBErrorCode eMBTCPDoInit( uint16_t ucTCPPort );
-void            eMBTCPStart( void );
-void            eMBTCPStop( void );
-eMBErrorCode    eMBTCPReceive( uint8_t * pucRcvAddress, uint8_t ** pucFrame,
-                               uint16_t * pusLength );
-eMBErrorCode    eMBTCPSend( uint8_t _unused, const uint8_t * pucFrame,
-                            uint16_t usLength );
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
+
+eMBErrorCode eMBTCPDoInit(uint16_t ucTCPPort);
+void         eMBTCPStart(void);
+void         eMBTCPStop(void);
+eMBErrorCode eMBTCPReceive(uint8_t *pucRcvAddress, uint8_t **pucFrame,
+                           uint16_t *pusLength);
+eMBErrorCode eMBTCPSend(uint8_t _unused, const uint8_t *pucFrame,
+                        uint16_t usLength);
 
 #ifdef __cplusplus
-PR_END_EXTERN_C
+}
 #endif
-#endif
+
+#endif /* __APPS_MODBUS_TCP_MBTCP_H */

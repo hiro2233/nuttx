@@ -2,7 +2,7 @@
  * arch/arm/src/sam34/chip/sam_tc.h
  * Timer Counter (TC) definitions for the SAM3U, SAM4E, and SAM4S
  *
- *   Copyright (C) 2009, 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2013-2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -325,6 +325,7 @@
 
 #define TC_CMR_TCCLKS_SHIFT          (0)       /* Bits 0-2: Clock Selection */
 #define TC_CMR_TCCLKS_MASK           (7 << TC_CMR_TCCLKS_SHIFT)
+#  define TC_CMR_TCCLKS(n)           ((uint32_t)(n) << TC_CMR_TCCLKS_SHIFT)
 #  define TC_CMR_TCCLKS_TIMERCLOCK1  (0 << TC_CMR_TCCLKS_SHIFT)
 #  define TC_CMR_TCCLKS_TIMERCLOCK2  (1 << TC_CMR_TCCLKS_SHIFT)
 #  define TC_CMR_TCCLKS_TIMERCLOCK3  (2 << TC_CMR_TCCLKS_SHIFT)
@@ -335,11 +336,11 @@
 #  define TC_CMR_TCCLKS_XC2          (7 << TC_CMR_TCCLKS_SHIFT)
 #define TC_CMR_CLKI                  (1 << 3)  /* Bit 3: Clock Invert */
 #define TC_CMR_BURST_SHIFT           (4)       /* Bits 4-5: Burst Signal Selection */
-#define TC_CMR_BURST_MASK            (3 << TC_CMR_BURST_MASK)
-#  define TC_CMR_BURST_NOTGATED      (0 << TC_CMR_BURST_MASK) /* Nott gated by external signal */
-#  define TC_CMR_BURST_XC0           (1 << TC_CMR_BURST_MASK) /* XC0 ANDed with selected clock */
-#  define TC_CMR_BURST_XC1           (2 << TC_CMR_BURST_MASK) /* XC1 ANDed with selected clock */
-#  define TC_CMR_BURST_XC2           (3 << TC_CMR_BURST_MASK) /* XC2 ANDed with selected clock */
+#define TC_CMR_BURST_MASK            (3 << TC_CMR_BURST_SHIFT)
+#  define TC_CMR_BURST_NOTGATED      (0 << TC_CMR_BURST_SHIFT) /* Nott gated by external signal */
+#  define TC_CMR_BURST_XC0           (1 << TC_CMR_BURST_SHIFT) /* XC0 ANDed with selected clock */
+#  define TC_CMR_BURST_XC1           (2 << TC_CMR_BURST_SHIFT) /* XC1 ANDed with selected clock */
+#  define TC_CMR_BURST_XC2           (3 << TC_CMR_BURST_SHIFT) /* XC2 ANDed with selected clock */
 #define TC_CMR_WAVE                  (1 << 15) /* Bit 15: Waveform Mode */
 
 /* TC Channel Mode Register -- Capture mode only */
@@ -370,11 +371,11 @@
 #if defined(CONFIG_ARCH_CHIP_SAM4E)
 #define TC_CMR_SBSMPLR_SHIFT         (20)      /* Bits 20-22: Loading Edge Subsampling Ratio */
 #define TC_CMR_SBSMPLR_MASK          (7 << TC_CMR_SBSMPLR_SHIFT)
-#  define TC_CMR_SBSMPLR_ ONE        (0 << TC_CMR_SBSMPLR_SHIFT) /* Load on each selected edge */
-#  define TC_CMR_SBSMPLR_ HALF       (1 << TC_CMR_SBSMPLR_SHIFT) /* Load on every 2 selected edges */
-#  define TC_CMR_SBSMPLR_ 4TH        (2 << TC_CMR_SBSMPLR_SHIFT) /* Load on every 4 selected edges */
-#  define TC_CMR_SBSMPLR_ 8TH        (3 << TC_CMR_SBSMPLR_SHIFT) /* Load on every 8 selected edges */
-#  define TC_CMR_SBSMPLR_ 16TH       (4 << TC_CMR_SBSMPLR_SHIFT) /* Load on every 16 selected edges */
+#  define TC_CMR_SBSMPLR_ONE         (0 << TC_CMR_SBSMPLR_SHIFT) /* Load on each selected edge */
+#  define TC_CMR_SBSMPLR_HALF        (1 << TC_CMR_SBSMPLR_SHIFT) /* Load on every 2 selected edges */
+#  define TC_CMR_SBSMPLR_4TH         (2 << TC_CMR_SBSMPLR_SHIFT) /* Load on every 4 selected edges */
+#  define TC_CMR_SBSMPLR_8TH         (3 << TC_CMR_SBSMPLR_SHIFT) /* Load on every 8 selected edges */
+#  define TC_CMR_SBSMPLR_16TH        (4 << TC_CMR_SBSMPLR_SHIFT) /* Load on every 16 selected edges */
 #endif
 
 /* TC Channel Mode Register -- Waveform mode only */
@@ -536,16 +537,10 @@
 #  define TC_BMR_TC1XC1S_TIOA2       (3 << TC_BMR_TC1XC1S_SHIFT)
 #define TC_BMR_TC2XC2S_SHIFT         (4)       /* Bits 4-5: External Clock Signal 2 Selection */
 #define TC_BMR_TC2XC2S_MASK          (3 << TC_BMR_TC2XC2S_SHIFT)
-#if defined(CONFIG_ARCH_CHIP_SAM4s) || defined(CONFIG_ARCH_CHIP_SAM4E)
-#  define TC_BMR_TC2XC2S_TCLK2       (0 << TC_BMR_TC2XC2S_SHIFT)
-#  define TC_BMR_TC2XC2S_TIOA1       (2 << TC_BMR_TC2XC2S_SHIFT)
-#  define TC_BMR_TC2XC2S_TIOA2       (3 << TC_BMR_TC2XC2S_SHIFT)
-#else
 #  define TC_BMR_TC2XC2S_TCLK2       (0 << TC_BMR_TC2XC2S_SHIFT)
 #  define TC_BMR_TC2XC2S_NONE        (1 << TC_BMR_TC2XC2S_SHIFT)
 #  define TC_BMR_TC2XC2S_TIOA0       (2 << TC_BMR_TC2XC2S_SHIFT)
 #  define TC_BMR_TC2XC2S_TIOA1       (3 << TC_BMR_TC2XC2S_SHIFT)
-#endif
 #define TC_BMR_QDEN                  (1 << 8)  /* Bit 8:  Quadrature Decoder Enabled */
 #define TC_BMR_POSEN                 (1 << 9)  /* Bit 9:  Position Enabled */
 #define TC_BMR_SPEEDEN               (1 << 10) /* Bit 10: Speed Enabled */

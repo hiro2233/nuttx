@@ -1,7 +1,7 @@
 /****************************************************************************
- * include/nuttx/lm75.h
+ * include/nuttx/sensors/lm75.h
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,18 +33,20 @@
  *
  ****************************************************************************/
 
-#ifndef __NUTTX_SENSORS_LM75_H
-#define __NUTTX_SENSORS_LM75_H
+#ifndef __INCLUDE_NUTTX_SENSORS_LM75_H
+#define __INCLUDE_NUTTX_SENSORS_LM75_H
 
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#include <nuttx/fs/ioctl.h>
+#include <nuttx/sensors/ioctl.h>
+
+#if defined(CONFIG_I2C) && defined(CONFIG_I2C_LM75)
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************
  * CONFIG_I2C - Enables support for I2C drivers
@@ -52,19 +54,14 @@
  */
 
 #define CONFIG_LM75_BASEADDR 0x48
-
-/* IOCTL Commands ***********************************************************/
-
-#define SNIOC_READCONF     _SNIOC(0x0001) /* Arg: uint8_t* pointer */
-#define SNIOC_WRITECONF    _SNIOC(0x0002) /* Arg: uint8_t value */
-#define SNIOC_SHUTDOWN     _SNIOC(0x0003) /* Arg: None */
-#define SNIOC_POWERUP      _SNIOC(0x0004) /* Arg: None */
-#define SNIOC_FAHRENHEIT   _SNIOC(0x0005) /* Arg: None */
-#define SNIOC_CENTIGRADE   _SNIOC(0x0006) /* Arg: None */
-#define SNIOC_READTHYS     _SNIOC(0x0007) /* Arg: b16_t* pointer */
-#define SNIOC_WRITETHYS    _SNIOC(0x0008) /* Arg: b16_t value */
-#define SNIOC_READTOS      _SNIOC(0x0009) /* Arg: b16_t* pointer */
-#define SNIOC_WRITRETOS    _SNIOC(0x000a) /* Arg: b16_t value */
+#define CONFIG_LM75_ADDR0 (CONFIG_LM75_BASEADDR + 0)
+#define CONFIG_LM75_ADDR1 (CONFIG_LM75_BASEADDR + 1)
+#define CONFIG_LM75_ADDR2 (CONFIG_LM75_BASEADDR + 2)
+#define CONFIG_LM75_ADDR3 (CONFIG_LM75_BASEADDR + 3)
+#define CONFIG_LM75_ADDR4 (CONFIG_LM75_BASEADDR + 4)
+#define CONFIG_LM75_ADDR5 (CONFIG_LM75_BASEADDR + 5)
+#define CONFIG_LM75_ADDR6 (CONFIG_LM75_BASEADDR + 6)
+#define CONFIG_LM75_ADDR7 (CONFIG_LM75_BASEADDR + 7)
 
 /* LM-75 Register Definitions ***********************************************/
 /* LM-75 Registers addresses */
@@ -86,20 +83,19 @@
  */
 
 /****************************************************************************
- * Global Data
+ * Public Types
  ****************************************************************************/
 
-/****************************************************************************
- * Global Function Prototypes
- ****************************************************************************/
+struct i2c_master_s;
 
 /****************************************************************************
- * Global Function Prototypes
+ * Public Function Prototypes
  ****************************************************************************/
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -122,12 +118,13 @@ extern "C" {
  *
  ****************************************************************************/
 
-EXTERN int lm75_register(FAR const char *devpath, FAR struct i2c_dev_s *i2c,
-                         uint8_t addr);
+int lm75_register(FAR const char *devpath, FAR struct i2c_master_s *i2c,
+                  uint8_t addr);
 
 #undef EXTERN
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __NUTTX_SENSORS_LM75_H */
+#endif /* CONFIG_I2C && CONFIG_I2C_LM75 */
+#endif /* __INCLUDE_NUTTX_SENSORS_LM75_H */

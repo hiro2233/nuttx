@@ -1,7 +1,7 @@
 ############################################################################
 # libxx/Makefile
 #
-#   Copyright (C) 2009, 2012 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2009, 2012, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -41,13 +41,16 @@ ASRCS =
 CSRCS =
 
 CXXSRCS  = libxx_cxapurevirtual.cxx libxx_eabi_atexit.cxx  libxx_cxa_atexit.cxx
+ifeq ($(CONFIG_UCLIBCXX_EXCEPTION),y)
+CXXSRCS += libxx__gnu_unwind_find_exidx.cxx
+endif
 
 # Some of the libxx/ files are not need if uClibc++ is installed because
 # uClibx++ replaces them
 
 ifneq ($(CONFIG_UCLIBCXX),y)
 CXXSRCS += libxx_delete.cxx libxx_deletea.cxx libxx_new.cxx libxx_newa.cxx
-CXXSRCS += libxx_stdthrow.cxx
+CXXSRCS += libxx_stdthrow.cxx libxx_cxa_guard.cxx
 else
 ifneq ($(UCLIBCXX_EXCEPTION),y)
 CXXSRCS += libxx_stdthrow.cxx
@@ -66,8 +69,8 @@ VPATH = .
 #
 # Note that an error will occur if you select CONFIG_LIBXX_UCLIBCXX
 # without installing the uClibc++ package.  This is intentional to let
-# you know about the configuration problem.  Refer to misc/uClibc++/README.txt
-# for more information
+# you know about the configuration problem.  Refer to the README.txt file
+# in the NuttX uClibc++ GIT repository for more information
 
 ifeq ($(CONFIG_UCLIBCXX),y)
 include uClibc++/Make.defs
@@ -85,6 +88,7 @@ OBJS = $(AOBJS) $(COBJS) $(CXXOBJS)
 BIN = libcxx$(LIBEXT)
 
 all: $(BIN)
+.PHONY: depend clean distclean
 
 $(AOBJS): %$(OBJEXT): %.S
 	$(call ASSEMBLE, $<, $@)

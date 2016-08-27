@@ -43,7 +43,7 @@
 #include <nuttx/config.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 
@@ -129,7 +129,7 @@ extern "C" {
 #endif
 
 /************************************************************************************
- * Name: pic32mx_spiinitialize
+ * Name: pic32mx_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the Sure PIC32MX Logic board.
@@ -137,7 +137,7 @@ extern "C" {
  ************************************************************************************/
 
 #if defined(CONFIG_PIC32MX_SPI2)
-void weak_function pic32mx_spiinitialize(void);
+void weak_function pic32mx_spidev_initialize(void);
 #endif
 
 /************************************************************************************
@@ -153,7 +153,7 @@ void weak_function pic32mx_usbdevinitialize(void);
 #endif
 
 /************************************************************************************
- * Name: pic32mx_ledinit
+ * Name: pic32mx_led_initialize
  *
  * Description:
  *   Configure on-board LEDs if LED support has been selected.
@@ -161,7 +161,7 @@ void weak_function pic32mx_usbdevinitialize(void);
  ************************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void pic32mx_ledinit(void);
+void pic32mx_led_initialize(void);
 #endif
 
 #undef EXTERN

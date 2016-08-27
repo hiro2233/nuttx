@@ -1,5 +1,5 @@
 README
-^^^^^^
+======
 
 This README discusses issues unique to NuttX configurations for the
 Atmel SAMD20 Xplained Pro development board.  This board features the
@@ -14,8 +14,9 @@ The SAMD20 Xplained Pro Starter Kit may be bundled with three modules:
             logic).
 
 Contents
-^^^^^^^^
+========
 
+  - STATUS/ISSUES
   - Modules
   - Development Environment
   - GNU Toolchain Options
@@ -27,8 +28,44 @@ Contents
   - SAMD20 Xplained Pro-specific Configuration Options
   - Configurations
 
+STATUS/ISSUES
+=============
+
+    1. The FLASH wait states is set to 2 (see include/board.h).  According to
+       the data sheet, it should work at 1 but I sometimes see crashes when
+       the wait states are set to one (about half of the time) (2014-2-18).
+
+    2. Garbage appears on the display sometimes after a reset (maybe 20% of
+       the time) or after a power cycle (less after a power cycle).  I don't
+       understand the cause of of this but most of this can be eliminated by
+       simply holding the the reset button longer and releasing it cleanly
+       (then it fails maybe 5-10% of the time, maybe because of button
+       chatter?) (2014-2-18).
+
+       - The garbage is not random:  It is always the same.
+       - This is not effected by BAUD rate.  Curiously, the same garbage
+         appears at different BAUD settings implying that this may not even
+         be clock related???
+       - The program seems to be running normally, just producing bad output.
+
+    3. SPI current hangs so not much progress has been made testing the I/O1
+       module.  The hang occurs because the SPI is waiting for SYNCBUSY to
+       be cleared after enabling the SPI.  This even does not happen and so
+       causes the hang.
+
+       Another note:  Enabling the SPI on SERCOM0 also seems to interfere
+       with the USART output on SERCOM4.  Both symptoms imply some clock-
+       related issue.
+
+       The configuration suggests CONFIG_MMCSD_HAVECARDDETECT=y, but as of
+       this writing, there is no support for EIC pin interrupts.
+
+    4. OLED1 module is untested.  These instructions were just lifted from
+       the SAM4L Xplained Pro README.txt file.
+
 Modules
-^^^^^^^
+=======
+
   The SAMD20 Xplained Pro Starter Kit is bundled with four modules:
 
   I/O1
@@ -230,7 +267,7 @@ Modules
   There is no built-in support for the PROTO1 module.
 
 Development Environment
-^^^^^^^^^^^^^^^^^^^^^^^
+=======================
 
   Either Linux or Cygwin on Windows can be used for the development environment.
   The source has been built only using the GNU toolchain (see below).  Other
@@ -238,7 +275,7 @@ Development Environment
   environment.
 
 GNU Toolchain Options
-^^^^^^^^^^^^^^^^^^^^^
+=====================
 
 
   The NuttX make system can be configured to support the various different
@@ -287,14 +324,8 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This
-     is because the dependencies are generated using Windows paths which do
-     not work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
 IDEs
-^^^^
+====
 
   NuttX is built using command-line make.  It can be used with an IDE, but some
   effort will be required to create the project.
@@ -326,14 +357,14 @@ IDEs
   startup object needed by an IDE.
 
 NuttX EABI "buildroot" Toolchain
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+================================
 
   A GNU GCC-based toolchain is assumed.  The files */setenv.sh should
   be modified to point to the correct path to the Cortex-M0 GCC toolchain (if
   different from the default in your PATH variable).
 
   If you have no Cortex-M0 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -363,7 +394,8 @@ NuttX EABI "buildroot" Toolchain
   building a Cortex-M0 toolchain for Cygwin under Windows.
 
 LEDs
-^^^^
+====
+
   There is one yellow LED available on the SAM D20 Xplained Pro board that
   can be turned on and off. The LED can be activated by driving the connected
   PA14 I/O line to GND.
@@ -387,7 +419,7 @@ LEDs
   2Hz, then a fatal error has been detected and the system has halted.
 
 Serial Consoles
-^^^^^^^^^^^^^^^
+===============
 
   SERCOM4
   ------
@@ -422,28 +454,32 @@ Serial Consoles
     PA25 SERCOM3 / USART RXD
 
 Atmel Studio 6.1
-^^^^^^^^^^^^^^^^
+================
 
   Loading Code into FLASH:
   -----------------------
+
   Tools menus:  Tools -> Device Programming.
 
   Debugging the NuttX Object File
   -------------------------------
+
   1) Rename object file from nutt to nuttx.elf.  That is an extension that
      will be recognized by the file menu.
 
   2) File menu: File -> Open -> Open object file for debugging
+
      - Select nuttx.elf object file
      - Select AT91SAMD20J18
      - Select files for symbols as desired
      - Select debugger
 
   3) Debug menu: Debug -> Start debugging and break
+
      - This will reload the nuttx.elf file into FLASH
 
 SAMD20 Xplained Pro-specific Configuration Options
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+==================================================
 
     CONFIG_ARCH - Identifies the arch/ subdirectory.  This should
        be set to:
@@ -460,7 +496,7 @@ SAMD20 Xplained Pro-specific Configuration Options
 
     CONFIG_ARCH_CHIP - Identifies the arch/*/chip subdirectory
 
-       CONFIG_ARCH_CHIP="samd"
+       CONFIG_ARCH_CHIP="samdl"
 
     CONFIG_ARCH_CHIP_name - For use in C code to identify the exact
        chip:
@@ -513,40 +549,40 @@ SAMD20 Xplained Pro-specific Configuration Options
 
   Individual subsystems can be enabled:
 
-    CONFIG_SAMD_WDT     - Watchdog Timer"
-    CONFIG_SAMD_RTC     - Real Time Counter"
-    CONFIG_SAMD_NVMCTRL - Non-Volatile Memory Controller"
-    CONFIG_SAMD_EVSYS   - Event System"
-    CONFIG_SAMD_SERCOM0 - Serial Communication Interface 0"
-    CONFIG_SAMD_SERCOM1 - Serial Communication Interface 1"
-    CONFIG_SAMD_SERCOM2 - Serial Communication Interface 2"
-    CONFIG_SAMD_SERCOM3 - Serial Communication Interface 3"
-    CONFIG_SAMD_SERCOM4 - Serial Communication Interface 4"
-    CONFIG_SAMD_SERCOM5 - Serial Communication Interface 5"
-    CONFIG_SAMD_TC0     - Timer/Counter 0"
-    CONFIG_SAMD_TC1     - Timer/Counter 1"
-    CONFIG_SAMD_TC2     - Timer/Counter 2"
-    CONFIG_SAMD_TC3     - Timer/Counter 3"
-    CONFIG_SAMD_TC4     - Timer/Counter 4"
-    CONFIG_SAMD_TC5     - Timer/Counter 5"
-    CONFIG_SAMD_TC6     - Timer/Counter 6"
-    CONFIG_SAMD_TC7     - Timer/Counter 6"
-    CONFIG_SAMD_ADC     - Analog-to-Digital Converter"
-    CONFIG_SAMD_AC      - Analog Comparator"
-    CONFIG_SAMD_DAC     - Digital-to-Analog Converter"
-    CONFIG_SAMD_PTC     - Peripheral Touch Controller"
+    CONFIG_SAMDL_WDT     - Watchdog Timer"
+    CONFIG_SAMDL_RTC     - Real Time Counter"
+    CONFIG_SAMDL_NVMCTRL - Non-Volatile Memory Controller"
+    CONFIG_SAMDL_EVSYS   - Event System"
+    CONFIG_SAMDL_SERCOM0 - Serial Communication Interface 0"
+    CONFIG_SAMDL_SERCOM1 - Serial Communication Interface 1"
+    CONFIG_SAMDL_SERCOM2 - Serial Communication Interface 2"
+    CONFIG_SAMDL_SERCOM3 - Serial Communication Interface 3"
+    CONFIG_SAMDL_SERCOM4 - Serial Communication Interface 4"
+    CONFIG_SAMDL_SERCOM5 - Serial Communication Interface 5"
+    CONFIG_SAMDL_TC0     - Timer/Counter 0"
+    CONFIG_SAMDL_TC1     - Timer/Counter 1"
+    CONFIG_SAMDL_TC2     - Timer/Counter 2"
+    CONFIG_SAMDL_TC3     - Timer/Counter 3"
+    CONFIG_SAMDL_TC4     - Timer/Counter 4"
+    CONFIG_SAMDL_TC5     - Timer/Counter 5"
+    CONFIG_SAMDL_TC6     - Timer/Counter 6"
+    CONFIG_SAMDL_TC7     - Timer/Counter 6"
+    CONFIG_SAMDL_ADC     - Analog-to-Digital Converter"
+    CONFIG_SAMDL_AC      - Analog Comparator"
+    CONFIG_SAMDL_DAC     - Digital-to-Analog Converter"
+    CONFIG_SAMDL_PTC     - Peripheral Touch Controller"
 
   Some subsystems can be configured to operate in different ways. The drivers
   need to know how to configure the subsystem.
 
-    CONFIG_SAMD_SERCOM0_ISI2C, CONFIG_SAMD_SERCOM0_ISSPI, or CONFIG_SAMD_SERCOM0_ISUSART
-    CONFIG_SAMD_SERCOM1_ISI2C, CONFIG_SAMD_SERCOM1_ISSPI, or CONFIG_SAMD_SERCOM1_ISUSART
-    CONFIG_SAMD_SERCOM2_ISI2C, CONFIG_SAMD_SERCOM2_ISSPI, or CONFIG_SAMD_SERCOM2_ISUSART
-    CONFIG_SAMD_SERCOM3_ISI2C, CONFIG_SAMD_SERCOM3_ISSPI, or CONFIG_SAMD_SERCOM3_ISUSART
-    CONFIG_SAMD_SERCOM4_ISI2C, CONFIG_SAMD_SERCOM4_ISSPI, or CONFIG_SAMD_SERCOM4_ISUSART
-    CONFIG_SAMD_SERCOM5_ISI2C, CONFIG_SAMD_SERCOM5_ISSPI, or CONFIG_SAMD_SERCOM5_ISUSART
+    CONFIG_SAMDL_SERCOM0_ISI2C, CONFIG_SAMDL_SERCOM0_ISSPI, or CONFIG_SAMDL_SERCOM0_ISUSART
+    CONFIG_SAMDL_SERCOM1_ISI2C, CONFIG_SAMDL_SERCOM1_ISSPI, or CONFIG_SAMDL_SERCOM1_ISUSART
+    CONFIG_SAMDL_SERCOM2_ISI2C, CONFIG_SAMDL_SERCOM2_ISSPI, or CONFIG_SAMDL_SERCOM2_ISUSART
+    CONFIG_SAMDL_SERCOM3_ISI2C, CONFIG_SAMDL_SERCOM3_ISSPI, or CONFIG_SAMDL_SERCOM3_ISUSART
+    CONFIG_SAMDL_SERCOM4_ISI2C, CONFIG_SAMDL_SERCOM4_ISSPI, or CONFIG_SAMDL_SERCOM4_ISUSART
+    CONFIG_SAMDL_SERCOM5_ISI2C, CONFIG_SAMDL_SERCOM5_ISSPI, or CONFIG_SAMDL_SERCOM5_ISUSART
 
-  SAT91SAMD20 specific device driver settings
+  SAMD20 specific device driver settings
 
     CONFIG_USARTn_SERIAL_CONSOLE - selects the USARTn (n=0,1,2,..5) for the
       console and ttys0 (default is the USART4).
@@ -560,7 +596,7 @@ SAMD20 Xplained Pro-specific Configuration Options
     CONFIG_USARTn_2STOP - Two stop bits
 
 Configurations
-^^^^^^^^^^^^^^
+==============
 
   Each SAMD20 Xplained Pro configuration is maintained in a sub-directory and
   can be selected as follow:
@@ -586,7 +622,7 @@ Configurations
   change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -597,7 +633,7 @@ Configurations
     change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -608,9 +644,9 @@ Configurations
      be used, instead, by reconfiguring to use SERCOM3 instead of
      SERCOM4:
 
-       System Type -> SAMD Peripheral Support
-         CONFIG_SAMD_SERCOM3=y           : Enable one or both
-         CONFIG_SAMD_SERCOM4=n
+       System Type -> SAMD/L Peripheral Support
+         CONFIG_SAMDL_SERCOM3=y           : Enable one or both
+         CONFIG_SAMDL_SERCOM4=n
 
        Device Drivers -> Serial Driver Support -> Serial Console
          CONFIG_USART4_SERIAL_CONSOLE=y  : Select only one for the console
@@ -680,10 +716,19 @@ Configuration sub-directories
        changed as described above under "Configurations."
 
     2. By default, this configuration provides a serial console on SERCOM4
-       via EXT3.  If you would prefer to use the EDBG serial COM port or
-       would prefer to use SERCOM4 on EXT1 or EXT2, you will need to
-       reconfigure the SERCOM as described under "Configurations".  See
-       also the section entitle "Serial Consoles" above.
+       at 115200 8N1 via EXT3:
+
+       PIN   EXT3 GPIO Function
+       ----  ---- ------------------
+        13   PB11 SERCOM4 / USART RX
+        14   PB12 SERCOM4 / USART TX
+        19   GND  N/A
+        20   VCC  N/A
+
+       If you would prefer to use the EDBG serial COM port or would prefer
+       to use SERCOM4 on EXT1 or EXT2, you will need to reconfigure the
+       SERCOM as described under "Configurations".  See also the section
+       entitled "Serial Consoles" above.
 
     3. NOTE: If you get a compilation error like:
 
@@ -717,13 +762,12 @@ Configuration sub-directories
          details.
 
        System Type -> Peripherals:
-         CONFIG_SAMD_SERCOM0=y             : Use SERCOM0 if the I/O is in EXT1
-         CONFIG_SAMD_SERCOM0_ISSPI=y       : Configure SERCOM0 as an SPI master
+         CONFIG_SAMDL_SERCOM0=y            : Use SERCOM0 if the I/O is in EXT1
+         CONFIG_SAMDL_SERCOM0_ISSPI=y      : Configure SERCOM0 as an SPI master
 
        Device Drivers
          CONFIG_SPI=y                      : Enable SPI support
          CONFIG_SPI_EXCHANGE=y             : The exchange() method is supported
-         CONFIG_SPI_OWNBUS=y               : Smaller code if this is the only SPI device
 
          CONFIG_MMCSD=y                    : Enable MMC/SD support
          CONFIG_MMCSD_NSLOTS=1             : Only one MMC/SD card slot
@@ -778,14 +822,13 @@ Configuration sub-directories
          EXT3: SPI is provided through SERCOM5
 
        System Type -> Peripherals:
-         CONFIG_SAMD_SERCOM1=y             : Use SERCOM1 if the I/O is in EXT2
-         CONFIG_SAMD_SERCOM1_ISSPI=y       : Configure SERCOM1 as an SPI master
+         CONFIG_SAMDL_SERCOM1=y             : Use SERCOM1 if the I/O is in EXT2
+         CONFIG_SAMDL_SERCOM1_ISSPI=y       : Configure SERCOM1 as an SPI master
 
        Device Drivers -> SPI
          CONFIG_SPI=y                       : Enable SPI support
          CONFIG_SPI_EXCHANGE=y              : The exchange() method is supported
          CONFIG_SPI_CMDDATA=y               : CMD/DATA support is required
-         CONFIG_SPI_OWNBUS=y                : Smaller code if this is the only SPI device
 
        Device Drivers -> LCDs
          CONFIG_LCD=y                       : Enable LCD support
@@ -848,37 +891,3 @@ Configuration sub-directories
        This is clearly some issue with initializing, un-initializing, and
        then re-initializing. If you want to fix this, patches are quite
        welcome.
-
-    STATUS/ISSUES:
-
-    1. The FLASH waitstates is set to 2 (see include/board.h).  According to
-       the data sheet, it should work at 1 but I sometimes see crashes when
-       the waitstates are set to one (about half of the time) (2014-2-18).
-
-    2. Garbage appears on the display sometimes after a reset (maybe 20% of
-       the time) or after a power cycle (less after a power cycle).  I don't
-       understand the cause of of this but most of this can be eliminated by
-       simply holding the the reset button longer and releasing it cleanly
-       (then it fails maybe 5-10% of the time, maybe because of button
-       chatter?) (2014-2-18).
-
-       - The garbage is not random:  It is always the same.
-       - This is not effected by BAUD rate.  Curiously, the same garbage
-         appears at different BAUD settings implying that this may not even
-         be clock related???
-       - The program seems to be running normally, just producing bad output.
-
-    3. SPI current hangs so not much progress has been made testing the I/O1
-       module.  The hang occurs because the SPI is waiting for SYNCBUSY to
-       be cleared after enabling the SPI.  This even does not happen and so
-       causes the hang.
-
-       Another note:  Enabling the SPI on SERCOM0 also seems to interfere
-       with the USART output on SERCOM4.  Both symptoms imply some clock-
-       related issue.
-
-       The configuration suggests CONFIG_MMCSD_HAVECARDDETECT=y, but as of
-       this writing, there is no support for EIC pin interrupts.
-
-    4. OLED1 module is untested.  These instructions were just lifted from
-       the SAM4L Xplained Pro README.txt file.

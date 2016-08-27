@@ -344,6 +344,8 @@
 #define TD_CC_BUFFERUNDERRUN       0x0d
 #define TD_CC_NOTACCESSED          0x0f
 
+#define TD_CC_USER                 0x10      /* For use by OHCI drivers */
+
 /* Host Controller Communications Area Format (4.4.1) ***********************/
 
 /* HccaInterrruptTable: 32x32-bit pointers to interrupt EDs */
@@ -365,10 +367,16 @@
 /* HccaDoneHead: When the HC reaches the end of a frame and its deferred
  * interrupt register is 0, it writes the current value of its HcDoneHead to
  * this location and generates an interrupt.
+ *
+ * The LSB of HCCADoneHead may be set to 1 to indicate that an unmasked
+ * HcInterruptStatus was set when HccaDoneHead was written.
  */
 
 #define HCCA_DONEHEAD_OFFSET       (0x84)
 #define HCCA_DONEHEAD_BSIZE        (4)
+
+#define HCCA_DONEHEAD_MASK         0xfffffffe
+#define HCCA_DONEHEAD_INTSTA       (1 << 0)
 
 /* 0x88: 116 bytes reserved */
 
@@ -441,7 +449,8 @@ struct ohci_hcca_s
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

@@ -1,7 +1,7 @@
 /****************************************************************************
- * up_releasepending.c
+ * arch/sim/src/up_releasepending.c
  *
- *   Copyright (C) 2007-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,21 +42,10 @@
 #include <sched.h>
 #include <debug.h>
 #include <nuttx/arch.h>
+#include <nuttx/sched.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -75,29 +64,36 @@
 
 void up_release_pending(void)
 {
-  struct tcb_s *rtcb = (struct tcb_s*)g_readytorun.head;
+  FAR struct tcb_s *rtcb = this_task();
 
-  sdbg("From TCB=%p\n", rtcb);
+  sinfo("From TCB=%p\n", rtcb);
 
-  /* Merge the g_pendingtasks list into the g_readytorun task list */
+  /* Merge the g_pendingtasks list into the ready-to-run task list */
 
   /* sched_lock(); */
   if (sched_mergepending())
     {
-      /* The currently active task has changed! Copy the exception context
-       * into the TCB of the task that was currently active. if up_setjmp
-       * returns a non-zero value, then this is really the previously
-       * running task restarting!
+      /* The currently active task has changed!  We will need to switch
+       * contexts.
+       *
+       * Update scheduler parameters.
+       */
+
+      sched_suspend_scheduler(rtcb);
+
+      /* Copy the exception context into the TCB of the task that was
+       * currently active. if up_setjmp returns a non-zero value, then
+       * this is really the previously running task restarting!
        */
 
       if (!up_setjmp(rtcb->xcp.regs))
         {
           /* Restore the exception context of the rtcb at the (new) head
-           * of the g_readytorun task list.
+           * of the ready-to-run task list.
            */
 
-          rtcb = (struct tcb_s*)g_readytorun.head;
-          sdbg("New Active Task TCB=%p\n", rtcb);
+          rtcb = this_task();
+          sinfo("New Active Task TCB=%p\n", rtcb);
 
           /* The way that we handle signals in the simulation is kind of
            * a kludge.  This would be unsafe in a truly multi-threaded, interrupt
@@ -106,12 +102,16 @@ void up_release_pending(void)
 
           if (rtcb->xcp.sigdeliver)
             {
-              sdbg("Delivering signals TCB=%p\n", rtcb);
+              sinfo("Delivering signals TCB=%p\n", rtcb);
               ((sig_deliver_t)rtcb->xcp.sigdeliver)(rtcb);
               rtcb->xcp.sigdeliver = NULL;
             }
 
-           /* Then switch contexts */
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
+
+          /* Then switch contexts */
 
           up_longjmp(rtcb->xcp.regs, 1);
         }

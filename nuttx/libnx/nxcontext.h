@@ -51,7 +51,7 @@
 #include <nuttx/streams.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* The NuttX NX library an be build in two modes: (1) as a standard, C-library
@@ -61,23 +61,25 @@
  * mode is supported.
  */
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(__KERNEL__)
+#if (defined(CONFIG_BUILD_PROTECTED) && defined(__KERNEL__)) || \
+     defined(CONFIG_BUILD_KERNEL)
+
 #  include <nuttx/kmalloc.h>
 
    /* Domain-specific allocations */
 
-#  define lib_malloc(s)     kmalloc(s)
-#  define lib_zalloc(s)     kzalloc(s)
-#  define lib_realloc(p,s)  krealloc(p,s)
-#  define lib_memalign(p,s) krealloc(p,s)
-#  define lib_free(p)       kfree(p)
+#  define lib_malloc(s)     kmm_malloc(s)
+#  define lib_zalloc(s)     kmm_zalloc(s)
+#  define lib_realloc(p,s)  kmm_realloc(p,s)
+#  define lib_memalign(p,s) kmm_memalign(p,s)
+#  define lib_free(p)       kmm_free(p)
 
    /* User-accessible allocations */
 
-#  define lib_umalloc(s)    kumalloc(s)
-#  define lib_uzalloc(s)    kuzalloc(s)
-#  define lib_urealloc(p,s) kurealloc(p,s)
-#  define lib_ufree(p)      kufree(p)
+#  define lib_umalloc(s)    kumm_malloc(s)
+#  define lib_uzalloc(s)    kumm_zalloc(s)
+#  define lib_urealloc(p,s) kumm_realloc(p,s)
+#  define lib_ufree(p)      kumm_free(p)
 
 #else
 #  include <stdlib.h>
@@ -103,7 +105,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 #undef EXTERN

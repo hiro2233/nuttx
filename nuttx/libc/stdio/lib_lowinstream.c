@@ -45,7 +45,7 @@
 
 #include <nuttx/arch.h>
 
-#include "lib_internal.h"
+#include "libc.h"
 
 #ifdef CONFIG_ARCH_LOWGETC
 
@@ -65,7 +65,7 @@ static int lowinstream_getc(FAR struct lib_instream_s *this)
 
   /* Get the next character from the incoming stream */
 
-  ret = up_getc(ch)
+  ret = up_getc(ch);
   if (ret != EOF)
     {
       this->nget++;
@@ -85,8 +85,8 @@ static int lowinstream_getc(FAR struct lib_instream_s *this)
  *   Initializes a stream for use with low-level, architecture-specific I/O.
  *
  * Input parameters:
- *   lowoutstream - User allocated, uninitialized instance of struct
- *                  lib_lowoutstream_s to be initialized.
+ *   stream - User allocated, uninitialized instance of struct
+ *           lib_lowinstream_s to be initialized.
  *
  * Returned Value:
  *   None (User allocated instance initialized).

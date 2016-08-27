@@ -44,7 +44,7 @@
 #include <nuttx/config.h>
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* Configuration ********************************************************************/
 
@@ -113,7 +113,7 @@
  *   .... .... .... V... ....
  */
 
-#define GPIO_OUTPUT_SET            (1 << 7)    /* Bit 7: Inital value of output */
+#define GPIO_OUTPUT_SET            (1 << 7)    /* Bit 7: Initial value of output */
 #define GPIO_OUTPUT_CLEAR          (0)
 
 /* This identifies the GPIO port:
@@ -198,7 +198,7 @@ extern "C"
  * Public Function Prototypes
  ************************************************************************************/
 
- #undef EXTERN
+#undef EXTERN
 #if defined(__cplusplus)
 }
 #endif

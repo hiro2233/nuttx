@@ -100,14 +100,14 @@
 #define STM32_RCC_CFGR_PPRE1    RCC_CFGR_PPRE1_HCLKd2
 #define STM32_PCLK1_FREQUENCY   (STM32_HCLK_FREQUENCY/2)
 
-/* APB1 timers 2-4 will be twice PCLK1 (I presume the remaining will receive PCLK1) */
+/* APB1 timers 2-7 will be twice PCLK1 */
 
 #define STM32_APB1_TIM2_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 #define STM32_APB1_TIM3_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 #define STM32_APB1_TIM4_CLKIN   (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM5_CLKIN   (STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM6_CLKIN   (STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM7_CLKIN   (STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM5_CLKIN   (2*STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM6_CLKIN   (2*STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM7_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 
 /* MCO output driven by PLL3. From above, we already have PLL3 input frequency as:
  *
@@ -124,7 +124,7 @@
  * way.  The following definitions are used to access individual LEDs.
  */
 
-/* LED index values for use with stm32_setled() */
+/* LED index values for use with board_userled() */
 
 #define BOARD_LED1          0
 #define BOARD_LED2          1
@@ -132,7 +132,7 @@
 #define BOARD_LED4          3
 #define BOARD_NLEDS         4
 
-/* LED bits for use with stm32_setleds() */
+/* LED bits for use with board_userled_all() */
 
 #define BOARD_LED1_BIT      (1 << BOARD_LED1)
 #define BOARD_LED2_BIT      (1 << BOARD_LED2)
@@ -367,22 +367,6 @@ extern "C" {
  ************************************************************************************/
 
 void stm32_boardinitialize(void);
-
-/************************************************************************************
- * Name:  stm32_ledinit, stm32_setled, and stm32_setleds
- *
- * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board LEDs.  If
- *   CONFIG_ARCH_LEDS is not defined, then the following interfacesare available to
- *   control the LEDs from user applications.
- *
- ************************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-void stm32_ledinit(void);
-void stm32_setled(int led, bool ledon);
-void stm32_setleds(uint8_t ledset);
-#endif
 
 /************************************************************************************
  * Name:  stm32_lcdclear

@@ -44,30 +44,14 @@
 
 #include <nuttx/net/iob.h>
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 
 /****************************************************************************
  * Pre-processor definitions
  ****************************************************************************/
 
- #ifndef MIN
+#ifndef MIN
 #  define MIN(a,b) ((a) < (b) ? (a) : (b))
-#endif
-
-/* Select the lowest level debug interface available */
-
-#ifdef CONFIG_CPP_HAVE_VARARGS
-#  ifdef CONFIG_ARCH_LOWPUTC
-#    define message(format, ...) lowsyslog(format, ##__VA_ARGS__)
-#  else
-#    define message(format, ...) syslog(format, ##__VA_ARGS__)
-#  endif
-#else
-#  ifdef CONFIG_ARCH_LOWPUTC
-#    define message lowsyslog
-#  else
-#    define message syslog
-#  endif
 #endif
 
 /****************************************************************************
@@ -93,13 +77,13 @@ void iob_dump(FAR const char *msg, FAR struct iob_s *iob, unsigned int len,
   unsigned int cndx;
 
   head = iob;
-  message("%s: iob=%p pktlen=%d\n", msg, head, head->io_pktlen);
+  syslog(LOG_DEBUG, "%s: iob=%p pktlen=%d\n", msg, head, head->io_pktlen);
 
   /* Check if the offset is beyond the data in the I/O buffer chain */
 
   if (offset > head->io_pktlen)
     {
-      ndbg("ERROR: offset is past the end of data: %u > %u\n",
+      nerr("ERROR: offset is past the end of data: %u > %u\n",
            offset, head->io_pktlen);
       return;
     }
@@ -108,7 +92,8 @@ void iob_dump(FAR const char *msg, FAR struct iob_s *iob, unsigned int len,
 
   for (; iob; iob = iob->io_flink)
     {
-      message("  iob=%p len=%d offset=%d\n", iob, iob->io_len, iob->io_offset);
+      syslog(LOG_DEBUG, "  iob=%p len=%d offset=%d\n",
+             iob, iob->io_len, iob->io_offset);
     }
 
   /* Get the amount of data to be displayed, limited by the amount that we
@@ -132,49 +117,49 @@ void iob_dump(FAR const char *msg, FAR struct iob_s *iob, unsigned int len,
 
       if (nbytes > 0)
         {
-          message("  %04x: ", offset);
+          syslog(LOG_DEBUG, "  %04x: ", offset);
 
           for (cndx = 0; cndx < 32; cndx++)
             {
               if (cndx == 16)
                 {
-                  message(" ");
+                  syslog(LOG_DEBUG, " ");
                 }
 
               if ((lndx + cndx) < len)
                 {
-                  message("%02x", data[cndx]);
+                  syslog(LOG_DEBUG, "%02x", data[cndx]);
                 }
               else
                 {
-                  message("  ");
+                  syslog(LOG_DEBUG, "  ");
                 }
             }
 
-          message(" ");
+          syslog(LOG_DEBUG, " ");
           for (cndx = 0; cndx < 32; cndx++)
             {
               if (cndx == 16)
                 {
-                  message(" ");
+                  syslog(LOG_DEBUG, " ");
                 }
 
               if ((lndx + cndx) < len)
                 {
                   if (data[cndx] >= 0x20 && data[cndx] < 0x7f)
                     {
-                      message("%c", data[cndx]);
+                      syslog(LOG_DEBUG, "%c", data[cndx]);
                     }
                   else
                     {
-                      message(".");
+                      syslog(LOG_DEBUG, ".");
                     }
                 }
             }
 
-          message("\n");
+          syslog(LOG_DEBUG, "\n");
         }
     }
 }
 
-#endif /* CONFIG_DEBUG */
+#endif /* CONFIG_DEBUG_FEATURES */

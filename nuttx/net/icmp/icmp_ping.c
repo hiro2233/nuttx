@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/icmp/icmp_ping.c
  *
- *   Copyright (C) 2008-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2012, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@
 
 #include <nuttx/config.h>
 #if defined(CONFIG_NET) && defined(CONFIG_NET_ICMP) && \
-    defined(CONFIG_NET_ICMP_PING) && !defined(CONFIG_DISABLE_CLOCK)
+    defined(CONFIG_NET_ICMP_PING)
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -47,26 +47,32 @@
 #include <semaphore.h>
 #include <debug.h>
 
+#include <netinet/in.h>
 #include <net/if.h>
-#include <nuttx/clock.h>
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip.h>
-#include <nuttx/net/uip/uip-arch.h>
 
-#include "uip/uip_internal.h"
-#include "../net_internal.h" /* Should not include this! */
+#include <nuttx/clock.h>
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/net.h>
+#include <nuttx/net/netdev.h>
+#include <nuttx/net/ip.h>
+#include <nuttx/net/icmp.h>
+
+#include "netdev/netdev.h"
+#include "devif/devif.h"
+#include "arp/arp.h"
+#include "icmp/icmp.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define ICMPBUF ((struct uip_icmpip_hdr *)&dev->d_buf[UIP_LLH_LEN])
-#define ICMPDAT (&dev->d_buf[UIP_LLH_LEN + sizeof(struct uip_icmpip_hdr)])
+#define ICMPBUF ((struct icmp_iphdr_s *)&dev->d_buf[NET_LL_HDRLEN(dev)])
+#define ICMPDAT (&dev->d_buf[NET_LL_HDRLEN(dev) + sizeof(struct icmp_iphdr_s)])
 
 /* Allocate a new ICMP data callback */
 
-#define uip_icmpcallbackalloc()   uip_callbackalloc(&g_echocallback)
-#define uip_icmpcallbackfree(cb)  uip_callbackfree(cb, &g_echocallback)
+#define icmp_callback_alloc(dev)   devif_callback_alloc(dev, &(dev)->d_conncb)
+#define icmp_callback_free(dev,cb) devif_dev_callback_free(dev, cb)
 
 /****************************************************************************
  * Private Types
@@ -74,26 +80,18 @@
 
 struct icmp_ping_s
 {
-  FAR struct uip_callback_s *png_cb; /* Reference to callback instance */
+  FAR struct devif_callback_s *png_cb; /* Reference to callback instance */
 
-  sem_t        png_sem;     /* Use to manage the wait for the response */
-  uint32_t     png_time;    /* Start time for determining timeouts */
-  uint32_t     png_ticks;   /* System clock ticks to wait */
-  int          png_result;  /* 0: success; <0:negated errno on fail */
-  uip_ipaddr_t png_addr;    /* The peer to be ping'ed */
-  uint16_t     png_id;      /* Used to match requests with replies */
-  uint16_t     png_seqno;   /* IN: seqno to send; OUT: seqno recieved */
-  uint16_t     png_datlen;  /* The length of data to send in the ECHO request */
-  bool         png_sent;    /* true... the PING request has been sent */
+  sem_t     png_sem;     /* Use to manage the wait for the response */
+  systime_t png_time;    /* Start time for determining timeouts */
+  systime_t png_ticks;   /* System clock ticks to wait */
+  int       png_result;  /* 0: success; <0:negated errno on fail */
+  in_addr_t png_addr;    /* The peer to be ping'ed */
+  uint16_t  png_id;      /* Used to match requests with replies */
+  uint16_t  png_seqno;   /* IN: seqno to send; OUT: seqno received */
+  uint16_t  png_datlen;  /* The length of data to send in the ECHO request */
+  bool      png_sent;    /* true... the PING request has been sent */
 };
-
-/****************************************************************************
- * Public Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Variables
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -116,9 +114,9 @@ struct icmp_ping_s
  *
  ****************************************************************************/
 
-static inline int ping_timeout(struct icmp_ping_s *pstate)
+static inline int ping_timeout(FAR struct icmp_ping_s *pstate)
 {
-  uint32_t elapsed =  clock_systimer() - pstate->png_time;
+  systime_t elapsed =  clock_systimer() - pstate->png_time;
   if (elapsed >= pstate->png_ticks)
     {
       return TRUE;
@@ -132,7 +130,8 @@ static inline int ping_timeout(struct icmp_ping_s *pstate)
  *
  * Description:
  *   This function is called from the interrupt level to perform the actual
- *   ECHO request and/or ECHO reply actions when polled by the uIP layer.
+ *   ECHO request and/or ECHO reply actions when polled by the lower, device
+ *   interfacing layer.
  *
  * Parameters:
  *   dev        The structure of the network driver that caused the interrupt
@@ -148,33 +147,44 @@ static inline int ping_timeout(struct icmp_ping_s *pstate)
  *
  ****************************************************************************/
 
-static uint16_t ping_interrupt(struct uip_driver_s *dev, void *conn,
-                               void *pvpriv, uint16_t flags)
+static uint16_t ping_interrupt(FAR struct net_driver_s *dev, FAR void *conn,
+                               FAR void *pvpriv, uint16_t flags)
 {
-  struct icmp_ping_s *pstate = (struct icmp_ping_s *)pvpriv;
-  uint8_t *ptr;
+  FAR struct icmp_ping_s *pstate = (struct icmp_ping_s *)pvpriv;
+  FAR uint8_t *ptr;
   int i;
 
-  nllvdbg("flags: %04x\n", flags);
+  ninfo("flags: %04x\n", flags);
+
   if (pstate)
     {
+      /* Check if the network is still up */
+
+      if ((flags & NETDEV_DOWN) != 0)
+        {
+          nerr("ERROR: Interface is down\n");
+          pstate->png_result = -ENETUNREACH;
+          goto end_wait;
+        }
+
       /* Check if this is a ICMP ECHO reply.  If so, return the sequence
        * number to the caller.  NOTE: We may not even have sent the
        * requested ECHO request; this could have been the delayed ECHO
        * response from a previous ping.
        */
 
-      if ((flags & UIP_ECHOREPLY) != 0 && conn != NULL)
+      else if ((flags & ICMP_ECHOREPLY) != 0 && conn != NULL)
         {
-          struct uip_icmpip_hdr *icmp = (struct uip_icmpip_hdr *)conn;
-          nlldbg("ECHO reply: id=%d seqno=%d\n",
-                 ntohs(icmp->id), ntohs(icmp->seqno));
+          FAR struct icmp_iphdr_s *icmp = (FAR struct icmp_iphdr_s *)conn;
+
+          ninfo("ECHO reply: id=%d seqno=%d\n",
+                ntohs(icmp->id), ntohs(icmp->seqno));
 
           if (ntohs(icmp->id) == pstate->png_id)
             {
               /* Consume the ECHOREPLY */
 
-              flags     &= ~UIP_ECHOREPLY;
+              flags     &= ~ICMP_ECHOREPLY;
               dev->d_len = 0;
 
               /* Return the result to the caller */
@@ -199,10 +209,10 @@ static uint16_t ping_interrupt(struct uip_driver_s *dev, void *conn,
        */
 
       if (dev->d_sndlen <= 0 &&           /* Packet available */
-          (flags & UIP_NEWDATA) == 0 &&   /* No incoming data */
+          (flags & ICMP_NEWDATA) == 0 &&  /* No incoming data */
           !pstate->png_sent)              /* Request not sent */
         {
-          struct uip_icmpip_hdr *picmp = ICMPBUF;
+          FAR struct icmp_iphdr_s *picmp = ICMPBUF;
 
           /* We can send the ECHO request now.
            *
@@ -211,12 +221,9 @@ static uint16_t ping_interrupt(struct uip_driver_s *dev, void *conn,
 
           picmp->type  = ICMP_ECHO_REQUEST;
           picmp->icode = 0;
-#ifndef CONFIG_NET_IPv6
           picmp->id    = htons(pstate->png_id);
           picmp->seqno = htons(pstate->png_seqno);
-#else
-# error "IPv6 ECHO Request not implemented"
-#endif
+
           /* Add some easily verifiable data */
 
           for (i = 0, ptr = ICMPDAT; i < pstate->png_datlen; i++)
@@ -229,10 +236,11 @@ static uint16_t ping_interrupt(struct uip_driver_s *dev, void *conn,
            * of the ICMP header.
            */
 
-          nlldbg("Send ECHO request: seqno=%d\n", pstate->png_seqno);
+          ninfo("Send ECHO request: seqno=%d\n", pstate->png_seqno);
 
           dev->d_sndlen = pstate->png_datlen + 4;
-          uip_icmpsend(dev, &pstate->png_addr);
+          icmp_send(dev, &pstate->png_addr);
+
           pstate->png_sent = true;
           return flags;
         }
@@ -247,19 +255,19 @@ static uint16_t ping_interrupt(struct uip_driver_s *dev, void *conn,
            * device.
            */
 
-          if (!uip_ipaddr_maskcmp(pstate->png_addr, dev->d_ipaddr, dev->d_netmask))
+          if (!net_ipv4addr_maskcmp(pstate->png_addr, dev->d_ipaddr, dev->d_netmask))
             {
               /* Destination address was not on the local network served by this
                * device.  If a timeout occurs, then the most likely reason is
                * that the destination address is not reachable.
                */
 
-              nlldbg("Not reachable\n");
+              nerr("ERROR:Not reachable\n");
               failcode = -ENETUNREACH;
             }
           else
             {
-              nlldbg("Ping timeout\n");
+              nerr("ERROR:Ping timeout\n");
               failcode = -ETIMEDOUT;
             }
 
@@ -275,7 +283,7 @@ static uint16_t ping_interrupt(struct uip_driver_s *dev, void *conn,
   return flags;
 
 end_wait:
-  nllvdbg("Resuming\n");
+  ninfo("Resuming\n");
 
   /* Do not allow any further callbacks */
 
@@ -294,7 +302,7 @@ end_wait:
  ****************************************************************************/
 
 /****************************************************************************
- * Name: uip_ping
+ * Name: imcp_ping
  *
  * Description:
  *   Send a ECHO request and wait for the ECHO response
@@ -320,11 +328,39 @@ end_wait:
  *
  ****************************************************************************/
 
-int uip_ping(uip_ipaddr_t addr, uint16_t id, uint16_t seqno,
-             uint16_t datalen, int dsecs)
+int icmp_ping(in_addr_t addr, uint16_t id, uint16_t seqno, uint16_t datalen,
+              int dsecs)
 {
+  FAR struct net_driver_s *dev;
   struct icmp_ping_s state;
-  uip_lock_t save;
+  net_lock_t save;
+#ifdef CONFIG_NET_ARP_SEND
+  int ret;
+#endif
+
+  /* Get the device that will be used to route this ICMP ECHO request */
+
+#ifdef CONFIG_NETDEV_MULTINIC
+  dev = netdev_findby_ipv4addr(INADDR_ANY, addr);
+#else
+  dev = netdev_findby_ipv4addr(addr);
+#endif
+  if (dev == 0)
+    {
+      nerr("ERROR: Not reachable\n");
+      return -ENETUNREACH;
+    }
+
+#ifdef CONFIG_NET_ARP_SEND
+  /* Make sure that the IP address mapping is in the ARP table */
+
+  ret = arp_send(addr);
+  if (ret < 0)
+    {
+      nerr("ERROR: Not reachable\n");
+      return -ENETUNREACH;
+    }
+#endif
 
   /* Initialize the state structure */
 
@@ -333,41 +369,41 @@ int uip_ping(uip_ipaddr_t addr, uint16_t id, uint16_t seqno,
   state.png_result = -ENOMEM;          /* Assume allocation failure */
   state.png_addr   = addr;             /* Address of the peer to be ping'ed */
   state.png_id     = id;               /* The ID to use in the ECHO request */
-  state.png_seqno  = seqno;            /* The seqno to use int the ECHO request */
+  state.png_seqno  = seqno;            /* The seqno to use in the ECHO request */
   state.png_datlen = datalen;          /* The length of data to send in the ECHO request */
   state.png_sent   = false;            /* ECHO request not yet sent */
 
-  save             = uip_lock();
+  save             = net_lock();
   state.png_time   = clock_systimer();
 
   /* Set up the callback */
 
-  state.png_cb = uip_icmpcallbackalloc();
+  state.png_cb = icmp_callback_alloc(dev);
   if (state.png_cb)
     {
-      state.png_cb->flags   = UIP_POLL|UIP_ECHOREPLY;
-      state.png_cb->priv    = (void*)&state;
+      state.png_cb->flags   = (ICMP_POLL | ICMP_ECHOREPLY | NETDEV_DOWN);
+      state.png_cb->priv    = (FAR void *)&state;
       state.png_cb->event   = ping_interrupt;
       state.png_result      = -EINTR; /* Assume sem-wait interrupted by signal */
 
       /* Notify the device driver of the availability of TX data */
 
-      netdev_txnotify(state.png_addr);
+      netdev_txnotify_dev(dev);
 
       /* Wait for either the full round trip transfer to complete or
-       * for timeout to occur. (1) uip_lockedwait will also terminate if a
+       * for timeout to occur. (1) net_lockedwait will also terminate if a
        * signal is received, (2) interrupts may be disabled!  They will
        * be re-enabled while the task sleeps and automatically
        * re-enabled when the task restarts.
        */
 
-      nlldbg("Start time: 0x%08x seqno: %d\n", state.png_time, seqno);
-      uip_lockedwait(&state.png_sem);
+      ninfo("Start time: 0x%08x seqno: %d\n", state.png_time, seqno);
+      net_lockedwait(&state.png_sem);
 
-      uip_icmpcallbackfree(state.png_cb);
+      icmp_callback_free(dev, state.png_cb);
     }
 
-  uip_unlock(save);
+  net_unlock(save);
 
   /* Return the negated error number in the event of a failure, or the
    * sequence number of the ECHO reply on success.
@@ -375,12 +411,12 @@ int uip_ping(uip_ipaddr_t addr, uint16_t id, uint16_t seqno,
 
   if (!state.png_result)
     {
-      nlldbg("Return seqno=%d\n", state.png_seqno);
+      ninfo("Return seqno=%d\n", state.png_seqno);
       return (int)state.png_seqno;
     }
   else
     {
-      nlldbg("Return error=%d\n", -state.png_result);
+      nerr("ERROR: Return error=%d\n", -state.png_result);
       return state.png_result;
     }
 }

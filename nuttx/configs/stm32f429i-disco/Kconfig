@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 if ARCH_BOARD_STM32F429I_DISCO
@@ -84,6 +84,16 @@ config STM32F429I_DISCO_RAMMTD_SIZE
 	---help---
 		Sets the size of static RAM allocation for the SMART RAM device
 
+config STM32F429IDISCO_USBHOST_STACKSIZE
+	int "USB host waiter stack size"
+	default 1024
+	depends on USBHOST
+
+config STM32F429IDISCO_USBHOST_PRIO
+	int "USB host waiter task priority"
+	default 100
+	depends on USBHOST
+
 config PM_BUTTONS
 	bool "PM Button support"
 	default n
@@ -133,4 +143,98 @@ config PM_SLEEP_WAKEUP_NSEC
 	---help---
 		Number of additional nanoseconds to wait in PM_SLEEP before going to PM_STANDBY mode.
 
-endif
+menuconfig STM32F429I_DISCO_ILI9341
+	bool "LCD driver for ILI9341 Liquid Crystal Display Controller"
+	default n
+	---help---
+		Enables  support for a connected display based on ili9341 LCD Single Chip
+		Driver. This sub driver supports only communication with the display driver
+		connected via 4-wire serial (spi) mcu interface.
+
+if STM32F429I_DISCO_ILI9341
+
+choice
+	prompt "LCD Interface Type"
+	default STM32F429I_DISCO_ILI9341_NONE if !LCD_ILI9341 && !STM32_LTDC
+	default STM32F429I_DISCO_ILI9341_LCDIFACE if LCD_ILI9341 && !STM32_LTDC
+	default STM32F429I_DISCO_ILI9341_FBIFACE if STM32_LTDC
+
+config STM32F429I_DISCO_ILI9341_NONE
+	bool "No LCD interface"
+
+config STM32F429I_DISCO_ILI9341_LCDIFACE
+	bool "Enable support for nuttx LCD interface"
+	depends on LCD_ILI9341
+	---help---
+		Enable lcd driver support for the nuttx lcd interface.
+
+config STM32F429I_DISCO_ILI9341_FBIFACE
+	bool "Enable support for nuttx framebuffer interface"
+	depends on STM32_LTDC
+	---help---
+		Enable lcd driver support for the nuttx framebuffer interface to displaying
+		data via ltdc controller of the stm32f429i mcu.
+
+endchoice # LCD Interface Type
+
+if STM32F429I_DISCO_ILI9341_LCDIFACE
+
+config STM32F429I_DISCO_ILI9341_LCDDEVICE
+	int "LCD interface"
+	default 0
+	range 0 1
+	depends on STM32F429I_DISCO_ILI9341_LCDIFACE
+	---help---
+		Define the lcd interface which should be used. This must be
+		corresponding to the configured ili9341 LCD device in the driver
+		section.
+
+config STM32F429I_DISCO_ILI9341_SPIFREQUENCY
+	int "SPI frequency"
+	default 12000000
+	---help---
+		Define the bus frequency of the SPI device.
+
+config STM32F429I_DISCO_ILI9341_SPIBITS16
+	bool "Enable 16 bit pixel read/write"
+	default n
+	---help---
+		This enables faster 16-bit SPI mode for transmitting or receiving pixel data
+		to or from the display gram. But uses default 8-bit SPI mode for all other
+		display operations.
+
+endif # STM32F429I_DISCO_ILI9341_LCDIFACE
+
+if STM32F429I_DISCO_ILI9341_FBIFACE
+
+choice
+	prompt "LCD Orientation"
+	default STM32F429I_DISCO_ILI9341_FBIFACE_PORTRAIT
+	---help---
+		Configure display orientation.
+
+config STM32F429I_DISCO_ILI9341_FBIFACE_LANDSCAPE
+	bool "Landscape orientation"
+	---help---
+		Define for "landscape" orientation support.
+
+config STM32F429I_DISCO_ILI9341_FBIFACE_PORTRAIT
+	bool "Portrait orientation"
+	---help---
+		Define for "portrait" orientation support.
+
+config STM32F429I_DISCO_ILI9341_FBIFACE_RLANDSCAPE
+	bool "Reverse landscape orientation"
+	---help---
+		Define for "reverse landscape" orientation support.
+
+config STM32F429I_DISCO_ILI9341_FBIFACE_RORTRAIT
+	bool "Reverse portrait display"
+	---help---
+		Define for "reverse portrait" orientation support.
+
+endchoice
+
+endif # STM32F429I_DISCO_ILI9341_FBIFACE
+endif # STM32F429I_DISCO_ILI9341
+endif # ARCH_BOARD_STM32F429I_DISCO

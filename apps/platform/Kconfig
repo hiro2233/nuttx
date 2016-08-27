@@ -1,7 +1,9 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
+
+menu "Platform-specific Support"
 
 config PLATFORM_CONFIGDATA
 	bool "Platform configuration data"
@@ -14,4 +16,6 @@ config PLATFORM_CONFIGDATA
 		volatile storage can be used:  A file, EEPROM, hardcoded values in
 		FLASH, etc.
 
-source "$APPSDIR/platform/mikroe-stm32f4/Kconfig"
+source "$APPSDIR/platform/board/Kconfig"
+
+endmenu # Platform-specific Support

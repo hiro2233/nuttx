@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z80/src/ez80/ez80_i2c.c
  *
- *   Copyright(C) 2009, 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright(C) 2009, 2011, 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/kmalloc.h>
 #include <arch/io.h>
 #include <arch/board/board.h>
@@ -59,16 +59,19 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
+#define EZ80_NOSTOP    (1 << 0)   /* Bit 0: No STOP on this transfer */
+#define EZ80_NOSTART   (1 << 1)   /* Bit 1: No address or START on this tranfers */
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
 
 struct ez80_i2cdev_s
 {
-  const struct i2c_ops_s *ops; /* I2C vtable */
-  uint16_t ccr;                /* Clock control register value */
-  uint16_t addr;               /* 7- or 10-bit address */
-  uint8_t  addr10 : 1;         /* 1=Address is 10-bit */
+  FAR const struct i2c_ops_s *ops; /* I2C vtable */
+  uint32_t frequency;              /* Currently selected I2C frequency */
+  uint16_t addr;                   /* 7- or 10-bit address */
+  uint8_t  addr10 : 1;             /* 1=Address is 10-bit */
 };
 
 /****************************************************************************
@@ -77,20 +80,25 @@ struct ez80_i2cdev_s
 
 /* Misc. Helpers */
 
-static void i2c_setccr(uint16_t ccr);
-static uint16_t i2c_getccr(uint32_t frequency);
-static uint8_t i2c_waitiflg(void);
-static void i2c_clriflg(void);
-static void i2c_start(void);
-static void i2c_stop(void);
-static int  i2c_sendaddr(struct ez80_i2cdev_s *priv, uint8_t readbit);
+static void     ez80_i2c_setccr(uint16_t ccr);
+static uint16_t ez80_i2c_getccr(uint32_t frequency);
+static uint8_t  ez80_i2c_waitiflg(void);
+static void     ez80_i2c_clriflg(void);
+static void     ez80_i2c_start(void);
+static void     ez80_i2c_stop(void);
+static int      ez80_i2c_sendaddr(struct ez80_i2cdev_s *priv,
+                  uint8_t readbit);
+static int      ez80_i2c_read_transfer(FAR struct ez80_i2cdev_s *priv,
+                  FAR uint8_t *buffer, int buflen, uint8_t flags);
+static int      ez80_i2c_write_transfer(FAR struct ez80_i2cdev_s *priv,
+                  FAR const uint8_t *buffer, int buflen, uint8_t flags);
+static void     ez80_i2c_setfrequency(FAR struct ez80_i2cdev_s *priv,
+                  uint32_t frequency);
 
 /* I2C methods */
 
-static uint32_t i2c_setfrequency(FAR struct i2c_dev_s *dev, uint32_t frequency);
-static int  i2c_setaddress(FAR struct i2c_dev_s *dev, int addr, int nbits);
-static int  i2c_write(FAR struct i2c_dev_s *dev, const uint8_t *buffer, int buflen);
-static int  i2c_read(FAR struct i2c_dev_s *dev, uint8_t *buffer, int buflen);
+static int      ez80_i2c_transfer(FAR struct i2c_master_s *dev,
+                  FAR struct i2c_msg_s *msgs, int count);
 
 /****************************************************************************
  * Public Function Prototypes
@@ -104,23 +112,19 @@ extern uint32_t get_freq(void);
  * Private Data
  ****************************************************************************/
 
-static uint8_t g_currccr;      /* Current setting of I2C CCR register */
-static bool    g_initialized;  /* true:I2C has been initialized */
-static sem_t   g_i2csem;       /* Serialize I2C transfers */
+static bool  g_initialized;  /* true:I2C has been initialized */
+static sem_t g_i2csem;       /* Serialize I2C transfers */
 
 const struct i2c_ops_s g_ops =
 {
-  i2c_setfrequency,
-  i2c_setaddress,
-  i2c_write,
-  i2c_read,
+  ez80_i2c_transfer
 };
 
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
 /****************************************************************************
- * Name: i2c_semtake/i2c_semgive
+ * Name: ez80_i2c_semtake/ez80_i2c_semgive
  *
  * Description:
  *   Take/Give the I2C semaphore.
@@ -133,7 +137,7 @@ const struct i2c_ops_s g_ops =
  *
  ****************************************************************************/
 
-static void i2c_semtake(void)
+static void ez80_i2c_semtake(void)
 {
   /* Take the I2C semaphore (perhaps waiting) */
 
@@ -147,10 +151,10 @@ static void i2c_semtake(void)
     }
 }
 
-#define i2c_semgive() sem_post(&g_i2csem)
+#define ez80_i2c_semgive() sem_post(&g_i2csem)
 
 /****************************************************************************
- * Name: i2c_setccr
+ * Name: ez80_i2c_setccr
  *
  * Description:
  *   Set the current BRG value for this transaction
@@ -163,17 +167,13 @@ static void i2c_semtake(void)
  *
  ****************************************************************************/
 
-static void i2c_setccr(uint16_t ccr)
+static void ez80_i2c_setccr(uint16_t ccr)
 {
-  if (g_currccr != ccr)
-    {
-      outp(EZ80_I2C_CCR, ccr);
-      g_currccr = ccr;
-    }
+  outp(EZ80_I2C_CCR, ccr);
 }
 
 /****************************************************************************
- * Name: i2c_getccr
+ * Name: ez80_i2c_getccr
  *
  * Description:
  *   Calculate the BRG value
@@ -186,7 +186,7 @@ static void i2c_setccr(uint16_t ccr)
  *
  ****************************************************************************/
 
-static uint16_t i2c_getccr(uint32_t fscl)
+static uint16_t ez80_i2c_getccr(uint32_t fscl)
 {
   uint32_t fsamp;
   uint32_t ftmp;
@@ -282,7 +282,7 @@ static uint16_t i2c_getccr(uint32_t fscl)
 }
 
 /****************************************************************************
- * Name: i2c_waitiflg
+ * Name: ez80_i2c_waitiflg
  *
  * Description:
  *   In polled mode, we have to spin until the IFLG bit in the xxx register
@@ -298,14 +298,14 @@ static uint16_t i2c_getccr(uint32_t fscl)
  *
  ****************************************************************************/
 
-static uint8_t i2c_waitiflg(void)
+static uint8_t ez80_i2c_waitiflg(void)
 {
   while ((inp(EZ80_I2C_CTL) & I2C_CTL_IFLG) != 0);
   return inp(EZ80_I2C_SR);
 }
 
 /****************************************************************************
- * Name: i2c_clriflg
+ * Name: ez80_i2c_clriflg
  *
  * Description:
  *   Clear the IFLAG bit in the I2C_CTL register, acknowledging the event.
@@ -319,7 +319,7 @@ static uint8_t i2c_waitiflg(void)
  *
  ****************************************************************************/
 
-static void i2c_clriflg(void)
+static void ez80_i2c_clriflg(void)
 {
   uint8_t regval = inp(EZ80_I2C_CTL);
   regval &= ~I2C_CTL_IFLG;
@@ -327,7 +327,7 @@ static void i2c_clriflg(void)
 }
 
 /****************************************************************************
- * Name: i2c_start
+ * Name: ez80_i2c_start
  *
  * Description:
  *   Send the START bit.  IFLAG must be zero; it will go to 1 when it is
@@ -341,7 +341,7 @@ static void i2c_clriflg(void)
  *
  ****************************************************************************/
 
-static void i2c_start(void)
+static void ez80_i2c_start(void)
 {
   uint8_t regval  = inp(EZ80_I2C_CTL);
   regval |= I2C_CTL_STA;
@@ -349,7 +349,7 @@ static void i2c_start(void)
 }
 
 /****************************************************************************
- * Name: i2c_stop
+ * Name: ez80_i2c_stop
  *
  * Description:
  *   Send the STOP bit.  This terminates the I2C transfer and reverts back
@@ -363,7 +363,7 @@ static void i2c_start(void)
  *
  ****************************************************************************/
 
-static void i2c_stop(void)
+static void ez80_i2c_stop(void)
 {
   uint8_t regval  = inp(EZ80_I2C_CTL);
   regval |= I2C_CTL_STP;
@@ -371,7 +371,7 @@ static void i2c_stop(void)
 }
 
 /****************************************************************************
- * Name: i2c_sendaddr
+ * Name: ez80_i2c_sendaddr
  *
  * Description:
  *   Send the 8- or 11-bit address for either a read or a write transaction.
@@ -390,7 +390,7 @@ static void i2c_stop(void)
  *
  ****************************************************************************/
 
-static int i2c_sendaddr(struct ez80_i2cdev_s *priv, uint8_t readbit)
+static int ez80_i2c_sendaddr(struct ez80_i2cdev_s *priv, uint8_t readbit)
 {
   uint8_t sr;
 
@@ -398,14 +398,14 @@ static int i2c_sendaddr(struct ez80_i2cdev_s *priv, uint8_t readbit)
    * have status == 8 meaning that the start bit was sent successfully.
    */
 
-  sr = i2c_waitiflg();
-#ifdef CONFIG_DEBUG
+  sr = ez80_i2c_waitiflg();
+#ifdef CONFIG_DEBUG_FEATURES
   if (sr != I2C_SR_MSTART)
     {
       /* This error should never occur */
 
-      dbg("Bad START status: %02x\n", sr);
-      i2c_clriflg();
+      _err("ERROR: Bad START status: %02x\n", sr);
+      ez80_i2c_clriflg();
       return -EIO;
     }
 #endif
@@ -419,14 +419,14 @@ static int i2c_sendaddr(struct ez80_i2cdev_s *priv, uint8_t readbit)
        */
 
       outp(EZ80_I2C_DR, (uint8_t)I2C_ADDR8(priv->addr) | readbit);
-      i2c_clriflg();
+      ez80_i2c_clriflg();
 
       /* And wait for the address transfer to complete */
 
-      sr = i2c_waitiflg();
+      sr = ez80_i2c_waitiflg();
       if (sr != I2C_SR_MADDRWRACK && sr != I2C_SR_MADDRWR)
         {
-          dbg("Bad ADDR8 status: %02x\n", sr);
+          _err("ERROR: Bad ADDR8 status: %02x\n", sr);
           goto failure;
         }
     }
@@ -438,28 +438,28 @@ static int i2c_sendaddr(struct ez80_i2cdev_s *priv, uint8_t readbit)
        */
 
       outp(EZ80_I2C_DR, (uint8_t)I2C_ADDR10H(priv->addr) | readbit);
-      i2c_clriflg();
+      ez80_i2c_clriflg();
 
       /* And wait for the address transfer to complete */
 
-      sr = i2c_waitiflg();
+      sr = ez80_i2c_waitiflg();
       if (sr != I2C_SR_MADDRWRACK && sr != I2C_SR_MADDRWR)
         {
-         dbg("Bad ADDR10H status: %02x\n", sr);
+         _err("ERROR: Bad ADDR10H status: %02x\n", sr);
          goto failure;
         }
 
       /* Now send the lower 8 bits of the 10-bit address */
 
       outp(EZ80_I2C_DR, (uint8_t)I2C_ADDR10L(priv->addr));
-      i2c_clriflg();
+      ez80_i2c_clriflg();
 
       /* And wait for the address transfer to complete */
 
-      sr = i2c_waitiflg();
+      sr = ez80_i2c_waitiflg();
       if (sr != I2C_SR_MADDR2WRACK && sr != I2C_SR_MADDR2WR)
         {
-          dbg("Bad ADDR10L status: %02x\n", sr);
+          _err("ERROR: Bad ADDR10L status: %02x\n", sr);
           goto failure;
         }
     }
@@ -469,238 +469,33 @@ static int i2c_sendaddr(struct ez80_i2cdev_s *priv, uint8_t readbit)
   /* We don't attempt any fancy status-based error recovery */
 
 failure:
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   switch (sr)
     {
       case I2C_SR_ARBLOST1: /* Arbitration lost in address or data byte */
-      case I2C_SR_ARBLOST2: /* Arbitration lost in address as master, slave address and Write bit received, ACK transmitted */
-      case I2C_SR_ARBLOST3: /* Arbitration lost in address as master, General Call address received, ACK transmitted */
-      case I2C_SR_ARBLOST4: /* Arbitration lost in address as master, slave address and Read bit received, ACK transmitted */
-        dbg("Arbitration lost: %02x\n", sr);
-        i2c_clriflg();
+      case I2C_SR_ARBLOST2: /* Arbitration lost in address as master, slave
+                             * address and Write bit received, ACK transmitted */
+      case I2C_SR_ARBLOST3: /* Arbitration lost in address as master, General
+                             * Call address received, ACK transmitted */
+      case I2C_SR_ARBLOST4: /* Arbitration lost in address as master, slave
+                             * address and Read bit received, ACK transmitted */
+        _err("ERROR: Arbitration lost: %02x\n", sr);
+        ez80_i2c_clriflg();
         return -EAGAIN;
 
       default:
-        dbg("Unexpected status: %02x\n", sr);
-        i2c_clriflg();
+        _err("ERROR: Unexpected status: %02x\n", sr);
+        ez80_i2c_clriflg();
         return -EIO;
     }
 #else
-  i2c_clriflg();
+  ez80_i2c_clriflg();
   return -EAGAIN;
 #endif
 }
 
 /****************************************************************************
- * Name: i2c_setfrequency
- *
- * Description:
- *   Set the I2C frequency. This frequency will be retained in the struct
- *   i2c_dev_s instance and will be used with all transfers.  Required.
- *
- * Input Parameters:
- *   dev -       Device-specific state data
- *   frequency - The I2C frequency requested
- *
- * Returned Value:
- *   Returns the actual frequency selected
- *
- ****************************************************************************/
-
-static uint32_t i2c_setfrequency(FAR struct i2c_dev_s *dev, uint32_t frequency)
-{
-  FAR struct ez80_i2cdev_s *priv = (FAR struct ez80_i2cdev_s *)dev;
-
-  /* Sanity Check */
-
-#ifdef CONFIG_DEBUG
-  if (!dev)
-    {
-      dbg("Invalid inputs\n");
-      return -EINVAL;
-    }
-#endif
-
-  /* Calculate and save the BRG (we won't apply it until the first transfer) */
-
-  priv->ccr = i2c_getccr(frequency);
-  return OK;
-}
-
-/****************************************************************************
- * Name: i2c_setaddress
- *
- * Description:
- *   Set the I2C slave address. This frequency will be retained in the struct
- *   i2c_dev_s instance and will be used with all transfers.  Required.
- *
- * Input Parameters:
- *   dev -     Device-specific state data
- *   address - The I2C slave address
- *   nbits -   The number of address bits provided (7 or 10)
- *
- * Returned Value:
- *   Returns the actual frequency selected
- *
- ****************************************************************************/
-
-static int i2c_setaddress(FAR struct i2c_dev_s *dev, int addr, int nbits)
-{
-  FAR struct ez80_i2cdev_s *priv = (FAR struct ez80_i2cdev_s *)dev;
-
-  /* Sanity Check */
-
-#ifdef CONFIG_DEBUG
-  if (!dev || (unsigned)addr > 0x7f || (nbits != 7 && nbits != 10))
-    {
-      dbg("Invalid inputs\n");
-      return -EINVAL;
-    }
-#endif
-
-  /* Save the 7- or 10-bit address */
-
-  priv->addr   = addr;
-  priv->addr10 = (nbits == 10);
-  return OK;
-}
-
-/****************************************************************************
- * Name: i2c_write
- *
- * Description:
- *   Send a block of data on I2C using the previously selected I2C
- *   frequency and slave address. Each write operational will be an 'atomic'
- *   operation in the sense that any other I2C actions will be serialized
- *   and pend until this write completes. Required.
- *
- * Input Parameters:
- *   dev -    Device-specific state data
- *   buffer - A pointer to the read-only buffer of data to be written to device
- *   buflen - The number of bytes to send from the buffer
- *
- * Returned Value:
- *   0: success, <0: A negated errno
- *
- ****************************************************************************/
-
-static int i2c_write(FAR struct i2c_dev_s *dev, const uint8_t *buffer, int buflen)
-{
-  FAR struct ez80_i2cdev_s *priv = (FAR struct ez80_i2cdev_s *)dev;
-  const uint8_t *ptr;
-  uint8_t sr;
-  int retry;
-  int count;
-  int ret;
-
-#ifdef CONFIG_DEBUG
-  if (!priv || !buffer || buflen < 1)
-    {
-      dbg("Invalid inputs\n");
-      return -EINVAL;
-    }
-#endif
-
-  /* Get exclusive access */
-
-  i2c_semtake();
-
-  /* Set the frequency */
-
-  i2c_setccr(priv->ccr);
-
-  /* Retry as necessary to send this whole message */
-
-  for (retry = 0; retry < 100; retry++)
-    {
-      /* Enter MASTER TRANSMIT mode by setting the STA bit in the I2C_CTL
-       * register to 1. The I2C then tests the I2C bus and transmits a START
-       * condition when the bus is free.
-       */
-
-      i2c_start();
-
-      /* When a START condition is transmitted, the IFLG bit is 1.  Then we may
-       * send the I2C slave address.
-       */
-
-      ret = i2c_sendaddr(priv, 0);
-      if (ret < 0)
-        {
-          if (ret == -EAGAIN)
-            {
-              continue;
-            }
-          else
-            {
-              goto failure;
-            }
-        }
-
-      /* Then send all of the bytes in the buffer */
-
-      ptr = buffer;
-      for (count = buflen; count; count--)
-        {
-          /* Load the I2C_DR with next data byte and clear the IFLG.  Clearing
-           * the IFLAG will cause the data to be transferred.
-           */
-
-          outp(EZ80_I2C_DR, *ptr++);
-          i2c_clriflg();
-
-          /* And wait for the data transfer to complete */
-
-          sr = i2c_waitiflg();
-          if (sr != I2C_SR_MDATAWRACK && sr != I2C_SR_MDATAWR)
-            {
-              dbg("Bad DATA status: %02x\n", sr);
-              i2c_clriflg();
-              if (sr == I2C_SR_ARBLOST1)
-                {
-                   /* Arbitration lost, break out of the inner loop and
-                    * try sending the message again
-                    */
-
-                   break;
-                }
-
-              /* Otherwise, it is fatal (shouldn't happen) */
-
-              ret = -EIO;
-              goto failure;
-            }
-
-          /* Data byte was sent successfully.  Was that the last byte? */
-
-          else if (count <= 1)
-            {
-              /* When all bytes are transmitted, the microcontroller must
-               * write a 1 to the STP bit in the I2C_CTL register. The
-               * I2C then transmits a STOP condition, clears the STP bit
-               * and returns to an idle state.
-               */
-
-              i2c_stop();
-
-              ret = OK;
-              goto success;
-            }
-        }
-    }
-
-  /* If we get here, we timed out without successfully sending the message */
-
-  ret = -ETIMEDOUT;
-
-success:
-failure:
-  i2c_semgive();
-  return ret;
-}
-
-/****************************************************************************
- * Name: i2c_read
+ * Name: ez80_i2c_read_transfer
  *
  * Description:
  *   Receive a block of data from I2C using the previously selected I2C
@@ -709,65 +504,54 @@ failure:
  *   and pend until this read completes. Required.
  *
  * Input Parameters:
- *   dev -   Device-specific state data
+ *   dev    - Device-specific state data
  *   buffer - A pointer to a buffer of data to receive the data from the device
  *   buflen - The requested number of bytes to be read
+ *   flags  - Determines is a START and/or STOP indication is needed.
  *
  * Returned Value:
  *   0: success, <0: A negated errno
  *
  ****************************************************************************/
 
-static int i2c_read(FAR struct i2c_dev_s *dev, uint8_t *buffer, int buflen)
+static int ez80_i2c_read_transfer(FAR struct ez80_i2cdev_s *priv,
+                                  FAR uint8_t *buffer, int buflen,
+                                  uint8_t flags)
 {
-  FAR struct ez80_i2cdev_s *priv = (FAR struct ez80_i2cdev_s *)dev;
-  uint8_t *ptr;
+  FAR uint8_t *ptr;
   uint8_t regval;
   int retry;
   int count;
   int ret;
 
-#ifdef CONFIG_DEBUG
-  if (!priv || !buffer || buflen < 1)
-    {
-      dbg("Invalid inputs\n");
-      return -EINVAL;
-    }
-#endif
-
-  /* Get exclusive access */
-
-  i2c_semtake();
-
-  /* Set the frequency */
-
-  i2c_setccr(priv->ccr);
-
   /* Retry as necessary to receive the whole message */
 
   for (retry = 0; retry < 100; retry++)
     {
-      /* Enter MASTER TRANSMIT mode by setting the STA bit in the I2C_CTL
-       * register to 1. The I2C then tests the I2C bus and transmits a START
-       * condition when the bus is free.
-       */
-
-      i2c_start();
-
-      /* When a START condition is transmitted, the IFLG bit is 1.  Then we may
-       * send the I2C slave address.
-       */
-
-      ret = i2c_sendaddr(priv, 0);
-      if (ret < 0)
+      if ((flags & EZ80_NOSTART) == 0)
         {
-          if (ret == -EAGAIN)
+          /* Enter MASTER TRANSMIT mode by setting the STA bit in the
+           * I2C_CTL register to 1. The I2C then tests the I2C bus and
+           * transmits a START condition when the bus is free.
+           */
+
+          ez80_i2c_start();
+
+          /* When a START condition is transmitted, the IFLG bit is 1.
+           * Then we may send the I2C slave address.
+           */
+
+          ret = ez80_i2c_sendaddr(priv, 0);
+          if (ret < 0)
             {
-              continue;
-            }
-          else
-            {
-              goto failure;
+              if (ret == -EAGAIN)
+                {
+                  continue;
+                }
+              else
+                {
+                  return ret;
+                }
             }
         }
 
@@ -796,13 +580,14 @@ static int i2c_read(FAR struct i2c_dev_s *dev, uint8_t *buffer, int buflen)
 
               regval |= I2C_CTL_AAK;
             }
+
           outp(EZ80_I2C_CTL, regval);
 
           /* Wait for IFLG to be set meaning that incoming data is
            * available in the I2C_DR registers.
            */
 
-          regval = i2c_waitiflg();
+          regval = ez80_i2c_waitiflg();
 
           /* Data byte received in MASTER mode, ACK transmitted */
 
@@ -815,7 +600,7 @@ static int i2c_read(FAR struct i2c_dev_s *dev, uint8_t *buffer, int buflen)
             /* Receive the data and clear the IFLGS */
 
             *ptr++ = inp(EZ80_I2C_DR);
-            i2c_clriflg();
+            ez80_i2c_clriflg();
           }
 
         /* Data byte received in MASTER mode, NACK transmitted */
@@ -826,17 +611,19 @@ static int i2c_read(FAR struct i2c_dev_s *dev, uint8_t *buffer, int buflen)
 
             DEBUGASSERT(count <= 1);
 
-            /* When all bytes are received and the NACK has been sent, then the
-             * microcontroller must write 1 to the STP bit in the I2C_CTL
-             * register. The I2C then transmits a STOP condition, clears
-             * the STP bit and returns to an idle state.
-             */
+              if ((flags & EZ80_NOSTOP) == 0)
+                {
+                  /* When all bytes are received and the NACK has been sent,
+                   * then the microcontroller must write 1 to the STP bit in
+                   * the I2C_CTL register. The I2C then transmits a STOP
+                   * condition, clears the STP bit and returns to an idle state.
+                   */
 
-            i2c_stop();
-            i2c_clriflg();
+                  ez80_i2c_stop();
+                }
 
-            ret = OK;
-            goto success;
+            ez80_i2c_clriflg();
+            return OK;
           }
 
         /* Arbitration lost in address or data byte */
@@ -847,8 +634,8 @@ static int i2c_read(FAR struct i2c_dev_s *dev, uint8_t *buffer, int buflen)
              * this will cause the whole transfer to start over
              */
 
-            dbg("Arbitration lost: %02x\n", regval);
-            i2c_clriflg();
+            _err("ERROR: Arbitration lost: %02x\n", regval);
+            ez80_i2c_clriflg();
             break;
           }
 
@@ -856,18 +643,270 @@ static int i2c_read(FAR struct i2c_dev_s *dev, uint8_t *buffer, int buflen)
 
         else
           {
-            dbg("Unexpected status: %02x\n", regval);
-            i2c_clriflg();
-            ret = -EIO;
-            goto failure;
+            _err("ERROR: Unexpected status: %02x\n", regval);
+            ez80_i2c_clriflg();
+            return-EIO;
           }
         }
     }
-  ret = -ETIMEDOUT;
 
-success:
-failure:
-  i2c_semgive();
+  return -ETIMEDOUT;
+}
+
+/****************************************************************************
+ * Name: ez80_i2c_write_transfer
+ *
+ * Description:
+ *   Send a block of data on I2C using the previously selected I2C
+ *   frequency and slave address. Each write operational will be an 'atomic'
+ *   operation in the sense that any other I2C actions will be serialized
+ *   and pend until this write completes. Required.
+ *
+ * Input Parameters:
+ *   dev -    Device-specific state data
+ *   buffer - A pointer to the read-only buffer of data to be written to device
+ *   buflen - The number of bytes to send from the buffer
+ *   flags  - Determines is a START and/or STOP indication is needed.
+ *
+ * Returned Value:
+ *   0: success, <0: A negated errno
+ *
+ ****************************************************************************/
+
+static int ez80_i2c_write_transfer(FAR struct ez80_i2cdev_s *priv,
+                                   FAR const uint8_t *buffer, int buflen,
+                                   uint8_t flags)
+{
+  FAR const uint8_t *ptr;
+  uint8_t sr;
+  int retry;
+  int count;
+  int ret;
+
+  /* Retry as necessary to send this whole message */
+
+  for (retry = 0; retry < 100; retry++)
+    {
+      if ((flags & EZ80_NOSTART) == 0)
+        {
+          /* Enter MASTER TRANSMIT mode by setting the STA bit in the
+           * I2C_CTL register to 1. The I2C then tests the I2C bus and
+           * transmits a START condition when the bus is free.
+           */
+
+          ez80_i2c_start();
+
+          /* When a START condition is transmitted, the IFLG bit is 1.  Then
+           * we may send the I2C slave address.
+           */
+
+          ret = ez80_i2c_sendaddr(priv, 0);
+          if (ret < 0)
+            {
+              if (ret == -EAGAIN)
+                {
+                  continue;
+                }
+              else
+                {
+                  return ret;
+                }
+            }
+        }
+
+      /* Then send all of the bytes in the buffer */
+
+      ptr = buffer;
+      for (count = buflen; count; count--)
+        {
+          /* Load the I2C_DR with next data byte and clear the IFLG.  Clearing
+           * the IFLAG will cause the data to be transferred.
+           */
+
+          outp(EZ80_I2C_DR, *ptr++);
+          ez80_i2c_clriflg();
+
+          /* And wait for the data transfer to complete */
+
+          sr = ez80_i2c_waitiflg();
+          if (sr != I2C_SR_MDATAWRACK && sr != I2C_SR_MDATAWR)
+            {
+              _err("ERROR: Bad DATA status: %02x\n", sr);
+              ez80_i2c_clriflg();
+              if (sr == I2C_SR_ARBLOST1)
+                {
+                   /* Arbitration lost, break out of the inner loop and
+                    * try sending the message again
+                    */
+
+                   break;
+                }
+
+              /* Otherwise, it is fatal (shouldn't happen) */
+
+              return -EIO;
+            }
+
+          /* Data byte was sent successfully.  Was that the last byte? */
+
+          else if (count <= 1)
+            {
+              if ((flags & EZ80_NOSTOP) == 0)
+                {
+                  /* When all bytes are transmitted, the microcontroller
+                   * must write a 1 to the STP bit in the I2C_CTL register.
+                   * The I2C then transmits a STOP condition, clears the
+                   * STP bit and returns to an idle state.
+                   */
+
+                  ez80_i2c_stop();
+                }
+
+              return OK;
+            }
+        }
+    }
+
+  /* If we get here, we timed out without successfully sending the message */
+
+  return -ETIMEDOUT;
+}
+
+/****************************************************************************
+ * Name: ez80_i2c_setfrequency
+ *
+ * Description:
+ *   Set the I2C frequency. This frequency will be retained in the struct
+ *   i2c_master_s instance and will be used with all transfers.  Required.
+ *
+ * Input Parameters:
+ *   dev -       Device-specific state data
+ *   frequency - The I2C frequency requested
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+static void ez80_i2c_setfrequency(FAR struct ez80_i2cdev_s *priv,
+                                  uint32_t frequency)
+{
+  uint16_t ccr;
+
+  if (priv->frequency != frequency)
+    {
+      /* Calculate and save the BRG and set the CCR */
+
+      ccr = ez80_i2c_getccr(frequency);
+      ez80_i2c_setccr(ccr);
+
+      /* Save the new I2C frequency */
+
+      priv->frequency = frequency;
+    }
+}
+
+/****************************************************************************
+ * Name: ez80_i2c_transfer
+ *
+ * Description:
+ *   Perform a sequence of I2C transfers, each transfer is started with a
+ *   START and the final transfer is completed with a STOP. Each sequence
+ *   will be an 'atomic'  operation in the sense that any other I2C actions
+ *   will be serialized and pend until this read completes. Optional.
+ *
+ * Input Parameters:
+ *   dev      - Device-specific state data
+ *   msgs     - A pointer to a set of message descriptors
+ *   msgcount - The number of transfers to perform
+ *
+ * Returned Value:
+ *   The number of transfers completed
+ *
+ ****************************************************************************/
+
+static int ez80_i2c_transfer(FAR struct i2c_master_s *dev,
+                             FAR struct i2c_msg_s *msgs, int count)
+{
+  FAR struct ez80_i2cdev_s *priv = (FAR struct ez80_i2cdev_s *)dev;
+  FAR struct i2c_msg_s *msg;
+  bool nostop;
+  uint8_t flags;
+  int ret = OK;
+  int i;
+
+  /* Perform each segment of the transfer, message at a time */
+
+  flags = 0;
+
+  /* Get exclusive access to the I2C bus */
+
+  ez80_i2c_semtake();
+
+  /* The process each message seqment */
+
+  for (i = 0; i < count; i++)
+    {
+      msg = &msgs[i];
+
+      /* Set the I2C frequency and address */
+
+      ez80_i2c_setfrequency(priv, msg->frequency);
+
+      priv->addr   = msg->addr;
+      priv->addr10 = ((msg->flags & I2C_M_TEN) != 0);
+
+      /* Is this the last message in the sequence? */
+
+      nostop = false;
+      if (i < (count - 1))
+       {
+          FAR struct i2c_msg_s *next;
+
+          /* No... Check if the next message should have a repeated start or
+           * not.  The conditions for NO repeated start are:
+           *
+           *   - I2C_M_NORESTART bit set
+           *   - Same direction (I2C_M_READ)
+           *   - Same address (and I2C_M_TEN)
+           */
+
+          next = &msgs[i + 1];
+          if ((msg->flags & I2C_M_NORESTART) != 0 &&
+              (msg->flags & (I2C_M_READ | I2C_M_TEN)) == (next->flags & (I2C_M_READ | I2C_M_TEN)) &&
+              msg->addr == next->addr)
+            {
+              nostop = true;
+            }
+        }
+
+      /* Perform the read or write operation */
+
+      flags |= (nostop) ? EZ80_NOSTOP : 0;
+      if ((msg->flags & I2C_M_READ) != 0)
+        {
+          ret = ez80_i2c_read_transfer(priv, msg->buffer, msg->length, flags);
+        }
+      else
+        {
+          ret = ez80_i2c_write_transfer(priv, msg->buffer, msg->length, flags);
+        }
+
+      /* Check for I2C transfer errors */
+
+      if (ret < 0)
+        {
+          break;
+        }
+
+      /* If there was no STOP bit on this segment, then there should be no
+       * START on the next segment.
+       */
+
+      flags = (nostop) ? EZ80_NOSTART : 0;
+    }
+
+  ez80_i2c_semgive();
   return ret;
 }
 
@@ -876,11 +915,11 @@ failure:
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_i2cinitialize
+ * Name: ez80_i2cbus_initialize
  *
  * Description:
  *   Initialize the selected I2C port. And return a unique instance of struct
- *   struct i2c_dev_s.  This function may be called to obtain multiple
+ *   struct i2c_master_s.  This function may be called to obtain multiple
  *   instances of the interface, each of which may be set up with a
  *   different frequency and slave address.
  *
@@ -892,7 +931,7 @@ failure:
  *
  ****************************************************************************/
 
-FAR struct i2c_dev_s *up_i2cinitialize(int port)
+FAR struct i2c_master_s *ez80_i2cbus_initialize(int port)
 {
   FAR struct ez80_i2cdev_s *i2c;
   uint16_t ccr;
@@ -902,8 +941,8 @@ FAR struct i2c_dev_s *up_i2cinitialize(int port)
     {
       /* Set up some initial BRG value */
 
-      ccr = i2c_getccr(100*1000);
-      i2c_setccr(ccr);
+      ccr = ez80_i2c_getccr(100*1000);
+      ez80_i2c_setccr(ccr);
 
       /* No GPIO setup is required -- I2C pints, SCL/SDA are not multiplexed */
 
@@ -920,13 +959,13 @@ FAR struct i2c_dev_s *up_i2cinitialize(int port)
 
   /* Now, allocate an I2C instance for this caller */
 
-  i2c = (FAR struct ez80_i2cdev_s *)kmalloc(sizeof(FAR struct ez80_i2cdev_s));
+  i2c = (FAR struct ez80_i2cdev_s *)kmm_zalloc(sizeof(FAR struct ez80_i2cdev_s));
   if (i2c)
     {
       /* Initialize the allocated instance */
 
       i2c->ops = &g_ops;
-      i2c->ccr = g_currccr;
     }
-  return (FAR struct i2c_dev_s *)i2c;
+
+  return (FAR struct i2c_master_s *)i2c;
 }

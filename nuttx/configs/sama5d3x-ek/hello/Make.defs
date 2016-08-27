@@ -96,9 +96,9 @@ endif
 
 ARCHCPUFLAGS = -mcpu=cortex-a5 -mfpu=vfpv4-d16
 ARCHCFLAGS = -fno-builtin
-ARCHCXXFLAGS = -fno-builtin -fno-exceptions -fno-rtti
-ARCHWARNINGS = -Wall -Wstrict-prototypes -Wshadow
-ARCHWARNINGSXX = -Wall -Wshadow
+ARCHCXXFLAGS = -fno-builtin -fno-exceptions -fcheck-new -fno-rtti
+ARCHWARNINGS = -Wall -Wstrict-prototypes -Wshadow -Wundef
+ARCHWARNINGSXX = -Wall -Wshadow -Wundef
 ARCHDEFINES =
 ARCHPICFLAGS = -fpic -msingle-pic-base -mpic-register=r10
 
@@ -109,10 +109,24 @@ CXXPICFLAGS = $(ARCHPICFLAGS) $(CXXFLAGS)
 CPPFLAGS = $(ARCHINCLUDES) $(ARCHDEFINES) $(EXTRADEFINES)
 AFLAGS = $(CFLAGS) -D__ASSEMBLY__
 
+# NXFLAT module definitions
+
 NXFLATLDFLAGS1 = -r -d -warn-common
 NXFLATLDFLAGS2 = $(NXFLATLDFLAGS1) -T$(TOPDIR)$(DELIM)binfmt$(DELIM)libnxflat$(DELIM)gnu-nxflat-pcrel.ld -no-check-sections
 LDNXFLATFLAGS = -e main -s 2048
 
+# ELF module definitions
+
+CELFFLAGS = $(CFLAGS) -mlong-calls # --target1-abs
+CXXELFFLAGS = $(CXXFLAGS) -mlong-calls # --target1-abs
+
+LDELFFLAGS = -r -e main
+ifeq ($(WINTOOL),y)
+  LDELFFLAGS += -T "${shell cygpath -w $(TOPDIR)/configs/$(CONFIG_ARCH_BOARD)/scripts/gnu-elf.ld}"
+else
+  LDELFFLAGS += -T $(TOPDIR)/configs/$(CONFIG_ARCH_BOARD)/scripts/gnu-elf.ld
+endif
+ASMEXT = .S
 OBJEXT = .o
 LIBEXT = .a
 EXEEXT =
@@ -126,7 +140,7 @@ endif
 
 HOSTCC = gcc
 HOSTINCLUDES = -I.
-HOSTCFLAGS = -Wall -Wstrict-prototypes -Wshadow -g -pipe
+HOSTCFLAGS = -Wall -Wstrict-prototypes -Wshadow -Wundef -g -pipe
 HOSTLDFLAGS =
 ifeq ($(CONFIG_HOST_WINDOWS),y)
   HOSTEXEEXT = .exe
@@ -138,7 +152,7 @@ ifeq ($(WINTOOL),y)
   # Windows-native host tools
   DIRLINK = $(TOPDIR)$(DELIM)tools$(DELIM)copydir.sh
   DIRUNLINK = $(TOPDIR)$(DELIM)tools$(DELIM)unlink.sh
-  MKDEP = $(TOPDIR)$(DELIM)tools$(DELIM)mknulldeps.sh
+  MKDEP = $(TOPDIR)$(DELIM)tools$(DELIM)mkwindeps.sh
 else
   # Linux/Cygwin-native host tools
   MKDEP = $(TOPDIR)$(DELIM)tools$(DELIM)mkdeps$(HOSTEXEEXT)

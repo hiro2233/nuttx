@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/sam4l-xplained/src/sam_boot.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,10 +41,12 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
+
 #include "sam4l-xplained.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /************************************************************************************
@@ -68,19 +70,19 @@
 void sam_boardinitialize(void)
 {
   /* Configure SPI chip selects if 1) SPI is not disabled, and 2) the weak function
-   * sam_spiinitialize() has been brought into the link.
+   * sam_spidev_initialize() has been brought into the link.
    */
 
 #ifdef CONFIG_SAM34_SPI0
-  if (sam_spiinitialize)
+  if (sam_spidev_initialize)
     {
-      sam_spiinitialize();
+      sam_spidev_initialize();
     }
 #endif
 
   /* Configure on-board LEDs if LED support has been selected. */
 
 #ifdef CONFIG_ARCH_LEDS
-  board_led_initialize();
+  board_autoled_initialize();
 #endif
 }

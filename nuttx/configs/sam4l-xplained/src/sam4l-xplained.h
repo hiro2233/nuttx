@@ -323,14 +323,14 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Name: sam_spiinitialize
+ * Name: sam_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the SAM3U-EK board.
  *
  ************************************************************************************/
 
-void weak_function sam_spiinitialize(void);
+void weak_function sam_spidev_initialize(void);
 
 /************************************************************************************
  * Name: sam_sdinitialize
@@ -356,14 +356,6 @@ int sam_sdinitialize(int minor);
 
 #if defined(CONFIG_SAM34_LCDCA) && defined(CONFIG_SAM4L_XPLAINED_SLCD1MODULE)
 int sam_slcd_initialize(void);
-#endif
-
-/************************************************************************************
- * Name: board_led_initialize
- ************************************************************************************/
-
-#ifdef CONFIG_ARCH_LEDS
-void board_led_initialize(void);
 #endif
 
 #endif /* __ASSEMBLY__ */

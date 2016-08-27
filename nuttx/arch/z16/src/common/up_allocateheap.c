@@ -1,7 +1,7 @@
 /****************************************************************************
- * common/up_allocateheap.c
+ * arch/z16/src/common/up_allocateheap.c
  *
- *   Copyright (C) 2008, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/kmalloc.h>
 #include <arch/board/board.h>
 
@@ -50,7 +51,7 @@
 #include "up_internal.h"
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Use ZDS-II linker settings to get the unused external RAM and use this
@@ -85,20 +86,13 @@
  * Description:
  *   This function will be called to dynamically set aside the heap region.
  *
- *   For the kernel build (CONFIG_NUTTX_KERNEL=y) with both kernel- and
- *   user-space heaps (CONFIG_MM_KERNEL_HEAP=y), this function provides the
- *   size of the unprotected, user-space heap.
- *
- *   If a protected kernel-space heap is provided, the kernel heap must be
- *   allocated (and protected) by an analogous up_allocate_kheap().
- *
  ****************************************************************************/
 
 void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 {
   *heap_start = (FAR void*)CONFIG_HEAP1_BASE;
   *heap_size = CONFIG_HEAP1_END - CONFIG_HEAP1_BASE;
-  board_led_on(LED_HEAPALLOCATE);
+  board_autoled_on(LED_HEAPALLOCATE);
 }
 
 /****************************************************************************

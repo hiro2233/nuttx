@@ -2,7 +2,7 @@
  * arch/arm/src/sama5/chip/sam_wdt.h
  * Watchdog Timer (WDT) definitions for the SAMA5D3
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,7 +65,12 @@
 /* WDT register bit definitions ********************************************************/
 /* Watchdog Timer Control Register */
 
-#define WDT_CR_WDRSTT             (1 << 0)   /* Bit 0:  Watchdog Rest */
+#define WDT_CR_WDRSTT             (1 << 0)   /* Bit 0:  Watchdog Restart */
+
+#ifdef ATSAMA5D2
+#define WDT_CR_LOCKMR             (1 << 4)   /* Bit 4:  Lock Mode Register Write Access */
+#endif
+
 #define WDT_CR_KEY_SHIFT          (24)       /* Bits 24-31:  Password */
 #define WDT_CR_KEY_MASK           (0xff << WDT_CR_KEY_SHIFT)
 #  define WDT_CR_KEY              (0xa5 << WDT_CR_KEY_SHIFT)
@@ -77,7 +82,11 @@
 #  define WDT_MR_WDV(n)           ((uint32_t)(n) << WDT_MR_WDV_SHIFT)
 #define WDT_MR_WDFIEN             (1 << 12) /* Bit 12: Watchdog Fault Interrupt Enable */
 #define WDT_MR_WDRSTEN            (1 << 13) /* Bit 13: Watchdog Reset Enable */
-#define WDT_MR_WDRPROC            (1 << 14) /* Bit 14: Watchdog Reset Processor */
+
+#ifdef ATSAMA5D3
+#  define WDT_MR_WDRPROC          (1 << 14) /* Bit 14: Watchdog Reset Processor */
+#endif
+
 #define WDT_MR_WDDIS              (1 << 15) /* Bit 15: Watchdog Disable */
 #define WDT_MR_WDD_SHIFT          (16)      /* Bits 16-27:  Watchdog Delta Value */
 #define WDT_MR_WDD_MASK           (0xfff << WDT_MR_WDD_SHIFT)

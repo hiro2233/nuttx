@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 comment "LPC17xx Configuration Options"
@@ -139,6 +139,7 @@ config LPC17_ETHERNET
 	bool "Ethernet"
 	select NETDEVICES
 	select ARCH_HAVE_PHY
+	select ARCH_HAVE_NETDEV_STATISTICS
 	default n
 
 config LPC17_LCD
@@ -149,6 +150,7 @@ config LPC17_LCD
 config LPC17_USBHOST
 	bool "USB host"
 	select USBHOST
+	select USBHOST_HAVE_ASYNCH
 	default n
 
 config LPC17_USBDEV
@@ -169,32 +171,37 @@ config LPC17_SDCARD
 
 config LPC17_UART0
 	bool "UART0"
-	select ARCH_HAVE_UART0
 	default n
+	select UART0_SERIALDRIVER
+	select ARCH_HAVE_SERIAL_TERMIOS
 
 config LPC17_UART1
 	bool "UART1"
-	select ARCH_HAVE_UART1
 	default n
+	select UART1_SERIALDRIVER
+	select ARCH_HAVE_SERIAL_TERMIOS
 
 config LPC17_UART2
 	bool "UART2"
-	select ARCH_HAVE_UART2
 	default n
+	select UART2_SERIALDRIVER
+	select ARCH_HAVE_SERIAL_TERMIOS
 
 config LPC17_UART3
 	bool "UART3"
-	select ARCH_HAVE_UART3
 	default n
+	select UART3_SERIALDRIVER
+	select ARCH_HAVE_SERIAL_TERMIOS
 
 config LPC17_UART4
 	bool "UART4"
-	select ARCH_HAVE_UART4
 	default n
+	select UART4_SERIALDRIVER
+	select ARCH_HAVE_SERIAL_TERMIOS
 
 config LPC17_CAN1
 	bool "CAN1"
-	select ARCH_HAVE_UART4
+	select UART4_SERIALDRIVER
 	default n
 
 config LPC17_CAN2
@@ -244,6 +251,15 @@ config LPC17_TMR0
 	bool "Timer 0"
 	default n
 
+config LPC17_MAT0_PIN
+	int "TIM1 MAT0 Output Pin"
+	default 1
+	range 1 4
+	depends on LPC17_TMR0
+	---help---
+		If TIM1 is enabled for PWM usage, you also need specifies the timer output
+		channel {1,..,4}
+
 config LPC17_TMR1
 	bool "Timer 1"
 	default n
@@ -267,12 +283,30 @@ config LPC17_PWM0
 config LPC17_PWM1
 	bool "PWM1"
 	default n
-	depends on ARCH_FAMILY_LPC177X || ARCH_FAMILY_LPC178X
+	depends on ARCH_FAMILY_LPC177X || ARCH_FAMILY_LPC178X || ARCH_FAMILY_LPC176X
+
+config LPC17_PWM1_PIN
+	int "TIM1 PWM Output Pin"
+	default 1
+	range 1 4
+	depends on LPC17_PWM1
+	---help---
+		If TIM1 is enabled for PWM usage, you also need specifies the timer output
+		channel {1,..,4}
 
 config LPC17_MCPWM
 	bool "MCPWM"
 	default n
 	depends on ARCH_FAMILY_LPC175X || ARCH_FAMILY_LPC176X
+
+config LPC17_MCPWM1_PIN
+	int "TIM1 MCPWM Output Pin"
+	default 1
+	range 1 4
+	depends on LPC17_MCPWM
+	---help---
+		If TIM1 is enabled for PWM usage, you also need specifies the timer output
+		channel {1,..,4}
 
 config LPC17_QEI
 	bool "QEI"
@@ -438,15 +472,6 @@ endmenu
 menu "Serial driver options"
 	depends on LPC17_UART0 || LPC17_UART1 || LPC17_UART2 || LPC17_UART3 || LPC17_UART4
 
-config SERIAL_TERMIOS
-	bool "Serial driver TERMIOS supported"
-	depends on LPC17_UART0 || LPC17_UART1 || LPC17_UART2 || LPC17_UART3
-	default n
-	---help---
-		Serial driver supports termios.h interfaces (tcsetattr, tcflush, etc.).
-		If this is not defined, then the terminal settings (baud, parity, etc).
-		are not configurable at runtime; serial streams cannot be flushed, etc..
-
 config UART1_RINGINDICATOR
 	bool "UART1 ring indicator"
 	depends on LPC17_UART1
@@ -489,6 +514,12 @@ config ADC_CHANLIST
 		two things:  (1) define ADC_NCHANNELS in the configuration file and
 		(2) provide an array g_adc_chanlist[] with the channel numbers
 		matching the ADC0_MASK within the board-specific library.
+
+config ADC_BURSTMODE
+    bool "One interrupt at the end of all ADC cconversions"
+    default n
+    ---help---
+        Select this if you want to generate only one interrupt once all selected channels has been converted by the ADC
 
 config ADC_NCHANNELS
 	int "ADC0 number of channels"
@@ -563,16 +594,17 @@ config CAN_LOOPBACK
 	---help---
 		Enable CAN loopback mode
 
-config CAN_REGDEBUG
+config LPC17_CAN_REGDEBUG
 	bool "Register level debug"
-	depends on DEBUG
+	depends on DEBUG_CAN_INFO
 	default n
 	---help---
-		Output detailed register-level CAN debug information.  Requires also DEBUG and DEBUG_CAN.
+		Output detailed register-level CAN debug information.  Requires also
+		CONFIG_DEBUG_CAN_INFO.
 
 endmenu
 
-config GPIO_IRQ
+config LPC17_GPIOIRQ
 	bool "GPIO interrupt support"
 	default n
 	---help---
@@ -581,17 +613,17 @@ config GPIO_IRQ
 menu "I2C driver options"
 	depends on LPC17_I2C0 || LPC17_I2C1 || LPC17_I2C2
 
-config I2C0_FREQ
+config LPC17_I2C0_FREQUENCY
 	int "I2C0 frequency"
 	depends on LPC17_I2C0
 	default 100000
 
-config I2C1_FREQ
+config LPC17_I2C1_FREQUENCY
 	int "I2C1 frequency"
 	depends on LPC17_I2C1
 	default 100000
 
-config I2C2_FREQ
+config LPC17_I2C2_FREQUENCY
 	int "I2C2 frequency"
 	depends on LPC17_I2C2
 	default 100000
@@ -610,13 +642,6 @@ config SDIO_DMA
 		Enable SD card DMA data transfers.  This is a marginally optional.
 		For most usages, SD accesses will cause data overruns if used without
 		DMA.  Requires LPC17_SDCARD and config LPC17_GPDMA.
-
-config SDIO_DMAPRIO
-	hex "SDIO DMA priority"
-	default 0x0
-	depends on LPC17_GPDMA
-	---help---
-		Select SDIO DMA prority.
 
 config SDIO_WIDTH_D1_ONLY
 	bool "Use D1 only"
@@ -656,15 +681,15 @@ config NET_EMACRAM_SIZE
 
 config NET_NTXDESC
 	int "Number of Tx descriptors"
-	default 18
+	default 13
 	---help---
-		Configured number of Tx descriptors. Default: 18
+		Configured number of Tx descriptors. Default: 13
 
 config NET_NRXDESC
 	int "Number of Rx descriptors"
-	default 18
+	default 13
 	---help---
-		Configured number of Rx descriptors. Default: 18
+		Configured number of Rx descriptors. Default: 13
 
 config NET_PRIORITY
 	int "Ethernet interrupt priority"
@@ -679,12 +704,12 @@ config NET_WOL
 	---help---
 		Enable Wake-up on Lan (not fully implemented).
 
-config NET_REGDEBUG
+config LPC17_NET_REGDEBUG
 	bool "Ethernet register-level debug"
-	depends on DEBUG
+	depends on DEBUG_NET_INFO
 	default n
 	---help---
-		Enable low level register debug.  Also needs DEBUG.
+		Enable low level register debug.  Also needs CONFIG_DEBUG_NET_INFO.
 
 config NET_HASH
 	bool "Hashing"
@@ -692,14 +717,13 @@ config NET_HASH
 	---help---
 		Enable receipt of near-perfect match frames.
 
-config NET_MULTICAST
+config LPC17_MULTICAST
 	bool "Multicast"
 	default y if NET_IGMP
 	default n if !NET_IGMP
 	---help---
 		Enable receipt of multicast (and unicast) frames. Automatically set
 		if NET_IGMP is selected.
-
 endmenu
 
 menu "LCD device driver options"
@@ -877,10 +901,11 @@ config LPC17_USBDEV_NOLED
 
 config LPC17_USBDEV_REGDEBUG
 	bool "Register level debug"
-	depends on DEBUG
+	depends on DEBUG_USB_INFO
 	default n
 	---help---
-		Output detailed register-level USB device debug information.  Requires also DEBUG.
+		Output detailed register-level USB device debug information.  Requires
+		also CONFIG_DEBUG_USB_INFO.
 
 endmenu
 
@@ -924,6 +949,15 @@ config USBHOST_IOBUFSIZE
 		Size of one end-user I/O buffer.  This can be zero if the application
 		can guarantee that all end-user I/O buffers reside in AHB SRAM.
 
+config LPC17_USBHOST_NPREALLOC
+	int "Max concurrent transfers"
+	default 8 if USBHOST_HUB
+	default 4 if !USBHOST_HUB
+	---help---
+		This number represents a number of pre-allocated structures to support
+		concurrent data transfers.  This number limits that number of concurrent
+		asynchronous IN endpoint transfer that can be supported.
+
 config USBHOST_BULK_DISABLE
 	bool "Disable bulk EPs"
 	default n
@@ -931,7 +965,7 @@ config USBHOST_BULK_DISABLE
 		Disable support for bulk endpoints.
 
 config USBHOST_INT_DISABLE
-	bool "Disable interupt EPs"
+	bool "Disable interrupt EPs"
 	default n
 	---help---
 		Disable support for interrupt endpoints.
@@ -944,9 +978,10 @@ config USBHOST_ISOC_DISABLE
 
 config LPC17_USBHOST_REGDEBUG
 	bool "Register level debug"
-	depends on DEBUG
+	depends on DEBUG_USB_INFO
 	default n
 	---help---
-		Output detailed register-level USB host debug information.  Requires also DEBUG.
+		Output detailed register-level USB host debug information.  Requires
+		also CONFIG_DEBUG_USB_INFO.
 
 endmenu

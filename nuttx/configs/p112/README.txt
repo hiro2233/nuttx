@@ -24,8 +24,8 @@ Gulczynski makes additional P112 derivative hobbyist home brew computers.
 Hal Bower was very active in the mid 1990's on the P112 project and ported
 the "Banked/Portable BIOS".
 
-Dave Brooks was successfully funded through Kickstarter for and another
-run of P112 boards in November of 2012.
+Dave Griffith was successfully funded through Kickstarter for another run
+of P112 boards in November of 2012.
 
 Pin Configuration
 =================
@@ -133,3 +133,21 @@ P112 Serial Console
 The UARTs are not used on the P112 board (the UART signals are avaiable off-board through P14).
 The serial console is provided by U7 LT1133, Advanced Low Power 5V RS232 Driver/Receiver
 that connects to the P112 via the Z85230 ESCC channel A.
+
+Status
+======
+
+2014-8-22:  After some time idling away, I tried rebuilding with Windows 8, the latest MinGW
+and the latest SDCC.  I fixed a few things but there a still a few issues.  The last "show
+stopper" before I gave up for now was during building dependencies:
+
+ASlink-Error-<cannot open> : "bin/mm_initialize.rel"
+
+Clearly there is something wrong with the command line options given to SDCC because it is
+trying to compile and link when we really only want dependencies.  I did not spend very much
+time trying to solve the problem; I assume that it is not too difficult.
+
+2014-9-15: There has been a lot of change to the address environment APIs with the inegration
+of address environments on the Cortex-A.  It is likely that there is some breakage due to
+incompatibilities with the Z180's mini-MMU.
+

@@ -2,7 +2,7 @@
  * arch/arm/src/sama5/sam_pio.h
  * Parallel Input/Output (PIO) definitions for the SAMA5
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,161 +46,39 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <arch/sama5/chip.h>
+
+#include "chip/sam_memorymap.h"
+
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
-/* Configuration ********************************************************************/
 
-#undef CONFIG_SAMA5_PIO_IRQ
-#if defined(CONFIG_SAMA5_PIOA_IRQ) || defined(CONFIG_SAMA5_PIOB_IRQ) || \
-    defined(CONFIG_SAMA5_PIOC_IRQ) || defined(CONFIG_SAMA5_PIOD_IRQ) || \
-    defined(CONFIG_SAMA5_PIOD_IRQ)
-#  define CONFIG_SAMA5_PIO_IRQ 1
+/* Definitions and types customized for each SAMA5Dx familiy */
+
+#if defined(ATSAMA5D2)
+#  include "sama5d2x_pio.h"
+#elif defined(ATSAMA5D3) || defined(ATSAMA5D4)
+#  include "sama5d3x4x_pio.h"
+#else
+#  error Unrecognized SAMA5 architecture
 #endif
-
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_GPIO
-#endif
-
-#define PIO_HAVE_PULLDOWN         1
-#define PIO_HAVE_PERIPHCD         1
-#define PIO_HAVE_SCHMITT          1
-#define PIO_HAVE_DRIVE            1
-
-/* Bit-encoded input to sam_configpio() ********************************************/
-
-/* 32-bit Encoding:
- *
- *   ..MM MCCC CCDD IIIV PPPB BBBB
- */
-
-/* Input/Output mode:
- *
- *   ..MM M... .... .... .... ....
- */
-
-#define PIO_MODE_SHIFT            (19)        /* Bits 19-21: PIO mode */
-#define PIO_MODE_MASK             (7 << PIO_MODE_SHIFT)
-#  define PIO_INPUT               (0 << PIO_MODE_SHIFT) /* Input */
-#  define PIO_OUTPUT              (1 << PIO_MODE_SHIFT) /* Output */
-#  define PIO_PERIPHA             (2 << PIO_MODE_SHIFT) /* Controlled by periph A signal */
-#  define PIO_PERIPHB             (3 << PIO_MODE_SHIFT) /* Controlled by periph B signal */
-#  define PIO_PERIPHC             (4 << PIO_MODE_SHIFT) /* Controlled by periph C signal */
-#  define PIO_PERIPHD             (5 << PIO_MODE_SHIFT) /* Controlled by periph D signal */
-
-/* These bits set the configuration of the pin:
- * NOTE: No definitions for parallel capture mode
- *
- *   .... .CCC CC.. .... .... ....
- */
-
-#define PIO_CFG_SHIFT             (14)        /* Bits 14-18: PIO configuration bits */
-#define PIO_CFG_MASK              (31 << PIO_CFG_SHIFT)
-#  define PIO_CFG_DEFAULT         (0  << PIO_CFG_SHIFT) /* Default, no attribute */
-#  define PIO_CFG_PULLUP          (1  << PIO_CFG_SHIFT) /* Bit 11: Internal pull-up */
-#  define PIO_CFG_PULLDOWN        (2  << PIO_CFG_SHIFT) /* Bit 11: Internal pull-down */
-#  define PIO_CFG_DEGLITCH        (4  << PIO_CFG_SHIFT) /* Bit 12: Internal glitch filter */
-#  define PIO_CFG_OPENDRAIN       (8  << PIO_CFG_SHIFT) /* Bit 13: Open drain */
-#  define PIO_CFG_SCHMITT         (16 << PIO_CFG_SHIFT) /* Bit 13: Schmitt trigger */
-
-/* Drive Strength:
- *
- *   .... .... ..DD .... .... ....
- */
-
-#define PIO_DRIVE_SHIFT           (12)        /* Bits 12-13: Drive strength */
-#define PIO_DRIVE_MASK            (7 << PIO_DRIVE_SHIFT)
-#  define PIO_DRIVE_LOW           (0 << PIO_DRIVE_SHIFT)
-#  define PIO_DRIVE_MEDIUM        (2 << PIO_DRIVE_SHIFT)
-#  define PIO_DRIVE_HIGH          (3 << PIO_DRIVE_SHIFT)
-
-/* Additional interrupt modes:
- *
- *   .... .... .... III. .... ....
- */
-
-#define PIO_INT_SHIFT             (9)         /* Bits 9-11: PIO interrupt bits */
-#define PIO_INT_MASK              (7 << PIO_INT_SHIFT)
-#  define _PIO_INT_AIM            (1 << 10)   /* Bit 10: Additional Interrupt modes */
-#  define _PIO_INT_LEVEL          (1 << 9)    /* Bit 9: Level detection interrupt */
-#  define _PIO_INT_EDGE           (0)         /*        (vs. Edge detection interrupt) */
-#  define _PIO_INT_RH             (1 << 8)    /* Bit 9: Rising edge/High level detection interrupt */
-#  define _PIO_INT_FL             (0)         /*        (vs. Falling edge/Low level detection interrupt) */
-
-#  define PIO_INT_HIGHLEVEL       (_PIO_INT_AIM | _PIO_INT_LEVEL | _PIO_INT_RH)
-#  define PIO_INT_LOWLEVEL        (_PIO_INT_AIM | _PIO_INT_LEVEL | _PIO_INT_FL)
-#  define PIO_INT_RISING          (_PIO_INT_AIM | _PIO_INT_EDGE  | _PIO_INT_RH)
-#  define PIO_INT_FALLING         (_PIO_INT_AIM | _PIO_INT_EDGE  | _PIO_INT_FL)
-#  define PIO_INT_BOTHEDGES       (0)
-
-/* If the pin is an PIO output, then this identifies the initial output value:
- *
- *   .... .... .... ...V .... ....
- */
-
-#define PIO_OUTPUT_SET            (1 << 8)    /* Bit 8: Inital value of output */
-#define PIO_OUTPUT_CLEAR          (0)
-
-/* This identifies the PIO port:
- *
- *   .... .... .... .... PPP. ....
- */
-
-#define PIO_PORT_SHIFT            (5)         /* Bit 5-7:  Port number */
-#define PIO_PORT_MASK             (7 << PIO_PORT_SHIFT)
-#  define PIO_PORT_PIOA           (0 << PIO_PORT_SHIFT)
-#  define PIO_PORT_PIOB           (1 << PIO_PORT_SHIFT)
-#  define PIO_PORT_PIOC           (2 << PIO_PORT_SHIFT)
-#  define PIO_PORT_PIOD           (3 << PIO_PORT_SHIFT)
-#  define PIO_PORT_PIOE           (4 << PIO_PORT_SHIFT)
-
-/* This identifies the bit in the port:
- *
- *   .... .... .... .... ...B BBBB
- */
-
-#define PIO_PIN_SHIFT             (0)         /* Bits 0-4: PIO number: 0-31 */
-#define PIO_PIN_MASK              (31 << PIO_PIN_SHIFT)
-#define PIO_PIN0                  (0  << PIO_PIN_SHIFT)
-#define PIO_PIN1                  (1  << PIO_PIN_SHIFT)
-#define PIO_PIN2                  (2  << PIO_PIN_SHIFT)
-#define PIO_PIN3                  (3  << PIO_PIN_SHIFT)
-#define PIO_PIN4                  (4  << PIO_PIN_SHIFT)
-#define PIO_PIN5                  (5  << PIO_PIN_SHIFT)
-#define PIO_PIN6                  (6  << PIO_PIN_SHIFT)
-#define PIO_PIN7                  (7  << PIO_PIN_SHIFT)
-#define PIO_PIN8                  (8  << PIO_PIN_SHIFT)
-#define PIO_PIN9                  (9  << PIO_PIN_SHIFT)
-#define PIO_PIN10                 (10 << PIO_PIN_SHIFT)
-#define PIO_PIN11                 (11 << PIO_PIN_SHIFT)
-#define PIO_PIN12                 (12 << PIO_PIN_SHIFT)
-#define PIO_PIN13                 (13 << PIO_PIN_SHIFT)
-#define PIO_PIN14                 (14 << PIO_PIN_SHIFT)
-#define PIO_PIN15                 (15 << PIO_PIN_SHIFT)
-#define PIO_PIN16                 (16 << PIO_PIN_SHIFT)
-#define PIO_PIN17                 (17 << PIO_PIN_SHIFT)
-#define PIO_PIN18                 (18 << PIO_PIN_SHIFT)
-#define PIO_PIN19                 (19 << PIO_PIN_SHIFT)
-#define PIO_PIN20                 (20 << PIO_PIN_SHIFT)
-#define PIO_PIN21                 (21 << PIO_PIN_SHIFT)
-#define PIO_PIN22                 (22 << PIO_PIN_SHIFT)
-#define PIO_PIN23                 (23 << PIO_PIN_SHIFT)
-#define PIO_PIN24                 (24 << PIO_PIN_SHIFT)
-#define PIO_PIN25                 (25 << PIO_PIN_SHIFT)
-#define PIO_PIN26                 (26 << PIO_PIN_SHIFT)
-#define PIO_PIN27                 (27 << PIO_PIN_SHIFT)
-#define PIO_PIN28                 (28 << PIO_PIN_SHIFT)
-#define PIO_PIN29                 (29 << PIO_PIN_SHIFT)
-#define PIO_PIN30                 (30 << PIO_PIN_SHIFT)
-#define PIO_PIN31                 (31 << PIO_PIN_SHIFT)
 
 /************************************************************************************
  * Public Types
  ************************************************************************************/
 
-/* Must be big enough to hold the 32-bit encoding */
+/* Lookup for non-secure PIOs */
 
-typedef uint32_t pio_pinset_t;
+extern const uintptr_t g_piobase[SAM_NPIO];
+#define sam_pion_vbase(n) (g_piobase[(n)])
+
+#ifdef ATSAMA5D2
+/* Lookup for secrure PIOs */
+
+extern const uintptr_t g_spiobase[SAM_NPIO];
+#  define sam_spion_vbase(n) (g_spiobase[(n)])
+#endif
 
 /************************************************************************************
  * Inline Functions
@@ -312,6 +190,23 @@ void sam_pioirqdisable(int irq);
 #endif
 
 /************************************************************************************
+ * Name: sam_pio_forceclk
+ *
+ * Description:
+ *   Enable PIO clocking.  This logic is overly conservative and does not enable PIO
+ *   clocking unless necessary (PIO input selected, glitch/filtering enable, or PIO
+ *   interrupts enabled).  There are, however, certain conditions were we may want
+ *   for force the PIO clock to be enabled.  An example is reading the input value
+ *   from an open drain output.
+ *
+ *   The PIO automatic enable/disable logic is not smart enough enough to know about
+ *   these cases.  For those cases, sam_pio_forceclk() is provided.
+ *
+ ************************************************************************************/
+
+void sam_pio_forceclk(pio_pinset_t pinset, bool enable);
+
+/************************************************************************************
  * Function:  sam_dumppio
  *
  * Description:
@@ -319,7 +214,7 @@ void sam_pioirqdisable(int irq);
  *
  ************************************************************************************/
 
-#ifdef CONFIG_DEBUG_GPIO
+#ifdef CONFIG_DEBUG_GPIO_INFO
 int sam_dumppio(uint32_t pinset, const char *msg);
 #else
 #  define sam_dumppio(p,m)

@@ -2,7 +2,7 @@
 # apps/system/nxplayer/Makefile
 #
 #   Copyright (C) 2013 Ken Pettit. All rights reserved.
-#   Copyright (C) 2012-2013 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2012-2013, 2016 Gregory Nutt. All rights reserved.
 #   Author: Ken Pettit <pettitkd@gmail.com>
 #           Gregory Nutt <gnutt@nuttx.org>
 #
@@ -39,10 +39,6 @@
 -include $(TOPDIR)/Make.defs
 include $(APPDIR)/Make.defs
 
-ifeq ($(WINTOOL),y)
-INCDIROPT = -w
-endif
-
 # NxPlayer Library
 
 ASRCS =
@@ -54,15 +50,24 @@ APPNAME = nxplayer
 PRIORITY = SCHED_PRIORITY_DEFAULT
 STACKSIZE = 2048
 
+ifeq ($(CONFIG_BUILD_KERNEL),y)
+MAINSRC = nxplayer_main.c
+else
 ifeq ($(CONFIG_NXPLAYER_COMMAND_LINE),y)
-CSRCS   += nxplayer_main.c
+MAINSRC = nxplayer_main.c
+endif
 endif
 
 AOBJS = $(ASRCS:.S=$(OBJEXT))
 COBJS = $(CSRCS:.c=$(OBJEXT))
+MAINOBJ = $(MAINSRC:.c=$(OBJEXT))
 
-SRCS = $(ASRCS) $(CSRCS)
+SRCS = $(ASRCS) $(CSRCS) $(MAINSRC)
 OBJS = $(AOBJS) $(COBJS)
+
+ifneq ($(CONFIG_BUILD_KERNEL),y)
+  OBJS += $(MAINOBJ)
+endif
 
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
   BIN = ..\..\libapps$(LIBEXT)
@@ -73,6 +78,15 @@ else
   BIN = ../../libapps$(LIBEXT)
 endif
 endif
+
+ifeq ($(WINTOOL),y)
+  INSTALL_DIR = "${shell cygpath -w $(BIN_DIR)}"
+else
+  INSTALL_DIR = $(BIN_DIR)
+endif
+
+CONFIG_XYZ_PROGNAME ?= nxplayer$(EXEEXT)
+PROGNAME = $(CONFIG_XYZ_PROGNAME)
 
 ROOTDEPPATH = --dep-path .
 
@@ -86,12 +100,25 @@ all: .built
 $(AOBJS): %$(OBJEXT): %.S
 	$(call ASSEMBLE, $<, $@)
 
-$(COBJS): %$(OBJEXT): %.c
+$(COBJS) $(MAINOBJ): %$(OBJEXT): %.c
 	$(call COMPILE, $<, $@)
 
 .built: $(OBJS)
 	$(call ARCHIVE, $(BIN), $(OBJS))
 	$(Q) touch .built
+
+ifeq ($(CONFIG_BUILD_KERNEL),y)
+$(BIN_DIR)$(DELIM)$(PROGNAME): $(OBJS) $(MAINOBJ)
+	@echo "LD: $(PROGNAME)"
+	$(Q) $(LD) $(LDELFFLAGS) $(LDLIBPATH) -o $(INSTALL_DIR)$(DELIM)$(PROGNAME) $(ARCHCRT0OBJ) $(MAINOBJ) $(LDLIBS)
+	$(Q) $(NM) -u  $(INSTALL_DIR)$(DELIM)$(PROGNAME)
+
+install: $(BIN_DIR)$(DELIM)$(PROGNAME)
+
+else
+install:
+
+endif
 
 # Register application
 
@@ -125,3 +152,5 @@ distclean: clean
 	$(call DELFILE, .depend)
 
 -include Make.dep
+.PHONY: preconfig
+preconfig:

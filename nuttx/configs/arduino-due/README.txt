@@ -7,7 +7,7 @@ README
 
   Supported Shields
   -----------------
-  - ITEAD 2.4" TFT with Touch, Arduion Shield 1.0
+  - ITEAD 2.4" TFT with Touch, Arduino Shield 1.0
 
 Contents
 ^^^^^^^^
@@ -110,12 +110,12 @@ Rev 2 vs. Rev 3
 ^^^^^^^^^^^^^^^
 
   This port was performed on the Arduino Due Rev 2 board.  NuttX users
-  have reported issues with the serial port on his Aduino Due Rev 3 board.
+  have reported issues with the serial port on his Arduino Due Rev 3 board.
   That problem was resolved as by configuring the UART0 RXD with a pull-up
   (see include/board.h).  That fix as well as any others that we may find
   will be enabled by selecting
 
-    CONFIG_ADRUINO_DUE_REV3=y
+    CONFIG_ARDUINO_DUE_REV3=y
 
 ITEAD 2.4" TFT with Touch
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -269,7 +269,7 @@ GNU Toolchain Options
 
     CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y  : CodeSourcery under Windows
     CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYL=y  : CodeSourcery under Linux
-    CONFIG_ARMV7M_TOOLCHAIN_ATOLLIC=y        : Atollic toolchain for Windos
+    CONFIG_ARMV7M_TOOLCHAIN_ATOLLIC=y        : Atollic toolchain for Windows
     CONFIG_ARMV7M_TOOLCHAIN_DEVKITARM=y      : devkitARM under Windows
     CONFIG_ARMV7M_TOOLCHAIN_BUILDROOT=y      : NuttX buildroot under Linux or Cygwin (default)
     CONFIG_ARMV7M_TOOLCHAIN_GNU_EABIL=y      : Generic GCC ARM EABI toolchain for Linux
@@ -304,12 +304,6 @@ GNU Toolchain Options
        make clean_context all
 
      An alias in your .bashrc file might make that less painful.
-
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
 
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
@@ -359,7 +353,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -391,7 +385,7 @@ NuttX EABI "buildroot" Toolchain
   NOTE:  Unfortunately, the 4.6.3 EABI toolchain is not compatible with the
   the NXFLAT tools.  See the top-level TODO file (under "Binary loaders") for
   more information about this problem. If you plan to use NXFLAT, please do not
-  use the GCC 4.6.3 EABI toochain; instead use the GCC 4.3.3 OABI toolchain.
+  use the GCC 4.6.3 EABI toolchain; instead use the GCC 4.3.3 OABI toolchain.
   See instructions below.
 
 NuttX OABI "buildroot" Toolchain
@@ -419,8 +413,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -487,8 +481,8 @@ Buttons and LEDs
     LED_IDLE             MCU is is sleep mode       ------ Not used --------
 
   Thus if LED L is statically on, NuttX has successfully booted and is,
-  apparently, running normmally.  If LED RX is glowing, then NuttX is
-  handling interupts (and also signals and assertions).  If TX is flashing
+  apparently, running normally.  If LED RX is glowing, then NuttX is
+  handling interrupts (and also signals and assertions).  If TX is flashing
   at approximately 2Hz, then a fatal error has been detected and the system
   has halted.
 
@@ -558,7 +552,7 @@ Loading Code
   Uploading NuttX to the Due Using Bossa:
   ---------------------------------------
   Where do you get it?
-    Generic BOSSA installation files are avaialable here:
+    Generic BOSSA installation files are available here:
     http://sourceforge.net/projects/b-o-s-s-a/?source=dlp
 
     However, DUE uses a patched version of BOSSA available as source code here:
@@ -582,7 +576,7 @@ Loading Code
     This is accomplished by simply configuring the programming port in 1200
     baud and sending something on the programming port.  Here is some sample
     output from a Windows CMD.exe shell.  NOTE that my Arduino programming
-    port shows up as COM26.  It may be different on yoursystem.
+    port shows up as COM26.  It may be different on your system.
 
     To enter boot mode, set the baud to 1200 and send anything to the
     programming port:
@@ -708,7 +702,7 @@ Loading Code
      9  GND            GNDDetect
      10 MASTER-RESET   nReset
 
-   You should be able to use a 10- to 20-pin adaptr to connect a SAM-ICE
+   You should be able to use a 10- to 20-pin adapter to connect a SAM-ICE
    debugger to the Arduino Due.  I have this Olimex adapter:
    https://www.olimex.com/Products/ARM/JTAG/ARM-JTAG-20-10/ . But so far I
    have been unable to get the get the SAM-ICE to communicate with the Due.
@@ -740,7 +734,7 @@ Arduino DUE-specific Configuration Options
     CONFIG_ARCH_CHIP_SAM3X
     CONFIG_ARCH_CHIP_ATSAM3X8E
 
-  CONFIG_ARCH_BOARD - Identifies the configs subdirectory and
+  CONFIG_ARCH_BOARD - Identifies the configs/ subdirectory and
   hence, the board that supports the particular chip or SoC.
 
     CONFIG_ARCH_BOARD=arduino-due (for the Arduino Due development board)
@@ -777,7 +771,7 @@ Arduino DUE-specific Configuration Options
 
   CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
   cause a 100 second delay during boot-up.  This 100 second delay
-  serves no purpose other than it allows you to calibratre
+  serves no purpose other than it allows you to calibrate
   CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
   the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
   the delay actually is 100 seconds.
@@ -828,10 +822,10 @@ Arduino DUE-specific Configuration Options
     CONFIG_SAM34_GPIOD_IRQ
     CONFIG_SAM34_GPIOE_IRQ
     CONFIG_SAM34_GPIOF_IRQ
-    CONFIG_USART0_ISUART
-    CONFIG_USART1_ISUART
-    CONFIG_USART2_ISUART
-    CONFIG_USART3_ISUART
+    CONFIG_USART0_SERIALDRIVER
+    CONFIG_USART1_SERIALDRIVER
+    CONFIG_USART2_SERIALDRIVER
+    CONFIG_USART3_SERIALDRIVER
 
   ST91SAM4S specific device driver settings
 
@@ -875,7 +869,7 @@ Configurations
     change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -891,7 +885,7 @@ Configurations
        Board Selection -> Peripheral
          CONFIG_SAM34_UART0=n              : Disable UART0.  Can't use with this shield
          CONFIG_SAM34_USART0=y             : Enable USART0
-         CONFIG_USART0_ISUART=y
+         CONFIG_USART0_SERIALDRIVER=y
 
        Device Drivers -> Serial
          CONFIG_USART0_SERIAL_CONSOLE=y    : Configure the console on USART0
@@ -972,7 +966,7 @@ Configuration sub-directories
        Board Selection -> Peripheral
          CONFIG_SAM34_UART0=n              : Disable UART0.  Can't use with this shield
          CONFIG_SAM34_USART0=y             : Enable USART0
-         CONFIG_USART0_ISUART=y
+         CONFIG_USART0_SERIALDRIVER=y
 
        Device Drivers -> Serial
          CONFIG_USART0_SERIAL_CONSOLE=y    : Configure the console on USART0
@@ -1014,7 +1008,6 @@ Configuration sub-directories
        Device Drivers
          CONFIG_SPI=y                      : Enable SPI support
          CONFIG_SPI_EXCHANGE=y             : The exchange() method is supported
-         CONFIG_SPI_OWNBUS=y               : Smaller code if this is the only SPI device
          CONFIG_SPI_BITBANG=y              : Enable SPI bit-bang support
 
          CONFIG_MMCSD=y                    : Enable MMC/SD support
@@ -1051,7 +1044,6 @@ Configuration sub-directories
        Device Drivers
          CONFIG_SPI=y                      : Enable SPI support
          CONFIG_SPI_EXCHANGE=y             : The exchange() method is supported
-         CONFIG_SPI_OWNBUS=y               : Smaller code if this is the only SPI device
          CONFIG_SPI_BITBANG=y              : Enable SPI bit-bang support
 
          CONFIG_INPUT=y                    : Enable support for input devices
@@ -1059,7 +1051,7 @@ Configuration sub-directories
          CONFIG_ADS7843E_SPIDEV=0          : (Doesn't matter)
          CONFIG_ADS7843E_SPIMODE=0         : Use SPI mode 0
          CONFIG_ADS7843E_FREQUENCY=1000000 : SPI BAUD 1MHz
-         CONFIG_ADS7843E_SWAPXY=y          : If landscpe orientation
+         CONFIG_ADS7843E_SWAPXY=y          : If landscape orientation
          CONFIG_ADS7843E_THRESHX=51        : These will probably need to be tuned
          CONFIG_ADS7843E_THRESHY=39
 
@@ -1080,10 +1072,9 @@ Configuration sub-directories
        debug output on USART0 can be enabled with:
 
        Build Setup:
-         CONFIG_DEBUG=y                    : Enable debug features
-         CONFIG_DEBUG_VERBOSE=y            : Enable verbose debug output
+         CONFIG_DEBUG_FEATURES=y           : Enable debug features
+         CONFIG_DEBUG_INFO=y               : Enable verbose debug output
          CONFIG_DEBUG_INPUT=y              : Enable debug output from input devices
 
        STATUS:
        2013-7-2:  TSC is not responding.  All 0's received on SPI.
-

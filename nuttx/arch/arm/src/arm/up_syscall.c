@@ -1,7 +1,7 @@
 /****************************************************************************
  *  arch/arm/src/arm/up_syscall.c
  *
- *   Copyright (C) 2007-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,34 +42,10 @@
 #include <stdint.h>
 #include <debug.h>
 
+#include <arch/irq.h>
+
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/* Output debug info if stack dump is selected -- even if
- * debug is not selected.
- */
-
-#ifdef CONFIG_ARCH_STACKDUMP
-# undef  lldbg
-# define lldbg lowsyslog
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * vectors
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -79,8 +55,8 @@
  * Name: up_syscall
  *
  * Description:
- *   SWI interrupts will vection here with insn=the SWI
- *   instruction and xcp=the interrupt context
+ *   SWI interrupts will vector here with insn=the SWI instruction and
+ *   xcp=the interrupt context
  *
  *   The handler may get the SWI number be de-referencing
  *   the return address saved in the xcp and decoding
@@ -90,7 +66,7 @@
 
 void up_syscall(uint32_t *regs)
 {
-  lldbg("Syscall from 0x%x\n", regs[REG_PC]);
-  current_regs = regs;
+  _alert("Syscall from 0x%x\n", regs[REG_PC]);
+  CURRENT_REGS = regs;
   PANIC();
 }

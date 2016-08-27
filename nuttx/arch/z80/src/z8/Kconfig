@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 if ARCH_CHIP_Z8
@@ -10,12 +10,12 @@ if ARCH_CHIP_Z8
 config Z8_UART0
 	bool
 	default y
-	select ARCH_HAVE_UART0
+	select UART0_SERIALDRIVER
 
 config Z8_UART1
 	bool
 	default y
-	select ARCH_HAVE_UART1
+	select UART1_SERIALDRIVER
 
 # The ZiLOG ZDS-II Windows toolchain is the only toolchain available for
 # the ez80.
@@ -26,4 +26,15 @@ config Z8_TOOLCHAIN_ZDSII
 	default y if ARCH_CHIP_Z8
 	default n if !ARCH_CHIP_Z8
 
-endif
+choice
+	prompt "ZDS-II Toolchain version"
+	default EZ80_ZDSII_V521
+
+config Z8_ZDSII_V500
+	bool "ZDS-II 5.0.0"
+
+config Z8_ZDSII_V522
+	bool "ZDS-II 5.2.2"
+
+endchoice # ZDS-II Toolchain version
+endif # ARCH_CHIP_Z8

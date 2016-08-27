@@ -98,7 +98,7 @@ struct pmecc_desc_s
 {
   uint32_t pagesize;     /*   0-3: See HSMC_PMECCFG_PAGESIZE_* definitions */
   uint32_t sparesize;    /*   4-7: The spare area size is equal to (SPARESIZE+1) bytes */
-  uint32_t sectorsz;     /*  8-11: See HSMC_PMECCFG_SECTORSZ_* definitions*/
+  uint32_t sectorsz;     /*  8-11: See HSMC_PMECCFG_SECTORSZ_* definitions */
   uint32_t bcherr;       /* 12-15: See HSMC_PMECCFG_BCHERR_* definitions */
   uint32_t eccsize;      /* 16-19: Real size in bytes of ECC in spare */
   uint32_t eccstart;     /* 20-23: The first byte address of the ECC area */
@@ -440,13 +440,13 @@ static uint32_t pmecc_getsigma(void)
 
           /* Compute degree of the new smu polynomial */
 
-          if ((lmu[i]>>1) > ((lmu[ro]>>1) + diff))
+          if ((lmu[i] >> 1) > ((lmu[ro] >> 1) + diff))
             {
               lmu[i + 1] = lmu[i];
             }
           else
             {
-              lmu[i + 1] = ((lmu[ro]>>1) + diff) * 2;
+              lmu[i + 1] = ((lmu[ro] >> 1) + diff) * 2;
             }
 
           /* Init smu[i+1] with 0 */
@@ -458,7 +458,7 @@ static uint32_t pmecc_getsigma(void)
 
           /* Compute smu[i+1] */
 
-          for (k = 0; k <= lmu[ro]>>1; k ++)
+          for (k = 0; k <= lmu[ro] >> 1; k++)
             {
               if (g_pmecc.desc.smu[ro][k] && dmu[i])
                 {
@@ -469,7 +469,7 @@ static uint32_t pmecc_getsigma(void)
                 }
             }
 
-          for (k = 0; k <= lmu[i]>>1; k ++)
+          for (k = 0; k <= lmu[i] >> 1; k++)
             {
               g_pmecc.desc.smu[i+1][k] ^= g_pmecc.desc.smu[i][k];
             }
@@ -493,11 +493,11 @@ static uint32_t pmecc_getsigma(void)
 
               /* Check if one operand of the multiplier is null, its index is -1 */
 
-              else if (g_pmecc.desc.smu[i+1][k] && si[ 2 * (i - 1) + 3 - k])
+              else if (g_pmecc.desc.smu[i + 1][k] && si[2 * (i - 1) + 3 - k])
                 {
                   dmu[i + 1] =
-                    g_pmecc.desc.alphato[(g_pmecc.desc.indexof[g_pmecc.desc.smu[ i + 1 ][ k ]] +
-                    g_pmecc.desc.indexof[si[ 2 * (i - 1) + 3 - k]]) % g_pmecc.desc.nn] ^ dmu[ i + 1];
+                    g_pmecc.desc.alphato[(g_pmecc.desc.indexof[g_pmecc.desc.smu[i + 1][k]] +
+                    g_pmecc.desc.indexof[si[2 * (i - 1) + 3 - k]]) % g_pmecc.desc.nn] ^ dmu[i + 1];
                 }
             }
         }
@@ -632,27 +632,27 @@ static uint32_t pmecc_errorcorrection(uintptr_t sectorbase,
 
           if (bytepos < sectorsz + nand_getreg(SAM_HSMC_PMECCSADDR))
             {
-              fdbg("Correct error bit @[Byte %d, Bit %d]\n",
+              fwarn("WARNING: Correct error bit @[Byte %d, Bit %d]\n",
                       (int)bytepos, (int)bitpos);
 
-              if (*(uint8_t*)(sectorbase + bytepos) & (1 << bitpos))
+              if (*(uint8_t *)(sectorbase + bytepos) & (1 << bitpos))
                 {
-                  *(uint8_t*)(sectorbase + bytepos) &= (0xff ^ (1 << bitpos));
+                  *(uint8_t *)(sectorbase + bytepos) &= (0xff ^ (1 << bitpos));
                 }
               else
                 {
-                  *(uint8_t*)(sectorbase + bytepos) |= (1 << bitpos);
+                  *(uint8_t *)(sectorbase + bytepos) |= (1 << bitpos);
                 }
             }
           else
             {
-              if (*(uint8_t*)(sectorbase + bytepos + eccsize)& (1 << bitpos))
+              if (*(uint8_t *)(sectorbase + bytepos + eccsize) & (1 << bitpos))
                 {
-                  *(uint8_t*)(sectorbase + bytepos + eccsize) &= (0xff ^ (1 << bitpos));
+                  *(uint8_t *)(sectorbase + bytepos + eccsize) &= (0xff ^ (1 << bitpos));
                 }
               else
                 {
-                  *(uint8_t*)(sectorbase + bytepos + eccsize) |= (1 << bitpos);
+                  *(uint8_t *)(sectorbase + bytepos + eccsize) |= (1 << bitpos);
                 }
             }
         }
@@ -775,14 +775,14 @@ static int pmecc_bcherr512(uint8_t nsectors, uint16_t eccsize)
 
   /* 7-bytes per 512 byte sector are required correctability of 4 errors */
 
-  else if (eccsize >= (7 *(unsigned int) nsectors))
+  else if (eccsize >= (7 * (unsigned int) nsectors))
     {
       return BCH_ERR4;
     }
 
   /* 4-bytes per 512 byte sector are required correctability of 2 errors */
 
-  else if (eccsize >= (4 *(unsigned int) nsectors))
+  else if (eccsize >= (4 * (unsigned int) nsectors))
     {
       return BCH_ERR2;
     }
@@ -823,14 +823,14 @@ static int pmecc_bcherr1k(uint8_t nsectors, uint16_t eccsize)
 
   /* 7-bytes per 1024 byte sector are required correctability of 4 errors */
 
-  else if (eccsize >= (7 *(unsigned int) nsectors))
+  else if (eccsize >= (7 * (unsigned int) nsectors))
     {
       return BCH_ERR4;
     }
 
   /* 4-bytes per 1024 byte sector are required correctability of 2 errors */
 
-  else if (eccsize >= (4 *(unsigned int) nsectors))
+  else if (eccsize >= (4 * (unsigned int) nsectors))
     {
       return BCH_ERR2;
     }
@@ -858,7 +858,7 @@ static int pmecc_pagelayout(uint16_t datasize, uint16_t eccsize)
   int bcherr1k;
   int selector;
 
-  fvdbg("datasize=%d eccsize=%d\n", datasize, eccsize);
+  finfo("datasize=%d eccsize=%d\n", datasize, eccsize);
   DEBUGASSERT(datasize > 0 && eccsize > 0);
 
   /* Try for 512 byte sectors */
@@ -870,14 +870,14 @@ static int pmecc_pagelayout(uint16_t datasize, uint16_t eccsize)
   bcherr512   = pmecc_bcherr512(nsectors512, eccsize);
   if (bcherr512 < 0)
     {
-      fdbg("WARNING: Cannot realize 512B sectors\n");
+      fwarn("WARNING: Cannot realize 512B sectors\n");
     }
   else
     {
       selector = 1;
     }
 
-  fvdbg("nsectors512=%d bcherr512=%d selector=%d\n",
+  finfo("nsectors512=%d bcherr512=%d selector=%d\n",
         nsectors512, bcherr512, selector);
 
   /* Try for 1024 byte sectors */
@@ -895,14 +895,14 @@ static int pmecc_pagelayout(uint16_t datasize, uint16_t eccsize)
 
   if (bcherr1k < 0)
     {
-      fdbg("WARNING: Cannot realize 1KB sectors\n");
+      fwarn("WARNING: Cannot realize 1KB sectors\n");
     }
   else
     {
       selector |= 2;
     }
 
-  fvdbg("nsectors1k=%d bcherr1k=%d selector=%d\n",
+  finfo("nsectors1k=%d bcherr1k=%d selector=%d\n",
         nsectors1k, bcherr1k, selector);
 
   /* Now pick the best (most likely 1024) */
@@ -934,7 +934,9 @@ static int pmecc_pagelayout(uint16_t datasize, uint16_t eccsize)
               DEBUGASSERT(bcherr512 >= 0);
               break;
             }
-        } /* Otherwise, fall through for the 1KB sectors */
+        }
+
+      /* Otherwise, fall through for the 1KB sectors */
 
       case 2:  /* 512B sectors not possible; 1KB sectors possible */
         {
@@ -958,7 +960,7 @@ static int pmecc_pagelayout(uint16_t datasize, uint16_t eccsize)
 
   g_pmecc.desc.bcherr = ((uint32_t)bcherr << HSMC_PMECCFG_BCHERR_SHIFT);
 
-  fvdbg("sector1k=%d nsectors=%d bcherr=%d correctability=%d\n",
+  finfo("sector1k=%d nsectors=%d bcherr=%d correctability=%d\n",
         g_pmecc.sector1k, g_pmecc.nsectors, bcherr, g_pmecc.correctability);
 
   return OK;
@@ -1016,7 +1018,7 @@ int pmecc_configure(struct sam_nandcs_s *priv, bool protected)
   uint32_t regval;
   int ret;
 
-  fvdbg("protected=%d configured=%d\n", protected, g_pmecc.configured);
+  finfo("protected=%d configured=%d\n", protected, g_pmecc.configured);
 
   /* Check if we need to re-configure */
 
@@ -1028,7 +1030,7 @@ int pmecc_configure(struct sam_nandcs_s *priv, bool protected)
     {
       /* No, we are already configured */
 
-      fvdbg("Already configured\n");
+      finfo("Already configured\n");
       return OK;
     }
 
@@ -1057,7 +1059,7 @@ int pmecc_configure(struct sam_nandcs_s *priv, bool protected)
   ret = pmecc_pagelayout(priv->raw.model.pagesize, eccsize);
   if (ret < 0)
     {
-      fdbg("ERROR: pmecc_pagelayout failed: %d\n", ret);
+      ferr("ERROR: pmecc_pagelayout failed: %d\n", ret);
       return ret;
     }
 
@@ -1094,7 +1096,7 @@ int pmecc_configure(struct sam_nandcs_s *priv, bool protected)
 #endif
     }
 
-  fvdbg("sectorsz=%08x sectorsperpage=%d mm=%d\n",
+  finfo("sectorsz=%08x sectorsperpage=%d mm=%d\n",
         g_pmecc.desc.sectorsz, sectorsperpage, g_pmecc.desc.mm);
 
   switch (sectorsperpage)
@@ -1112,13 +1114,13 @@ int pmecc_configure(struct sam_nandcs_s *priv, bool protected)
           g_pmecc.desc.pagesize = HSMC_PMECCFG_PAGESIZE_8SEC;
           break;
       default:
-        fdbg("ERROR: Unsupported sectors per page: %d\n", sectorsperpage);
+        ferr("ERROR: Unsupported sectors per page: %d\n", sectorsperpage);
         return -EINVAL;
     }
 
   g_pmecc.desc.nn = (1 << g_pmecc.desc.mm) - 1;
 
-  fvdbg("pagesize=%08x nn=%d\n", g_pmecc.desc.pagesize, g_pmecc.desc.nn);
+  finfo("pagesize=%08x nn=%d\n", g_pmecc.desc.pagesize, g_pmecc.desc.nn);
 
   /* Real value of ECC bit number correction (2, 4, 8, 12, 24) */
 
@@ -1134,19 +1136,19 @@ int pmecc_configure(struct sam_nandcs_s *priv, bool protected)
         (((g_pmecc.desc.mm * g_pmecc.correctability) >> 3) + 1) * sectorsperpage;
     }
 
-  fvdbg("mm=%d correctability=%d eccsize=%d\n",
+  finfo("mm=%d correctability=%d eccsize=%d\n",
         g_pmecc.desc.mm, g_pmecc.correctability, g_pmecc.desc.eccsize);
 
   g_pmecc.desc.eccstart = eccoffset;
   g_pmecc.desc.eccend   = eccoffset + g_pmecc.desc.eccsize;
 
-  fvdbg("eccstart=%d eccend=%d sparesize=%d\n",
+  finfo("eccstart=%d eccend=%d sparesize=%d\n",
         g_pmecc.desc.eccstart, g_pmecc.desc.eccend,
         priv->raw.model.sparesize);
 
   if (g_pmecc.desc.eccend > priv->raw.model.sparesize)
     {
-      fdbg("ERROR: No room for ECC in spare bytes %d > %d\n",
+      ferr("ERROR: No room for ECC in spare bytes %d > %d\n",
            g_pmecc.desc.eccend, priv->raw.model.sparesize);
 
       return -ENOSPC;
@@ -1347,7 +1349,7 @@ uint32_t pmecc_get_pagesize(void)
  ****************************************************************************/
 
 #ifdef CONFIG_SAMA5_PMECC_GALOIS_CUSTOM
-void pmecc_buildgf(uint32_t mm, int16_t* indexof, int16_t* alphato)
+void pmecc_buildgf(uint32_t mm, int16_t *indexof, int16_t *alphato)
 {
   uint32_t i;
   uint32_t mask;
@@ -1440,8 +1442,8 @@ void pmecc_buildgf(uint32_t mm, int16_t* indexof, int16_t* alphato)
   /* Second
    *
    * Build elements from 0 to mm - 1.  Very easy because degree is less than
-    * mm so it is just a logical shift ! (only the remainder)
-    */
+   * mm so it is just a logical shift ! (only the remainder)
+   */
 
   mask = 1;
   for (i = 0; i < mm; i++)

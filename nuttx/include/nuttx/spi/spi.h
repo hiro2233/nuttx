@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/spi/spi.h
  *
- *   Copyright(C) 2008-2013 Gregory Nutt. All rights reserved.
+ *   Copyright(C) 2008-2013, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,20 +45,23 @@
 #include <sys/types.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <assert.h>
+#include <errno.h>
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
-/* CONFIG_SPI_OWNBUS - Set if there is only one active device on the SPI bus.
- *   No locking or SPI configuration will be performed. It is not necessary
- *   for clients to lock, re-configure, etc..
+/* These SPI configuration options affect the form of the SPI interface:
+ *
  * CONFIG_SPI_EXCHANGE - Driver supports a single exchange method
  *   (vs a recvblock() and sndblock ()methods).
  * CONFIG_SPI_CMDDATA - Devices on the SPI bus require out-of-band support
  *   to distinguish command transfers from data transfers.  Such devices
  *   will often support either 9-bit SPI (yech) or 8-bit SPI and a GPIO
  *   output that selects between command and data.
+ * CONFIG_SPI_HWFEATURES - Include an interface method to support special,
+ *   hardware-specific SPI features.
  */
 
 /* Access macros ************************************************************/
@@ -84,11 +87,7 @@
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
-#  define SPI_LOCK(d,l) (d)->ops->lock(d,l)
-#else
-#  define SPI_LOCK(d,l) 0
-#endif
+#define SPI_LOCK(d,l) (d)->ops->lock(d,l)
 
 /****************************************************************************
  * Name: SPI_SELECT
@@ -129,6 +128,28 @@
 #define SPI_SETFREQUENCY(d,f) ((d)->ops->setfrequency(d,f))
 
 /****************************************************************************
+ * Name: SPI_SETDELAY
+ *
+ * Description:
+ *   Set the SPI Delays in nanoseconds. Optional.
+ *
+ * Input Parameters:
+ *   dev        - Device-specific state data
+ *   startdelay - The delay between CS active and first CLK
+ *   stopdelay  - The delay between last CLK and CS inactive
+ *   csdelay    - The delay between CS inactive and CS active again
+ *
+ * Returned Value:
+ *   Returns zero (OK) on success; a negated errno value is return on any
+ *   failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SPI_CS_DELAY_CONTROL
+#  define SPI_SETDELAY(d,a,b,c) ((d)->ops->setdelay(d,a,b,c))
+#endif
+
+/****************************************************************************
  * Name: SPI_SETMODE
  *
  * Description:
@@ -154,9 +175,7 @@
  *
  * Input Parameters:
  *   dev -  Device-specific state data
- *   nbits - The number of bits requests.
- *           If value is greater > 0 then it implies MSB first
- *           If value is below < 0, then it implies LSB first with -nbits
+ *   nbits - The number of bits in an SPI word.
  *
  * Returned Value:
  *   none
@@ -165,6 +184,72 @@
 
 #define SPI_SETBITS(d,b) \
   do { if ((d)->ops->setbits) (d)->ops->setbits(d,b); } while (0)
+
+/****************************************************************************
+ * Name: SPI_HWFEATURES
+ *
+ * Description:
+ *   Set hardware-specific feature flags.
+ *
+ * Input Parameters:
+ *   dev      - Device-specific state data
+ *   features - H/W feature flags
+ *
+ * Returned Value:
+ *   Zero (OK) if the selected H/W features are enabled; A negated errno
+ *   value if any H/W feature is not supportable.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SPI_HWFEATURES
+  /* If there are multiple SPI drivers, some may not support hardware
+   * feature selection.
+   */
+
+#  define SPI_HWFEATURES(d,f) \
+  (((d)->ops->hwfeatures) ? (d)->ops->hwfeatures(d,f) : ((f) == 0 ? OK : -ENOSYS))
+
+  /* These are currently defined feature flags:
+   *
+   *   Bit 0: HWFEAT_CRCGENERATION
+   *          Hardware CRC generation
+   *   Bit 1: HWFEAT_FORCE_CS_INACTIVE_AFTER_TRANSFER
+   *          CS rises after every Transmission, also if we provide new data
+   *          immediately
+   *   Bit 2: HWFEAT_FORCE_CS_ACTIVE_AFTER_TRANSFER
+   *          CS does not rise automatically after a transmission, also if
+   *          the spi runs out of data (for a long time)
+   *   Bit 3: HWFEAT_ESCAPE_LASTXFER
+   *          Do not set the LASTXFER-Bit at the last word of the next
+   *          exchange, Flag is auto-resetting after the next LASTXFER
+   *          condition. (see spi_exchange)
+   *   Bit 4: HWFEAT_LSBFIRST
+   *          Data transferred LSB first (default is MSB first)
+   */
+
+#  ifdef CONFIG_SPI_CRCGENERATION
+#    define HWFEAT_CRCGENERATION                     (1 << 0)
+#  endif
+
+#  ifdef CONFIG_SPI_CS_CONTROL
+#    define HWFEAT_FORCE_CS_CONTROL_MASK             (7 << 1)
+#    define HWFEAT_FORCE_CS_INACTIVE_AFTER_TRANSFER  (1 << 1)
+#    define HWFEAT_FORCE_CS_ACTIVE_AFTER_TRANSFER    (1 << 2)
+#    define HWFEAT_ESCAPE_LASTXFER                   (1 << 3)
+#  endif
+
+#  ifdef CONFIG_SPI_BITORDER
+#    define HWFEAT_MSBFIRST                          (0 << 4)
+#    define HWFEAT_LSBFIRST                          (1 << 4)
+#  endif
+
+#else
+  /* Any attempt to select hardware features with CONFIG_SPI_HWFEATURES
+   * deselected will return an -ENOSYS error.
+   */
+
+#  define SPI_HWFEATURES(d,f) (((f) == 0) ? OK : -ENOSYS)
+#endif
 
 /****************************************************************************
  * Name: SPI_STATUS
@@ -271,7 +356,7 @@
  *
  * Input Parameters:
  *   dev -    Device-specific state data
- *   buffer - A pointer to the buffer in which to recieve data
+ *   buffer - A pointer to the buffer in which to receive data
  *   nwords - the length of data that can be received in the buffer in number
  *            of words.  The wordsize is determined by the number of bits-
  *            per-word selected for the SPI interface.  If nbits <= 8, the
@@ -298,7 +383,7 @@
  * Input Parameters:
  *   dev      - Device-specific state data
  *   txbuffer - A pointer to the buffer of data to be sent
- *   rxbuffer - A pointer to the buffer in which to recieve data
+ *   rxbuffer - A pointer to the buffer in which to receive data
  *   nwords   - the length of data that to be exchanged in units of words.
  *              The wordsize is determined by the number of bits-per-word
  *              selected for the SPI interface.  If nbits <= 8, the data is
@@ -324,7 +409,7 @@
  *
  * Input Parameters:
  *   dev -      Device-specific state data
- *   callback - The funtion to call on the media change
+ *   callback - The function to call on the media change
  *   arg -      A caller provided value to return with the callback
  *
  * Returned Value:
@@ -344,64 +429,84 @@
 typedef void (*spi_mediachange_t)(FAR void *arg);
 
 /* If the board supports multiple SPI devices, this enumeration identifies
- * which is selected or de-seleted.
+ * which is selected or de-selected.
  */
 
 enum spi_dev_e
 {
-  SPIDEV_NONE = 0,    /* Not a valid value */
-  SPIDEV_MMCSD,       /* Select SPI MMC/SD device */
-  SPIDEV_FLASH,       /* Select SPI FLASH device */
-  SPIDEV_ETHERNET,    /* Select SPI ethernet device */
-  SPIDEV_DISPLAY,     /* Select SPI LCD/OLED display device */
-  SPIDEV_CAMERA,      /* Select SPI imaging device */
-  SPIDEV_WIRELESS,    /* Select SPI Wireless device */
-  SPIDEV_TOUCHSCREEN, /* Select SPI touchscreen device */
-  SPIDEV_EXPANDER,    /* Select SPI I/O expander device */
-  SPIDEV_MUX,         /* Select SPI multiplexer device */
-  SPIDEV_AUDIO_DATA,  /* Select SPI audio codec device data port */
-  SPIDEV_AUDIO_CTRL   /* Select SPI audio codec device control port */
+  SPIDEV_NONE = 0,      /* Not a valid value */
+  SPIDEV_MMCSD,         /* Select SPI MMC/SD device */
+  SPIDEV_FLASH,         /* Select SPI FLASH device */
+  SPIDEV_ETHERNET,      /* Select SPI Ethernet device */
+  SPIDEV_DISPLAY,       /* Select SPI LCD/OLED display device */
+  SPIDEV_CAMERA,        /* Select SPI imaging device */
+  SPIDEV_WIRELESS,      /* Select SPI Wireless device */
+  SPIDEV_TOUCHSCREEN,   /* Select SPI touchscreen device */
+  SPIDEV_EXPANDER,      /* Select SPI I/O expander device */
+  SPIDEV_MUX,           /* Select SPI multiplexer device */
+  SPIDEV_AUDIO_DATA,    /* Select SPI audio codec device data port */
+  SPIDEV_AUDIO_CTRL,    /* Select SPI audio codec device control port */
+  SPIDEV_EEPROM,        /* Select SPI EEPROM device */
+  SPIDEV_ACCELEROMETER, /* Select SPI Accelerometer device */
+  SPIDEV_BAROMETER,     /* Select SPI Pressure/Barometer device */
+  SPIDEV_TEMPERATURE,   /* Select SPI Temperature sensor device */
+  SPIDEV_IEEE802154,    /* Select SPI IEEE 802.15.4 wireless device */
+  SPIDEV_USER           /* Board-specific values start here */
 };
 
-/* Certain SPI devices may required differnt clocking modes */
+/* Certain SPI devices may required different clocking modes */
 
 enum spi_mode_e
 {
-  SPIDEV_MODE0 = 0,   /* CPOL=0 CHPHA=0 */
-  SPIDEV_MODE1,       /* CPOL=0 CHPHA=1 */
-  SPIDEV_MODE2,       /* CPOL=1 CHPHA=0 */
-  SPIDEV_MODE3        /* CPOL=1 CHPHA=1 */
+  SPIDEV_MODE0 = 0,     /* CPOL=0 CHPHA=0 */
+  SPIDEV_MODE1,         /* CPOL=0 CHPHA=1 */
+  SPIDEV_MODE2,         /* CPOL=1 CHPHA=0 */
+  SPIDEV_MODE3          /* CPOL=1 CHPHA=1 */
 };
+
+#ifdef CONFIG_SPI_HWFEATURES
+/* This is a type wide enough to support all hardware features */
+
+typedef uint8_t spi_hwfeatures_t;
+#endif
 
 /* The SPI vtable */
 
 struct spi_dev_s;
 struct spi_ops_s
 {
-#ifndef CONFIG_SPI_OWNBUS
-  int      (*lock)(FAR struct spi_dev_s *dev, bool lock);
+  CODE int      (*lock)(FAR struct spi_dev_s *dev, bool lock);
+  CODE void     (*select)(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
+                  bool selected);
+  CODE uint32_t (*setfrequency)(FAR struct spi_dev_s *dev, uint32_t frequency);
+#ifdef CONFIG_SPI_CS_DELAY_CONTROL
+  CODE int      (*setdelay)(FAR struct spi_dev_s *dev, uint32_t a, uint32_t b,
+                  uint32_t c);
 #endif
-  void     (*select)(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
-                     bool selected);
-  uint32_t (*setfrequency)(FAR struct spi_dev_s *dev, uint32_t frequency);
-  void     (*setmode)(FAR struct spi_dev_s *dev, enum spi_mode_e mode);
-  void     (*setbits)(FAR struct spi_dev_s *dev, int nbits);
-  uint8_t  (*status)(FAR struct spi_dev_s *dev, enum spi_dev_e devid);
+  CODE void     (*setmode)(FAR struct spi_dev_s *dev, enum spi_mode_e mode);
+  CODE void     (*setbits)(FAR struct spi_dev_s *dev, int nbits);
+#ifdef CONFIG_SPI_HWFEATURES
+  CODE int      (*hwfeatures)(FAR struct spi_dev_s *dev,
+                  spi_hwfeatures_t features);
+#endif
+  CODE uint8_t  (*status)(FAR struct spi_dev_s *dev, enum spi_dev_e devid);
 #ifdef CONFIG_SPI_CMDDATA
-  int      (*cmddata)(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool cmd);
+  CODE int      (*cmddata)(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
+                  bool cmd);
 #endif
-  uint16_t (*send)(FAR struct spi_dev_s *dev, uint16_t wd);
+  CODE uint16_t (*send)(FAR struct spi_dev_s *dev, uint16_t wd);
 #ifdef CONFIG_SPI_EXCHANGE
-  void     (*exchange)(FAR struct spi_dev_s *dev, FAR const void *txbuffer,
-                       FAR void *rxbuffer, size_t nwords);
+  CODE void     (*exchange)(FAR struct spi_dev_s *dev,
+                  FAR const void *txbuffer, FAR void *rxbuffer,
+                  size_t nwords);
 #else
-  void     (*sndblock)(FAR struct spi_dev_s *dev, FAR const void *buffer,
-                       size_t nwords);
-  void     (*recvblock)(FAR struct spi_dev_s *dev, FAR void *buffer,
-                        size_t nwords);
+  CODE void     (*sndblock)(FAR struct spi_dev_s *dev,
+                  FAR const void *buffer, size_t nwords);
+  CODE void     (*recvblock)(FAR struct spi_dev_s *dev, FAR void *buffer,
+                  size_t nwords);
 #endif
-  int     (*registercallback)(FAR struct spi_dev_s *dev, spi_mediachange_t callback,
-                              void *arg);
+  CODE int      (*registercallback)(FAR struct spi_dev_s *dev,
+                  spi_mediachange_t callback, void *arg);
 };
 
 /* SPI private data.  This structure only defines the initial fields of the
@@ -426,42 +531,6 @@ extern "C"
 #else
 #define EXTERN extern
 #endif
-
-/****************************************************************************
- * Name: up_spiinitialize
- *
- * Description:
- *   Initialize the selected SPI port.
- *
- *   This is a generic prototype for the SPI initialize logic.  Specific
- *   architectures may support different SPI initialization functions if,
- *   for example, those architectures support multiple, incompatible SPI
- *   implementations.  In any event, the prototype of those architecture-
- *   specific initialization functions should be the same as
- *   up_spiinitialize()
- *
- *   As an example, the LPC17xx family supports an SPI block and several SSP
- *   blocks that may be programmed to support the SPI function.  In this
- *   case, the LPC17xx architecture supports these two initialization
- *   functions:
- *
- *     FAR struct spi_dev_s *lpc17_spiinitialize(int port);
- *     FAR struct spi_dev_s *lpc17_sspinitialize(int port);
- *
- *   Another example would be the STM32 families that support both SPI
- *   blocks as well as USARTs that can be configured to perform the SPI
- *   function as well (the STM32 USARTs do not suppor SPI as of this
- *   writing).
- *
- * Input Parameter:
- *   Port number (for hardware that has mutiple SPI interfaces)
- *
- * Returned Value:
- *   Valid SPI device structure reference on succcess; a NULL on failure
- *
- ****************************************************************************/
-
-FAR struct spi_dev_s *up_spiinitialize(int port);
 
 #undef EXTERN
 #if defined(__cplusplus)

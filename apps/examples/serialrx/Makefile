@@ -33,32 +33,16 @@
 #
 ############################################################################
 
--include $(TOPDIR)/.config
 -include $(TOPDIR)/Make.defs
-include $(APPDIR)/Make.defs
 
 # For testing: Blast canned characters at a designated serial port
 
 ASRCS =
-CSRCS = serialrx_main.c
+CSRCS =
+MAINSRC = serialrx_main.c
 
-AOBJS = $(ASRCS:.S=$(OBJEXT))
-COBJS = $(CSRCS:.c=$(OBJEXT))
-
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-ifeq ($(CONFIG_WINDOWS_NATIVE),y)
-  BIN = ..\..\libapps$(LIBEXT)
-else
-ifeq ($(WINTOOL),y)
-  BIN = ..\\..\\libapps$(LIBEXT)
-else
-  BIN = ../../libapps$(LIBEXT)
-endif
-endif
-
-ROOTDEPPATH = --dep-path .
+CONFIG_XYZ_PROGNAME ?= serialrx$(EXEEXT)
+PROGNAME = $(CONFIG_XYZ_PROGNAME)
 
 # Built-in application info
 
@@ -69,44 +53,4 @@ APPNAME = serialrx
 PRIORITY = $(CONFIG_EXAMPLES_SERIALRX_PRIORITY)
 STACKSIZE = $(CONFIG_EXAMPLES_SERIALRX_STACKSIZE)
 
-# Common build
-
-VPATH = 
-
-all: .built
-.PHONY: clean depend distclean
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-.built: $(OBJS)
-	$(call ARCHIVE, $(BIN), $(OBJS))
-	@touch .built
-
-ifeq ($(CONFIG_NSH_BUILTIN_APPS),y)
-$(BUILTIN_REGISTRY)$(DELIM)$(APPNAME)_main.bdat: $(DEPCONFIG) Makefile
-	$(call REGISTER,$(APPNAME),$(PRIORITY),$(STACKSIZE),$(APPNAME)_main)
-
-context: $(BUILTIN_REGISTRY)$(DELIM)$(APPNAME)_main.bdat
-else
-context:
-endif
-
-.depend: Makefile $(SRCS)
-	@$(MKDEP) $(ROOTDEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make.dep
-	@touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, .built)
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(APPDIR)/Application.mk

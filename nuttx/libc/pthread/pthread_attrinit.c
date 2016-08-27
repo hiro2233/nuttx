@@ -47,34 +47,19 @@
 #include <nuttx/pthread.h>
 
 /****************************************************************************
- * Definitions
+ * Public Data
  ****************************************************************************/
 
-/****************************************************************************
- * Private Type Declarations
- ****************************************************************************/
-
-/****************************************************************************
- * Global Variables
- ****************************************************************************/
-
-/* Default pthread attributes (see included/nuttx/pthread.h).  When configured
+/* Default pthread attributes (see include/nuttx/pthread.h).  When configured
  * to build separate kernel- and user-address spaces, this global is
  * duplicated in each address spaced.  This copy can only be shared within
  * the user address space.
  */
 
-#if defined(CONFIG_NUTTX_KERNEL) && !defined(__KERNEL__)
-pthread_attr_t g_default_pthread_attr = PTHREAD_ATTR_INITIALIZER;
+#if (defined(CONFIG_BUILD_PROTECTED) || defined(CONFIG_BUILD_KERNEL)) && \
+    !defined(__KERNEL__)
+const pthread_attr_t g_default_pthread_attr = PTHREAD_ATTR_INITIALIZER;
 #endif
-
-/****************************************************************************
- * Private Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -102,7 +87,7 @@ int pthread_attr_init(FAR pthread_attr_t *attr)
 {
   int ret = OK;
 
-  sdbg("attr=0x%p\n", attr);
+  linfo("attr=0x%p\n", attr);
   if (!attr)
     {
       ret = ENOMEM;
@@ -117,7 +102,7 @@ int pthread_attr_init(FAR pthread_attr_t *attr)
       memcpy(attr, &g_default_pthread_attr, sizeof(pthread_attr_t));
     }
 
-  sdbg("Returning %d\n", ret);
+  linfo("Returning %d\n", ret);
   return ret;
 }
 

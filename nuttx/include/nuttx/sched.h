@@ -1,7 +1,7 @@
 /********************************************************************************
  * include/nuttx/sched.h
  *
- *   Copyright (C) 2007-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,9 +51,14 @@
 #include <mqueue.h>
 #include <time.h>
 
+#include <nuttx/clock.h>
 #include <nuttx/irq.h>
+#include <nuttx/wdog.h>
+#include <nuttx/mm/shm.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/net/net.h>
+
+#include <arch/arch.h>
 
 /********************************************************************************
  * Pre-processor Definitions
@@ -99,6 +104,10 @@
 #    define HAVE_TASK_GROUP   1          /* Sockets */
 #  elif !defined(CONFIG_DISABLE_MQUEUE)
 #    define HAVE_TASK_GROUP   1          /* Message queues */
+#  elif defined(CONFIG_ARCH_ADDRENV)
+#    define HAVE_TASK_GROUP   1          /* Address environment */
+#  elif defined(CONFIG_MM_SHM)
+#    define HAVE_TASK_GROUP   1          /* Shared memory */
 #  endif
 #endif
 
@@ -108,7 +117,17 @@
 #  undef HAVE_GROUP_MEMBERS
 #endif
 
+/* Sporadic scheduling */
+
+#ifndef CONFIG_SCHED_SPORADIC_MAXREPL
+#  define CONFIG_SCHED_SPORADIC_MAXREPL 3
+#endif
+
 /* Task Management Definitions **************************************************/
+/* Special task IDS.  Any negative PID is invalid. */
+
+#define NULL_TASK_PROCESS_ID       (pid_t)0
+#define INVALID_PROCESS_ID         (pid_t)-1
 
 /* This is the maximum number of times that a lock can be set */
 
@@ -118,17 +137,28 @@
 
 #define TCB_FLAG_TTYPE_SHIFT       (0)      /* Bits 0-1: thread type */
 #define TCB_FLAG_TTYPE_MASK        (3 << TCB_FLAG_TTYPE_SHIFT)
-#  define TCB_FLAG_TTYPE_TASK      (0 << TCB_FLAG_TTYPE_SHIFT) /* Normal user task */
-#  define TCB_FLAG_TTYPE_PTHREAD   (1 << TCB_FLAG_TTYPE_SHIFT) /* User pthread */
-#  define TCB_FLAG_TTYPE_KERNEL    (2 << TCB_FLAG_TTYPE_SHIFT) /* Kernel thread */
+#  define TCB_FLAG_TTYPE_TASK      (0 << TCB_FLAG_TTYPE_SHIFT)  /* Normal user task */
+#  define TCB_FLAG_TTYPE_PTHREAD   (1 << TCB_FLAG_TTYPE_SHIFT)  /* User pthread */
+#  define TCB_FLAG_TTYPE_KERNEL    (2 << TCB_FLAG_TTYPE_SHIFT)  /* Kernel thread */
 #define TCB_FLAG_NONCANCELABLE     (1 << 2) /* Bit 2: Pthread is non-cancelable */
 #define TCB_FLAG_CANCEL_PENDING    (1 << 3) /* Bit 3: Pthread cancel is pending */
-#define TCB_FLAG_ROUND_ROBIN       (1 << 4) /* Bit 4: Round robin sched enabled */
-#define TCB_FLAG_EXIT_PROCESSING   (1 << 5) /* Bit 5: Exitting */
+#define TCB_FLAG_POLICY_SHIFT      (4) /* Bit 4-5: Scheduling policy */
+#define TCB_FLAG_POLICY_MASK       (3 << TCB_FLAG_POLICY_SHIFT)
+#  define TCB_FLAG_SCHED_FIFO      (0 << TCB_FLAG_POLICY_SHIFT) /* FIFO scheding policy */
+#  define TCB_FLAG_SCHED_RR        (1 << TCB_FLAG_POLICY_SHIFT) /* Round robin scheding policy */
+#  define TCB_FLAG_SCHED_SPORADIC  (2 << TCB_FLAG_POLICY_SHIFT) /* Sporadic scheding policy */
+#  define TCB_FLAG_SCHED_OTHER     (3 << TCB_FLAG_POLICY_SHIFT) /* Other scheding policy */
+#define TCB_FLAG_CPU_LOCKED        (1 << 6) /* Bit 6: Locked to this CPU */
+#define TCB_FLAG_EXIT_PROCESSING   (1 << 7) /* Bit 7: Exitting */
+                                            /* Bits 8-15: Available */
 
 /* Values for struct task_group tg_flags */
 
 #define GROUP_FLAG_NOCLDWAIT       (1 << 0) /* Bit 0: Do not retain child exit status */
+#define GROUP_FLAG_ADDRENV         (1 << 1) /* Bit 1: Group has an address environment */
+#define GROUP_FLAG_PRIVILEGED      (1 << 2) /* Bit 2: Group is privileged */
+#define GROUP_FLAG_DELETED         (1 << 3) /* Bit 3: Group has been deleted but not yet freed */
+                                            /* Bits 4-7: Available */
 
 /* Values for struct child_status_s ch_flags */
 
@@ -138,6 +168,14 @@
 #  define CHILD_FLAG_TTYPE_PTHREAD (1 << CHILD_FLAG_TTYPE_SHIFT) /* User pthread */
 #  define CHILD_FLAG_TTYPE_KERNEL  (2 << CHILD_FLAG_TTYPE_SHIFT) /* Kernel thread */
 #define CHILD_FLAG_EXITED          (1 << 0) /* Bit 2: The child thread has exit'ed */
+                                            /* Bits 3-7: Available */
+
+/* Sporadic scheduler flags */
+
+#define SPORADIC_FLAG_ALLOCED      (1 << 0)  /* Bit 0: Timer is allocated */
+#define SPORADIC_FLAG_MAIN         (1 << 1)  /* Bit 1: The main timer */
+#define SPORADIC_FLAG_REPLENISH    (1 << 2)  /* Bit 2: Replenishment cycle */
+                                             /* Bits 3-7: Available */
 
 /********************************************************************************
  * Public Type Definitions
@@ -157,6 +195,9 @@ enum tstate_e
   TSTATE_TASK_INVALID    = 0, /* INVALID      - The TCB is uninitialized */
   TSTATE_TASK_PENDING,        /* READY_TO_RUN - Pending preemption unlock */
   TSTATE_TASK_READYTORUN,     /* READY-TO-RUN - But not running */
+#ifdef CONFIG_SMP
+  TSTATE_TASK_ASSIGNED,       /* READY-TO-RUN - Not running, but assigned to a CPU */
+#endif
   TSTATE_TASK_RUNNING,        /* READY_TO_RUN - And running */
 
   TSTATE_TASK_INACTIVE,       /* BLOCKED      - Initialized but not yet activated */
@@ -175,12 +216,16 @@ enum tstate_e
 };
 typedef enum tstate_e tstate_t;
 
-/* The following definitions are determined by tstate_t */
+/* The following definitions are determined by tstate_t.  Ordering of values
+ * in the enumeration is important!
+ */
 
-#define FIRST_READY_TO_RUN_STATE TSTATE_TASK_READYTORUN
-#define LAST_READY_TO_RUN_STATE  TSTATE_TASK_RUNNING
-#define FIRST_BLOCKED_STATE      TSTATE_TASK_INACTIVE
-#define LAST_BLOCKED_STATE       (NUM_TASK_STATES-1)
+#define FIRST_READY_TO_RUN_STATE   TSTATE_TASK_READYTORUN
+#define LAST_READY_TO_RUN_STATE    TSTATE_TASK_RUNNING
+#define FIRST_ASSIGNED_STATE       TSTATE_TASK_ASSIGNED
+#define LAST_ASSIGNED_STATE        TSTATE_TASK_RUNNING
+#define FIRST_BLOCKED_STATE        TSTATE_TASK_INACTIVE
+#define LAST_BLOCKED_STATE         (NUM_TASK_STATES-1)
 
 /* The following is the form of a thread start-up function */
 
@@ -215,14 +260,55 @@ typedef CODE void (*atexitfunc_t)(void);
 typedef CODE void (*onexitfunc_t)(int exitcode, FAR void *arg);
 #endif
 
-/* POSIX Message queue */
+/* struct sporadic_s *************************************************************/
 
-typedef struct msgq_s msgq_t;
+#ifdef CONFIG_SCHED_SPORADIC
+
+/* This structure represents oen replenishment interval.  This is what is
+ * received by each timeout handler.
+ */
+
+struct sporadic_s;
+struct replenishment_s
+{
+  FAR struct tcb_s *tcb;            /* The parent TCB structure                 */
+  struct wdog_s timer;              /* Timer dedicated to this interval         */
+  uint32_t budget;                  /* Current budget time                      */
+  uint8_t  flags;                   /* See SPORADIC_FLAG_* definitions          */
+};
+
+/* This structure is an allocated "plug-in" to the main TCB structure.  It is
+ * allocated when the sporadic scheduling policy is assigned to a thread.  Thus,
+ * in the context of numerous threads of varying policies, there the overhead
+ * from this significant allocation is only borne by the threads with the
+ * sporadic scheduling policy.
+ */
+
+struct sporadic_s
+{
+  bool      suspended;              /* Thread is currently suspended            */
+  uint8_t   hi_priority;            /* Sporadic high priority                   */
+  uint8_t   low_priority;           /* Sporadic low priority                    */
+  uint8_t   max_repl;               /* Maximum number of replenishments         */
+  uint8_t   nrepls;                 /* Number of active replenishments          */
+  uint32_t  repl_period;            /* Sporadic replenishment period            */
+  uint32_t  budget;                 /* Sporadic execution budget period         */
+  systime_t eventtime;              /* Time thread suspended or [re-]started    */
+
+  /* This is the last interval timer activated */
+
+  FAR struct replenishment_s *active;
+
+  /* This is the list of replenishment interval timers */
+
+  struct replenishment_s replenishments[CONFIG_SCHED_SPORADIC_MAXREPL];
+};
+
+#endif /* CONFIG_SCHED_SPORADIC */
 
 /* struct child_status_s *********************************************************/
-/* This structure is used to maintin information about child tasks.
- * pthreads work differently, they have join information.  This is
- * only for child tasks.
+/* This structure is used to maintain information about child tasks.  pthreads
+ * work differently, they have join information.  This is only for child tasks.
  */
 
 #ifdef CONFIG_SCHED_CHILD_STATUS
@@ -230,9 +316,9 @@ struct child_status_s
 {
   FAR struct child_status_s *flink;
 
-  uint8_t ch_flags;           /* Child status:  See CHILD_FLAG_* definitions */
-  pid_t   ch_pid;             /* Child task ID */
-  int     ch_status;          /* Child exit status */
+  uint8_t ch_flags;                 /* Child status:  See CHILD_FLAG_* defns     */
+  pid_t   ch_pid;                   /* Child task ID                             */
+  int     ch_status;                /* Child exit status                         */
 };
 #endif
 
@@ -254,8 +340,8 @@ struct dspace_s
   uint16_t crefs;
 
   /* This is the allocated D-Space memory region.  This may be a physical
-   * address allocated with kmalloc(), or it may be virtual address associated
-   * with an address environment (if CONFIG_ADDRENV=y).
+   * address allocated with kmm_malloc(), or it may be virtual address associated
+   * with an address environment (if CONFIG_ARCH_ADDRENV=y).
    */
 
   FAR uint8_t *region;
@@ -264,25 +350,24 @@ struct dspace_s
 
 /* struct task_group_s ***********************************************************/
 /* All threads created by pthread_create belong in the same task group (along with
- * the thread of the original task).  struct task_group_s is a shared, "breakaway"
- * structure referenced by each TCB.
+ * the thread of the original task).  struct task_group_s is a shared structure
+ * referenced by the TCB of each thread that is a member of the task group.
  *
  * This structure should contain *all* resources shared by tasks and threads that
  * belong to the same task group:
  *
  *   Child exit status
- *   Environment varibles
+ *   Environment variables
  *   PIC data space and address environments
  *   File descriptors
  *   FILE streams
  *   Sockets
- *
- * Currenty, however, this implementation only applies to child exit status.
+ *   Address environments.
  *
  * Each instance of struct task_group_s is reference counted. Each instance is
- * created with a reference count of one.  The reference incremeneted when each
+ * created with a reference count of one.  The reference incremented when each
  * thread joins the group and decremented when each thread exits, leaving the
- * group.  When the refernce count decrements to zero, the struc task_group_s
+ * group.  When the reference count decrements to zero, the struct task_group_s
  * is free.
  */
 
@@ -290,14 +375,16 @@ struct dspace_s
 
 #ifndef CONFIG_DISABLE_PTHREAD
 struct join_s;                      /* Forward reference                        */
-                                    /* Defined in pthread_internal.h            */
+                                    /* Defined in sched/pthread/pthread.h       */
 #endif
 
 struct task_group_s
 {
-#ifdef HAVE_GROUP_MEMBERS
+#if defined(HAVE_GROUP_MEMBERS) || defined(CONFIG_ARCH_ADDRENV)
   struct task_group_s *flink;       /* Supports a singly linked list            */
   gid_t tg_gid;                     /* The ID of this task group                */
+#endif
+#ifdef HAVE_GROUP_MEMBERS
   gid_t tg_pgid;                    /* The ID of the parent task group          */
 #endif
 #if !defined(CONFIG_DISABLE_PTHREAD) && defined(CONFIG_SCHED_HAVE_PARENT)
@@ -313,9 +400,9 @@ struct task_group_s
   FAR pid_t *tg_members;            /* Members of the group                     */
 #endif
 
-  /* atexit/on_exit support ****************************************************/
-
 #if defined(CONFIG_SCHED_ATEXIT) && !defined(CONFIG_SCHED_ONEXIT)
+  /* atexit support ************************************************************/
+
 # if defined(CONFIG_SCHED_ATEXIT_MAX) && CONFIG_SCHED_ATEXIT_MAX > 1
   atexitfunc_t tg_atexitfunc[CONFIG_SCHED_ATEXIT_MAX];
 # else
@@ -324,6 +411,8 @@ struct task_group_s
 #endif
 
 #ifdef CONFIG_SCHED_ONEXIT
+  /* on_exit support ***********************************************************/
+
 # if defined(CONFIG_SCHED_ONEXIT_MAX) && CONFIG_SCHED_ONEXIT_MAX > 1
   onexitfunc_t tg_onexitfunc[CONFIG_SCHED_ONEXIT_MAX];
   FAR void *tg_onexitarg[CONFIG_SCHED_ONEXIT_MAX];
@@ -333,23 +422,23 @@ struct task_group_s
 # endif
 #endif
 
+#if defined(CONFIG_SCHED_HAVE_PARENT) && defined(CONFIG_SCHED_CHILD_STATUS)
   /* Child exit status **********************************************************/
 
-#if defined(CONFIG_SCHED_HAVE_PARENT) && defined(CONFIG_SCHED_CHILD_STATUS)
   FAR struct child_status_s *tg_children; /* Head of a list of child status     */
 #endif
 
+#if defined(CONFIG_SCHED_WAITPID) && !defined(CONFIG_SCHED_HAVE_PARENT)
   /* waitpid support ************************************************************/
   /* Simple mechanism used only when there is no support for SIGCHLD            */
 
-#if defined(CONFIG_SCHED_WAITPID) && !defined(CONFIG_SCHED_HAVE_PARENT)
+  uint8_t tg_nwaiters;              /* Number of waiters                        */
   sem_t tg_exitsem;                 /* Support for waitpid                      */
   int *tg_statloc;                  /* Location to return exit status           */
 #endif
 
-  /* Pthreads *******************************************************************/
-
 #ifndef CONFIG_DISABLE_PTHREAD
+  /* Pthreads *******************************************************************/
                                     /* Pthread join Info:                       */
   sem_t tg_joinsem;                 /*   Mutually exclusive access to join data */
   FAR struct join_s *tg_joinhead;   /*   Head of a list of join data            */
@@ -357,15 +446,16 @@ struct task_group_s
   uint8_t tg_nkeys;                 /* Number pthread keys allocated            */
 #endif
 
+#ifndef CONFIG_DISABLE_SIGNALS
   /* POSIX Signal Control Fields ************************************************/
 
-#ifndef CONFIG_DISABLE_SIGNALS
-  sq_queue_t sigpendingq;           /* List of pending signals                  */
+  sq_queue_t tg_sigactionq;         /* List of actions for signals              */
+  sq_queue_t tg_sigpendingq;        /* List of pending signals                  */
 #endif
 
+#ifndef CONFIG_DISABLE_ENVIRON
   /* Environment variables ******************************************************/
 
-#ifndef CONFIG_DISABLE_ENVIRON
   size_t     tg_envsize;            /* Size of environment string allocation    */
   FAR char  *tg_envp;               /* Allocated environment strings            */
 #endif
@@ -376,35 +466,49 @@ struct task_group_s
    * life of the PIC data is managed.
    */
 
+#if CONFIG_NFILE_DESCRIPTORS > 0
   /* File descriptors ***********************************************************/
 
-#if CONFIG_NFILE_DESCRIPTORS > 0
   struct filelist tg_filelist;      /* Maps file descriptor to file             */
 #endif
 
+#if CONFIG_NFILE_STREAMS > 0
   /* FILE streams ***************************************************************/
   /* In a flat, single-heap build.  The stream list is allocated with this
    * structure.  But kernel mode with a kernel allocator, it must be separately
    * allocated using a user-space allocator.
    */
 
-#if CONFIG_NFILE_STREAMS > 0
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#if (defined(CONFIG_BUILD_PROTECTED) || defined(CONFIG_BUILD_KERNEL)) && \
+     defined(CONFIG_MM_KERNEL_HEAP)
   FAR struct streamlist *tg_streamlist;
 #else
   struct streamlist tg_streamlist;  /* Holds C buffered I/O info                */
 #endif
 #endif
 
+#if CONFIG_NSOCKET_DESCRIPTORS > 0
   /* Sockets ********************************************************************/
 
-#if CONFIG_NSOCKET_DESCRIPTORS > 0
   struct socketlist tg_socketlist;  /* Maps socket descriptor to socket         */
 #endif
-  /* POSIX Named Message Queue Fields *******************************************/
 
 #ifndef CONFIG_DISABLE_MQUEUE
+  /* POSIX Named Message Queue Fields *******************************************/
+
   sq_queue_t tg_msgdesq;            /* List of opened message queues           */
+#endif
+
+#ifdef CONFIG_ARCH_ADDRENV
+  /* Address Environment ********************************************************/
+
+  group_addrenv_t tg_addrenv;       /* Task group address environment           */
+#endif
+
+#ifdef CONFIG_MM_SHM
+  /* Shared Memory **************************************************************/
+
+  struct group_shm_s tg_shm;        /* Task shared memory logic                 */
 #endif
 };
 #endif
@@ -448,25 +552,36 @@ struct tcb_s
   uint8_t  sched_priority;               /* Current priority of the thread      */
 
 #ifdef CONFIG_PRIORITY_INHERITANCE
-#  if CONFIG_SEM_NNESTPRIO > 0
+#if CONFIG_SEM_NNESTPRIO > 0
   uint8_t  npend_reprio;                 /* Number of nested reprioritizations  */
   uint8_t  pend_reprios[CONFIG_SEM_NNESTPRIO];
-#  endif
+#endif
   uint8_t  base_priority;                /* "Normal" priority of the thread     */
 #endif
 
   uint8_t  task_state;                   /* Current state of the thread         */
+#ifdef CONFIG_SMP
+  uint8_t  cpu;                          /* CPU index if running or assigned    */
+  cpu_set_t affinity;                    /* Bit set of permitted CPUs           */
+#endif
   uint16_t flags;                        /* Misc. general status flags          */
   int16_t  lockcount;                    /* 0=preemptable (not-locked)          */
-
-#if CONFIG_RR_INTERVAL > 0
-  int      timeslice;                    /* RR timeslice interval remaining     */
+#ifdef CONFIG_SMP
+  int16_t  irqcount;                     /* 0=interrupts enabled                */
 #endif
-  FAR struct wdog_s *waitdog;            /* All timed waits used this wdog      */
+
+#if CONFIG_RR_INTERVAL > 0 || defined(CONFIG_SCHED_SPORADIC)
+  int32_t  timeslice;                    /* RR timeslice OR Sporadic budget     */
+                                         /* interval remaining                  */
+#endif
+#ifdef CONFIG_SCHED_SPORADIC
+  FAR struct sporadic_s *sporadic;       /* Sporadic scheduling parameters      */
+#endif
+
+  FAR struct wdog_s *waitdog;            /* All timed waits use this timer      */
 
   /* Stack-Related Fields *******************************************************/
 
-#ifndef CONFIG_CUSTOM_STACK
   size_t    adj_stack_size;              /* Stack size after adjustment         */
                                          /* for hardware, processor, etc.       */
                                          /* (for debug purposes only)           */
@@ -474,7 +589,6 @@ struct tcb_s
                                          /* Need to deallocate stack            */
   FAR void *adj_stack_ptr;               /* Adjusted stack_alloc_ptr for HW     */
                                          /* The initial stack pointer value     */
-#endif
 
   /* External Module Support ****************************************************/
 
@@ -491,7 +605,6 @@ struct tcb_s
 #ifndef CONFIG_DISABLE_SIGNALS
   sigset_t   sigprocmask;                /* Signals that are blocked            */
   sigset_t   sigwaitmask;                /* Waiting for pending signals         */
-  sq_queue_t sigactionq;                 /* List of actions for signals         */
   sq_queue_t sigpendactionq;             /* List of pending signal actions      */
   sq_queue_t sigpostedq;                 /* List of posted signals              */
   siginfo_t  sigunbinfo;                 /* Signal info when task unblocked     */
@@ -500,7 +613,7 @@ struct tcb_s
   /* POSIX Named Message Queue Fields *******************************************/
 
 #ifndef CONFIG_DISABLE_MQUEUE
-  FAR msgq_t *msgwaitq;                  /* Waiting for this message queue      */
+  FAR struct mqueue_inode_s *msgwaitq;   /* Waiting for this message queue      */
 #endif
 
   /* Library related fields *****************************************************/
@@ -508,12 +621,12 @@ struct tcb_s
   int pterrno;                           /* Current per-thread errno            */
 
   /* State save areas ***********************************************************/
-  /* The form and content of these fields are processor-specific.               */
+  /* The form and content of these fields are platform-specific.                */
 
   struct xcptcontext xcp;                /* Interrupt register save area        */
 
 #if CONFIG_TASK_NAME_SIZE > 0
-  char name[CONFIG_TASK_NAME_SIZE];      /* Task name                           */
+  char name[CONFIG_TASK_NAME_SIZE+1];    /* Task name (with NUL terminator)     */
 #endif
 };
 
@@ -543,17 +656,7 @@ struct task_tcb_s
   /* Values needed to restart a task ********************************************/
 
   uint8_t  init_priority;                /* Initial priority of the task        */
-
-#if !defined(CONFIG_CUSTOM_STACK) && defined(CONFIG_NUTTX_KERNEL)
-  /* In the kernel mode build, the arguments are saved on the task's stack      */
-
   FAR char **argv;                       /* Name+start-up parameters            */
-#else
-  /* Otherwise, the arguments are strdup'ed and the argv[] is statically        */
-  /* defined here:                                                              */
-
-  char    *argv[CONFIG_MAX_TASK_ARGS+1]; /* Name+start-up parameters            */
-#endif
 };
 
 /* struct pthread_tcb_s **********************************************************/
@@ -695,6 +798,51 @@ void task_starthook(FAR struct task_tcb_s *tcb, starthook_t starthook,
 FAR struct task_tcb_s *task_vforksetup(start_t retaddr);
 pid_t task_vforkstart(FAR struct task_tcb_s *child);
 void task_vforkabort(FAR struct task_tcb_s *child, int errcode);
+
+/********************************************************************************
+ * Name: sched_resume_scheduler
+ *
+ * Description:
+ *   Called by architecture specific implementations that block task execution.
+ *   This function prepares the scheduler for the thread that is about to be
+ *   restarted.
+ *
+ * Input Parameters:
+ *   tcb - The TCB of the thread to be restarted.
+ *
+ * Returned Value:
+ *   None
+ *
+ ********************************************************************************/
+
+#if CONFIG_RR_INTERVAL > 0 || defined(CONFIG_SCHED_SPORADIC) || \
+    defined(CONFIG_SCHED_INSTRUMENTATION)
+void sched_resume_scheduler(FAR struct tcb_s *tcb);
+#else
+#  define sched_resume_scheduler(tcb)
+#endif
+
+/********************************************************************************
+ * Name: sched_suspend_scheduler
+ *
+ * Description:
+ *   Called by architecture specific implementations to resume task execution.
+ *   This function performs scheduler operations for the thread that is about to
+ *   be suspended.
+ *
+ * Input Parameters:
+ *   tcb - The TCB of the thread to be restarted.
+ *
+ * Returned Value:
+ *   None
+ *
+ ********************************************************************************/
+
+#if defined(CONFIG_SCHED_SPORADIC) || defined(CONFIG_SCHED_INSTRUMENTATION)
+void sched_suspend_scheduler(FAR struct tcb_s *tcb);
+#else
+#  define sched_suspend_scheduler(tcb)
+#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

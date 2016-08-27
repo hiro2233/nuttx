@@ -7,10 +7,16 @@ README
     - Semi-Optional apps/ Package
     - Installation Directories with Spaces in the Path
     - Downloading from Repositories
+    - Related Repositories
     - Notes about Header Files
   o Configuring NuttX
     - Instantiating "Canned" Configurations
+    - Refreshing Configurations
     - NuttX Configuration Tool
+    - Finding Selections in the Configuration Menus
+    - Reveal Hidden Configuration Options
+    - Make Sure that You on on the Right Platform
+    - Comparing Two Configurations
     - Incompatibilities with Older Configurations
     - NuttX Configuration Tool under DOS
   o Toolchains
@@ -31,19 +37,26 @@ README
 INSTALLATION
 ^^^^^^^^^^^^
 
+  NuttX may be installed and built on a Linux system or on a Windows
+  system if Cygwin is installed.  The MSYS environment is an option
+  to Cygwin on the Windows platform.  However, I have little experience
+  that that configuration and it will not be discussed in this README
+  file.
+
+  Instructions for installation of Cygwin on Windows system are provided
+  in the following paragraph.
+
+  NuttX can also be installed and built on a native Windows system, but
+  with some potential tool-related issues (see the discussion "Native
+  Windows Build" below).
+
 Installing Cygwin
 -----------------
 
-  NuttX may be installed and built on a Linux system or on a Windows
-  system if Cygwin is installed.  Installing Cygwin on your Windows PC
-  is simple, but time consuming.  See http://www.cygwin.com/ for
-  installation instructions. Basically you just need to download a
-  tiny setup.exe program and it does the real, internet installation
-  for you.
-
-     NOTE: NuttX can also be installed and built on a native Windows
-     system, but with some potential tool-related issues (see the
-     discussion "Native Windows Build" below).
+  Installing Cygwin on your Windows PC is simple, but time consuming.  See
+  http://www.cygwin.com/ for installation instructions. Basically you just
+  need to download a tiny setup.exe program and it does the real, network
+  installation for you.
 
   Some Cygwin installation tips:
 
@@ -62,12 +75,25 @@ Installing Cygwin
      of the Cygwin utilities that you will need to build NuttX.  The
      build will fail in numerous places because of missing packages.
 
+     NOTE: You don't really have to install EVERYTHING but I cannot
+     answer the question "Then what should I install?"  I don't know
+     the answer to that and so will continue to recommend installing
+     EVERYTHING.
+
+     You should certainly be able to omit "Science", "Math", and
+     "Publishing".  You can try omitting KDE, Gnome, GTK, and other
+     graphics packages if you don't plan to use them.
+
   After installing Cygwin, you will get lots of links for installed
   tools and shells.  I use the RXVT native shell.  It is fast and reliable
   and does not require you to run the Cygwin X server (which is neither
   fast nor reliable).  Unless otherwise noted, the rest of these
   instructions assume that you are at a bash command line prompt in
   either Linux or in Cygwin shell.
+
+  UPDATE: The last time I installed EVERTHING, the download was
+  about 5GiB.  The server I selected was also very slow so it took
+  over a day to do the whole install!
 
 Download and Unpack
 -------------------
@@ -91,17 +117,21 @@ Semi-Optional apps/ Package
   tarball.
 
   It is call "Semi-optional" because if you don't have some apps/
-  directory, NuttX will *fail* to build!
+  directory, NuttX will *fail* to build! You do not necessarily need
+  to use the NuttX apps tarball but may, instead, provide your own
+  custom application directory.  Such a custom directory would need
+  to include a valid Makefile to support the build and a valid Kconfig
+  file to support the configuration.  More about these file later.
 
-  Download the unpack the apps tarball in the same directly where you
+  Download then unpack the apps tarball in the same directory where you
   unpacked the NuttX tarball.  After you unpack the apps tarball, you
   will have a new directory called apps-version (where the version
   should exactly match the version of the NuttX tarball).  Again, you
   might want to rename the directory to simply apps/ to match what
   you read in the documentation
 
-  After unpacking the apps tarball, you will have two directories side
-  by side like this:
+  After unpacking (and renaming) the apps tarball, you will have two
+  directories side by side like this:
 
              |
         +----+----+
@@ -109,9 +139,9 @@ Semi-Optional apps/ Package
       nuttx/     apps/
 
   This is important because the NuttX build will expect to find the
-  apps directory in that (default) location.  )That default location
-  can be changed by editing your NuttX configuration file, but that
-  is another story).
+  apps directory in that (default) location.  That default location
+  can be changed by modifying your NuttX configuration file, but that
+  is another story.
 
 Installation Directories with Spaces in the Path
 ------------------------------------------------
@@ -133,23 +163,131 @@ Installation Directories with Spaces in the Path
 Downloading from Repositories
 -----------------------------
 
-  The current NuttX du jour is available in from a GIT repository.  Download
-  instructions are available here:
+  Cloning the Repository
 
-  https://sourceforge.net/p/nuttx/git
+    The current NuttX du jour is available in from a GIT repository.  Here are
+    instructions for cloning the core NuttX RTOS (corresponding to the nuttx
+    tarball discussed above)::
+
+      git clone https://bitbucket.org/nuttx/nuttx.git nuttx
+
+    And the semi-optional apps/ application directory and be cloned like:
+
+      git clone https://bitbucket.org/nuttx/apps.git apps
+
+    That will give you the same directory structure like this:
+
+             |
+        +----+----+
+        |         |
+      nuttx/     apps/
+
+  Configuring the Clones
+
+    The following steps need to be performed for each of the repositories.
+    After changing to the clone directory:
+
+    Set your identity:
+
+      git config --global user.name "My Name"
+      git config --global user.email my.name@example.com
+
+    Colorized diffs are much easier to read:
+
+      git config --global color.branch auto
+      git config --global color.diff auto
+      git config --global color.interactive auto
+      git config --global color.status auto
+
+    Checkout other settings
+
+      git config --list
+
+  Cloning NuttX Inside Cygwin
+
+    If you are cloning the NuttX repository, it is recommended to avoid
+    automatic end of lines conversions by git. These conversions may break
+    some scripts like configure.sh. Before cloning, do the following:
+
+      git config --global core.autocrlf false
+
+Related Repositories
+--------------------
+
+  These are standalone repositories:
+
+  * https://bitbucket.org/nuttx/apps
+
+    This directory holds an optional package of applications and libraries
+    can be used with the NuttX RTOS.  There is a README.txt file there that
+    will provide a more information about that package.
+
+  * https://bitbucket.org/nuttx/nxwidgets
+
+    This is the NuttX C++ graphics support.  This includes NxWM, the tiny
+    NuttX Window Manager.
+
+  * https://bitbucket.org/nuttx/uclibc
+
+    This repository contains a version of the uClibc++ C++ library.  This code
+    originates from http://cxx.uclibc.org/ and has been adapted for NuttX by the
+    RGMP team (http://rgmp.sourceforge.net/wiki/index.php/Main_Page).
+
+  * https://bitbucket.org/nuttx/buildroot
+
+    A environment that you can to use to build a custom, NuttX GNU toolchain.
+
+  * https://bitbucket.org/nuttx/tools
+
+    There are snapshots of some tools here that you will need to work with
+    NuttX:  kconfig-frontends, genromfs, and others.
+
+  * https://bitbucket.org/nuttx/drivers
+
+    A few drivers that are not integrated into the main NuttX source tree due
+    to licensing issues.
+
+  * https://bitbucket.org/nuttx/pascal
+
+    Yes, this really is a Pascal compiler.  The Pascal p-code run-time and
+    pcode debugger can be built as a part of NuttX.
 
 Notes about Header Files
 ------------------------
 
   Other C-Library Header Files.
 
-    Some toolchains are built with header files extracted from a C-library
-    distribution (such as newlib).  These header files must *not* be used
-    with NuttX because NuttX provides its own, built-in C-Library.  For
-    toolchains that do include built-in header files from a foreign C-
-    Library, NuttX must be compiled without using the standard header files
-    that are distributed with your toolchain.  This prevents including
-    conflicting, incompatible header files (such as stdio.h).
+    When a GCC toolchain is built, it must be built against a C library.
+    The compiler together with the contents of the C library completes the
+    C language definition and provides the complete C development
+    environment.  NuttX provides its own, built-in C library.  So the
+    complete, consistent C language definition for use with NuttX comes from
+    the combination of the compiler and the header files provided by the
+    NuttX C library.
+
+    When a GCC toolchain is built, it incorporates the C library header
+    files into the compiler internal directories and, in this way, the C
+    library really becomes a part of the toolchain.  If you use the NuttX
+    buildroot toolchain as described below under under "NuttX Buildroot
+    Toolchain", your GCC toolchain will build against the NuttX C library
+    and will incorporate the NuttX C library header files as part of the
+    toolchain.
+
+    If you use some other, third-party tool chain, this will not be the
+    case, however.  Those toolchains were probably built against some
+    other, incompatible C library distribution (such as newlib).  Those
+    tools will have incorporated the incompatible C library header files
+    as part of the toolchain.  These incompatible header files must *not*
+    be used with NuttX because the will conflict with definitions in the
+    NuttX built-in C-Library.  For such toolchains that include header
+    files from a foreign C-Library, NuttX must be compiled without using
+    the standard header files that are distributed with your toolchain.
+    This prevents including conflicting, incompatible header files such
+    as stdio.h.
+
+    The math.h and stdarg.h are probably the two most trouble some header
+    files to deal with.  These troublesome header files are discussed in
+    more detail below.
 
   Header Files Provided by Your Toolchain.
 
@@ -184,13 +322,13 @@ Notes about Header Files
 
     If you have a custom, architecture specific math.h header file, then
     that header file should be placed at arch/<cpu>/include/math.h.  There
-    is a stub math.h header file located at include/nuttx/math.h.  This stub
+    is a stub math.h header file located at include/nuttx/lib/math.h.  This stub
     header file can be used to "redirect" the inclusion to an architecture-
     specific math.h header file.  If you add an architecture specific math.h
     header file then you should also define CONFIG_ARCH_MATH_H=y in your
     NuttX Configuration file.  If CONFIG_ARCH_MATH_H is selected, then the
     top-level Makefile will copy the stub math.h header file from
-    include/nuttx/math.h to include/math.h where it will become the system
+    include/nuttx/lib/math.h to include/math.h where it will become the system
     math.h header file.  The stub math.h header file does nothing other
     than to include that architecture-specific math.h header file as the
     system math.h header file.
@@ -224,66 +362,104 @@ CONFIGURING NUTTX
 Instantiating "Canned" Configurations
 -------------------------------------
 
-"Canned" NuttX configuration files are retained in:
+  "Canned" NuttX configuration files are retained in:
 
-  configs/<board-name>/<config-dir>
+    configs/<board-name>/<config-dir>
 
-Where <board-name> is the name of your development board and <config-dir>.
-Configuring NuttX requires only copying three files from the <config-dir>
-to the directory where you installed NuttX (TOPDIR) (and sometimes one
-additional file to the directory the NuttX application package (APPSDIR)):
+  Where <board-name> is the name of your development board and <config-dir>
+  is the name of the sub-directory containing a specific configuration for
+  that board.  Configuring NuttX requires only copying three files from the
+  <config-dir> to the directory where you installed NuttX (TOPDIR) (and
+  sometimes one additional file to the directory the NuttX application
+  package (APPSDIR)):
 
-  Copy configs/<board-name>/<config-dir>/Make.def to ${TOPDIR}/Make.defs
+    Copy configs/<board-name>/<config-dir>/Make.def to ${TOPDIR}/Make.defs
 
-    Make.defs describes the rules needed by you tool chain to compile
-    and link code.  You may need to modify this file to match the
-    specific needs of your toolchain.
+      Make.defs describes the rules needed by you tool chain to compile
+      and link code.  You may need to modify this file to match the
+      specific needs of your toolchain.
 
-  Copy configs/<board-name>/<config-dir>/setenv.sh to ${TOPDIR}/setenv.sh
+    Copy configs/<board-name>/<config-dir>/setenv.sh to ${TOPDIR}/setenv.sh
 
-    setenv.sh is an optional convenience file that I use to set
-    the PATH variable to the toolchain binaries.  You may chose to
-    use setenv.sh or not.  If you use it, then it may need to be
-    modified to include the path to your toolchain binaries.
+      setenv.sh is an optional convenience file that I use to set
+      the PATH variable to the toolchain binaries.  You may chose to
+      use setenv.sh or not.  If you use it, then it may need to be
+      modified to include the path to your toolchain binaries.
 
-  Copy configs/<board-name>/<config-dir>/defconfig to ${TOPDIR}/.config
+    Copy configs/<board-name>/<config-dir>/defconfig to ${TOPDIR}/.config
 
-    The defconfig file holds the actual build configuration.  This
-    file is included by all other make files to determine what is
-    included in the build and what is not.  This file is also used
-    to generate a C configuration header at include/nuttx/config.h.
+      The defconfig file holds the actual build configuration.  This
+      file is included by all other make files to determine what is
+      included in the build and what is not.  This file is also used
+      to generate a C configuration header at include/nuttx/config.h.
 
-General information about configuring NuttX can be found in:
+   General information about configuring NuttX can be found in:
 
-  ${TOPDIR}/configs/README.txt
-  ${TOPDIR}/configs/<board-name>/README.txt
+      ${TOPDIR}/configs/README.txt
+      ${TOPDIR}/configs/<board-name>/README.txt
 
-There is a configuration script in the tools/ directory that makes this
-easier.  It is used as follows:
+    There is a configuration script in the tools/ directory that makes this
+    easier.  It is used as follows:
 
-  cd ${TOPDIR}/tools
-  ./configure.sh <board-name>/<config-dir>
+      cd ${TOPDIR}/tools
+      ./configure.sh <board-name>/<config-dir>
 
-There is an alternative Windows batch file that can be used in the
-windows native environment like:
+    There is an alternative Windows batch file that can be used in the
+    windows native environment like:
 
-  cd ${TOPDIR}\tools
-  configure.bat <board-name>\<config-dir>
+      cd ${TOPDIR}\tools
+      configure.bat <board-name>\<config-dir>
 
-See tools/README.txt for more information about these scripts.
+    See tools/README.txt for more information about these scripts.
+
+Refreshing Configurations
+-------------------------
+
+  Configurations can get out of date.  As new configuration settings are
+  added or removed or as dependencies between configuration settings
+  change, the contents of a default configuration can become out of synch
+  with the build systems.  Hence, it is a good practice to "refresh" each
+  configuration after configuring and before making.  To refresh the
+  configuration, use the NuttX Configuration Tool like this:
+
+    make oldconfig
+
+  AFTER you have instantiated the NuttX configuration as described above.
+  The configuration step copied the .config file into place in the top-level
+  NuttX directory; 'make oldconfig' step will then operate on that .config
+  file to bring it up-to-date.
+
+  If you configuration is out of date, you will be prompted by 'make oldconfig'
+  to resolve the issues detected by the configuration tool, that is, to
+  provide values for the new configuration options in the build system.  Doing
+  this can save you a lot of problems down the road due to obsolete settings in
+  the default board configuration file.  The NuttX configuration tool is
+  discussed in more detail in the following paragraph.
+
+  Confused about what the correct value for a new configuration item should
+  be?  Enter ? in response to the 'make oldconfig' prompt and it will show
+  you the help text that goes with the option.
+
+  If you don't want to make any decisions are are willing to just accept the
+  recommended default value for each new configuration item, an even easier
+  way is:
+
+    make oldefconfig
+
+  The olddefconfig target will simply bring you configuration up to date with
+  the current Kconfig files, setting any new options to the default value.
+  No questions asked.
 
 NuttX Configuration Tool
 ------------------------
 
-  An automated tool is under development to support re-configuration
-  of NuttX.  This tool, however, is not yet quite ready for general
-  usage.
-
-  This automated tool is based on the kconfig-frontends application
-  available at http://ymorin.is-a-geek.org/projects/kconfig-frontends
-  (A snapshot of this tool is also available at ../misc/tools).  This
-  application provides a tool called 'kconfig-mconf' that is used by
-  the NuttX top-level Makefile.  The following make target is provided:
+  An automated tool has been incorported to support re-configuration
+  of NuttX.  This automated tool is based on the kconfig-frontends
+  application available at http://ymorin.is-a-geek.org/projects/kconfig-frontends
+  (A snapshot of this tool is also available fromo the tools repository at
+  https://bitbucket.org/nuttx/tools).  This application provides a tool
+  called 'kconfig-mconf' that is used by the NuttX top-level Makefile.
+  The following make target is provided:
 
     make menuconfig
 
@@ -294,6 +470,9 @@ NuttX Configuration Tool
   damage your configuration (see
   http://www.nuttx.org/doku.php?id=wiki:howtos:convertconfig).
 
+  How do we tell a new configuration from an old one? See "Incompatibilities
+  with Older Configurations" below.
+
   The 'menuconfig' make target depends on two things:
 
   1. The Kconfig configuration data files that appear in almost all
@@ -303,17 +482,20 @@ NuttX Configuration Tool
      relevant to the directory in which the Kconfig file resides.
 
      NOTE: For a description of the syntax of this configuration file,
-     see ../misc/tools/kconfig-language.txt.
+     see kconfig-language.txt in the tools repository at
+     https://bitbucket.org/nuttx/tools
 
   2. The 'kconfig-mconf' tool.  'kconfig-mconf' is part of the
      kconfig-frontends package.  You can download that package from
      the website http://ymorin.is-a-geek.org/projects/kconfig-frontends
-     or you can use the snapshot in ../misc/tools.
+     or you can use the snapshot in the tools repository at
+     https://bitbucket.org/nuttx/tools.
 
      Building kconfig-frontends under Linux may be as simple as
      'configure; make; make install' but there may be some build
      complexities, especially if you are building under Cygwin.  See
-     the more detailed build instructions at ../misc/tools/README.txt
+     the more detailed build instructions in the top-level README.txt
+     file of the tools repository at https://bitbucket.org/nuttx/tools.
 
      The 'make install' step will, by default, install the 'kconfig-mconf'
      tool at /usr/local/bin/mconf.  Where ever you choose to
@@ -339,9 +521,10 @@ NuttX Configuration Tool
   but may be less intuitive for modifying existing configurations.
 
   If you have an environment that supports the Qt or GTK graphical systems
-  (probably KDE or gnome, respectively), then you can also build the
-  graphical kconfig-frontends, kconfig-qconf and kconfig-gconf.  In
-  these case, you can start the graphical configurator with either:
+  (probably KDE or gnome, respectively, or Cygwin under Windows with Qt or
+  GTK installed), then you can also build the graphical kconfig-frontends,
+  kconfig-qconf and kconfig-gconf.  In these case, you can start the
+  graphical configurator with either:
 
     make qconfig
 
@@ -349,21 +532,123 @@ NuttX Configuration Tool
 
     make gconfig
 
-Refreshing Configurations with 'make oldconfig'
------------------------------------------------
+  Some keyboard shortcus supported by kconfig-mconf, the tool that runs
+  when you do 'make menuconfig':
 
-  Whenever you use a configuration, you really should always do
-  the following *before* you make NuttX:
+    - '?' will bring up the mconfig help display.
 
-    make oldconfig
+    - '/' can be used find configuration selections.
 
-  This will make sure that the configuration is up-to-date in
-  the event that it has lapsed behind the current NuttX development.
+    - 'Z' can be used to reveal hidden configuration options
 
-  WARNING:  Never do 'make oldconfig' (OR 'make menuconfig') on a
-  configuration that has not been converted to use the kconfig-frontends
-  tools!  This will damage your configuration (see
-  http://www.nuttx.org/doku.php?id=wiki:howtos:convertconfig).
+  These last to shortcuts are described further in the following
+  paragraphs.
+
+Finding Selections in the Configuration Menus
+---------------------------------------------
+
+  The NuttX configuration options have gotten complex and it can be very
+  difficult to find options in the menu trees if you are not sure where
+  to look.  The "basic configuration order" describe above can help to
+  narrow things down.
+
+  But if you know exactly what configuration setting you want to select,
+  say CONFIG_XYZ, but not where to find it, then the 'make memconfig'
+  version of the tool offers some help:  By pressing the '/' key, the
+  tool will bring up a menu that will allow you to search for a
+  configuration item.  Just enter the string CONFIG_XYZ and press 'ENTER'.
+  It will show you not only where to find the configuration item, but
+  also all of the dependencies related to the configuration item.
+
+Reveal Hidden Configuration Options
+-----------------------------------
+
+  If you type 'Z', then kconfig-mconf will change what is displayed.
+  Normally, only enabled features that have all of their dependencies met
+  are displayed.  That is, of course, not very useful if you would like to
+  discover new options or if you are looking for an option and do not
+  realize that the dependencies have not yet been selected and, hence, it
+  is not displayed.
+
+  But if you enter 'Z', then every option will be shown, whether or not its
+  dependencies have been met.  You can the see everything that could be
+  selected with the right dependency selections.  These additional options
+  will be shown the '-' for the selection and for the value (since it
+  cannot be selected and has no value).  About all you do is to select
+  the <Help> option to see what the dependencies are.
+
+Make Sure that You on on the Right Platform
+-------------------------------------------
+
+  Saved configurations may run on Linux, Cygwin (32- or 64-bit), or other
+  platforms.  The platform characteristics can be changed use 'make
+  menuconfig'.  Sometimes this can be confusing due to the differences
+  between the platforms.  Enter sethost.sh
+
+  sethost.sh is a simple script that changes a configuration to your
+  host platform.  This can greatly simplify life if you use many different
+  configurations.  For example, if you are running on Linux and you
+  configure like this:
+
+    $ cd tools
+    $ ./configure.sh board/configuration
+    $ cd ..
+
+  The you can use the following command to both (1) make sure that the
+  configuration is up to date, AND (2) the configuration is set up
+  correctly for Linux:
+
+    $ tools/sethost.sh -l
+
+  Or, if you are on a Windows/Cygwin 64-bit platform:
+
+    $ tools/sethost.sh -w
+
+  Other options are available from the help option built into the
+  script.  You can see all options with:
+
+    $ tools/sethost.sh -h
+
+Comparing Two Configurations
+----------------------------
+
+  If you try to compare to configurations using 'diff', you will probably
+  not be happy with the result.  There are superfluous things added to
+  the configuration files that makes comparisons with the human eye
+  difficult.
+
+  There is a tool at nuttx/tools/cmpconfig.c that can be build to simplify
+  these comparisons.  The output from this difference tools will show only
+  the meaningful differences between two configuration files.  This tools
+  built as follows:
+
+    cd nuttx/tools
+    make -f Makefile.host
+
+  This will crate a program called 'cmpconfig' or 'comconfig.exe' on Windows.
+
+  Why would you want to compare two configuration files?  Here are a few
+  of reasons why I do this:
+
+  1. When I create a new configuration I usually base it on an older
+     configuration and I want to know, "What are the options that I need to
+     change to add the new feature to the older configurations?"  For example,
+     suppose that I have a boardA/nsh configuration and I want to create a
+     boardA/nxwm configuration.  Suppose I already have boardB/nsh and
+     boardB/nxwm configurations.  Then by comparing the boardB/nsh with the
+     boardB/nxwm I can see the modifications that I would need to make to my
+     boardA/nsh to create a new  boardA/nxwm.
+
+  2. But the most common reason that I use the 'cmpconfig' program to to
+     check the results of "refreshing" a configuration with 'make oldconfig'
+     (see the paragraph "Refreshing Configurations" above).  The 'make
+     oldconfig' command will make changes to my configuration and using
+     'cmpconfig', I can see precisely what those changes were and if any
+     should be of concern to me.
+
+  3. The 'cmpconfig' tool can also be useful when converting older, legacy
+     manual configurations to the current configurations based on the
+     kconfig-frontends tools.  See the following paragraph.
 
 Incompatibilities with Older Configurations
 -------------------------------------------
@@ -371,11 +656,13 @@ Incompatibilities with Older Configurations
   ***** WARNING *****
 
   The current NuttX build system supports *only* the new configuration
-  files generated using the kconfig-frontends tools.  The older, legacy,
-  manual configurations and the new kconfig-frontends configurations are
-  not compatible.  Old legacy configurations can *not* be used with the
-  kconfig-frontends tool and, hence, cannot be used with recent releases
-  of NuttX:
+  files generated using the kconfig-frontends tools.  Support for the
+  older, legacy, manual configurations was eliminated in NuttX 7.0; all
+  configuration must now be done using the kconfig-frontends tool.  The
+  older manual configurations and the new kconfig-frontends configurations
+  are not compatible.  Old legacy configurations can *not* be used
+  with the kconfig-frontends tool and, hence, cannot be used with releases
+  of NuttX 7.0 and beyond:
 
   If you run 'make menuconfig' with a legacy configuration the resulting
   configuration will probably not be functional.
@@ -390,6 +677,24 @@ Incompatibilities with Older Configurations
      kconfig-frontends toolchain.
 
   A: Refer to http://www.nuttx.org/doku.php?id=wiki:howtos:convertconfig
+
+  ***** WARNING *****
+
+  As described above, whenever you use a configuration, you really should
+  always refresh the configuration the following command *before* you make
+  NuttX:
+
+    make oldconfig
+
+  This will make sure that the configuration is up-to-date in the event that
+  it has lapsed behind the current NuttX development (see the paragraph
+  "Refreshing Configurations" above).  But this only works with *new*
+  configuration files created with the kconfig-frontends tools
+
+  Never do 'make oldconfig' (OR 'make menuconfig') on a  configuration that
+  has not been converted to use the kconfig-frontends tools!  This will
+  damage your configuration (see
+  http://www.nuttx.org/doku.php?id=wiki:howtos:convertconfig).
 
 NuttX Configuration Tool under DOS
 ----------------------------------
@@ -461,7 +766,7 @@ NuttX Buildroot Toolchain
 -------------------------
 
   For many configurations, a DIY set of tools is available for NuttX.  These
-  tools can be downloaded from the NuttX SourceForge file repository.  After
+  tools can be downloaded from the NuttX Bitbucket.org file repository.  After
   unpacking the buildroot tarball, you can find instructions for building
   the tools in the buildroot/configs/README.txt file.
 
@@ -484,7 +789,7 @@ NuttX Buildroot Toolchain
 
   NOTE: For Cortex-M3/4, there are OABI and EABI versions of the buildroot
   toolchains.  If you are using the older OABI toolchain the prefix for
-  the tools will be arm-nuttx-elf-; for the EABI toolchin the prefix will
+  the tools will be arm-nuttx-elf-; for the EABI toolchain the prefix will
   be arm-nuttx-eabi-.  If you are using the older OABI toolchain with
   an ARM Cortex-M3/4, you will need to set CONFIG_ARMV7M_OABI_TOOLCHAIN
   in the .config file in order to pick the right tool prefix.
@@ -513,7 +818,7 @@ SHELLS
 
      In this case, bash is probably available and the #!/bin/bash at the
      beginning of the file should do the job.  If any scripts with #!/bin/sh
-     fail, try changing that ti #!/bin/bash and let me know about the change.
+     fail, try changing that to #!/bin/bash and let me know about the change.
 
   2. FreeBSD with the Bourne Shell and no bash shell.
 
@@ -561,13 +866,28 @@ Re-building
   a file in one of the linked (i.e., copied) directories, re-build NuttX,
   and then not see your changes when you run the program.  That is because
   build is still using the version of the file in the copied directory, not
-  your modified file! To work around this annoying behavior, do the
-  following when you re-build:
+  your modified file!
+
+  Older versions of NuttX did not support dependiencies in this
+  configuration.  So a simple work around this annoying behavior in this
+  case was the following when you re-build:
 
      make clean_context all
 
   This 'make' command will remove of the copied directories, re-copy them,
   then make NuttX.
+
+  However, more recent versions of NuttX do support dependencies for the
+  Cygwin build.  As a result, the above command will cause everything to be
+  rebuilt (beause it removes and will cause recreating the
+  include/nuttx/config.h header file).  A much less gracefully but still
+  effective command in this case is the following for the ARM configuration:
+
+    rm -rf arch/arm/src/chip arch/arm/src/board
+
+  This "kludge" simple removes the copied directories.  These directories
+  will be re-created when you do a normal 'make' and your edits will then be
+  effective.
 
 Build Targets and Options
 -------------------------
@@ -661,9 +981,13 @@ Native Windows Build
 --------------------
 
   The beginnings of a Windows native build are in place but still not often
-  used as of this writing.  The windows native build logic initiated
-  if CONFIG_WINDOWS_NATIVE=y is defined in the NuttX configuration file:
+  used as of this writing.  The build was functional but because of lack of
+  use may find some issues to be resolved with this build configuration.
 
+  The windows native build logic initiated if CONFIG_WINDOWS_NATIVE=y is
+  defined in the NuttX configuration file:
+
+  
   This build:
 
     - Uses all Windows style paths
@@ -673,10 +997,13 @@ Native Windows Build
   In this build, you cannot use a Cygwin or MSYS shell. Rather the build must
   be performed in a Windows console window. Here is a better terminal than the
   standard issue, CMD.exe terminal:  ConEmu which can be downloaded from:
-  http://code.google.com/p/conemu-maximus5/
+  https://sourceforge.net/projects/conemu/ or https://conemu.github.io/ .
 
   Build Tools.  The build still relies on some Unix-like commands.  I use
-  the GNUWin32 tools that can be downloaded from http://gnuwin32.sourceforge.net/.
+  the GNUWin32 tools that can be downloaded from http://gnuwin32.sourceforge.net/
+  using the 'Download all' selection.  Individual packages can be download
+  instead if you know what you are doing and want a faster download (No, I
+  can't tell you which packages you should or should not download).
 
   Host Compiler:  I use the MingGW GCC compiler which can be downloaded from
   http://www.mingw.org/.  If you are using GNUWin32, then it is recommended
@@ -684,12 +1011,13 @@ Native Windows Build
 
   This capability should still be considered a work in progress because:
 
-  (1) It has not been verified on all targets and tools, and
-  (2) it still lacks some of the creature-comforts of the more mature environments.
+    (1) It has not been verified on all targets and tools, and
+    (2) it still lacks some of the creature-comforts of the more mature
+        environments.
 
-   There is an alternative to the setenv.sh script available for the Windows
-   native environment: tools/configure.bat.  See tools/README.txt for additional
-   information.
+  There is an alternative to the setenv.sh script available for the Windows
+  native environment: tools/configure.bat.  See tools/README.txt for additional
+  information.
 
 Installing GNUWin32
 -------------------
@@ -812,17 +1140,6 @@ Window Native Toolchain Issues
      is not a long as you might think because there is no dependency checking
      if you are using a native Windows toolchain.  That bring us to #3:
 
-  3. Dependencies are not made when using Windows versions of the GCC on a POSIX
-     platform (i.e., Cygwin).  This is because the dependencies are generated
-     using Windows paths which do not work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
-     If you are building natively on Windows, then no such conflict exists
-     and the best selection is:
-
-       MKDEP                = $(TOPDIR)/tools/mkdeps.exe
-
 General Pre-built Toolchain Issues
 
   To continue with the list of "Window Native Toolchain Issues" we can add
@@ -833,7 +1150,7 @@ General Pre-built Toolchain Issues
   There may be incompatibilities with header files, libraries, and compiler
   built-in functions at detailed below.  For the most part, these issues
   are handled in the existing make logic.  But if you are breaking new ground,
-  then you may incounter these:
+  then you may encounter these:
 
   4. Header Files.  Most pre-built toolchains will build with a foreign C
      library (usually newlib, but maybe uClibc or glibc if you are using a
@@ -842,14 +1159,14 @@ General Pre-built Toolchain Issues
      you will get the stdio.h from the incompatible, foreign C library and
      not the nuttx stdio.h (at nuttx/include/stdio.h) that you wanted.
 
-     This can cause really confusion in the buildds and you must always be
+     This can cause really confusion in the builds and you must always be
      sure the -nostdinc is included in the CFLAGS.  That will assure that
      you take the include files only from
 
   5. Libraries.  What was said above header files applies to libraries.
      You do not want to include code from the libraries of any foreign
      C libraries built into your toolchain.  If this happens you will get
-     perplexing errors about undefined sysmbols.  To avoid these errors,
+     perplexing errors about undefined symbols.  To avoid these errors,
      you will need to add -nostdlib to your CFLAGS flags to assure that
      you only take code from the NuttX libraries.
 
@@ -871,10 +1188,46 @@ General Pre-built Toolchain Issues
      for NXFLAT.  NXFLAT is a binary format described in
      Documentation/NuttXNxFlat.html.  It may be possible to build
      standalone versions of the NXFLAT tools; there are a few examples
-     of this in the misc/buildroot/configs directory.  However, it
-     is possible that there could be interoperability issues with
-     your toolchain since they will be using different versions of
-     binutials and possibly different ABIs.
+     of this in the buildroot repository at https://bitbucket.org/nuttx/buildroot
+     However, it is possible that there could be interoperability issues
+     with your toolchain since they will be using different versions of
+     binutils and possibly different ABIs.
+
+Building Original Linux Boards in Cygwin
+
+  Some default board configurations are set to build under Linux and others
+  to build under Windows with Cygwin.  Various default toolchains may also
+  be used in each configuration.  It is possible to change the default
+  setup.  Here, for example, is what you must do in order to compile a
+  default Linux configuration in the Cygwin environment using the
+  CodeSourceery for Windows toolchain.  After instantiating a "canned"
+  NuttX configuration, run the target 'menuconfig' and set the following
+  items:
+
+    Build Setup->Build Host Platform->Windows
+    Build Setup->Windows Build Environment->Cygwin
+    System Type->Toolchain Selection->CodeSourcery GNU Toolchain under Windows
+
+  In Windows 7 it may be required to open the Cygwin shell as Administrator
+  ("Run As" option, right button) you find errors like "Permission denied".
+
+Recovering from Bad Configurations
+
+  Many people make the mistake of configuring NuttX with the "canned"
+  configuration and then just typing 'make' with disastrous consequences;
+  the build may fail with mysterious, uninterpretable, and irrecoverable
+  build errors.  If, for example, you do this with an unmodified Linux
+  configuration in a Windows/Cgwin environment, you will corrupt the
+  build environment.  The environment will be corrupted because of POSIX vs
+  Windows path issues and with issues related to symbolic links.  If you
+  make the mistake of doing this, the easiest way to recover is to just
+  start over: Do 'make distclean' to remove every trace of the corrupted
+  configuration, reconfigure from scratch, and make certain that the set
+  the configuration correctly for your platform before attempting to make
+  again.
+
+  Just fixing the configuration file after you have instantiated the bad
+  configuration with 'make' is not enough.
 
 DOCUMENTATION
 ^^^^^^^^^^^^^
@@ -890,14 +1243,14 @@ NuttX documentation is also available online at http://www.nuttx.org.
 
 Below is a guide to the available README files in the NuttX source tree:
 
-nuttx
+nuttx/
  |
  |- arch/
  |   |
  |   |- arm/
  |   |   `- src
  |   |       `- lpc214x/README.txt
- |   |- sh/
+ |   |- renesas/
  |   |   |- include/
  |   |   |   `-README.txt
  |   |   |- src/
@@ -918,15 +1271,17 @@ nuttx
  |   `-libpcode/
  |       `-README.txt
  |- configs/
- |   |- 16z/
- |   |   `- README.txt
  |   |- amber/
+ |   |   `- README.txt
+ |   |- arduino-mega2560/
  |   |   `- README.txt
  |   |- arduino-due/
  |   |   `- README.txt
  |   |- avr32dev1/
  |   |   `- README.txt
  |   |- c5471evm/
+ |   |   `- README.txt
+ |   |- cc3200-launchpad/
  |   |   `- README.txt
  |   |- cloudctrl
  |   |   `- README.txt
@@ -938,11 +1293,17 @@ nuttx
  |   |   `- README.txt
  |   |- demo0s12ne64/
  |   |   `- README.txt
+ |   |- dk-tm4c129x/
+ |   |   `- README.txt
  |   |- ea3131/
  |   |   `- README.txt
  |   |- ea3152/
  |   |   `- README.txt
  |   |- eagle100/
+ |   |   `- README.txt
+ |   |- efm32-g8xx-stk/
+ |   |   `- README.txt
+ |   |- efm32gg-stk3700/
  |   |   `- README.txt
  |   |- ekk-lm3s9b96/
  |   |   `- README.txt
@@ -957,13 +1318,19 @@ nuttx
  |   |   |- ostest/README.txt
  |   |   |- poll/README.txt
  |   |   `- README.txt
- |   |-  fire-stm32v2/
+ |   |- fire-stm32v2/
  |   |   `- README.txt
- |   |-  freedom-kl25z/
+ |   |- freedom-k64f/
  |   |   `- README.txt
- |   |-  hymini-stm32v/
+ |   |- freedom-kl25z/
+ |   |   `- README.txt
+ |   |- freedom-kl26z/
+ |   |   `- README.txt
+ |   |- hymini-stm32v/
  |   |   `- README.txt
  |   |- kwikstik-k40/
+ |   |   `- README.txt
+ |   |- launchxl-tms57004/
  |   |   `- README.txt
  |   |- lincoln60/
  |   |   `- README.txt
@@ -974,6 +1341,14 @@ nuttx
  |   |- lm3s8962-ek/
  |   |   `- README.txt
  |   |- lpc4330-xplorer/
+ |   |   `- README.txt
+ |   |- lpc4337-ws/
+ |   |   `- README.txt
+ |   |- lpc4357-evb/
+ |   |   `- README.txt
+ |   |- lpc4370-link2/
+ |   |   `- README.txt
+ |   |- lpcxpresso-lpc1115/
  |   |   `- README.txt
  |   |- lpcxpresso-lpc1768/
  |   |   `- README.txt
@@ -989,6 +1364,8 @@ nuttx
  |   |   `- README.txt
  |   |- mirtoo/
  |   |   `- README.txt
+ |   |- moteino-mega/
+ |   |   `- README.txt
  |   |- mx1ads/
  |   |   `- README.txt
  |   |- ne63badge/
@@ -996,17 +1373,25 @@ nuttx
  |   |- ntosd-dm320/
  |   |   |- doc/README.txt
  |   |   `- README.txt
- |   |- nucleo-f401re/
+ |   |- nucleo-144/
  |   |   `- README.txt
- |   |- nucleus2g/
+ |   |- nucleo-f4x1re/
  |   |   `- README.txt
  |   |- nutiny-nuc120/
+ |   |   `- README.txt
+ |   |- olimex-efm32g880f129-stk/
  |   |   `- README.txt
  |   |- olimex-lpc1766stk/
  |   |   `- README.txt
  |   |- olimex-lpc2378/
  |   |   `- README.txt
  |   |- olimex-lpc-h3131/
+ |   |   `- README.txt
+ |   |- olimex-stm32-h405/
+ |   |   `- README.txt
+ |   |- olimex-stm32-h407/
+ |   |   `- README.txt
+ |   |- olimex-stm32-p107/
  |   |   `- README.txt
  |   |- olimex-stm32-p207/
  |   |   `- README.txt
@@ -1020,23 +1405,33 @@ nuttx
  |   |   `- README.txt
  |   |- pcduino-a10/
  |   |   `- README.txt
- |   |- pic32-starterkit/
+ |   |- pic32mx-starterkit/
  |   |   `- README.txt
  |   |- pic32mx7mmb/
  |   |   `- README.txt
- |   |- pirelli_dpl10/
+ |   |- pic32mz-starterkit/
  |   |   `- README.txt
- |   |- pjrc-8051/
+ |   |- pirelli_dpl10/
  |   |   `- README.txt
  |   |- qemu-i486/
  |   |   `- README.txt
  |   |- rgmp/
  |   |   `- README.txt
+ |   |- sabre-6quad/
+ |   |   `- README.txt
+ |   |- sama5d2-xult/
+ |   |   `- README.txt
  |   |- sama5d3x-ek/
  |   |   `- README.txt
  |   |- sama5d3-xplained/
  |   |   `- README.txt
+ |   |- sama5d4-ek/
+ |   |   `- README.txt
  |   |- samd20-xplained/
+ |   |   `- README.txt
+ |   |- samd21-xplained/
+ |   |   `- README.txt
+ |   |- saml21-xplained/
  |   |   `- README.txt
  |   |- sam3u-ek/
  |   |   `- README.txt
@@ -1048,7 +1443,12 @@ nuttx
  |   |   `- README.txt
  |   |- sam4s-xplained-pro/
  |   |   `- README.txt
+ |   |- same70-xplained/
+ |   |   `- README.txt
+ |   |- samv71-xult/
+ |   |   `- README.txt
  |   |- sim/
+ |   |   |- include/README.txt
  |   |   `- README.txt
  |   |- shenzhou/
  |   |   `- README.txt
@@ -1060,18 +1460,28 @@ nuttx
  |   |   |- RIDE/README.txt
  |   |   `- README.txt
  |   |- stm3220g-eval/
+ |   |   |-ide/nsh/iar/README.txt
+ |   |   |-ide/nsh/uvision/README.txt
  |   |   `- README.txt
  |   |- stm3240g-eval/
  |   |   `- README.txt
  |   |- stm32_tiny/
  |   |   `- README.txt
- |   |- stm32f100rc_generic/
+ |   |- stm32f103-minumum/
  |   |   `- README.txt
  |   |- stm32f3discovery/
  |   |   `- README.txt
  |   |- stm32f4discovery/
  |   |   `- README.txt
+ |   |- stm32f411e-disco/
+ |   |   `- README.txt
  |   |- stm32f429i-disco/
+ |   |   |- ide/ltcd/uvision/README.txt
+ |   |   |- ltdc/README.txt
+ |   |   `- README.txt
+ |   |- stm32f746g-disco/
+ |   |   `- README.txt
+ |   |- stm32l476vg-disco/
  |   |   `- README.txt
  |   |- stm32ldiscovery/
  |   |   `- README.txt
@@ -1079,20 +1489,25 @@ nuttx
  |   |   `- README.txt
  |   |- sure-pic32mx/
  |   |   `- README.txt
- |   |- teensy/
+ |   |- teensy-2.0/
+ |   |   `- README.txt
+ |   |- teensy-3.x/
+ |   |   `- README.txt
+ |   |- teensy-lc/
  |   |   `- README.txt
  |   |- tm4c123g-launchpad/
  |   |   `- README.txt
+ |   |- tm4c1294-launchpad/
+ |   |   `- README.txt
  |   |- twr-k60n512/
+ |   |   `- README.txt
+ |   |- u-blox-co27/
  |   |   `- README.txt
  |   |- ubw32/
  |   |   `- README.txt
  |   |- us7032evb1/
  |   |   `- README.txt
  |   |- viewtool-stm32f107/
- |   |   `- README.txt
- |   |- vsn/
- |   |   |- src/README.txt
  |   |   `- README.txt
  |   |- xtrs/
  |   |   `- README.txt
@@ -1114,9 +1529,14 @@ nuttx
  |   |   `- README.txt
  |   `- README.txt
  |- drivers/
- |   |- lcd/
+ |   |- eeprom/
  |   |   `- README.txt
+ |   |- lcd/
+ |   |   | README.txt
+ |   |   `- pcf8574_lcd_backpack_readme.txt
  |   |- mtd/
+ |   |   `- README.txt
+ |   |- sensors/
  |   |   `- README.txt
  |   |- sercomm/
  |   |   `- README.txt
@@ -1132,33 +1552,49 @@ nuttx
  |   |   `- README.txt
  |   |- smartfs/
  |   |   `- README.txt
- |   `- procfs/
+ |   |- procfs/
+ |   |   `- README.txt
+ |   `- unionfs/
  |       `- README.txt
  |- graphics/
  |   `- README.txt
  |- lib/
  |   `- README.txt
  |- libc/
+ |   |- zoneinfo
+ |   |   `- README.txt
  |   `- README.txt
  |- libnx/
  |   `- README.txt
  |- libxx/
  |   `- README.txt
  |- mm/
+ |   |- shm/
+ |   |   `- README.txt
+ |   `- README.txt
+ |- net/
  |   `- README.txt
  |- syscall/
  |   `- README.txt
  `- tools/
      `- README.txt
 
-apps
+Below is a guide to the available README files in the semi-optional apps/
+source tree:
+
+apps/
  |- examples/
+ |   |- bastest/README.txt
  |   |- json/README.txt
  |   |- pashello/README.txt
  |   `- README.txt
+ |- gpsutils/
+ |   `- minmea/README.txt
  |- graphics/
  |   `- tiff/README.txt
  |- interpreters/
+ |   |- bas
+ |   |  `- README.txt
  |   |- ficl
  |   |  `- README.txt
  |   `- README.txt
@@ -1189,17 +1625,33 @@ apps
  |   |  `- README.txt
  |   |- nxplayer
  |   |  `- README.txt
+ |   |- symtab/
+ |   |   `- README.txt
  |   |- usbmsc
  |   |  `- README.txt
  |   `- zmodem
  |      `- README.txt
  `- README.txt
 
- NxWidgets
+Additional README.txt files in the other, related repositories:
+
+NxWidgets/
  |- Doxygen
  |   `- README.txt
  |- tools
  |   `- README.txt
  |- UnitTests
  |   `- README.txt
+ `- README.txt
+
+buildroot/
+ `- README.txt
+
+tools/
+ `- README.txt
+
+uClibc++/
+ `- README.txt
+
+pascal/
  `- README.txt

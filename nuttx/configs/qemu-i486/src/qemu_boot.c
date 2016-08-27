@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/qemu-i486/src/qemu_boot.c
  *
- *   Copyright (C) 2011, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,16 +41,17 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
 #include "up_internal.h"
 
-#include "qemu_internal.h"
+#include "qemu.h"
 #include "qemu_i486.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /************************************************************************************
@@ -62,20 +63,20 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Name: up_boardinitialize
+ * Name: x86_boardinitialize
  *
  * Description:
  *   All x86 architectures must provide the following entry point.  This entry point
- *   is called early in the intitialization -- after all memory has been configured
+ *   is called early in the initialization -- after all memory has been configured
  *   and mapped but before any devices have been initialized.
  *
  ************************************************************************************/
 
-void up_boardinitialize(void)
+void x86_boardinitialize(void)
 {
   /* Configure on-board LEDs if LED support has been selected. */
 
 #ifdef CONFIG_ARCH_LEDS
-  board_led_initialize();
+  board_autoled_initialize();
 #endif
 }

@@ -69,6 +69,10 @@
 #  if defined(CONFIG_STM32_VALUELINE)
 #    include "chip/stm32f100_pinmap.h"
 
+/* STM32 F102 USB Access Medium Density Family */
+#  elif defined(CONFIG_ARCH_CHIP_STM32F102CB)
+#    include "chip/stm32f102_pinmap.h"
+
 /* STM32 F103 Low / Medium Density Family */
 #  elif defined(CONFIG_ARCH_CHIP_STM32F103C4) || \
         defined(CONFIG_ARCH_CHIP_STM32F103C8) || \
@@ -80,8 +84,11 @@
  * only in the available FLASH and SRAM.
  */
 
-#  elif defined(CONFIG_ARCH_CHIP_STM32F103RE) || \
-        defined(CONFIG_ARCH_CHIP_STM32F103RB)
+#  elif defined(CONFIG_ARCH_CHIP_STM32F103RB) || \
+        defined(CONFIG_ARCH_CHIP_STM32F103RC) || \
+        defined(CONFIG_ARCH_CHIP_STM32F103RD) || \
+        defined(CONFIG_ARCH_CHIP_STM32F103RE) || \
+        defined(CONFIG_ARCH_CHIP_STM32F103RG)
 #    include "chip/stm32f103r_pinmap.h"
 
 /* STM32F103VC, STM32F103VD, and STM32F103VE are all provided in 100 pin packages and differ
@@ -102,6 +109,9 @@
 #  elif defined(CONFIG_ARCH_CHIP_STM32F105VB)
 #    include "chip/stm32f105v_pinmap.h"
 
+#  elif defined(CONFIG_ARCH_CHIP_STM32F105RB)
+#    include "chip/stm32f105r_pinmap.h"
+
 #  elif defined(CONFIG_ARCH_CHIP_STM32F107VC)
 #    include "chip/stm32f107v_pinmap.h"
 #  else
@@ -117,6 +127,8 @@
 
 #elif defined(CONFIG_STM32_STM32F30XX)
 #  include "chip/stm32f30xxx_pinmap.h"
+#elif defined(CONFIG_STM32_STM32F37XX)
+#  include "chip/stm32f37xxx_pinmap.h"
 
 /* STM32 F4 Family ******************************************************************/
 
@@ -139,6 +151,8 @@
 #    include "chip/stm32f20xxx_vectors.h"
 #  elif defined(CONFIG_STM32_STM32F30XX)
 #    include "chip/stm32f30xxx_vectors.h"
+#  elif defined(CONFIG_STM32_STM32F37XX)
+#    include "chip/stm32f37xxx_vectors.h"
 #  elif defined(CONFIG_STM32_STM32F40XX)
 #    include "chip/stm32f40xxx_vectors.h"
 #  else

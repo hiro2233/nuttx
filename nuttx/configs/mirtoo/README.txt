@@ -390,7 +390,7 @@ Toolchains
   well. This toolchain can be downloded from the Pinguino website:
   http://wiki.pinguino.cc/index.php/Main_Page#Download . There is some general
   information about using the Pinguino mips-elf toolchain in this thread:
-  http://tech.groups.yahoo.com/group/nuttx/message/1821
+  https://groups.yahoo.com/neo/groups/nuttx/conversations/messages/1821
 
   Support for the Pinguino mips-elf toolchain has been included in the Mirtoo
   configurations.  Use one of these configuration options to select the Pinguino
@@ -426,7 +426,7 @@ Toolchains
 
   Even then, there are more warnings from the linker and some undefined symbols
   for non-NuttX code that resides in the unused Microchip libraries.  See this
-  email thread at http://tech.groups.yahoo.com/group/nuttx/message/1458 for more
+  email thread at https://groups.yahoo.com/neo/groups/nuttx/conversations/messages/1458 for more
   information.  You will have to solve at least this undefined symbol problem if
   you want to used the XC32 toolchain.
 
@@ -452,12 +452,6 @@ Toolchains
        make clean_context all
 
      An alias in your .bashrc file might make that less painful.
-
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
 
 Loading NuttX with ICD3
 ========================
@@ -536,7 +530,7 @@ UART Usage
 
   When mounted on the DTX1-4000L EV-kit1 board, serial output is avaiable through
   an FT230X device via the FUNC0 and FUNC1 module outputs.  If CONFIG_PIC32MX_UART2
-  is enabled, the src/up_boot will configure the UART2 pins as follows:
+  is enabled, the src/pic32_boot will configure the UART2 pins as follows:
 
     ---------- ------ ----- ------ -------------------------
        BOARD   MODULE  PIN  SIGNAL NOTES
@@ -548,7 +542,7 @@ UART Usage
   for UART2 if you are also debugging with the ICD3.  In that case, you may need
   to switch to UART1.
 
-  If CONFIG_PIC32MX_UART1 is enabled, the src/up_boot will configure the UART
+  If CONFIG_PIC32MX_UART1 is enabled, the src/pic32_boot will configure the UART
   pins as follows.  This will support communictions (via an external RS-232
   driver) through X3 pins 4 and 5:
 
@@ -580,7 +574,6 @@ Analog Input
 
     CONFIG_ADC=y         : Enable support for analog input devices
     CONFIG_PIC32MX_ADC=y : Enable support the PIC32 ADC driver
-    CONFIG_SPI_OWNBUS=n  : The PGA117 is *not* the only device on the bus
     CONFIG_ADC_PGA11X=y  : Enable support for the PGA117
 
   When CONFIG_PIC32MX_ADC=y is defined, the Mirtoo boot up logic will
@@ -596,10 +589,10 @@ Analog Input
 
   /* Get the SPI port */
 
-  spi = up_spiinitialize(2);
+  spi = pic32mx_spibus_initialize(2);
   if (!spi)
     {
-      dbg("ERROR: Failed to initialize SPI port 2\n");
+      _err("ERROR: Failed to initialize SPI port 2\n");
       return -ENODEV;
     }
 
@@ -608,7 +601,7 @@ Analog Input
   handle = pga11x_initialize(spi);
   if (!handle)
     {
-      dbg("ERROR: Failed to bind SPI port 2 to the PGA117 driver\n");
+      _err("ERROR: Failed to bind SPI port 2 to the PGA117 driver\n");
       return -ENODEV;
     }
 
@@ -624,7 +617,7 @@ Analog Input
   ret = pga11x_select(handle, &settings);
   if (ret < 0)
     {
-      dbg("ERROR: Failed to select channel 2, gain 2\n");
+      _err("ERROR: Failed to select channel 2, gain 2\n");
       return -EIO;
     }
 
@@ -870,7 +863,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -898,7 +891,6 @@ Where <subdir> is one of the following:
        but can be enabled by setting:
 
          CONFIG_ADC=y         : Enable support for analog input devices
-         CONFIG_SPI_OWNBUS=y  : If the PGA117 is the only device on the bus
          CONFIG_ADC_PGA11X=y  : Enable support for the PGA117
 
   nxffs
@@ -913,7 +905,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -998,5 +990,4 @@ Where <subdir> is one of the following:
        configuration but can be enabled by setting:
 
          CONFIG_ADC=y         : Enable support for anlog input devices
-         CONFIG_SPI_OWNBUS=n  : The PGA117 is *not* the only device on the bus
          CONFIG_ADC_PGA11X=y  : Enable support for the PGA117

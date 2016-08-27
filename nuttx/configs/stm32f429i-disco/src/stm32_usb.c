@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/stm32f429i-disco/src/stm32_usbdev.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,6 +44,7 @@
 #include <stdbool.h>
 #include <sched.h>
 #include <errno.h>
+#include <assert.h>
 #include <debug.h>
 
 #include <nuttx/usb/usbdev.h>
@@ -52,10 +53,10 @@
 
 #include "up_arch.h"
 #include "stm32.h"
-#include "stm32_otgfs.h"
+#include "stm32_otghs.h"
 #include "stm32f429i-disco.h"
 
-#ifdef CONFIG_STM32_OTGFS2
+#ifdef CONFIG_STM32_OTGHS
 
 /************************************************************************************
  * Pre-processor Definitions
@@ -64,16 +65,16 @@
 #if defined(CONFIG_USBDEV) || defined(CONFIG_USBHOST)
 #  define HAVE_USB 1
 #else
-#  warning "CONFIG_STM32_OTGFS2 is enabled but neither CONFIG_USBDEV nor CONFIG_USBHOST"
+#  warning "CONFIG_STM32_OTGHS is enabled but neither CONFIG_USBDEV nor CONFIG_USBHOST"
 #  undef HAVE_USB
 #endif
 
-#ifndef CONFIG_USBHOST_DEFPRIO
-#  define CONFIG_USBHOST_DEFPRIO 50
+#ifndef CONFIG_STM32F429IDISCO_USBHOST_PRIO
+#  define CONFIG_STM32F429IDISCO_USBHOST_PRIO 100
 #endif
 
-#ifndef CONFIG_USBHOST_STACKSIZE
-#  define CONFIG_USBHOST_STACKSIZE 1024
+#ifndef CONFIG_STM32F429IDISCO_USBHOST_STACKSIZE
+#  define CONFIG_STM32F429IDISCO_USBHOST_STACKSIZE 1024
 #endif
 
 /************************************************************************************
@@ -99,27 +100,23 @@ static struct usbhost_connection_s *g_usbconn;
 #ifdef CONFIG_USBHOST
 static int usbhost_waiter(int argc, char *argv[])
 {
-  bool connected = false;
-  int ret;
+  struct usbhost_hubport_s *hport;
 
-  uvdbg("Running\n");
+  uinfo("Running\n");
   for (;;)
     {
       /* Wait for the device to change state */
 
-      ret = CONN_WAIT(g_usbconn, &connected);
-      DEBUGASSERT(ret == OK);
-
-      connected = !connected;
-      uvdbg("%s\n", connected ? "connected" : "disconnected");
+      DEBUGVERIFY(CONN_WAIT(g_usbconn, &hport));
+      uinfo("%s\n", hport->connected ? "connected" : "disconnected");
 
       /* Did we just become connected? */
 
-      if (connected)
+      if (hport->connected)
         {
           /* Yes.. enumerate the newly connected device */
 
-          (void)CONN_ENUMERATE(g_usbconn, 0);
+          (void)CONN_ENUMERATE(g_usbconn, hport);
         }
     }
 
@@ -148,7 +145,7 @@ void stm32_usbinitialize(void)
 
   /* Configure the OTG HS VBUS sensing GPIO, Power On, and Overcurrent GPIOs */
 
-#ifdef CONFIG_STM32_OTGFS2
+#ifdef CONFIG_STM32_OTGHS
   stm32_configgpio(GPIO_OTGHS_VBUS);
   stm32_configgpio(GPIO_OTGHS_PWRON);
   stm32_configgpio(GPIO_OTGHS_OVER);
@@ -175,25 +172,50 @@ int stm32_usbhost_initialize(void)
    * that we care about:
    */
 
-  uvdbg("Register class drivers\n");
-  ret = usbhost_storageinit();
+  uinfo("Register class drivers\n");
+
+#ifdef CONFIG_USBHOST_HUB
+  /* Initialize USB hub class support */
+
+  ret = usbhost_hub_initialize();
+  if (ret < 0)
+    {
+      uerr("ERROR: usbhost_hub_initialize failed: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_USBHOST_MSC
+  /* Register the USB mass storage class class */
+
+  ret = usbhost_msc_initialize();
   if (ret != OK)
     {
-      udbg("Failed to register the mass storage class\n");
+      uerr("ERROR: Failed to register the mass storage class: %d\n", ret);
     }
+#endif
+
+#ifdef CONFIG_USBHOST_CDCACM
+  /* Register the CDC/ACM serial class */
+
+  ret = usbhost_cdcacm_initialize();
+  if (ret != OK)
+    {
+      uerr("ERROR: Failed to register the CDC/ACM serial class: %d\n", ret);
+    }
+#endif
 
   /* Then get an instance of the USB host interface */
 
-  uvdbg("Initialize USB host\n");
-  g_usbconn = stm32_otgfshost_initialize(0);
+  uinfo("Initialize USB host\n");
+  g_usbconn = stm32_otghshost_initialize(0);
   if (g_usbconn)
     {
       /* Start a thread to handle device connection. */
 
-      uvdbg("Start usbhost_waiter\n");
+      uinfo("Start usbhost_waiter\n");
 
-      pid = TASK_CREATE("usbhost", CONFIG_USBHOST_DEFPRIO,
-                        CONFIG_USBHOST_STACKSIZE,
+      pid = task_create("usbhost", CONFIG_STM32F429IDISCO_USBHOST_PRIO,
+                        CONFIG_STM32F429IDISCO_USBHOST_STACKSIZE,
                         (main_t)usbhost_waiter, (FAR char * const *)NULL);
       return pid < 0 ? -ENOEXEC : OK;
     }
@@ -284,9 +306,8 @@ xcpt_t stm32_setup_overcurrent(xcpt_t handler)
 #ifdef CONFIG_USBDEV
 void stm32_usbsuspend(FAR struct usbdev_s *dev, bool resume)
 {
-  ulldbg("resume: %d\n", resume);
+  uinfo("resume: %d\n", resume);
 }
 #endif
 
-#endif /* CONFIG_STM32_OTGFS2 */
-
+#endif /* CONFIG_STM32_OTGHS */

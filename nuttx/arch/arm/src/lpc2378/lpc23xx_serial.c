@@ -60,9 +60,8 @@
 
 #include "chip.h"
 #include "up_arch.h"
-#include "os_internal.h"
 
-#include "internal.h"
+#include "lpc2378.h"
 #include "lpc23xx_scb.h"
 #include "lpc23xx_pinsel.h"
 #include "lpc23xx_uart.h"
@@ -71,7 +70,7 @@
 #ifdef USE_SERIALDRIVER
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -108,7 +107,7 @@ static bool up_txready(struct uart_dev_s *dev);
 static bool up_txempty(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -291,6 +290,7 @@ static inline void up_waittxready(struct up_dev_s *priv)
 static inline void up_enablebreaks(struct up_dev_s *priv, bool enable)
 {
   uint8_t lcr = up_serialin(priv, UART_LCR_OFFSET);
+
   if (enable)
     {
       lcr |= LCR_BREAK_ENABLE;
@@ -299,6 +299,7 @@ static inline void up_enablebreaks(struct up_dev_s *priv, bool enable)
     {
       lcr &= ~LCR_BREAK_ENABLE;
     }
+
   up_serialout(priv, UART_LCR_OFFSET, lcr);
 }
 
@@ -319,14 +320,14 @@ static inline void up_configbaud(struct up_dev_s *priv)
   /* Test values calculated for every multiplier/divisor combination */
 
   uint32_t tdiv;
-  uint32_t terr;
+  uint32_t tmperr;
   int tmulval;
   int tdivaddval;
 
   /* Optimal multiplier/divider values */
 
   uint32_t div = 0;
-  uint32_t err = 100000;
+  uint32_t errval = 100000;
   int mulval = 1;
   int divaddval = 0;
 
@@ -349,13 +350,13 @@ static inline void up_configbaud(struct up_dev_s *priv)
 
   /* Try every valid multiplier, tmulval (or until a perfect match is found). */
 
-  for (tmulval = 1; tmulval <= 15 && err > 0; tmulval++)
+  for (tmulval = 1; tmulval <= 15 && errval > 0; tmulval++)
     {
       /* Try every valid pre-scale div, tdivaddval (or until a perfect match is
        * found).
        */
 
-      for (tdivaddval = 0; tdivaddval <= 15 && err > 0; tdivaddval++)
+      for (tdivaddval = 0; tdivaddval <= 15 && errval > 0; tdivaddval++)
         {
           /* Calculate the divisor with these fractional divider settings */
 
@@ -372,16 +373,16 @@ static inline void up_configbaud(struct up_dev_s *priv)
 
               if (actualbaud <= priv->baud)
                 {
-                  terr = priv->baud - actualbaud;
+                  tmperr = priv->baud - actualbaud;
                 }
               else
                 {
-                  terr = actualbaud - priv->baud;
+                  tmperr = actualbaud - priv->baud;
                 }
 
               /* Is this the smallest error we have encountered? */
 
-              if (terr < err)
+              if (tmperr < errval)
                 {
                   /* Yes, save these settings as the new, candidate optimal
                    * settings
@@ -390,7 +391,7 @@ static inline void up_configbaud(struct up_dev_s *priv)
                   mulval = tmulval;
                   divaddval = tdivaddval;
                   div = tdiv;
-                  err = terr;
+                  errval = tmperr;
                 }
             }
         }
@@ -484,7 +485,7 @@ static int up_setup(struct uart_dev_s *dev)
                (FCR_FIFO_TRIG8 | FCR_TX_FIFO_RESET |
                 FCR_RX_FIFO_RESET | FCR_FIFO_ENABLE));
 
-  /* The NuttX serial driver waits for the first THRE interrrupt before sending
+  /* The NuttX serial driver waits for the first THRE interrupt before sending
    * serial data... However, it appears that the LPC2378 hardware too does not
    * generate that interrupt until a transition from not-empty to empty.  So,
    * the current kludge here is to send one NULL at startup to kick things off.
@@ -647,7 +648,7 @@ static int up_interrupt(int irq, void *context)
             /* Read the modem status register (MSR) to clear */
 
             status = up_serialin(priv, UART_MSR_OFFSET);
-            vdbg("MSR: %02x\n", status);
+            _info("MSR: %02x\n", status);
             break;
           }
 
@@ -658,7 +659,7 @@ static int up_interrupt(int irq, void *context)
             /* Read the line status register (LSR) to clear */
 
             status = up_serialin(priv, UART_LSR_OFFSET);
-            vdbg("LSR: %02x\n", status);
+            _info("LSR: %02x\n", status);
             break;
           }
 
@@ -666,7 +667,7 @@ static int up_interrupt(int irq, void *context)
 
         default:
           {
-            dbg("Unexpected IIR: %02x\n", status);
+            _err("ERROR: Unexpected IIR: %02x\n", status);
             break;
           }
         }
@@ -710,9 +711,9 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
     case TIOCSBRK:             /* BSD compatibility: Turn break on,
                                  * unconditionally */
       {
-        irqstate_t flags = irqsave();
+        irqstate_t flags = enter_critical_section();
         up_enablebreaks(priv, true);
-        irqrestore(flags);
+        leave_critical_section(flags);
       }
       break;
 
@@ -720,9 +721,9 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
                                  * unconditionally */
       {
         irqstate_t flags;
-        flags = irqsave();
+        flags = enter_critical_section();
         up_enablebreaks(priv, false);
-        irqrestore(flags);
+        leave_critical_section(flags);
       }
       break;
 

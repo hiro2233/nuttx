@@ -55,13 +55,13 @@ ifeq ($(WINTOOL),y)
   # Windows-native toolchains
   DIRLINK = $(TOPDIR)/tools/copydir.sh
   DIRUNLINK = $(TOPDIR)/tools/unlink.sh
-  MKDEP = $(TOPDIR)/tools/mknulldeps.sh
+  MKDEP = $(TOPDIR)/tools/mkwindeps.sh
   ARCHINCLUDES = -I. -isystem "${shell cygpath -w $(TOPDIR)/include}"
   ARCHXXINCLUDES = -I. -isystem "${shell cygpath -w $(TOPDIR)/include}" -isystem "${shell cygpath -w $(TOPDIR)/include/cxx}"
   ARCHSCRIPT = -T "${shell cygpath -w $(TOPDIR)/configs/$(CONFIG_ARCH_BOARD)/ostest/ld.script}"
 else
   # Linux/Cygwin-native toolchain
-  MKDEP = $(TOPDIR)/tools/mkdeps.sh
+  MKDEP = $(TOPDIR)/tools/mkdeps$(HOSTEXEEXT)
   ARCHINCLUDES = -I. -isystem $(TOPDIR)/include
   ARCHXXINCLUDES = -I. -isystem $(TOPDIR)/include -isystem $(TOPDIR)/include/cxx
   ARCHSCRIPT = -T$(TOPDIR)/configs/$(CONFIG_ARCH_BOARD)/ostest/ld.script
@@ -88,9 +88,9 @@ ifneq ($(CONFIG_DEBUG_NOOPT),y)
 endif
 
 ARCHCFLAGS = -fno-builtin -muse-rodata-section
-ARCHCXXFLAGS = -fno-builtin -fno-exceptions
-ARCHWARNINGS = -Wall -Wstrict-prototypes -Wshadow
-ARCHWARNINGSXX = -Wall -Wshadow
+ARCHCXXFLAGS = -fno-builtin -fno-exceptions -fcheck-new
+ARCHWARNINGS = -Wall -Wstrict-prototypes -Wshadow -Wundef
+ARCHWARNINGSXX = -Wall -Wshadow -Wundef
 ARCHDEFINES =
 ARCHNOPICFLAGS = -fno-pic
 ARCHPICFLAGS = -fpic
@@ -104,6 +104,7 @@ CXXPICFLAGS = $(ARCHPICFLAGS) $(ARCHALLCXXFLAGS)
 CPPFLAGS = $(ARCHINCLUDES) $(ARCHDEFINES) $(EXTRADEFINES)
 AFLAGS = $(ARCHALLCFLAGS) -D__ASSEMBLY__
 
+ASMEXT = .S
 OBJEXT = .o
 LIBEXT = .a
 EXEEXT =
@@ -115,6 +116,6 @@ endif
 
 HOSTCC = gcc
 HOSTINCLUDES = -I.
-HOSTCFLAGS = -Wall -Wstrict-prototypes -Wshadow -g -pipe
+HOSTCFLAGS = -Wall -Wstrict-prototypes -Wshadow -Wundef -g -pipe
 HOSTLDFLAGS =
 

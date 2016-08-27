@@ -2,7 +2,7 @@
  * arch/arm/src/lpc31xx/lpc31_irq.c
  * arch/arm/src/chip/lpc31_irq.c
  *
- *   Copyright (C) 2009-2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2011, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,22 +49,27 @@
 
 #include "arm.h"
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 #include "lpc31_intc.h"
 #include "lpc31_cgudrvr.h"
-#include "lpc31_internal.h"
+#include "lpc31.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
  * Public Data
  ****************************************************************************/
 
-volatile uint32_t *current_regs;
+/* g_current_regs[] holds a references to the current interrupt level
+ * register storage structure.  If is non-NULL only during interrupt
+ * processing.  Access to g_current_regs[] must be through the macro
+ * CURRENT_REGS for portability.
+ */
+
+volatile uint32_t *g_current_regs[1];
 
 /****************************************************************************
  * Private Data
@@ -103,7 +108,7 @@ void up_irqinitialize(void)
   putreg32(0, LPC31_INTC_PRIORITYMASK0); /* Proc interrupt request 0: IRQ */
   putreg32(0, LPC31_INTC_PRIORITYMASK1); /* Proc interrupt request 1: FIQ */
 
-  /* Disable all interrupts. Start from index 1 since 0 is unused.*/
+  /* Disable all interrupts. Start from index 1 since 0 is unused. */
 
   for (irq = 0; irq < NR_IRQS; irq++)
     {
@@ -112,19 +117,20 @@ void up_irqinitialize(void)
        */
 
       uint32_t address = LPC31_INTC_REQUEST(irq+1);
-      putreg32(INTC_REQUEST_WEACTLOW|INTC_REQUEST_WEENABLE|INTC_REQUEST_TARGET_IRQ|
-               INTC_REQUEST_PRIOLEVEL(1)|INTC_REQUEST_WEPRIO, address);
+      putreg32(INTC_REQUEST_WEACTLOW | INTC_REQUEST_WEENABLE |
+               INTC_REQUEST_TARGET_IRQ | INTC_REQUEST_PRIOLEVEL(1) |
+               INTC_REQUEST_WEPRIO, address);
 
     }
 
   /* currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  CURRENT_REGS = NULL;
 
   /* And finally, enable interrupts */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
-  irqrestore(SVC_MODE | PSR_F_BIT);
+  up_irq_restore(SVC_MODE | PSR_F_BIT);
 #endif
 }
 
@@ -171,18 +177,18 @@ void up_enable_irq(int irq)
    * preserved because WE_TARGET is zero.
    */
 
-  putreg32(INTC_REQUEST_ENABLE|INTC_REQUEST_WEENABLE, address);
+  putreg32(INTC_REQUEST_ENABLE | INTC_REQUEST_WEENABLE, address);
 }
 
 /****************************************************************************
- * Name: up_maskack_irq
+ * Name: up_ack_irq
  *
  * Description:
- *   Mask the IRQ and acknowledge it
+ *   Acknowledge the interrupt
  *
  ****************************************************************************/
 
-void up_maskack_irq(int irq)
+void up_ack_irq(int irq)
 {
   /* Get the address of the request register corresponding to this
    * interrupt source
@@ -190,12 +196,13 @@ void up_maskack_irq(int irq)
 
   uint32_t address = LPC31_INTC_REQUEST(irq+1);
 
-  /* Clear the pending interrupt (INTC_REQUEST_CLRSWINT=1) AND disable interrupts
-   * (ENABLE=0 && WE_ENABLE=1). Configuration settings will be preserved because
-   * WE_TARGET is zero.
+  /* Clear the pending interrupt (INTC_REQUEST_CLRSWINT=1) while keeping
+   * interrupts enabled (ENABLE=1 && WE_ENABLE=1). Configuration settings
+   * will be preserved because WE_TARGET is zero.
    */
 
-  putreg32(INTC_REQUEST_CLRSWINT|INTC_REQUEST_WEENABLE, address);
+  putreg32(INTC_REQUEST_CLRSWINT | INTC_REQUEST_ENABLE |
+           INTC_REQUEST_WEENABLE, address);
 }
 
 /****************************************************************************

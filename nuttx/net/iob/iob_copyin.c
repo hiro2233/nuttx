@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/iob/iob_copyin.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@
 
 #include <nuttx/config.h>
 
-#if defined(CONFIG_DEBUG) && defined(CONFIG_IOB_DEBUG)
+#if defined(CONFIG_DEBUG_FEATURES) && defined(CONFIG_IOB_DEBUG)
 /* Force debug output (from this file only) */
 
 #  undef  CONFIG_DEBUG_NET
@@ -68,44 +68,43 @@
  * Private Types
  ****************************************************************************/
 
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
+typedef CODE struct iob_s *(*iob_alloc_t)(bool throttled);
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: iob_copyin
+ * Name: iob_copyin_internal
  *
  * Description:
  *  Copy data 'len' bytes from a user buffer into the I/O buffer chain,
  *  starting at 'offset', extending the chain as necessary.
  *
+ * Returned Value:
+ *  The number of uncopied bytes left if >= 0 OR a negative error code.
+ *
  ****************************************************************************/
 
-int iob_copyin(FAR struct iob_s *iob, FAR const uint8_t *src,
-               unsigned int len, unsigned int offset, bool throttled)
+static int iob_copyin_internal(FAR struct iob_s *iob, FAR const uint8_t *src,
+                               unsigned int len, unsigned int offset,
+                               bool throttled, bool can_block)
 {
   FAR struct iob_s *head = iob;
   FAR struct iob_s *next;
   FAR uint8_t *dest;
   unsigned int ncopy;
   unsigned int avail;
+  unsigned int total = len;
 
-  nllvdbg("iob=%p len=%u offset=%u\n", iob, len, offset);
+  ninfo("iob=%p len=%u offset=%u\n", iob, len, offset);
   DEBUGASSERT(iob && src);
 
   /* The offset must applied to data that is already in the I/O buffer chain */
 
   if (offset > iob->io_pktlen)
     {
-      ndbg("ERROR: offset is past the end of data: %u > %u\n",
+      nerr("ERROR: offset is past the end of data: %u > %u\n",
            offset, iob->io_pktlen);
       return -ESPIPE;
     }
@@ -131,7 +130,7 @@ int iob_copyin(FAR struct iob_s *iob, FAR const uint8_t *src,
       dest  = &iob->io_data[iob->io_offset + offset];
       avail = iob->io_len - offset;
 
-      nllvdbg("iob=%p avail=%u len=%u next=%p\n", iob, avail, len, next);
+      ninfo("iob=%p avail=%u len=%u next=%p\n", iob, avail, len, next);
 
       /* Will the rest of the copy fit into this buffer, overwriting
        * existing data.
@@ -188,8 +187,8 @@ int iob_copyin(FAR struct iob_s *iob, FAR const uint8_t *src,
       /* Copy from the user buffer to the I/O buffer.  */
 
       memcpy(dest, src, ncopy);
-      nllvdbg("iob=%p Copy %u bytes new len=%u\n",
-              iob, ncopy, iob->io_len);
+      ninfo("iob=%p Copy %u bytes new len=%u\n",
+            iob, ncopy, iob->io_len);
 
       /* Adjust the total length of the copy and the destination address in
        * the user buffer.
@@ -204,24 +203,78 @@ int iob_copyin(FAR struct iob_s *iob, FAR const uint8_t *src,
 
       if (len > 0 && !next)
         {
-          /* Yes.. allocate a new buffer */
+          /* Yes.. allocate a new buffer.
+           *
+           * Copy as many bytes as possible.  If we have successfully copied
+           * any already don't block, otherwise block if we're allowed.
+           */
 
-          next = iob_alloc(throttled);
+          if (!can_block || len < total)
+            {
+              next = iob_tryalloc(throttled);
+            }
+          else
+            {
+              next = iob_alloc(throttled);
+            }
+
           if (next == NULL)
             {
-              ndbg("ERROR: Failed to allocate I/O buffer\n");
-              return -ENOMEM;
+              nerr("ERROR: Failed to allocate I/O buffer\n");
+              return len;
             }
 
           /* Add the new, empty I/O buffer to the end of the buffer chain. */
 
           iob->io_flink = next;
-          nllvdbg("iob=%p added to the chain\n", iob);
+          ninfo("iob=%p added to the chain\n", iob);
         }
 
       iob = next;
       offset = 0;
     }
 
-  return OK;
+  return 0;
+}
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: iob_copyin
+ *
+ * Description:
+ *  Copy data 'len' bytes from a user buffer into the I/O buffer chain,
+ *  starting at 'offset', extending the chain as necessary.
+ *
+ ****************************************************************************/
+
+int iob_copyin(FAR struct iob_s *iob, FAR const uint8_t *src,
+               unsigned int len, unsigned int offset, bool throttled)
+{
+  return len - iob_copyin_internal(iob, src, len, offset, throttled, true);
+}
+
+/****************************************************************************
+ * Name: iob_trycopyin
+ *
+ * Description:
+ *  Copy data 'len' bytes from a user buffer into the I/O buffer chain,
+ *  starting at 'offset', extending the chain as necessary BUT without
+ *  waiting if buffers are not available.
+ *
+ ****************************************************************************/
+
+int iob_trycopyin(FAR struct iob_s *iob, FAR const uint8_t *src,
+                  unsigned int len, unsigned int offset, bool throttled)
+{
+  if (iob_copyin_internal(iob, src, len, offset, throttled, false) == 0)
+    {
+      return OK;
+    }
+  else
+    {
+      return -ENOMEM;
+    }
 }

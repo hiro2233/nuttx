@@ -46,7 +46,7 @@
 #include <stdint.h>
 
 /****************************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************************************/
 /* Configuration ************************************************************************************/
 
@@ -91,14 +91,14 @@
  ****************************************************************************************************/
 
 /****************************************************************************************************
- * Name: nuc_spiinitialize
+ * Name: nuc_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the NuTiny-EVB-120 board.
  *
  ****************************************************************************************************/
 
-void weak_function nuc_spiinitialize(void);
+void weak_function nuc_spidev_initialize(void);
 
 /****************************************************************************************************
  * Name: nuc_usbinitialize
@@ -114,7 +114,7 @@ void weak_function nuc_usbinitialize(void);
 #endif
 
 /****************************************************************************************************
- * Name: nuc_ledinit
+ * Name: nuc_led_initialize
  *
  * Description:
  *   Initialize the on-board LED
@@ -122,7 +122,7 @@ void weak_function nuc_usbinitialize(void);
  ****************************************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void nuc_ledinit(void);
+void nuc_led_initialize(void);
 #endif
 
 

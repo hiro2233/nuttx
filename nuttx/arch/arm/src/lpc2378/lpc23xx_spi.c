@@ -6,7 +6,7 @@
  *
  * Derived from  arch/arm/src/lpc17xx/lpc17_spi.c
  *
- *   Copyright (C) 2010, 2012, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2012, 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,7 @@
 #include <debug.h>
 
 #include <arch/board/board.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/spi/spi.h>
 
@@ -72,21 +73,6 @@
 
 #ifdef CONFIG_SPI_EXCHANGE
 #  error CONFIG_SPI_EXCHANGE is not supported by this driver
-#endif
-
-/* Debug ********************************************************************/
-/* CONFIG_DEBUG_SPI enables debug output from this file */
-
-#ifdef CONFIG_DEBUG_SPI
-#  define spidbg  lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define spivdbg lldbg
-#  else
-#    define spivdbg(x...)
-#  endif
-#else
-#  define spidbg(x...)
-#  define spivdbg(x...)
 #endif
 
 /* SPI Clocking.
@@ -117,13 +103,11 @@
 struct lpc23xx_spidev_s
 {
   struct spi_dev_s spidev;     /* Externally visible part of the SPI interface */
-#ifndef CONFIG_SPI_OWNBUS
   sem_t            exclsem;    /* Held while chip is selected for mutual exclusion */
   uint32_t         frequency;  /* Requested clock frequency */
   uint32_t         actual;     /* Actual clock frequency */
   uint8_t          nbits;      /* Width of word in bits (8 to 16) */
   uint8_t          mode;       /* Mode 0,1,2,3 */
-#endif
 };
 
 /****************************************************************************
@@ -132,9 +116,7 @@ struct lpc23xx_spidev_s
 
 /* SPI methods */
 
-#ifndef CONFIG_SPI_OWNBUS
 static int      spi_lock(FAR struct spi_dev_s *dev, bool lock);
-#endif
 static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency);
 static void     spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode);
 static void     spi_setbits(FAR struct spi_dev_s *dev, int nbits);
@@ -148,13 +130,14 @@ static void     spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_
 
 static const struct spi_ops_s g_spiops =
 {
-#ifndef CONFIG_SPI_OWNBUS
   .lock              = spi_lock,
-#endif
   .select            = lpc23xx_spiselect,   /* Provided externally */
   .setfrequency      = spi_setfrequency,
   .setmode           = spi_setmode,
   .setbits           = spi_setbits,
+#ifdef CONFIG_SPI_HWFEATURES
+  .hwfeatures        = 0,                   /* Not supported */
+#endif
   .status            = lpc23xx_spistatus,
 #ifdef CONFIG_SPI_CMDDATA
   .cmddata           = lpc23xx_spicmddata,
@@ -203,7 +186,6 @@ static struct lpc23xx_spidev_s g_spidev =
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 {
   FAR struct lpc23xx_spidev_s *priv = (FAR struct lpc23xx_spidev_s *)dev;
@@ -228,7 +210,6 @@ static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 
   return OK;
 }
-#endif
 
 /****************************************************************************
  * Name: spi_setfrequency
@@ -251,17 +232,17 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
   uint32_t divisor;
   uint32_t actual;
 
-  /* Check if the requested frequence is the same as the frequency selection */
+  DEBUGASSERT(frequency <= SPI_CLOCK / 2);
 
-  DEBUGASSERT(priv && frequency <= SPI_CLOCK / 2);
-#ifndef CONFIG_SPI_OWNBUS
+  /* Check if the requested frequency is the same as the frequency selection */
+
+  DEBUGASSERT(priv != NULL);
   if (priv->frequency == frequency)
     {
       /* We are already at this frequency.  Return the actual. */
 
       return priv->actual;
     }
-#endif
 
   /* frequency = SPI_CLOCK / divisor, or divisor = SPI_CLOCK / frequency */
 
@@ -290,12 +271,10 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
 
   /* Save the frequency setting */
 
-#ifndef CONFIG_SPI_OWNBUS
   priv->frequency = frequency;
   priv->actual    = actual;
-#endif
 
-  spidbg("Frequency %d->%d\n", frequency, actual);
+  spiinfo("Frequency %d->%d\n", frequency, actual);
   return actual;
 }
 
@@ -321,14 +300,13 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
 
   /* Has the mode changed? */
 
-#ifndef CONFIG_SPI_OWNBUS
+ DEBUGASSERT(priv != NULL);
   if (mode != priv->mode)
     {
-#endif
       /* Yes... Set CR appropriately */
 
       regval = getreg32(SPI_CR);
-      regval &= ~(SPI_CR_CPOL|SPI_CR_CPHA);
+      regval &= ~(SPI_CR_CPOL | SPI_CR_CPHA);
 
       switch (mode)
         {
@@ -344,7 +322,7 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
             break;
 
           case SPIDEV_MODE3: /* CPOL=1; CPHA=1 */
-            regval |= (SPI_CR_CPOL|SPI_CR_CPHA);
+            regval |= (SPI_CR_CPOL | SPI_CR_CPHA);
             break;
 
           default:
@@ -356,10 +334,8 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
 
       /* Save the mode so that subsequent re-configuratins will be faster */
 
-#ifndef CONFIG_SPI_OWNBUS
       priv->mode = mode;
     }
-#endif
 }
 
 /****************************************************************************
@@ -382,28 +358,25 @@ static void spi_setbits(FAR struct spi_dev_s *dev, int nbits)
   FAR struct lpc23xx_spidev_s *priv = (FAR struct lpc23xx_spidev_s *)dev;
   uint32_t regval;
 
+  DEBUGASSERT(nbits > 7 && nbits < 17);
+
   /* Has the number of bits changed? */
 
-  DEBUGASSERT(priv && nbits > 7 && nbits < 17);
-
-#ifndef CONFIG_SPI_OWNBUS
+  DEBUGASSERT(priv != NULL);
   if (nbits != priv->nbits)
     {
-#endif
       /* Yes... Set CR appropriately */
 
-      regval = getreg32(SPI_CR);
+      regval  = getreg32(SPI_CR);
       regval &= ~SPI_CR_BITS_MASK;
       regval |= (nbits << SPI_CR_BITS_SHIFT) & SPI_CR_BITS_MASK;
       regval |= SPI_CR_BITENABLE;
-      regval = getreg32(SPI_CR);
+      putreg32(regval, SPI_CR);
 
       /* Save the selection so the subsequence re-configurations will be faster */
 
-#ifndef CONFIG_SPI_OWNBUS
       priv->nbits = nbits;
     }
-#endif
 }
 
 /****************************************************************************
@@ -441,7 +414,7 @@ static uint16_t spi_send(FAR struct spi_dev_s *dev, uint16_t wd)
   return (uint16_t)getreg32(SPI_DR);
 }
 
-/*************************************************************************
+/****************************************************************************
  * Name: spi_sndblock
  *
  * Description:
@@ -462,10 +435,10 @@ static uint16_t spi_send(FAR struct spi_dev_s *dev, uint16_t wd)
 
 static void spi_sndblock(FAR struct spi_dev_s *dev, FAR const void *buffer, size_t nwords)
 {
-  FAR uint8_t *ptr = (FAR uint8_t*)buffer;
+  FAR uint8_t *ptr = (FAR uint8_t *)buffer;
   uint8_t data;
 
-  spidbg("nwords: %d\n", nwords);
+  spiinfo("nwords: %d\n", nwords);
   while (nwords)
     {
       /* Write the data to transmitted to the SPI Data Register */
@@ -508,9 +481,9 @@ static void spi_sndblock(FAR struct spi_dev_s *dev, FAR const void *buffer, size
 
 static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t nwords)
 {
-  FAR uint8_t *ptr = (FAR uint8_t*)buffer;
+  FAR uint8_t *ptr = (FAR uint8_t *)buffer;
 
-  spidbg("nwords: %d\n", nwords);
+  spiinfo("nwords: %d\n", nwords);
   while (nwords)
     {
       /* Write some dummy data to the SPI Data Register in order to clock the
@@ -542,7 +515,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t nw
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_spiinitialize
+ * Name: lpc23_spibus_initialize
  *
  * Description:
  *   Initialize the selected SPI port
@@ -555,7 +528,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t nw
  *
  ****************************************************************************/
 
-FAR struct spi_dev_s *up_spiinitialize(int port)
+FAR struct spi_dev_s *lpc23_spibus_initialize(int port)
 {
   FAR struct lpc23xx_spidev_s *priv = &g_spidev;
   irqstate_t flags;
@@ -570,7 +543,7 @@ FAR struct spi_dev_s *up_spiinitialize(int port)
    * #define GPIO_SPI_SCK GPIO_SPI_SCK_1
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   regval  = getreg32(LPC23XX_SCB_BASE+SCB_PCONP_OFFSET);
   regval |= PCSPI;
@@ -591,19 +564,17 @@ FAR struct spi_dev_s *up_spiinitialize(int port)
   regval |= SPI_PINSEL1;
   putreg32(regval, LPC23XX_PINSEL1);
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   /* Configure 8-bit SPI mode and master mode */
 
-  putreg32(SPI_CR_BITS_8BITS|SPI_CR_BITENABLE|SPI_CR_MSTR, SPI_CR);
+  putreg32(SPI_CR_BITS_8BITS | SPI_CR_BITENABLE | SPI_CR_MSTR, SPI_CR);
 
   /* Set the initial SPI configuration */
 
-#ifndef CONFIG_SPI_OWNBUS
   priv->frequency = 0;
   priv->nbits     = 8;
   priv->mode      = SPIDEV_MODE0;
-#endif
 
   /* Select a default frequency of approx. 400KHz */
 
@@ -611,9 +582,7 @@ FAR struct spi_dev_s *up_spiinitialize(int port)
 
   /* Initialize the SPI semaphore that enforces mutually exclusive access */
 
-#ifndef CONFIG_SPI_OWNBUS
   sem_init(&priv->exclsem, 0, 1);
-#endif
   return &priv->spidev;
 }
 

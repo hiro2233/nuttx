@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/stdlib.h
  *
- *   Copyright (C) 2007-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,12 +46,12 @@
 #include <stdint.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
-/* The C standard specifies two constants, EXIT_SUCCESS and
- * EXIT_FAILURE, that may be passed to exit() to indicate
- * successful or unsucessful termination, respectively.
+/* The C standard specifies two constants, EXIT_SUCCESS and EXIT_FAILURE,
+ * that may be passed to exit() to indicate successful or unsuccessful
+ * termination, respectively.
  */
 
 #define EXIT_SUCCESS 0
@@ -63,7 +63,7 @@
 
 /* Maximum value returned by rand() */
 
-#define MAX_RAND 32767
+#define RAND_MAX 32767
 
 /* Integer expression whose value is the maximum number of bytes in a
  * character specified by the current locale.
@@ -71,17 +71,16 @@
 
 #define MB_CUR_MAX 1
 
-/* The environ variable, normally 'extern char **environ;' is
- * not implemented as a function call.  However, get_environ_ptr()
- * can be used in its place.
+/* The environ variable, normally 'char **environ;' is not implemented as a
+ * function call.  However, get_environ_ptr() can be used in its place.
  */
 
-#ifndef CONFIG_DISABLE_ENIVRON
-# define environ get_environ_ptr()
+#ifndef CONFIG_DISABLE_ENVIRON
+#  define environ get_environ_ptr()
 #endif
 
 /****************************************************************************
- * Global Type Definitions
+ * Public Type Definitions
  ****************************************************************************/
 
 struct mallinfo
@@ -96,12 +95,38 @@ struct mallinfo
                  * by free (not in use) chunks.*/
 };
 
-/****************************************************************************
- * Global Function Prototypes
- ****************************************************************************/
+/* Structure type returned by the div() function. */
+
+struct div_s
+{
+  int quot;     /* Quotient */
+  int rem;      /* Remainder */
+};
+
+typedef struct div_s div_t;
+
+/* Structure type returned by the ldiv() function. */
+
+struct ldiv_s
+{
+  long quot;    /* Quotient */
+  long rem;     /* Remainder */
+};
+
+typedef struct ldiv_s ldiv_t;
+
+/* Structure type returned by the lldiv() function. */
+
+struct lldiv_s
+{
+  long quot;    /* Quotient */
+  long rem;     /* Remainder */
+};
+
+typedef struct lldiv_s lldiv_t;
 
 /****************************************************************************
- * Global Function Prototypes
+ * Public Function Prototypes
  ****************************************************************************/
 
 #undef EXTERN
@@ -118,15 +143,15 @@ extern "C"
 void      srand(unsigned int seed);
 int       rand(void);
 
+#ifndef CONFIG_DISABLE_ENVIRON
 /* Environment variable support */
 
-#ifndef CONFIG_DISABLE_ENIVRON
-FAR char **get_environ_ptr( void );
+FAR char **get_environ_ptr(void);
 FAR char *getenv(FAR const char *name);
 int       putenv(FAR const char *string);
 int       clearenv(void);
-int       setenv(const char *name, const char *value, int overwrite);
-int       unsetenv(const char *name);
+int       setenv(FAR const char *name, FAR const char *value, int overwrite);
+int       unsetenv(FAR const char *name);
 #endif
 
 /* Process exit functions */
@@ -145,17 +170,28 @@ int       on_exit(CODE void (*func)(int, FAR void *), FAR void *arg);
 void      _exit(int status); /* See unistd.h */
 #define   _Exit(s) _exit(s)
 
+/* System() command is not implemented in the NuttX libc because it is so
+ * entangled with shell logic.  There is an experimental version at
+ * apps/system/system.  system() is prototyped here, however, for
+ * standards compatibility.
+ */
+
+#ifndef __KERNEL__
+int       system(FAR char *cmd);
+#endif
+
 /* String to binary conversions */
 
-long      strtol(const char *, char **, int);
-unsigned long strtoul(const char *, char **, int);
+long      strtol(FAR const char *nptr, FAR char **endptr, int base);
+unsigned long strtoul(FAR const char *nptr, FAR char **endptr, int base);
 #ifdef CONFIG_HAVE_LONG_LONG
-long long strtoll(const char *, char **, int);
-unsigned long long strtoull(const char *, char **, int);
+long long strtoll(FAR const char *nptr, FAR char **endptr, int base);
+unsigned long long strtoull(FAR const char *nptr, FAR char **endptr,
+                            int base);
 #endif
-double_t  strtod(const char *, char **);
+double_t  strtod(FAR const char *str, FAR char **endptr);
 
-#define atoi(nptr)  strtol((nptr), NULL, 10)
+#define atoi(nptr)  ((int)strtol((nptr), NULL, 10))
 #define atol(nptr)  strtol((nptr), NULL, 10)
 #ifdef CONFIG_HAVE_LONG_LONG
 #define atoll(nptr) strtoll((nptr), NULL, 10)
@@ -164,18 +200,39 @@ double_t  strtod(const char *, char **);
 
 /* Binary to string conversions */
 
-char     *itoa(int value, char *str, int base);
+FAR char *itoa(int val, FAR char *str, int base);
 
 /* Memory Management */
 
 FAR void *malloc(size_t);
-void      free(FAR void*);
-FAR void *realloc(FAR void*, size_t);
+void      free(FAR void *);
+FAR void *realloc(FAR void *, size_t);
 FAR void *memalign(size_t, size_t);
 FAR void *zalloc(size_t);
 FAR void *calloc(size_t, size_t);
 
-/* Misc */
+#ifdef CONFIG_CAN_PASS_STRUCTS
+struct mallinfo mallinfo(void);
+#else
+int      mallinfo(FAR struct mallinfo *info);
+#endif
+
+/* Pseudo-Terminals */
+
+#ifdef CONFIG_PSEUDOTERM_SUSV1
+FAR char *ptsname(int fd);
+int ptsname_r(int fd, FAR char *buf, size_t buflen);
+#endif
+
+#ifdef CONFIG_PSEUDOTERM
+int unlockpt(int fd);
+
+/* int grantpt(int fd); Not implemented */
+
+#define grantpt(fd) (0)
+#endif
+
+/* Arithmetic */
 
 int      abs(int j);
 long int labs(long int j);
@@ -183,16 +240,29 @@ long int labs(long int j);
 long long int llabs(long long int j);
 #endif
 
+#ifdef CONFIG_CAN_PASS_STRUCTS
+div_t    div(int numer, int denom);
+ldiv_t   ldiv(long numer, long denom);
+#ifdef CONFIG_HAVE_LONG_LONG
+lldiv_t  lldiv(long long numer, long long denom);
+#endif
+#endif
+
+/* Temporary files */
+
+int      mktemp(FAR char *path_template);
+int      mkstemp(FAR char *path_template);
+
 /* Sorting */
 
-void     qsort(void *base, size_t nmemb, size_t size,
-               int(*compar)(const void *, const void *));
+void     qsort(FAR void *base, size_t nel, size_t width,
+               CODE int (*compar)(FAR const void *, FAR const void *));
 
-#ifdef CONFIG_CAN_PASS_STRUCTS
-struct mallinfo mallinfo(void);
-#else
-int      mallinfo(struct mallinfo *info);
-#endif
+/* Binary search */
+
+FAR void *bsearch(FAR const void *key, FAR const void *base, size_t nel,
+                  size_t width, CODE int (*compar)(FAR const void *,
+                  FAR const void *));
 
 #undef EXTERN
 #if defined(__cplusplus)

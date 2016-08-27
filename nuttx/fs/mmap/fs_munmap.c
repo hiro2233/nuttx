@@ -49,13 +49,13 @@
 
 #include <nuttx/kmalloc.h>
 
-#include "fs_internal.h"
+#include "inode/inode.h"
 #include "fs_rammap.h"
 
 #ifdef CONFIG_FS_RAMMAP
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -115,7 +115,7 @@ int munmap(FAR void *start, size_t length)
   FAR void *newaddr;
   unsigned int offset;
   int ret;
-  int err;
+  int errcode;
 
   /* Find a region containing this start and length in the list of regions */
 
@@ -143,23 +143,23 @@ int munmap(FAR void *start, size_t length)
 
   if (!curr)
     {
-      fdbg("Region not found\n");
-      err = EINVAL;
+      ferr("ERROR: Region not found\n");
+      errcode = EINVAL;
       goto errout_with_semaphore;
     }
 
   /* Get the offset from the beginning of the region and the actual number
    * of bytes to "unmap".  All mappings must extend to the end of the region.
    * There is no support for free a block of memory but leaving a block of
-   * memory at the end.  This is a consequence of using kurealloc() to
+   * memory at the end.  This is a consequence of using kumm_realloc() to
    * simulate the unmapping.
    */
 
   offset = start - curr->addr;
   if (offset + length < curr->length)
     {
-      fdbg("Cannot umap without unmapping to the end\n");
-      err = ENOSYS;
+      ferr("ERROR: Cannot umap without unmapping to the end\n");
+      errcode = ENOSYS;
       goto errout_with_semaphore;
     }
 
@@ -186,7 +186,7 @@ int munmap(FAR void *start, size_t length)
 
       /* Then free the region */
 
-      kufree(curr);
+      kumm_free(curr);
     }
 
   /* No.. We have been asked to "unmap' only a portion of the memory
@@ -195,8 +195,8 @@ int munmap(FAR void *start, size_t length)
 
   else
     {
-      newaddr = kurealloc(curr->addr, sizeof(struct fs_rammap_s) + length);
-      DEBUGASSERT(newaddr == (FAR void*)(curr->addr));
+      newaddr = kumm_realloc(curr->addr, sizeof(struct fs_rammap_s) + length);
+      DEBUGASSERT(newaddr == (FAR void *)(curr->addr));
       curr->length = length;
     }
 
@@ -205,7 +205,7 @@ int munmap(FAR void *start, size_t length)
 
 errout_with_semaphore:
   sem_post(&g_rammaps.exclsem);
-  errno = err;
+  set_errno(errcode);
   return ERROR;
 }
 

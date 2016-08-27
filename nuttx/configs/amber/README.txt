@@ -196,14 +196,14 @@ The valid values for <toolchain> are BUILDROOT, CROSSPACK, LINUXGCC and WINAVR.
 Buildroot:
 
   There is a DIY buildroot version for the AVR boards here:
-  http://sourceforge.net/projects/nuttx/files/buildroot/.  See the
+  http://bitbucket.org/nuttx/buildroot/downloads/.  See the
   following section for details on building this toolchain.
 
   It is assumed in some places that buildroot toolchain is available
-  at ../misc/buildroot/build_avr.  Edit the setenv.sh file if
+  at ../buildroot/build_avr.  Edit the setenv.sh file if
   this is not the case.
 
-  After configuring NuttX, make sure that CONFIG_AVR_BUILDROOT=y is set in your
+  After configuring NuttX, make sure that CONFIG_AVR_BUILDROOT_TOOLCHAIN=y is set in your
   .config file.
 
 WinAVR:
@@ -214,7 +214,7 @@ WinAVR:
   It is assumed in some places that WinAVR is installed at C:/WinAVR.  Edit the
   setenv.sh file if this is not the case.
 
-  After configuring NuttX, make sure that CONFIG_AVR_WINAVR=y is set in your
+  After configuring NuttX, make sure that CONFIG_AVR_WINAVR_TOOLCHAIN=y is set in your
   .config file.
 
   WARNING:  There is an incompatible version of cygwin.dll in the WinAVR/bin
@@ -226,7 +226,7 @@ Linux:
   For Linux, there are widely available avr-gcc packages.  On Ubuntu, use:
   sudo apt-get install gcc-avr gdb-avr avr-libc
 
-  After configuring NuttX, make sure that CONFIG_AVR_LINUXGCC=y is set in your
+  After configuring NuttX, make sure that CONFIG_AVR_LINUXGCC_TOOLCHAIN=y is set in your
   .config file.
 
 Mac OS X:
@@ -262,12 +262,6 @@ Windows Native Toolchains
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This
-     is because the dependencies are generated using Windows pathes which do
-     not work with the Cygwin make.
-
-       MKDEP = $(TOPDIR)/tools/mknulldeps.sh
-
   An additional issue with the WinAVR toolchain, in particular, is that it
   contains an incompatible version of the Cygwin DLL in its bin/ directory.
   You must take care that the correct Cygwin DLL is used.
@@ -276,7 +270,7 @@ NuttX buildroot Toolchain
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
   If NuttX buildroot toolchain source tarball cne can be downloaded from the
-  NuttX SourceForge download site (https://sourceforge.net/projects/nuttx/files/).
+  NuttX Bitbucket download site (https://bitbucket.org/nuttx/nuttx/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -512,7 +506,7 @@ Common Configuration Notes
      change a configurations using that tool, you should:
 
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-        and misc/tools/
+        see additional README.txt files in the NuttX tools repository.
 
      b. Execute 'make menuconfig' in nuttx/ in order to start the
         reconfiguration process.
@@ -522,7 +516,7 @@ Common Configuration Notes
 
         CONFIG_HOST_WINDOWS=y
         CONFIG_WINDOWS_CYGWIN=y
-        CONFIG_AVR_BUILDROOT=y
+        CONFIG_AVR_BUILDROOT_TOOLCHAIN=y
 
 Configuration Sub-Directories
 -----------------------------

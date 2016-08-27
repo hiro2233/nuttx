@@ -96,20 +96,6 @@
 #  define CONFIG_LCD_LANDSCAPE 1
 #endif
 
-/* Define CONFIG_DEBUG_LCD to enable detailed LCD debug output. Verbose debug must
- * also be enabled.
- */
-
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_VERBOSE
-#  undef CONFIG_DEBUG_GRAPHICS
-#  undef CONFIG_DEBUG_LCD
-#endif
-
-#ifndef CONFIG_DEBUG_VERBOSE
-#  undef CONFIG_DEBUG_LCD
-#endif
-
 /* Display/Color Properties ***********************************************************/
 /* Display Resolution */
 
@@ -135,16 +121,6 @@
 
 #define ILI9341_ID_1 0x93
 #define ILI9341_ID_2 0x41
-
-/* Debug ******************************************************************************/
-
-#ifdef CONFIG_DEBUG_LCD
-#  define lcddbg              dbg
-#  define lcdvdbg             vdbg
-#else
-#  define lcddbg(x...)
-#  define lcdvdbg(x...)
-#endif
 
 /**************************************************************************************
  * Private Type Definition
@@ -382,16 +358,15 @@ static inline uint16_t mio283qt9a_gramread(FAR struct mio283qt9a_lcd_s *lcd,
 static void mio283qt9a_setarea(FAR struct mio283qt9a_lcd_s *lcd,
                               uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
-   //lcddbg("setarea x0=%d, y0=%d, x1=%d, y1=%d\n", x0, y0, x1, y1);
+  mio283qt9a_putreg(lcd, 0x2a, (x0 >> 8)); /* Set column address x0 */
+  lcd->write(lcd, (x0 & 0xff));            /* Set x0 */
+  lcd->write(lcd, (x1 >> 8));              /* Set x1 */
+  lcd->write(lcd, (x1 & 0xff));            /* Set x1 */
 
-   mio283qt9a_putreg(lcd, 0x2a, (x0 >> 8)); /* set column address x0 */
-   lcd->write(lcd, (x0 & 0xff));            /* set x0 */
-   lcd->write(lcd, (x1 >> 8));              /* set x1 */
-   lcd->write(lcd, (x1 & 0xff));            /* set x1 */
-   mio283qt9a_putreg(lcd, 0x2b, (y0 >> 8)); /* set page address y0 */
-   lcd->write(lcd, (y0 & 0xff));            /* set y0 */
-   lcd->write(lcd, (y1 >> 8));              /* set y1 */
-   lcd->write(lcd, (y1 & 0xff));            /* set y1 */
+  mio283qt9a_putreg(lcd, 0x2b, (y0 >> 8)); /* Set page address y0 */
+  lcd->write(lcd, (y0 & 0xff));            /* Set y0 */
+  lcd->write(lcd, (y1 >> 8));              /* Set y1 */
+  lcd->write(lcd, (y1 & 0xff));            /* Set y1 */
 }
 
 /**************************************************************************************
@@ -411,14 +386,14 @@ static void mio283qt9a_dumprun(FAR const char *msg, FAR uint16_t *run, size_t np
   int i;
   int j;
 
-  syslog("\n%s:\n", msg);
+  syslog(LOG_INFO, "\n%s:\n", msg);
   for (i = 0; i < npixels; i += 16)
     {
       up_putc(' ');
-      syslog(" ");
+      syslog(LOG_INFO, " ");
       for (j = 0; j < 16; j++)
         {
-          syslog(" %04x", *run++);
+          syslog(LOG_INFO, " %04x", *run++);
         }
 
       up_putc('\n');
@@ -445,12 +420,11 @@ static int mio283qt9a_putrun(fb_coord_t row, fb_coord_t col, FAR const uint8_t *
 {
   FAR struct mio283qt9a_dev_s *priv = &g_lcddev;
   FAR struct mio283qt9a_lcd_s *lcd = priv->lcd;
-  FAR const uint16_t *src = (FAR const uint16_t*)buffer;
+  FAR const uint16_t *src = (FAR const uint16_t *)buffer;
   int i;
 
   /* Buffer must be provided and aligned to a 16-bit address boundary */
 
-  //lcdvdbg("row: %d col: %d npixels: %d\n", row, col, npixels);
   DEBUGASSERT(buffer && ((uintptr_t)buffer & 1) == 0);
 
   /* Select the LCD */
@@ -494,13 +468,13 @@ static int mio283qt9a_getrun(fb_coord_t row, fb_coord_t col, FAR uint8_t *buffer
 #ifndef CONFIG_LCD_NOGETRUN
   FAR struct mio283qt9a_dev_s *priv = &g_lcddev;
   FAR struct mio283qt9a_lcd_s *lcd = priv->lcd;
-  FAR uint16_t *dest = (FAR uint16_t*)buffer;
+  FAR uint16_t *dest = (FAR uint16_t *)buffer;
   uint16_t accum, test;
   int i;
 
   /* Buffer must be provided and aligned to a 16-bit address boundary */
 
-  lcdvdbg("mio283qt9a_getrun row: %d col: %d npixels: %d\n", row, col, npixels);
+  lcdinfo("mio283qt9a_getrun row: %d col: %d npixels: %d\n", row, col, npixels);
   DEBUGASSERT(buffer && ((uintptr_t)buffer & 1) == 0);
 
   /* Read the run from GRAM. */
@@ -520,8 +494,7 @@ static int mio283qt9a_getrun(fb_coord_t row, fb_coord_t col, FAR uint8_t *buffer
 
   for (i = 0; i < npixels; i++)
     {
-        test= mio283qt9a_gramread(lcd, &accum);
-       // lcddbg("read 0x%04x\n", test); 
+      test = mio283qt9a_gramread(lcd, &accum);
       *dest++ = test;
     }
 
@@ -546,7 +519,7 @@ static int mio283qt9a_getvideoinfo(FAR struct lcd_dev_s *dev,
                                    FAR struct fb_videoinfo_s *vinfo)
 {
   DEBUGASSERT(dev && vinfo);
-  lcdvdbg("fmt: %d xres: %d yres: %d nplanes: 1\n",
+  lcdinfo("fmt: %d xres: %d yres: %d nplanes: 1\n",
           MIO283QT9A_COLORFMT, MIO283QT9A_XRES, MIO283QT9A_YRES);
 
   vinfo->fmt     = MIO283QT9A_COLORFMT;  /* Color format: RGB16-565: RRRR RGGG GGGB BBBB */
@@ -570,12 +543,12 @@ static int mio283qt9a_getplaneinfo(FAR struct lcd_dev_s *dev, unsigned int plane
   FAR struct mio283qt9a_dev_s *priv = (FAR struct mio283qt9a_dev_s *)dev;
 
   DEBUGASSERT(dev && pinfo && planeno == 0);
-  lcdvdbg("planeno: %d bpp: %d\n", planeno, MIO283QT9A_BPP);
+  lcdinfo("planeno: %d bpp: %d\n", planeno, MIO283QT9A_BPP);
 
-  pinfo->putrun = mio283qt9a_putrun;          /* Put a run into LCD memory */
-  pinfo->getrun = mio283qt9a_getrun;          /* Get a run from LCD memory */
-  pinfo->buffer = (uint8_t*)priv->runbuffer;  /* Run scratch buffer */
-  pinfo->bpp    = MIO283QT9A_BPP;             /* Bits-per-pixel */
+  pinfo->putrun = mio283qt9a_putrun;               /* Put a run into LCD memory */
+  pinfo->getrun = mio283qt9a_getrun;               /* Get a run from LCD memory */
+  pinfo->buffer = (FAR uint8_t *)priv->runbuffer;  /* Run scratch buffer */
+  pinfo->bpp    = MIO283QT9A_BPP;                  /* Bits-per-pixel */
 
   return OK;
 }
@@ -591,7 +564,7 @@ static int mio283qt9a_getplaneinfo(FAR struct lcd_dev_s *dev, unsigned int plane
 
 static int mio283qt9a_getpower(FAR struct lcd_dev_s *dev)
 {
-  lcdvdbg("getpower: %d\n", 0);
+  lcdinfo("getpower: %d\n", 0);
   return g_lcddev.power;
 }
 
@@ -607,7 +580,7 @@ static int mio283qt9a_getpower(FAR struct lcd_dev_s *dev)
 static int mio283qt9a_poweroff(FAR struct mio283qt9a_lcd_s *lcd)
 {
   /* Select the LCD */
-  lcdvdbg("mio283qt9a_poweroff\n");
+  lcdinfo("mio283qt9a_poweroff\n");
 
   lcd->select(lcd);
 
@@ -643,7 +616,7 @@ static int mio283qt9a_setpower(FAR struct lcd_dev_s *dev, int power)
   FAR struct mio283qt9a_dev_s *priv = (FAR struct mio283qt9a_dev_s *)dev;
   FAR struct mio283qt9a_lcd_s *lcd  = priv->lcd;
 
-  lcdvdbg("setpower: %d\n", power);
+  lcdinfo("setpower: %d\n", power);
   DEBUGASSERT((unsigned)power <= CONFIG_LCD_MAXPOWER);
 
   /* Set new power level */
@@ -690,7 +663,7 @@ static int mio283qt9a_setpower(FAR struct lcd_dev_s *dev, int power)
 
 static int mio283qt9a_getcontrast(FAR struct lcd_dev_s *dev)
 {
-  lcdvdbg("Not implemented\n");
+  lcdinfo("Not implemented\n");
   return -ENOSYS;
 }
 
@@ -704,7 +677,7 @@ static int mio283qt9a_getcontrast(FAR struct lcd_dev_s *dev)
 
 static int mio283qt9a_setcontrast(FAR struct lcd_dev_s *dev, unsigned int contrast)
 {
-  lcdvdbg("contrast: %d\n", contrast);
+  lcdinfo("contrast: %d\n", contrast);
   return -ENOSYS;
 }
 
@@ -719,11 +692,13 @@ static int mio283qt9a_setcontrast(FAR struct lcd_dev_s *dev, unsigned int contra
 static inline int mio283qt9a_hwinitialize(FAR struct mio283qt9a_dev_s *priv)
 {
   FAR struct mio283qt9a_lcd_s *lcd  = priv->lcd;
-#ifndef CONFIG_LCD_NOGETRUN
+#if !defined(CONFIG_LCD_NOGETRUN) || defined(CONFIG_DEBUG_LCD)
   uint16_t id_a;
   uint16_t id_b;
   uint16_t id_c;
   uint16_t id_d;
+#endif
+#ifdef CONFIG_DEBUG_LCD
   uint16_t id_e;
 #endif
   int ret;
@@ -740,7 +715,9 @@ static inline int mio283qt9a_hwinitialize(FAR struct mio283qt9a_dev_s *priv)
   id_c = lcd->read(lcd);
   id_d = lcd->read(lcd);
 
-  lcdvdbg("LCD ID: %04x %04x %04x %04x\n", id_a, id_b, id_c, id_d);
+  lcdinfo("LCD ID: %04x %04x %04x %04x\n", id_a, id_b, id_c, id_d);
+  UNUSED(id_a);
+  UNUSED(id_b);
 
   /* Check if the ID is for the ILI9341 */
 
@@ -773,50 +750,52 @@ static inline int mio283qt9a_hwinitialize(FAR struct mio283qt9a_dev_s *priv)
       mio283qt9a_putreg(lcd, 0x11, 0);      /* Sleep out mode */
       up_mdelay(25);
 
+#ifdef CONFIG_DEBUG_LCD
       /* Read back some info from the panel */
 
       id_a = mio283qt9a_readreg(lcd, 0x04); /* Read display information */
       id_b = lcd->read(lcd);
       id_c = lcd->read(lcd);
       id_d = lcd->read(lcd);
-      lcdvdbg("LCD man ID: %02x, version: %02x, driver ID: %02x\n", id_b, id_c, id_d);
+      lcdinfo("LCD man ID: %02x, version: %02x, driver ID: %02x\n", id_b, id_c, id_d);
 
       id_a = mio283qt9a_readreg(lcd, 0x09); /* Read display status */
       id_b = lcd->read(lcd);
       id_c = lcd->read(lcd);
       id_d = lcd->read(lcd);
       id_e = lcd->read(lcd);
-      lcdvdbg("Display status %02x, %02x, %02x, %02x, %02x\n", id_a, id_b, id_c, id_d, id_e);
+      lcdinfo("Display status %02x, %02x, %02x, %02x, %02x\n", id_a, id_b, id_c, id_d, id_e);
 
       id_a = mio283qt9a_readreg(lcd, 0x0a); /* Read power status */
       id_b = lcd->read(lcd);
-      lcdvdbg("Power status %02x, %02x\n", id_a, id_b);
+      lcdinfo("Power status %02x, %02x\n", id_a, id_b);
 
       id_a = mio283qt9a_readreg(lcd, 0x0b); /* Read MADCTL */
       id_b = lcd->read(lcd);
-      lcdvdbg("MADCTL %02x, %02x\n", id_a, id_b);
+      lcdinfo("MADCTL %02x, %02x\n", id_a, id_b);
 
       id_a = mio283qt9a_readreg(lcd, 0x0c); /* Read pixel format */
       id_b = lcd->read(lcd);
-      lcdvdbg("Pixel format %02x, %02x\n", id_a, id_b);
+      lcdinfo("Pixel format %02x, %02x\n", id_a, id_b);
 
       id_a = mio283qt9a_readreg(lcd, 0x0d); /* Read image format */
       id_b = lcd->read(lcd);
-      lcdvdbg("Image format %02x, %02x\n", id_a, id_b);
+      lcdinfo("Image format %02x, %02x\n", id_a, id_b);
 
       id_a = mio283qt9a_readreg(lcd, 0x0e);  /* read signal mode */
       id_b = lcd->read(lcd);
-      lcdvdbg("Signal mode %02x, %02x\n", id_a, id_b);
+      lcdinfo("Signal mode %02x, %02x\n", id_a, id_b);
 
       id_a = mio283qt9a_readreg(lcd, 0x0f);  /* read self diag */
       id_b = lcd->read(lcd);
-      lcdvdbg("Self diag %02x, %02x\n", id_a, id_b);
+      lcdinfo("Self diag %02x, %02x\n", id_a, id_b);
+#endif
       ret = OK;
     }
 #ifndef CONFIG_LCD_NOGETRUN
   else
     {
-      lcddbg("Unsupported LCD type\n");
+      lcderr("ERROR: Unsupported LCD type\n");
       ret = -ENODEV;
     }
 #endif
@@ -827,7 +806,7 @@ static inline int mio283qt9a_hwinitialize(FAR struct mio283qt9a_dev_s *priv)
   return ret;
 }
 
- /*************************************************************************************
+/**************************************************************************************
  * Public Functions
  **************************************************************************************/
 
@@ -846,7 +825,7 @@ FAR struct lcd_dev_s *mio283qt9a_lcdinitialize(FAR struct mio283qt9a_lcd_s *lcd)
   FAR struct mio283qt9a_dev_s *priv;
   int ret;
 
-  lcdvdbg("Initializing\n");
+  lcdinfo("Initializing\n");
 
   /* If we could support multiple MIO283QT9A devices, this is where we would allocate
    * a new driver data structure... but we can't.  Why not?  Because of a bad should

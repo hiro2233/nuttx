@@ -1,7 +1,7 @@
 /****************************************************************************
  *  arch/arm/src/armv7-a/arm_initialstate.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,18 +49,6 @@
 #include "up_arch.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -68,13 +56,13 @@
  * Name: up_initial_state
  *
  * Description:
- *   A new thread is being started and a new TCB
- *   has been created. This function is called to initialize
- *   the processor specific portions of the new TCB.
+ *   A new thread is being started and a new TCB has been created. This
+ *   function is called to initialize the processor specific portions of
+ *   the new TCB.
  *
- *   This function must setup the intial architecture registers
- *   and/or  stack so that execution will begin at tcb->start
- *   on the next context switch.
+ *   This function must setup the initial architecture registers and/or
+ *   stack so that execution will begin at tcb->start on the next context
+ *   switch.
  *
  ****************************************************************************/
 
@@ -89,11 +77,11 @@ void up_initial_state(struct tcb_s *tcb)
 
   /* Save the initial stack pointer */
 
-  xcp->regs[REG_SP]      = (uint32_t)tcb->adj_stack_ptr;
+  xcp->regs[REG_SP] = (uint32_t)tcb->adj_stack_ptr;
 
   /* Save the task entry point */
 
-  xcp->regs[REG_PC]      = (uint32_t)tcb->start;
+  xcp->regs[REG_PC] = (uint32_t)tcb->start;
 
   /* If this task is running PIC, then set the PIC base register to the
    * address of the allocated D-Space region.
@@ -110,37 +98,31 @@ void up_initial_state(struct tcb_s *tcb)
     }
 #endif
 
-  /* Set supervisor- or user-mode, depending on how NuttX is configured and
-   * what kind of thread is being started.  Disable FIQs in any event
+  /* Set supervisor-mode and disable FIQs, regardless of how NuttX is
+   * configured and of what kind of thread is being started.  That is
+   * because all threads, even user-mode threads will start in kernel
+   * trampoline at task_start() or pthread_start().  The thread's
+   * privileges will be dropped before transitioning to user code.
    */
 
-#ifdef CONFIG_NUTTX_KERNEL
-  if ((tcb->flags & TCB_FLAG_TTYPE_MASK) == TCB_FLAG_TTYPE_KERNEL)
-    {
-      /* It is a kernel thread.. set supervisor mode */
-
-      cpsr               = PSR_MODE_SVC | PSR_F_BIT;
-    }
-  else
-    {
-      /* It is a normal task or a pthread.  Set user mode */
-
-      cpsr               = PSR_MODE_USR | PSR_F_BIT;
-    }
-#else
-  /* If the kernel build is not selected, then all threads run in
-   * supervisor-mode.
-   */
-
-  cpsr                   = PSR_MODE_SVC | PSR_F_BIT;
-#endif
+  cpsr = PSR_MODE_SVC;
 
   /* Enable or disable interrupts, based on user configuration */
 
-# ifdef CONFIG_SUPPRESS_INTERRUPTS
-  cpsr                  |= PSR_I_BIT;
-# endif
+#ifdef CONFIG_SUPPRESS_INTERRUPTS
+  /* Disable interrupts (both IRQs and FIQs) */
 
-  xcp->regs[REG_CPSR]    = cpsr;
+  cpsr |= (PSR_I_BIT | PSR_F_BIT);
+
+#else /* CONFIG_SUPPRESS_INTERRUPTS */
+  /* Leave IRQs enabled (Also FIQs if CONFIG_ARMV7A_DECODEFIQ is selected) */
+
+#ifndef CONFIG_ARMV7A_DECODEFIQ
+
+  cpsr |= PSR_F_BIT;
+
+#endif /* !CONFIG_ARMV7A_DECODEFIQ */
+#endif /* CONFIG_SUPPRESS_INTERRUPTS */
+
+  xcp->regs[REG_CPSR] = cpsr;
 }
-

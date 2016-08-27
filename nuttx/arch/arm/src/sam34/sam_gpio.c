@@ -2,7 +2,7 @@
  * arch/arm/src/sam34/sam_gpio.c
  * General Purpose Input/Output (GPIO) logic for the SAM3U, SAM4S and SAM4E
  *
- *   Copyright (C) 2010, 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2013-2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +45,7 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <arch/board/board.h>
 
@@ -53,37 +54,31 @@
 
 #include "chip.h"
 #include "sam_gpio.h"
+#include "sam_periphclks.h"
 
 #if defined(CONFIG_ARCH_CHIP_SAM3U) || defined(CONFIG_ARCH_CHIP_SAM3X) || \
     defined(CONFIG_ARCH_CHIP_SAM3A)
 #  include "chip/sam3u_pio.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM4E)
 #  include "chip/sam4e_pio.h"
-#elif defined(CONFIG_ARCH_CHIP_SAM4S)
+#elif defined(CONFIG_ARCH_CHIP_SAM4CM) || defined(CONFIG_ARCH_CHIP_SAM4S)
 #  include "chip/sam4s_pio.h"
 #else
 #  error Unrecognized SAM architecture
 #endif
 
 /****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
  * Private Data
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_GPIO
+#ifdef CONFIG_DEBUG_GPIO_INFO
 static const char g_portchar[4]   = { 'A', 'B', 'C', 'D' };
 #endif
 
 /****************************************************************************
- * Private Function Prototypes
+ * Private Functions
  ****************************************************************************/
+
 /****************************************************************************
  * Name: sam_gpiobase
  *
@@ -102,13 +97,74 @@ static inline uintptr_t sam_gpiobase(gpio_pinset_t cfgset)
  * Name: sam_gpiopin
  *
  * Description:
- *   Returun the base address of the GPIO register set
+ *   Return the base address of the GPIO register set
  *
  ****************************************************************************/
 
 static inline int sam_gpiopin(gpio_pinset_t cfgset)
 {
   return 1 << ((cfgset & GPIO_PIN_MASK) >> GPIO_PIN_SHIFT);
+}
+
+/****************************************************************************
+ * Name: sam_gpio_enableclk
+ *
+ * Description:
+ *   Enable clocking on the PIO port.  Port clocking is required in the
+ *   following cases:
+ *
+ *     - In order to read values in input pins from the port
+ *     - If the port supports interrupting pins
+ *     - If glitch filtering is enabled
+ *     - If necessary to read the input value on an open drain output (this
+ *       may be done in TWI logic to detect hangs on the I2C bus).
+ *     - If necessary to read the input value on peripheral pins.
+ *
+ ****************************************************************************/
+
+static inline int sam_gpio_enableclk(gpio_pinset_t cfgset)
+{
+  /* Enable the peripheral clock for the GPIO's port controller. */
+
+  switch (cfgset & GPIO_PORT_MASK)
+    {
+      case GPIO_PORT_PIOA:
+        sam_pioa_enableclk();
+        break;
+
+      case GPIO_PORT_PIOB:
+        sam_piob_enableclk();
+        break;
+
+#ifdef GPIO_PORT_PIOC
+      case GPIO_PORT_PIOC:
+        sam_pioc_enableclk();
+        break;
+#endif
+
+#ifdef GPIO_PORT_PIOD
+      case GPIO_PORT_PIOD:
+        sam_piod_enableclk();
+        break;
+#endif
+
+#ifdef GPIO_PORT_PIOE
+      case GPIO_PORT_PIOE:
+        sam_pioe_enableclk();
+        break;
+#endif
+
+#ifdef GPIO_PORT_PIOF
+      case GPIO_PORT_PIOF:
+        sam_piof_enableclk();
+        break;
+#endif
+
+      default:
+        return -EINVAL;
+    }
+
+  return OK;
 }
 
 /****************************************************************************
@@ -177,6 +233,7 @@ static inline int sam_configinput(uintptr_t base, uint32_t pin,
     {
       regval &= ~pin;
     }
+
   putreg32(regval, base + SAM_PIO_SCHMITT_OFFSET);
 #endif
 
@@ -190,7 +247,12 @@ static inline int sam_configinput(uintptr_t base, uint32_t pin,
    *         another, new API... perhaps sam_configfilter()
    */
 
- return OK;
+  /* Enable the peripheral clock for the GPIO's port controller.
+   * A GPIO input value is only sampled if the peripheral clock for its
+   * controller is enabled.
+   */
+
+  return sam_gpio_enableclk(cfgset);
 }
 
 /****************************************************************************
@@ -362,7 +424,7 @@ static inline int sam_configperiph(uintptr_t base, uint32_t pin,
 }
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -382,7 +444,7 @@ int sam_configgpio(gpio_pinset_t cfgset)
 
   /* Disable interrupts to prohibit re-entrance. */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Enable writing to GPIO registers */
 
@@ -417,7 +479,7 @@ int sam_configgpio(gpio_pinset_t cfgset)
   /* Disable writing to GPIO registers */
 
   putreg32(PIO_WPMR_WPEN | PIO_WPMR_WPKEY, base + SAM_PIO_WPMR_OFFSET);
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   return ret;
 }
@@ -479,7 +541,7 @@ bool sam_gpioread(gpio_pinset_t pinset)
  *
  ************************************************************************************/
 
-#ifdef CONFIG_DEBUG_GPIO
+#ifdef CONFIG_DEBUG_GPIO_INFO
 int sam_dumpgpio(uint32_t pinset, const char *msg)
 {
   irqstate_t    flags;
@@ -493,46 +555,48 @@ int sam_dumpgpio(uint32_t pinset, const char *msg)
 
   /* The following requires exclusive access to the GPIO registers */
 
-  flags = irqsave();
-  lldbg("PIO%c pinset: %08x base: %08x -- %s\n",
+  flags = enter_critical_section();
+
+  gpioinfo("PIO%c pinset: %08x base: %08x -- %s\n",
         g_portchar[port], pinset, base, msg);
-  lldbg("    PSR: %08x    OSR: %08x   IFSR: %08x   ODSR: %08x\n",
-        getreg32(base + SAM_PIO_PSR_OFFSET), getreg32(base + SAM_PIO_OSR_OFFSET),
-        getreg32(base + SAM_PIO_IFSR_OFFSET), getreg32(base + SAM_PIO_ODSR_OFFSET));
-  lldbg("   PDSR: %08x    IMR: %08x    ISR: %08x   MDSR: %08x\n",
-        getreg32(base + SAM_PIO_PDSR_OFFSET), getreg32(base + SAM_PIO_IMR_OFFSET),
-        getreg32(base + SAM_PIO_ISR_OFFSET), getreg32(base + SAM_PIO_MDSR_OFFSET));
+  gpioinfo("    PSR: %08x    OSR: %08x   IFSR: %08x   ODSR: %08x\n",
+           getreg32(base + SAM_PIO_PSR_OFFSET), getreg32(base + SAM_PIO_OSR_OFFSET),
+           getreg32(base + SAM_PIO_IFSR_OFFSET), getreg32(base + SAM_PIO_ODSR_OFFSET));
+  gpioinfo("   PDSR: %08x    IMR: %08x    ISR: %08x   MDSR: %08x\n",
+           getreg32(base + SAM_PIO_PDSR_OFFSET), getreg32(base + SAM_PIO_IMR_OFFSET),
+           getreg32(base + SAM_PIO_ISR_OFFSET), getreg32(base + SAM_PIO_MDSR_OFFSET));
 #if defined(CONFIG_ARCH_CHIP_SAM3U)
-  lldbg("   ABSR: %08x SCIFSR: %08x  DIFSR: %08x IFDGSR: %08x\n",
-        getreg32(base + SAM_PIO_ABSR_OFFSET), getreg32(base + SAM_PIO_SCIFSR_OFFSET),
-        getreg32(base + SAM_PIO_DIFSR_OFFSET), getreg32(base + SAM_PIO_IFDGSR_OFFSET));
+  gpioinfo("   ABSR: %08x SCIFSR: %08x  DIFSR: %08x IFDGSR: %08x\n",
+           getreg32(base + SAM_PIO_ABSR_OFFSET), getreg32(base + SAM_PIO_SCIFSR_OFFSET),
+           getreg32(base + SAM_PIO_DIFSR_OFFSET), getreg32(base + SAM_PIO_IFDGSR_OFFSET));
 #elif defined(CONFIG_ARCH_CHIP_SAM4S) || defined(CONFIG_ARCH_CHIP_SAM4E)
-  lldbg(" ABCDSR: %08x %08x         IFSCSR: %08x  PPDSR: %08x\n",
-        getreg32(base + SAM_PIO_ABCDSR1_OFFSET), getreg32(base + SAM_PIO_ABCDSR2_OFFSET),
-        getreg32(base + SAM_PIO_IFSCSR_OFFSET), getreg32(base + SAM_PIO_PPDSR_OFFSET));
+  gpioinfo(" ABCDSR: %08x %08x         IFSCSR: %08x  PPDSR: %08x\n",
+           getreg32(base + SAM_PIO_ABCDSR1_OFFSET), getreg32(base + SAM_PIO_ABCDSR2_OFFSET),
+           getreg32(base + SAM_PIO_IFSCSR_OFFSET), getreg32(base + SAM_PIO_PPDSR_OFFSET));
 #endif
-  lldbg("   PUSR: %08x   SCDR: %08x   OWSR: %08x  AIMMR: %08x\n",
-        getreg32(base + SAM_PIO_PUSR_OFFSET), getreg32(base + SAM_PIO_SCDR_OFFSET),
-        getreg32(base + SAM_PIO_OWSR_OFFSET), getreg32(base + SAM_PIO_AIMMR_OFFSET));
-  lldbg("    ESR: %08x    LSR: %08x   ELSR: %08x FELLSR: %08x\n",
-        getreg32(base + SAM_PIO_ESR_OFFSET), getreg32(base + SAM_PIO_LSR_OFFSET),
-        getreg32(base + SAM_PIO_ELSR_OFFSET), getreg32(base + SAM_PIO_FELLSR_OFFSET));
-  lldbg(" FRLHSR: %08x LOCKSR: %08x   WPMR: %08x   WPSR: %08x\n",
-        getreg32(base + SAM_PIO_FRLHSR_OFFSET), getreg32(base + SAM_PIO_LOCKSR_OFFSET),
-        getreg32(base + SAM_PIO_WPMR_OFFSET), getreg32(base + SAM_PIO_WPSR_OFFSET));
+  gpioinfo("   PUSR: %08x   SCDR: %08x   OWSR: %08x  AIMMR: %08x\n",
+           getreg32(base + SAM_PIO_PUSR_OFFSET), getreg32(base + SAM_PIO_SCDR_OFFSET),
+           getreg32(base + SAM_PIO_OWSR_OFFSET), getreg32(base + SAM_PIO_AIMMR_OFFSET));
+  gpioinfo("    ESR: %08x    LSR: %08x   ELSR: %08x FELLSR: %08x\n",
+           getreg32(base + SAM_PIO_ESR_OFFSET), getreg32(base + SAM_PIO_LSR_OFFSET),
+           getreg32(base + SAM_PIO_ELSR_OFFSET), getreg32(base + SAM_PIO_FELLSR_OFFSET));
+  gpioinfo(" FRLHSR: %08x LOCKSR: %08x   WPMR: %08x   WPSR: %08x\n",
+           getreg32(base + SAM_PIO_FRLHSR_OFFSET), getreg32(base + SAM_PIO_LOCKSR_OFFSET),
+           getreg32(base + SAM_PIO_WPMR_OFFSET), getreg32(base + SAM_PIO_WPSR_OFFSET));
 #if defined(CONFIG_ARCH_CHIP_SAM4S) || defined(CONFIG_ARCH_CHIP_SAM4E)
-  lldbg("   PCMR: %08x  PCIMR: %08x  PCISR: %08x   PCRHR: %08x\n",
-        getreg32(base + SAM_PIO_PCMR_OFFSET), getreg32(base + SAM_PIO_PCIMR_OFFSET),
-        getreg32(base + SAM_PIO_PCISR_OFFSET), getreg32(base + SAM_PIO_PCRHR_OFFSET));
+  gpioinfo("   PCMR: %08x  PCIMR: %08x  PCISR: %08x   PCRHR: %08x\n",
+           getreg32(base + SAM_PIO_PCMR_OFFSET), getreg32(base + SAM_PIO_PCIMR_OFFSET),
+           getreg32(base + SAM_PIO_PCISR_OFFSET), getreg32(base + SAM_PIO_PCRHR_OFFSET));
 #ifdef CONFIG_ARCH_CHIP_SAM4E
-  lldbg("SCHMITT: %08x DELAYR:%08x\n",
-        getreg32(base + SAM_PIO_SCHMITT_OFFSET), getreg32(base + SAM_PIO_DELAYR_OFFSET));
+  gpioinfo("SCHMITT: %08x DELAYR:%08x\n",
+           getreg32(base + SAM_PIO_SCHMITT_OFFSET), getreg32(base + SAM_PIO_DELAYR_OFFSET));
 #else
-  lldbg("SCHMITT: %08x\n",
-        getreg32(base + SAM_PIO_SCHMITT_OFFSET));
+  gpioinfo("SCHMITT: %08x\n",
+           getreg32(base + SAM_PIO_SCHMITT_OFFSET));
 #endif
 #endif
-  irqrestore(flags);
+
+  leave_critical_section(flags);
   return OK;
 }
 #endif

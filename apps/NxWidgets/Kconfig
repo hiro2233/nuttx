@@ -1,7 +1,9 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
+
+menu "NxWidgets/NxWM"
 
 config NXWIDGETS
 	bool "Enable NxWidgets"
@@ -29,6 +31,8 @@ config NXWIDGETS_FLICKERFREE
 config NXWIDGETS_EXTERNINIT
 	bool "External display Initialization"
 	default n
+	depends on LIB_BOARDCTL
+	select BOARDCTL_GRAPHICS
 	---help---
 		Define to support external display initialization.
 
@@ -52,7 +56,7 @@ if NX_MULTIUSER
 config NXWIDGET_SERVERINIT
 	bool "Start server"
 	default y
-	depends on !NUTTX_KERNEL
+	depends on !BUILD_PROTECTED && !BUILD_KERNEL
 	---help---
 		If this option is selected, then the NxWidgets::CNxServer class will
 		bring up the NX server when it is initialized.  If this option is
@@ -125,6 +129,13 @@ config NXWIDGETS_BPP
 		Supported bits-per-pixel {8, 16, 24, 32}.  Default: The smallest
 		BPP configuration supported by NX.
 
+config NXWIDGETS_GREYSCALE
+	bool "Greyscale (vs RGB)"
+	default n
+	---help---
+		Select to use a greyscale vs RGB color image.  This option is ignored if
+		CONFIG_NXWIDGETS_BPP > 8
+
 config NXWIDGETS_SIZEOFCHAR
 	int "Size of a character (1 or 2 bytes)"
 	range 1 2
@@ -161,7 +172,7 @@ config NXWIDGETS_TNXARRAY_SIZEINCREMENT
 	int "Dyanamic Array Reallocation Size Increment"
 	default 8
 	---help---
-		Default dynamic array realloctino increment (in entries).  Default: 8
+		Default dynamic array reallocation increment (in entries).  Default: 8
 
 config NXWIDGETS_CUSTOM_FILLCOLORS
 	bool "Custom Default Fill Colors"
@@ -277,7 +288,7 @@ config NXWIDGETS_DOUBLECLICK_TIME
 		Default: 350
 
 config NXWIDGETS_KBDBUFFER_SIZE
-	int "Keybard Buffer Size"
+	int "Keyboard Buffer Size"
 	default 16
 	---help---
 		Size of incoming character buffer, i.e., the maximum number of
@@ -311,15 +322,29 @@ config NXWM
 
 if NXWM
 
-menu "NxWM General settings"
+menu "NxWM General Settings"
 
-config NXWM_SYSTEM_CUSTOM_FONTID
+config NXWM_LARGE_ICONS
+	bool "Use large icons"
+	default n
+	---help---
+		The default icons are nominally 25x25 pixels for a small
+		resolution/display, this is a good selection.  For example, a
+		320x240 display that is 4.5cm x 3.375 would have a resolution of
+		about 71 dots per cm.  In this case, the icon would be 0.35cm.
+
+		If you use a larger display, these smaller icons may seem
+		inappropriately small.  In this case, you have two options:  (1)
+		Enable image scaling which will make the icons "fuzzy" looking, or
+		(2) select this option to enable use of larger icons.
+
+config NXWM_CUSTOM_FONTID
 	bool "Use Custom Default Font"
 	default n
 	---help---
 		Set to override the system default font id (NXFONT_DEFAULT).
 
-if NXWM_SYSTEM_CUSTOM_FONTID
+if NXWM_CUSTOM_FONTID
 
 config NXWM_DEFAULT_FONTID
 	int "Font ID"
@@ -328,7 +353,7 @@ config NXWM_DEFAULT_FONTID
 		Use this NxWM default font ID instead of the system font ID
 		(NXFONT_DEFAULT).  Default: 0
 
-endif # NXWM_SYSTEM_CUSTOM_FONTID
+endif # NXWM_CUSTOM_FONTID
 
 config NXWM_UNITTEST
 	bool "NxWM Unit Test"
@@ -480,7 +505,8 @@ if NXWM_CUSTOM_TASKBAR_WIDTH
 
 config NXWM_TASKBAR_WIDTH
 	int "Taskbar Width"
-	default 29
+	default 29 if !NXWM_LARGE_ICONS
+	default 54 if !NXWM_LARGE_ICONS
 	---help---
 		Task bar thickness (either vertical or horizontal).  Default: 25 + 2*2
 
@@ -532,18 +558,38 @@ config NXWM_CUSTOM_TOOLBAR_HEIGHT
 	---help---
 		Set to override the default tooldar height The default depends on
 		the selected horizontal or vertical spacing. Default: 21 + 2*spacing
+		or 42 + 2*spacing if large icons are selected
 
 if NXWM_CUSTOM_TOOLBAR_HEIGHT
 
 config NXWM_TOOLBAR_HEIGHT
 	int "Toolbar Height"
-	default 25
+	default 25 if !NXWM_LARGE_ICONS
+	default 46 if NXWM_LARGE_ICONS
 	---help---
 		The height of the tool bar in each application window. At present,
 		all icons are 21 pixels in height and, hence, require a task bar of
-		at least that size.  Default:  21 + 2*2
+		at least that size.  Default:  21 + 2*2or 42 + 2*spacing if large
+		icons are selected
 
 endif # NXWM_CUSTOM_TOOLBAR_HEIGHT
+
+config NXWM_TOOLBAR_CUSTOM_FONTID
+	bool "Use Custom Toolbar Font"
+	default n
+	---help---
+		Set to override the NxWM default font id (NXWM_DEFAULT_FONTID).
+
+if NXWM_TOOLBAR_CUSTOM_FONTID
+
+config NXWM_TOOLBAR_FONTID
+	int "Toolbar Font ID"
+	default 0
+	---help---
+		Use this default font ID in the NxTerm window instead of the
+		NxWM font ID (NXWM_DEFAULT_FONTID).  Default: 0 (maybe invalid)
+
+endif # NXWM_TOOLBAR_CUSTOM_FONTID
 endmenu # NxWM Toolbar Configuration
 
 menu "NxWM Application Window Configuration"
@@ -590,15 +636,15 @@ config NXWM_CUSTOM_STARTWINDOW_ICON
 	bool "Custom Start Window Icon"
 	default n
 	---help---
-		Select to override the default Start Window Icon: NxWM::g_playBitmap24x24
+		Select to override the default Start Window Icon: NxWM::g_playBitmap
 
 if NXWM_CUSTOM_STARTWINDOW_ICON
 
 config NXWM_STARTWINDOW_ICON
 	string "StartWindow Icon"
-	default "NxWM::g_playBitmap24x24"
+	default "NxWM::g_playBitmap"
 	---help---
-		The glyph to use as the start window icon.  Default: NxWM::g_playBitmap24x24
+		The glyph to use as the start window icon.  Default: NxWM::g_playBitmap
 
 endif # NXWM_CUSTOM_STARTWINDOW_ICON
 
@@ -640,90 +686,93 @@ config NXWM_STARTWINDOW_STACKSIZE
 
 endmenu # Start Window Configuration
 
-menuconfig NXWM_NXCONSOLE
-	bool "NxConsole Window"
+menu "NxTerm Window Settings"
+
+config NXWM_NXTERM
+	bool "NxTerm Window"
 	default y
 	---help---
-		Enable support for the NxConsole window which provides a text window
+		Enable support for the NxTerm window which provides a text window
 		in which you can interact with NSH.
 
-if NXWM_NXCONSOLE
+if NXWM_NXTERM
 
-config NXWM_NXCONSOLE_PRIO
-	int "NxConsole Task Priority"
+config NXWM_NXTERM_PRIO
+	int "NxTerm Task Priority"
 	default 100
 	---help---
-		Priority of the NxConsole task.  Default:  100.
+		Priority of the NxTerm task.  Default:  100.
 
 		NOTE:  This priority should be less than NXWIDGETS_SERVERPRIO or
 		else there may be data overrun errors. Such errors would most likely
 		appear as duplicated rows of data on the display.
 
-config NXWM_NXCONSOLE_STACKSIZE
-	int "NxConsole Task Stack Size"
+config NXWM_NXTERM_STACKSIZE
+	int "NxTerm Task Stack Size"
 	default 2048
 	---help---
-		The stack size to use when starting the NxConsole task.  Default:
+		The stack size to use when starting the NxTerm task.  Default:
 		2048 bytes.
 
-config NXWM_NXCONSOLE_CUSTOM_COLORS
-	bool "Custom NxConsole Colors"
+config NXWM_NXTERM_CUSTOM_COLORS
+	bool "Custom NxTerm Colors"
 	default n
 	---help---
-		Select custom default colors for the NxConsole window.  If defined,
-		the hexadecimal values for all NxConsole colors must be provided
+		Select custom default colors for the NxTerm window.  If defined,
+		the hexadecimal values for all NxTerm colors must be provided
 		(there are no default colors because the hexadecimal representation
 		of the default colors depend on the pixel depth). Default: n
 
-if NXWM_NXCONSOLE_CUSTOM_COLORS
+if NXWM_NXTERM_CUSTOM_COLORS
 
-config NXWM_NXCONSOLE_WCOLOR
-	hex "NxConsole Background Color"
+config NXWM_NXTERM_WCOLOR
+	hex "NxTerm Background Color"
 	---help---
-		The color of the NxConsole window background. Default:
+		The color of the NxTerm window background. Default:
 		RGB(192,192,192)
 
-config NXWM_NXCONSOLE_FONTCOLOR
-	hex "NxConsole Font Color"
+config NXWM_NXTERM_FONTCOLOR
+	hex "NxTerm Font Color"
 	---help---
-		The color of the fonts to use in the NxConsole window.
+		The color of the fonts to use in the NxTerm window.
 		Default: RGB(0,0,0)
 
-endif # NXWM_NXCONSOLE_CUSTOM_COLORS
+endif # NXWM_NXTERM_CUSTOM_COLORS
 
-config NXWM_NXCONSOLE_CUSTOM_FONTID
+config NXWM_NXTERM_CUSTOM_FONTID
 	bool "Use Custom Default Font"
 	default n
 	---help---
-		Set to override the system default font id (NXWM_DEFAULT_FONTID).
+		Set to override the NxWM default font id (NXWM_DEFAULT_FONTID).
 
-if NXWM_NXCONSOLE_CUSTOM_FONTID
+if NXWM_NXTERM_CUSTOM_FONTID
 
-config NXWM_NXCONSOLE_FONTID
-	int "NxConsole Font ID"
+config NXWM_NXTERM_FONTID
+	int "NxTerm Font ID"
 	default 0
 	---help---
-		Use this default font ID in the NxConsole window instead of the
+		Use this default font ID in the NxTerm window instead of the
 		NxWM font ID (NXWM_DEFAULT_FONTID).  Default: 0
 
-endif # NXWM_NXCONSOLE_CUSTOM_FONTID
+endif # NXWM_NXTERM_CUSTOM_FONTID
 
-config NXWM_CUSTOM_NXCONSOLE_ICON
-	bool "Custom NxConsole Icon"
+config NXWM_CUSTOM_NXTERM_ICON
+	bool "Custom NxTerm Icon"
 	default n
 	---help---
-		Select to override the default NxConsole Window Icon: NxWM::g_cmdBitmap
+		Select to override the default NxTerm Window Icon: NxWM::g_cmdBitmap
 
-if NXWM_CUSTOM_NXCONSOLE_ICON
+if NXWM_CUSTOM_NXTERM_ICON
 
-config NXWM_NXCONSOLE_ICON
-	string "NxConsole Icon"
+config NXWM_NXTERM_ICON
+	string "NxTerm Icon"
 	default "NxWM::g_cmdBitmap"
 	---help---
-		The glyph to use as the NxConsole icon.  Default: NxWM::g_cmdBitmap
+		The glyph to use as the NxTerm icon.  Default: NxWM::g_cmdBitmap
 
-endif # NXWM_NXCONSOLE_ICON
-endif # NXWM_NXCONSOLE
+endif # NXWM_NXTERM_ICON
+endif # NXWM_NXTERM
+endmenu # NxTerm Window Settings
 
 menu "NxWM Touchscreen Configuration"
 
@@ -736,20 +785,19 @@ config NXWM_TOUCHSCREEN
 
 if NXWM_TOUCHSCREEN
 
-comment "Touchscreen device settings"
+comment "Touchscreen Device Settings"
 
 config NXWM_TOUCHSCREEN_DEVINIT
 	bool "Touchscreen Device Initialization"
 	default y
-	depends on !NUTTX_KERNEL
+	depends on !BUILD_PROTECTED && !BUILD_KERNEL
 	---help---
 		It this option is selected, then the NxWM:CTouchscreen listener
-		thread will call a function arch_tcinitialize(NXWM_TOUCHSCREEN_DEVNO)
-		in order to instantiate the touchscreen driver at path
-		NXWM_TOUCHSCREEN_DEVPATH.  If NXWM_TOUCHSCREEN_DEVINIT is not
-		selected, then the NxWM:CTouchscreen listener thread will assume
-		that the driver has already been initialized at
-		NXWM_TOUCHSCREEN_DEVPATH.
+		thread will call a function boardctl() in order to instantiate the
+		touchscreen driver at path NXWM_TOUCHSCREEN_DEVPATH.  If
+		NXWM_TOUCHSCREEN_DEVINIT is not selected, then the NxWM:CTouchscreen
+		listener thread will assume that the driver has already been
+		initialized at NXWM_TOUCHSCREEN_DEVPATH.
 
 		NOTE that in the kernel build, all touchscreen initialize must be
 		performed in kernel logic prior to the execution of NxWM.
@@ -776,9 +824,11 @@ config NXWM_TOUCHSCREEN_SIGNO
 
 config NXWM_TOUCHSCREEN_LISTENERPRIO
 	int "Touchscreen Listener Task Priority"
-	default 100
+	default 120
 	---help---
-		Priority of the touchscreen listener thread.  Default: 100
+		Priority of the touchscreen listener thread.  This listener should
+		have a higher priority than most display-related tsks otherwise it
+		may miss touchscreen events. Default: 120
 
 config NXWM_TOUCHSCREEN_LISTENERSTACK
 	int "Touchscreen Listener Task Stack Size"
@@ -805,23 +855,34 @@ config NXWM_KEYBOARD
 	bool "Keyboard Support"
 	default n
 	---help---
-		Define to build in touchscreen support.
+		Define to build in keyboard support.
 
 if NXWM_KEYBOARD
 
-comment "Keyboard device settings"
+comment "Keyboard Device Settings"
 
 config NXWM_KEYBOARD_DEVPATH
 	string "Keyboard Device Path"
 	default "/dev/console"
 	---help---
-		The full path to the touchscreen device. Default: "/dev/console"
+		The full path to the keyboard device. Default: "/dev/console"
+
+config NXWM_KEYBOARD_USBHOST
+	bool "USB Keyboard Device"
+	default n
+	---help---
+		This setting indicates that NXWM_KEYBOARD_DEVPATH is a USB keyboard.
+		A USB Keyboard is a removable device. When it is inserted, then
+		device at NXWM_KEYBOARD_DEVPATH will appear; when it removed,
+		keyboard reads will fail and the device at NXWM_KEYBOARD_DEVPATH
+		will disappear.  Selecting this option builds addtional logic into
+		the keyboard listener thread in order to handle this case.
 
 config NXWM_KEYBOARD_SIGNO
 	int "Keyboard Task Signal Number"
 	default 6
 	---help---
-		The realtime signal used to wake up the touchscreen listener thread.
+		The realtime signal used to wake up the keyboard listener thread.
 		Default: 6
 
 config NXWM_KEYBOARD_BUFSIZE
@@ -832,9 +893,12 @@ config NXWM_KEYBOARD_BUFSIZE
 
 config NXWM_KEYBOARD_LISTENERPRIO
 	int "Keyboard Listener Task Priority"
-	default 100
+	default 120
 	---help---
-		Priority of the touchscreen listener thread.  Default: 100
+		Priority of the keyboard listener thread. This listener should
+		have a higher priority than most display-related tasks otherwise it
+		may miss keyboard input (not really very likely because keyboard
+		input is relatively slow). Default: 120
 
 config NXWM_KEYBOARD_LISTENERSTACK
 	int "Keyboard Listener Task Stack Size"
@@ -845,7 +909,7 @@ config NXWM_KEYBOARD_LISTENERSTACK
 endif # NXWM_KEYBOARD
 endmenu # NxWM Keyboard Configuration
 
-menu "NxWM Calibration display settings"
+menu "NxWM Calibration Display Settings"
 
 config NXWM_CALIBRATION_MARGIN
 	int "Calibration Margin"
@@ -901,7 +965,7 @@ config NXWM_CALIBRATION_MESSAGES
 	default n
 	---help---
 		By default, the calibration screen is clear excecpt for the
-		calibratino touchpoints.  If this options are enabled, then
+		calibration touchpoints.  If this options are enabled, then
 		instructions when to touch and when to release the touch will
 		be added in the center of the display,
 
@@ -1010,9 +1074,9 @@ config NXWM_CALIBRATION_LISTENERSTACK
 	---help---
 		Calibration listener thread stack size.  Default 2048
 
-endmenu # NxWM Calibration display settings
+endmenu # NxWM Calibration Display Settings
 
-menu "NxWM Hex Calculator display settings"
+menu "NxWM Hex Calculator Display Settings"
 
 config NXWM_HEXCALCULATOR_CUSTOM_COLORS
 	bool "Custom Hex Calculator Colors"
@@ -1056,7 +1120,7 @@ config NXWM_HEXCALCULATOR_CUSTOM_FONTID
 	bool "Use Custom Default Font"
 	default n
 	---help---
-		Set to override the system default font id (NXWM_DEFAULT_FONTID).
+		Set to override the NxWM default font id (NXWM_DEFAULT_FONTID).
 
 if NXWM_HEXCALCULATOR_CUSTOM_FONTID
 
@@ -1068,11 +1132,14 @@ config NXWM_HEXCALCULATOR_FONTID
 		NxWM font ID (NXWM_DEFAULT_FONTID).  Default: 0
 
 endif # NXWM_HEXCALCULATOR_FONTID
-endmenu # NxWM Hex Calculator display settings
+endmenu # NxWM Hex Calculator Display Dettings
+
+menu "NxWM Media Player Display Settings"
 
 config NXWM_MEDIAPLAYER
 	bool "NxWM Media Player"
 	default n
+	depends on FS_READABLE && SYSTEM_NXPLAYER
 	---help---
 		Enable support for the MP3 Media Player.  This features requires
 		a board that includes an MP3 Codec chip, such as the Mikromedia
@@ -1082,4 +1149,146 @@ config NXWM_MEDIAPLAYER
 		NOTE:  This application is currently under development and just
 		a shell of an app which will be developed soon.
 
+if NXWM_MEDIAPLAYER
+
+menu "NxPlayer Integration"
+
+config NXWM_MEDIAPLAYER_PREFERRED_DEVICE
+	string "Preferred audio device"
+	default "pcm0"
+	depends on NXPLAYER_INCLUDE_PREFERRED_DEVICE
+	---help---
+		NxPlayer expects us to specify a preferred audio device.  This
+		selection allows us to identify that preferred audio device.  This
+		device is identified by a simple name string that corresponds to an
+		audio device that can be found under /dev/audio.
+
+endmenu # NxPlayer Integration
+
+menu "Media File Configuration"
+
+config NXWM_MEDIAPLAYER_MEDIAPATH
+	string "Path to media"
+	default "/mnt/sdcard"
+	---help---
+		This is the full path to the mount point of the storage device
+		containing all of the media files accessible by the media player.
+
+config NXWM_MEDIAPLAYER_NOFILTER
+	bool "Disable filtering by file name extension"
+	default y
+
+config NXWM_MEDIAPLAYER_FILTER
+	bool
+	default n
+
+if !NXWM_MEDIAPLAYER_NOFILTER
+
+config NXWM_MEDIAPLAYER_FILTER_AC3
+	bool "Accept .ac3 extension"
+	default n
+	select NXWM_MEDIAPLAYER_FILTER
+
+config NXWM_MEDIAPLAYER_FILTER_DTS
+	bool "Accept .dts extension"
+	default n
+	select NXWM_MEDIAPLAYER_FILTER
+
+config NXWM_MEDIAPLAYER_FILTER_WAV
+	bool "Accept .wav extension"
+	default y
+	select NXWM_MEDIAPLAYER_FILTER
+
+config NXWM_MEDIAPLAYER_FILTER_PCM
+	bool "Accept .pcm extension"
+	default n
+	select NXWM_MEDIAPLAYER_FILTER
+
+config NXWM_MEDIAPLAYER_FILTER_MP3
+	bool "Accept .mp3 extension"
+	default n
+	select NXWM_MEDIAPLAYER_FILTER
+
+config NXWM_MEDIAPLAYER_FILTER_MIDI
+	bool "Accept .mid extension"
+	default n
+	select NXWM_MEDIAPLAYER_FILTER
+
+config NXWM_MEDIAPLAYER_FILTER_WMA
+	bool "Accept .wma extension"
+	default n
+	select NXWM_MEDIAPLAYER_FILTER
+
+config NXWM_MEDIAPLAYER_FILTER_OGGVORBIS
+	bool "Accept .ogg extension"
+	default n
+	select NXWM_MEDIAPLAYER_FILTER
+
+endif # !NXWM_MEDIAPLAYER_NOFILTER
+endmenu # Media File Configuration
+
+menu "General Look and Feel"
+
+config NXWM_MEDIAPLAYER_XSPACING
+	int "Media Player Horizontal Spacing"
+	default 12
+	---help---
+		This is the space between play, forward, and reverse controls in
+		units of pixels.
+
+config NXWM_MEDIAPLAYER_YSPACING
+	int "Media Player Vertical Spacing"
+	default 8
+	---help---
+		This is the space between vertical element: (1) list box, (2) play,
+		forward, and reverse controls, and the volume slider in units of
+		lines.
+
+config NXWM_MEDIAPLAYER_CUSTOM_COLORS
+	bool "Select Custom Media Player Colors"
+	default n
+
+if NXWM_MEDIAPLAYER_CUSTOM_COLORS
+
+	config NXWM_MEDIAPLAYER_VOLUMECOLOR
+	hex "Media Volume Slide Color"
+	default 0x0
+
+endif # NXWM_MEDIAPLAYER_CUSTOM_COLORS
+
+config NXWM_MEDIAPLAYER_BORDERS
+	bool "Media Player Button Borders"
+	default n
+	---help---
+		If you have nice graphics, then borderless would probably be the
+		better choice.  If you graphics is really more of a button label,
+		then have buttons with boarders might make more sense.
+
+endmenu # General Look and Feel
+
+menu "Volume Control Configuration"
+
+config NXWM_MEDIAPLAYER_VOLUMESTEP
+	int "Media Player Volume Step"
+	default 5
+	---help---
+		This increment in volume, up or down, when the volume bar is clicked.
+
+config NXWM_MEDIAPLAYER_MINVOLUMEHEIGHT
+	int "Minimum Player Volume Minimum Height"
+	default 6
+	---help---
+		The height of the slider is automatically calculated from the height
+		of the grip image.  However, we will not let the height of the grip
+		get smaller than this value.
+
+		NOTE: This width includes the size of the slider upper and lower
+		borders.
+
+endmenu # Volume Configuration"
+endif # NXWM_MEDIAPLAYER
+endmenu # NxWM Media Player Display Settings
+
 endif # NXWM
+endmenu # NxWidgets/NxWM
+

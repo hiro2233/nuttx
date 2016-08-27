@@ -51,7 +51,7 @@
  ****************************************************************************/
 /* Configuration ************************************************************/
 
-#ifdef CONFIG_PIC32MX_MVEC0
+#ifdef CONFIG_PIC32MX_MVEC
 #  error "Multi-vectors not supported"
 #  ifndef CONFIG_PIC32MX_EBASE
 #    error "EBASE address provided"  /* Should come from the linker script */
@@ -84,10 +84,10 @@
  * 6) Optional interrupt stack
  *    Start:   _ebss+CONFIG_IDLETHREAD_STACKSIZE
  *    End(+1): _ebss+CONFIG_IDLETHREAD_STACKSIZE+(CONFIG_ARCH_INTERRUPTSTACK & ~3)
- * 6a) Heap (without interupt stack)
+ * 6a) Heap (without interrupt stack)
  *    Start:   _ebss+CONFIG_IDLETHREAD_STACKSIZE
  *    End(+1): to the end of memory
- * 6b) Heap (with interupt stack)
+ * 6b) Heap (with interrupt stack)
  *    Start:   _ebss+CONFIG_IDLETHREAD_STACKSIZE+(CONFIG_ARCH_INTERRUPTSTACK & ~3)
  *    End(+1): to the end of memory
  */
@@ -105,7 +105,7 @@
 #endif
 
 /****************************************************************************
- * Global Symbols
+ * Public Symbols
  ****************************************************************************/
 
 	.file	"pic32mx-head.S"
@@ -490,8 +490,8 @@ __start:
 _exception_handler:
 	EXCPT_PROLOGUE t0				/* Save registers on stack, enable nested interrupts */
 	move	a0, sp					/* Pass register save structure as the parameter 1 */
-	USE_INTSTACK t0, t1, t2			/* Switch to the interrupt stack */
-	la		t0, pic32mx_exception		/* Call pic32mx_exception(regs) */
+	USE_INTSTACK t0, t1, t2, t3		/* Switch to the interrupt stack */
+	la		t0, pic32mx_exception	/* Call pic32mx_exception(regs) */
 	jalr	ra, t0
 	nop
 #ifdef CONFIG_PIC32MX_NESTED_INTERRUPTS
@@ -515,7 +515,7 @@ _exception_handler:
 _int_handler:
 	EXCPT_PROLOGUE t0				/* Save registers on stack, enable nested interrupts */
 	move	a0, sp					/* Pass register save structure as the parameter 1 */
-	USE_INTSTACK t0, t1, t2			/* Switch to the interrupt stack */
+	USE_INTSTACK t0, t1, t2, t3		/* Switch to the interrupt stack */
 	la		t0, pic32mx_decodeirq	/* Call pic32mx_decodeirq(regs) */
 	jalr	ra, t0
 	nop
@@ -541,7 +541,7 @@ _int_handler:
 _nmi_handler:
 	EXCPT_PROLOGUE t0				/* Save registers on stack, enable nested interrupts */
 	move	a0, sp					/* Pass register save structure as the parameter 1 */
-	USE_INTSTACK t0, t1, t2			/* Switch to the interrupt stack */
+	USE_INTSTACK t0, t1, t2, t3		/* Switch to the interrupt stack */
 	la		t0, pic32mx_donmi		/* Call up_donmi(regs) */
 	jalr	ra, t0
 	nop
@@ -669,7 +669,7 @@ devconfig0:
 	.size	devconfig, .-devconfig
 
 /****************************************************************************
- * Global Data
+ * Public Data
  ****************************************************************************/
 
 /* Interrupt stack variables */

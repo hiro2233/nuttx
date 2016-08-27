@@ -1,7 +1,7 @@
 /************************************************************************************
  * arch/arm/src/dm320/dm320_boot.c
  *
- *   Copyright (C) 2007, 2009-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009-2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,9 +45,7 @@
 #include "up_internal.h"
 #include "up_arch.h"
 
-/************************************************************************************
- * Private Types
- ************************************************************************************/
+#include <nuttx/board.h>
 
 /************************************************************************************
  * Private Types
@@ -62,14 +60,14 @@ struct section_mapping_s
 };
 
 /************************************************************************************
- * Public Variables
+ * Public Data
  ************************************************************************************/
 
 extern uint32_t _vector_start; /* Beginning of vector block */
 extern uint32_t _vector_end;   /* End+1 of vector block */
 
 /************************************************************************************
- * Private Variables
+ * Private Data
  ************************************************************************************/
 
 static const struct section_mapping_s section_mapping[] =
@@ -103,7 +101,7 @@ static const struct section_mapping_s section_mapping[] =
 
 static inline void up_setlevel1entry(uint32_t paddr, uint32_t vaddr, uint32_t mmuflags)
 {
-  uint32_t *pgtable = (uint32_t*)PGTABLE_BASE_VADDR;
+  uint32_t *pgtable = (uint32_t *)PGTABLE_BASE_VADDR;
   uint32_t  index   = vaddr >> 20;
 
   /* Save the page table entry */
@@ -118,7 +116,7 @@ static inline void up_setlevel1entry(uint32_t paddr, uint32_t vaddr, uint32_t mm
 static inline void up_setlevel2coarseentry(uint32_t ctabvaddr, uint32_t paddr,
                                            uint32_t vaddr, uint32_t mmuflags)
 {
-  uint32_t *ctable  = (uint32_t*)ctabvaddr;
+  uint32_t *ctable  = (uint32_t *)ctabvaddr;
   uint32_t  index;
 
   /* The coarse table divides a 1Mb address space up into 256 entries, each
@@ -190,9 +188,9 @@ static void up_vectormapping(void)
 
 static void up_copyvectorblock(void)
 {
-  uint32_t *src  = (uint32_t*)&_vector_start;
-  uint32_t *end  = (uint32_t*)&_vector_end;
-  uint32_t *dest = (uint32_t*)VECTOR_BASE;
+  uint32_t *src  = (uint32_t *)&_vector_start;
+  uint32_t *end  = (uint32_t *)&_vector_end;
+  uint32_t *dest = (uint32_t *)VECTOR_BASE;
 
   while (src < end)
     {
@@ -204,7 +202,7 @@ static void up_copyvectorblock(void)
  * Public Functions
  ************************************************************************************/
 
-void up_boot(void)
+void arm_boot(void)
 {
   /* __start provided the basic MMU mappings for SDRAM.  Now provide mappings for all
    * IO regions (Including the vector region).
@@ -227,8 +225,9 @@ void up_boot(void)
   /* Set up the board-specific LEDs */
 
 #ifdef CONFIG_ARCH_LEDS
-  board_led_initialize();
+  board_autoled_initialize();
 #endif
+
   /* Perform early serial initialization */
 
 #ifdef USE_EARLYSERIALINIT

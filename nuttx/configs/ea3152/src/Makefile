@@ -35,70 +35,28 @@
 
 -include $(TOPDIR)/Make.defs
 
-CFLAGS		+= -I$(TOPDIR)/sched
-
-ASRCS		=
-AOBJS		= $(ASRCS:.S=$(OBJEXT))
-
-CSRCS		= up_boot.c up_clkinit.c
+ASRCS =
+CSRCS = lpc31_boot.c lpc31_clkinit.c
 ifeq ($(CONFIG_ARCH_BUTTONS),y)
-CSRCS		+= up_buttons.c
+CSRCS += lpc31_buttons.c
 endif
 ifeq ($(CONFIG_LPC31_EXTDRAM),y)
-CSRCS		+= up_mem.c
+CSRCS += lpc31_mem.c
 endif
 ifeq ($(CONFIG_ARCH_LEDS),y)
-CSRCS		+= up_leds.c
+CSRCS += lpc31_leds.c
 endif
 ifeq ($(CONFIG_LPC31_SPI),y)
-CSRCS		+= up_spi.c
+CSRCS += lpc31_spi.c
 endif
-ifeq ($(CONFIG_NSH_ARCHINIT),y)
-CSRCS		+= up_nsh.c
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+CSRCS += lpc31_appinit.c
 endif
 ifeq ($(CONFIG_PAGING),y)
-CSRCS		+= up_fillpage.c
+CSRCS += lpc31_fillpage.c
 endif
 ifeq ($(CONFIG_USBMSC),y)
-CSRCS		+= up_usbmsc.c
-endif
-COBJS		= $(CSRCS:.c=$(OBJEXT))
-
-SRCS		= $(ASRCS) $(CSRCS)
-OBJS		= $(AOBJS) $(COBJS)
-
-ARCH_SRCDIR	= $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(WINTOOL),y)
-  CFLAGS	+= -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/arm}"
-else
-  CFLAGS	+= -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/arm
+CSRCS += lpc31_usbmsc.c
 endif
 
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

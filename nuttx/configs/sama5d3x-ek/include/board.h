@@ -52,6 +52,11 @@
  * definitions will configure operational clocking.
  */
 
+/* On-board crystal frequencies */
+
+#define BOARD_MAINOSC_FREQUENCY    (12000000)  /* MAINOSC: 12MHz crystal on-board */
+#define BOARD_SLOWCLK_FREQUENCY    (32768)     /* Slow Clock: 32.768KHz */
+
 #if defined(CONFIG_SAMA5_BOOT_SDRAM)
 /* When booting from SDRAM, NuttX is loaded in SDRAM by an intermediate bootloader.
  * That bootloader had to have already configured the PLL and SDRAM for proper
@@ -59,7 +64,7 @@
  *
  * In this case, we don not reconfigure the clocking.  Rather, we need to query
  * the register settings to determine the clock frequencies.  We can only assume that
- * the Main clock source in the on-board 12MHz crystal.
+ * the Main clock source is the on-board 12MHz crystal.
  */
 
 #  include <arch/board/board_sdram.h>
@@ -130,7 +135,7 @@
  *   LCD is illuminated by a high output.
  */
 
-/* LED index values for use with sam_setled() */
+/* LED index values for use with board_userled() */
 
 #define BOARD_BLUE        0
 #ifdef CONFIG_SAMA5D3xEK_NOREDLED
@@ -140,7 +145,7 @@
 #  define BOARD_NLEDS     2
 #endif
 
-/* LED bits for use with sam_setleds() */
+/* LED bits for use with board_userled_all() */
 
 #define BOARD_BLUE_BIT    (1 << BOARD_BLUE)
 #ifndef CONFIG_SAMA5D3xEK_NOREDLED
@@ -347,7 +352,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -366,36 +372,6 @@ extern "C" {
  ************************************************************************************/
 
 void sam_boardinitialize(void);
-
-/************************************************************************************
- * Name: sam_phyirq
- *
- * Description:
- *   This function may be called to register an interrupt handler that will be
- *   called when an interrupt is received from a PHY.
- *
- ************************************************************************************/
-
-#if defined(CONFIG_NET) && (defined(CONFIG_SAMA5_EMAC) || defined(CONFIG_SAMA5_GMAC)) && \
-    defined(CONFIG_SAMA5_PIOE_IRQ)
-xcpt_t sam_phyirq(int intf, xcpt_t irqhandler);
-#endif
-
-/************************************************************************************
- * Name:  sam_ledinit, sam_setled, and sam_setleds
- *
- * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board LEDs.  If
- *   CONFIG_ARCH_LEDS is not defined, then the following interfaces are available to
- *   control the LEDs from user applications.
- *
- ************************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-void sam_ledinit(void);
-void sam_setled(int led, bool ledon);
-void sam_setleds(uint8_t ledset);
-#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

@@ -1,7 +1,7 @@
 /****************************************************************************
  * config/sama5d3x-ek/src/sam_at24.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -64,16 +64,17 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/mtd/mtd.h>
 #include <nuttx/fs/nxffs.h>
 
+#include "sam_twi.h"
 #include "sama5d3x-ek.h"
 
 #ifdef HAVE_AT24
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -90,7 +91,7 @@
 
 int sam_at24_automount(int minor)
 {
-  FAR struct i2c_dev_s *i2c;
+  FAR struct i2c_master_s *i2c;
   FAR struct mtd_dev_s *mtd;
   static bool initialized = false;
   int ret;
@@ -101,21 +102,21 @@ int sam_at24_automount(int minor)
     {
       /* No.. Get the I2C bus driver */
 
-      fvdbg("Initialize TWI%d\n", AT24_BUS);
-      i2c = up_i2cinitialize(AT24_BUS);
+      finfo("Initialize TWI%d\n", AT24_BUS);
+      i2c = sam_i2cbus_initialize(AT24_BUS);
       if (!i2c)
         {
-          fdbg("ERROR: Failed to initialize TWI%d\n", AT24_BUS);
+          ferr("ERROR: Failed to initialize TWI%d\n", AT24_BUS);
           return -ENODEV;
         }
 
       /* Now bind the I2C interface to the AT24 I2C EEPROM driver */
 
-      fvdbg("Bind the AT24 EEPROM driver to TWI%d\n", AT24_BUS);
+      finfo("Bind the AT24 EEPROM driver to TWI%d\n", AT24_BUS);
       mtd = at24c_initialize(i2c);
       if (!mtd)
         {
-          fdbg("ERROR: Failed to bind TWI%d to the AT24 EEPROM driver\n",
+          ferr("ERROR: Failed to bind TWI%d to the AT24 EEPROM driver\n",
                AT24_BUS);
           return -ENODEV;
         }
@@ -123,32 +124,32 @@ int sam_at24_automount(int minor)
 #if defined(CONFIG_SAMA5D3xEK_AT24_FTL)
       /* And finally, use the FTL layer to wrap the MTD driver as a block driver */
 
-      fvdbg("Initialize the FTL layer to create /dev/mtdblock%d\n", AT24_MINOR);
+      finfo("Initialize the FTL layer to create /dev/mtdblock%d\n", AT24_MINOR);
       ret = ftl_initialize(AT24_MINOR, mtd);
       if (ret < 0)
         {
-          fdbg("ERROR: Failed to initialize the FTL layer: %d\n", ret);
+          ferr("ERROR: Failed to initialize the FTL layer: %d\n", ret);
           return ret;
         }
 
 #elif defined(CONFIG_SAMA5D3xEK_AT24_NXFFS)
       /* Initialize to provide NXFFS on the MTD interface */
 
-      fvdbg("Initialize the NXFFS file system\n");
+      finfo("Initialize the NXFFS file system\n");
       ret = nxffs_initialize(mtd);
       if (ret < 0)
         {
-          fdbg("ERROR: NXFFS initialization failed: %d\n", ret);
+          ferr("ERROR: NXFFS initialization failed: %d\n", ret);
           return ret;
         }
 
       /* Mount the file system at /mnt/at24 */
 
-      fvdbg("Mount the NXFFS file system at /dev/at24\n");
+      finfo("Mount the NXFFS file system at /dev/at24\n");
       ret = mount(NULL, "/mnt/at24", "nxffs", 0, NULL);
       if (ret < 0)
         {
-          fdbg("ERROR: Failed to mount the NXFFS volume: %d\n", errno);
+          ferr("ERROR: Failed to mount the NXFFS volume: %d\n", errno);
           return ret;
         }
 #endif

@@ -1,4 +1,4 @@
-/******************************************************************************
+/****************************************************************************
  * arch/avr/src/atmega/atmega_lowconsole.c
  *
  *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ******************************************************************************/
+ ****************************************************************************/
 
-/******************************************************************************
+/****************************************************************************
  * Included Files
- ******************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include "atmega_config.h"
@@ -49,11 +49,11 @@
 
 #include "up_arch.h"
 #include "up_internal.h"
-#include "atmega_internal.h"
+#include "atmega.h"
 
-/******************************************************************************
- * Private Definitions
- ******************************************************************************/
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
 /* USART0 Baud rate settings for normal and double speed modes  */
 
@@ -77,41 +77,43 @@
  *     AVR_DBLSPEED_UBRR1 = 104 (rounded), actual baud = 9615
  */
 
-#undef UART0_DOUBLE_SPEED
-#if BOARD_CPU_CLOCK <= 4000000
-#  if CONFIG_USART0_BAUD <= 9600
-#    define AVR_UBRR0 AVR_NORMAL_UBRR0
+#undef USART0_DOUBLE_SPEED
+#ifdef CONFIG_AVR_USART0
+#  if BOARD_CPU_CLOCK <= 4000000
+#    if CONFIG_USART0_BAUD <= 9600
+#      define AVR_UBRR0 AVR_NORMAL_UBRR0
+#    else
+#      define AVR_UBRR0 AVR_DBLSPEED_UBRR0
+#      define USART0_DOUBLE_SPEED 1
+#    endif
+#  elif BOARD_CPU_CLOCK <= 8000000
+#    if CONFIG_USART0_BAUD <= 19200
+#      define AVR_UBRR0 AVR_NORMAL_UBRR0
+#    else
+#      define AVR_UBRR0 AVR_DBLSPEED_UBRR0
+#      define USART0_DOUBLE_SPEED 1
+#    endif
+#  elif BOARD_CPU_CLOCK <= 12000000
+#    if CONFIG_USART0_BAUD <= 28800
+#      define AVR_UBRR0 AVR_NORMAL_UBRR0
+#    else
+#      define AVR_UBRR0 AVR_DBLSPEED_UBRR0
+#      define USART0_DOUBLE_SPEED 1
+#    endif
+#  elif BOARD_CPU_CLOCK <= 16000000
+#    if CONFIG_USART0_BAUD <= 38400
+#      define AVR_UBRR0 AVR_NORMAL_UBRR0
+#    else
+#      define AVR_UBRR0 AVR_DBLSPEED_UBRR0
+#      define USART0_DOUBLE_SPEED 1
+#    endif
 #  else
-#    define AVR_UBRR0 AVR_DBLSPEED_UBRR0
-#    define UART0_DOUBLE_SPEED 1
-#  endif
-#elif BOARD_CPU_CLOCK <= 8000000
-#  if CONFIG_USART0_BAUD <= 19200
-#    define AVR_UBRR0 AVR_NORMAL_UBRR0
-#  else
-#    define AVR_UBRR0 AVR_DBLSPEED_UBRR0
-#    define UART0_DOUBLE_SPEED 1
-#  endif
-#elif BOARD_CPU_CLOCK <= 12000000
-#  if CONFIG_USART0_BAUD <= 28800
-#    define AVR_UBRR0 AVR_NORMAL_UBRR0
-#  else
-#    define AVR_UBRR0 AVR_DBLSPEED_UBRR0
-#    define UART0_DOUBLE_SPEED 1
-#  endif
-#elif BOARD_CPU_CLOCK <= 16000000
-#  if CONFIG_USART0_BAUD <= 38400
-#    define AVR_UBRR0 AVR_NORMAL_UBRR0
-#  else
-#    define AVR_UBRR0 AVR_DBLSPEED_UBRR0
-#    define UART0_DOUBLE_SPEED 1
-#  endif
-#else
-#  if CONFIG_USART0_BAUD <= 57600
-#    define AVR_UBRR0 AVR_NORMAL_UBRR0
-#  else
-#    define AVR_UBRR0 AVR_DBLSPEED_UBRR0
-#    define UART0_DOUBLE_SPEED 1
+#    if CONFIG_USART0_BAUD <= 57600
+#      define AVR_UBRR0 AVR_NORMAL_UBRR0
+#    else
+#      define AVR_UBRR0 AVR_DBLSPEED_UBRR0
+#      define USART0_DOUBLE_SPEED 1
+#    endif
 #  endif
 #endif
 
@@ -137,67 +139,69 @@
  *     AVR_DBLSPEED_UBRR1 = 104 (rounded), actual baud = 9615
  */
 
-#undef UART1_DOUBLE_SPEED
-#if BOARD_CPU_CLOCK <= 4000000
-#  if CONFIG_USART1_BAUD <= 9600
-#    define AVR_UBRR1 AVR_NORMAL_UBRR1
+#undef USART1_DOUBLE_SPEED
+#ifdef CONFIG_AVR_USART1
+#  if BOARD_CPU_CLOCK <= 4000000
+#    if CONFIG_USART1_BAUD <= 9600
+#      define AVR_UBRR1 AVR_NORMAL_UBRR1
+#    else
+#      define AVR_UBRR1 AVR_DBLSPEED_UBRR1
+#      define USART1_DOUBLE_SPEED 1
+#    endif
+#  elif BOARD_CPU_CLOCK <= 8000000
+#    if CONFIG_USART1_BAUD <= 19200
+#      define AVR_UBRR1 AVR_NORMAL_UBRR1
+#    else
+#      define AVR_UBRR1 AVR_DBLSPEED_UBRR1
+#      define USART1_DOUBLE_SPEED 1
+#    endif
+#  elif BOARD_CPU_CLOCK <= 12000000
+#    if CONFIG_USART1_BAUD <= 28800
+#      define AVR_UBRR1 AVR_NORMAL_UBRR1
+#    else
+#      define AVR_UBRR1 AVR_DBLSPEED_UBRR1
+#      define USART1_DOUBLE_SPEED 1
+#    endif
+#  elif BOARD_CPU_CLOCK <= 16000000
+#    if CONFIG_USART1_BAUD <= 38400
+#      define AVR_UBRR1 AVR_NORMAL_UBRR1
+#    else
+#      define AVR_UBRR1 AVR_DBLSPEED_UBRR1
+#      define USART1_DOUBLE_SPEED 1
+#    endif
 #  else
-#    define AVR_UBRR1 AVR_DBLSPEED_UBRR1
-#    define UART1_DOUBLE_SPEED 1
-#  endif
-#elif BOARD_CPU_CLOCK <= 8000000
-#  if CONFIG_USART1_BAUD <= 19200
-#    define AVR_UBRR1 AVR_NORMAL_UBRR1
-#  else
-#    define AVR_UBRR1 AVR_DBLSPEED_UBRR1
-#    define UART1_DOUBLE_SPEED 1
-#  endif
-#elif BOARD_CPU_CLOCK <= 12000000
-#  if CONFIG_USART1_BAUD <= 28800
-#    define AVR_UBRR1 AVR_NORMAL_UBRR1
-#  else
-#    define AVR_UBRR1 AVR_DBLSPEED_UBRR1
-#    define UART1_DOUBLE_SPEED 1
-#  endif
-#elif BOARD_CPU_CLOCK <= 16000000
-#  if CONFIG_USART1_BAUD <= 38400
-#    define AVR_UBRR1 AVR_NORMAL_UBRR1
-#  else
-#    define AVR_UBRR1 AVR_DBLSPEED_UBRR1
-#    define UART1_DOUBLE_SPEED 1
-#  endif
-#else
-#  if CONFIG_USART1_BAUD <= 57600
-#    define AVR_UBRR1 AVR_NORMAL_UBRR1
-#  else
-#    define AVR_UBRR1 AVR_DBLSPEED_UBRR1
-#    define UART1_DOUBLE_SPEED 1
+#    if CONFIG_USART1_BAUD <= 57600
+#      define AVR_UBRR1 AVR_NORMAL_UBRR1
+#    else
+#      define AVR_UBRR1 AVR_DBLSPEED_UBRR1
+#      define USART1_DOUBLE_SPEED 1
+#    endif
 #  endif
 #endif
 
-/******************************************************************************
+/****************************************************************************
  * Private Types
- ******************************************************************************/
+ ****************************************************************************/
 
-/******************************************************************************
+/****************************************************************************
  * Private Function Prototypes
- ******************************************************************************/
+ ****************************************************************************/
 
-/******************************************************************************
- * Global Variables
- ******************************************************************************/
+/****************************************************************************
+ * Public Data
+ ****************************************************************************/
 
-/******************************************************************************
- * Private Variables
- ******************************************************************************/
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
 
-/******************************************************************************
+/****************************************************************************
  * Private Functions
- ******************************************************************************/
+ ****************************************************************************/
 
-/******************************************************************************
+/****************************************************************************
  * Public Functions
- ******************************************************************************/
+ ****************************************************************************/
 
 /****************************************************************************
  * Name: usart0_reset and usart1_reset
@@ -218,8 +222,13 @@ void usart0_reset(void)
 
   /* Unconfigure pins (no action needed */
 
+#ifdef CONFIG_ARCH_CHIP_ATMEGA1284P
+  DDRD  &= ~(1 << 1);
+  PORTD &= ~(1 << 0);
+#else
   DDRE  &= ~(1 << 1);
   PORTE &= ~(1 << 0);
+#endif
 
   /* Unconfigure BAUD divisor */
 
@@ -265,7 +274,7 @@ void usart0_configure(void)
 
   /* Select normal or double speed. */
 
-#ifdef UART0_DOUBLE_SPEED
+#ifdef USART0_DOUBLE_SPEED
   UCSR0A = (1 << U2X0);
 #else
   UCSR0A = 0;
@@ -309,6 +318,23 @@ void usart0_configure(void)
   UCSR0B = ucsr0b;
   UCSR0C = ucsr0c;
 
+#ifdef CONFIG_ARCH_CHIP_ATMEGA1284P
+  /* Pin Configuration: None necessary, Port D bits 0&1 are automatically
+   * configured:
+   *
+   * Port D, Bit 0: RXD0, USART0 Receive Pin. Receive Data (Data input pin
+   *   for the USART0). When the USART0 receiver is enabled this pin is
+   *   configured as an input regardless of the value of DDRD0. When the
+   *   USART0 forces this pin to be an input, a logical one in PORTD0 will
+   *   turn on the internal pull-up.
+   *
+   * Port D, Bit 1: TXD0, USART0 Transmit pin.
+   */
+
+  DDRD  |= (1 << 1);   /* Force Port D pin 1 to be an output -- should not be necessary */
+  PORTD |= (1 << 0);   /* Set pull-up on Port D pin 0 */
+
+#else
   /* Pin Configuration: None necessary, Port E bits 0&1 are automatically
    * configured:
    *
@@ -318,14 +344,15 @@ void usart0_configure(void)
    *   USART0 forces this pin to be an input, a logical one in PORTE0 will
    *   turn on the internal pull-up.
    *
-   * Port E, Bit 1: TXD0, UART0 Transmit pin.
+   * Port E, Bit 1: TXD0, USART0 Transmit pin.
    *
    * REVISIT: According to table 41, TXD0 is also automatically configured.
    * However, this is not explicitly stated in the text.
    */
 
-  DDRE  |= (1 << 1);   /* Force Port E pin 1 to be an input -- might not be necessary */
+  DDRE  |= (1 << 1);   /* Force Port E pin 1 to be an output -- might not be necessary */
   PORTE |= (1 << 0);   /* Set pull-up on Port E pin 0 */
+#endif
 
   /* Set the baud rate divisor */
 
@@ -342,7 +369,7 @@ void usart1_configure(void)
 
   /* Select normal or double speed. */
 
-#ifdef UART1_DOUBLE_SPEED
+#ifdef USART1_DOUBLE_SPEED
   UCSR1A = (1 << U2X1);
 #else
   UCSR1A = 0;
@@ -408,7 +435,7 @@ void usart1_configure(void)
 }
 #endif
 
-/******************************************************************************
+/****************************************************************************
  * Name: up_consoleinit
  *
  * Description:
@@ -416,7 +443,7 @@ void usart1_configure(void)
  *   early in the initialization sequence to configure the serial console uart
  *   (only).
  *
- ******************************************************************************/
+ ****************************************************************************/
 
 void up_consoleinit(void)
 {
@@ -429,13 +456,13 @@ void up_consoleinit(void)
 #endif
 }
 
-/******************************************************************************
+/****************************************************************************
  * Name: up_lowputc
  *
  * Description:
  *   Output one byte on the serial console
  *
- ******************************************************************************/
+ ****************************************************************************/
 
 void up_lowputc(char ch)
 {
@@ -449,4 +476,3 @@ void up_lowputc(char ch)
 #  endif
 #endif
 }
-

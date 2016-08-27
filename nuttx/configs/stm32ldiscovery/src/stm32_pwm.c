@@ -2,7 +2,7 @@
  * configs/stm32ldiscovery/src/up_pwm.c
  * arch/arm/src/board/up_pwm.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,7 +43,9 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <nuttx/pwm.h>
+#include <nuttx/board.h>
+#include <nuttx/drivers/pwm.h>
+
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -52,7 +54,7 @@
 #include "stm32ldiscovery.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* Configuration *******************************************************************/
 /* PWM
@@ -95,7 +97,7 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Name: pwm_devinit
+ * Name: board_pwm_setup
  *
  * Description:
  *   All STM32 architectures must provide the following interface to work with
@@ -103,7 +105,7 @@
  *
  ************************************************************************************/
 
-int pwm_devinit(void)
+int board_pwm_setup(void)
 {
   static bool initialized = false;
   struct pwm_lowerhalf_s *pwm;
@@ -118,7 +120,7 @@ int pwm_devinit(void)
       pwm = stm32_pwminitialize(STM32F3DISCOVERY_PWMTIMER);
       if (!pwm)
         {
-          dbg("Failed to get the STM32 PWM lower half\n");
+          _err("ERROR: Failed to get the STM32 PWM lower half\n");
           return -ENODEV;
         }
 
@@ -127,7 +129,7 @@ int pwm_devinit(void)
       ret = pwm_register("/dev/pwm0", pwm);
       if (ret < 0)
         {
-          adbg("pwm_register failed: %d\n", ret);
+          aerr("ERROR: pwm_register failed: %d\n", ret);
           return ret;
         }
 

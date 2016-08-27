@@ -35,16 +35,8 @@
 
 -include $(TOPDIR)/Make.defs
 
-CFLAGS += -I$(TOPDIR)/sched
-
 ASRCS =
-AOBJS = $(ASRCS:.S=$(OBJEXT))
-
 CSRCS = stm32_boot.c stm32_spi.c
-
-ifeq ($(CONFIG_HAVE_CXX),y)
-CSRCS += stm32_cxxinitialize.c
-endif
 
 ifeq ($(CONFIG_ARCH_LEDS),y)
 CSRCS += stm32_autoleds.c
@@ -57,7 +49,7 @@ CSRCS +=  stm32_buttons.c
 endif
 
 ifeq ($(CONFIG_NSH_LIBRARY),y)
-CSRCS += stm32_nsh.c
+CSRCS += stm32_appinit.c
 endif
 
 ifeq ($(CONFIG_ARCH_IDLE_CUSTOM),y)
@@ -68,55 +60,23 @@ ifeq ($(CONFIG_STM32_FSMC),y)
 CSRCS += stm32_extmem.c
 endif
 
-ifeq ($(CONFIG_STM32_OTGFS2),y)
+ifeq ($(CONFIG_STM32_OTGHS),y)
 CSRCS += stm32_usb.c
+endif
+
+ifeq ($(CONFIG_STM32F429I_DISCO_ILI9341),y)
+CSRCS += stm32_ili93414ws.c
+endif
+
+ifeq ($(and \
+      $(CONFIG_STM32F429I_DISCO_ILI9341_LCDIFACE), \
+      $(CONFIG_STM32F429I_DISCO_ILI9341_FBIFACE), \
+      $(CONFIG_STM32_LTDC)),)
+CSRCS += stm32_lcd.c
 endif
 
 ifeq ($(CONFIG_ARCH_FPU),y)
 CSRCS += stm32_ostest.c
 endif
 
-COBJS = $(CSRCS:.c=$(OBJEXT))
-
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-ARCH_SRCDIR = $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(CONFIG_WINDOWS_NATIVE),y)
-  CFLAGS += -I$(ARCH_SRCDIR)\chip -I$(ARCH_SRCDIR)\common -I$(ARCH_SRCDIR)\armv7-m
-else
-ifeq ($(WINTOOL),y)
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
-			-I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
-			-I "${shell cygpath -w $(ARCH_SRCDIR)/armv7-m}"
-else
-  CFLAGS += -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/armv7-m
-endif
-endif
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

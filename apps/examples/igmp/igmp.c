@@ -44,15 +44,17 @@
 #include <unistd.h>
 #include <debug.h>
 
+#include <arpa/inet.h>
 #include <net/if.h>
-#include <nuttx/net/uip/uip.h>
-#include <apps/netutils/uiplib.h>
-#include <apps/netutils/ipmsfilter.h>
+#include <netinet/in.h>
+
+#include "netutils/netlib.h"
+#include "netutils/ipmsfilter.h"
 
 #include "igmp.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Check if the destination address is a multicast address
@@ -81,14 +83,18 @@
  * igmp_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int igmp_main(int argc, char *argv[])
+#endif
 {
   struct in_addr addr;
 #if defined(CONFIG_EXAMPLES_IGMP_NOMAC)
   uint8_t mac[IFHWADDRLEN];
 #endif
 
-  message("Configuring Ethernet...\n");
+  printf("Configuring Ethernet...\n");
 
   /* Many embedded network interfaces must have a software assigned MAC */
 
@@ -99,44 +105,44 @@ int igmp_main(int argc, char *argv[])
   mac[3] = 0xad;
   mac[4] = 0xbe;
   mac[5] = 0xef;
-  uip_setmacaddr("eth0", mac);
+  netlib_setmacaddr("eth0", mac);
 #endif
 
   /* Set up our host address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_IGMP_IPADDR);
-  uip_sethostaddr("eth0", &addr);
+  netlib_set_ipv4addr("eth0", &addr);
 
   /* Set up the default router address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_IGMP_DRIPADDR);
-  uip_setdraddr("eth0", &addr);
+  netlib_set_dripv4addr("eth0", &addr);
 
   /* Setup the subnet mask */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_IGMP_NETMASK);
-  uip_setnetmask("eth0", &addr);
+  netlib_set_ipv4netmask("eth0", &addr);
 
   /* Not much of a test for now */
   /* Join the group */
 
-  message("Join group...\n");
+  printf("Join group...\n");
   addr.s_addr = HTONL(CONFIG_EXAMPLES_IGMP_GRPADDR);
   ipmsfilter("eth0", &addr, MCAST_INCLUDE);
 
   /* Wait a while */
 
-  message("Wait for timeout...\n");
+  printf("Wait for timeout...\n");
   sleep(5);
 
   /* Leave the group */
 
-  message("Leave group...\n");
+  printf("Leave group...\n");
   ipmsfilter("eth0", &addr, MCAST_EXCLUDE);
 
   /* Wait a while */
 
   sleep(5);
-  message("Exiting...\n");
+  printf("Exiting...\n");
   return 0;
 }

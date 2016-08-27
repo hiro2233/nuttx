@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/include/netutils/base64.h
+ * apps/netutils/codecs/md5.c
  *
  * This file is part of the NuttX RTOS:
  *
@@ -65,7 +65,7 @@
 #include <string.h>
 #include <stdint.h>
 
-#include <apps/netutils/md5.h>
+#include "netutils/md5.h"
 
 #ifdef CONFIG_CODECS_HASH_MD5
 
@@ -395,7 +395,7 @@ char *md5_hash(const uint8_t * addr, const size_t len)
   md5_sum(addr, len, digest);
   for (i = 0; i < 16; i++)
     {
-      sprintf(&hash[i * 2], "%.2x", digest[i]);
+      sprintf(&hash[i * 2], "%02x", digest[i]);
     }
 
   hash[32] = 0;

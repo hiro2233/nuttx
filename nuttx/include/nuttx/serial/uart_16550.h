@@ -2,7 +2,7 @@
  * include/nuttx/serial/uart_16550.h
  * Serial driver for 16550 UART
  *
- *   Copyright (C) 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -336,16 +336,18 @@ typedef uint32_t uart_addrwidth_t;
  ************************************************************************************/
 
 /************************************************************************************
- * Name: uart_getreg(), uart_putreg()
+ * Name: uart_getreg(), uart_putreg(), uart_ioctl()
  *
  * Description:
  *   These functions must be provided by the processor-specific code in order to
  *   correctly access 16550 registers
+ *   uart_ioctl() is optional to provide custom IOCTLs
  *
  ************************************************************************************/
 
-extern uart_datawidth_t uart_getreg(uart_addrwidth_t base, unsigned int offset);
-extern void uart_putreg(uart_addrwidth_t base, unsigned int offset, uart_datawidth_t value);
+uart_datawidth_t uart_getreg(uart_addrwidth_t base, unsigned int offset);
+void uart_putreg(uart_addrwidth_t base, unsigned int offset, uart_datawidth_t value);
+int uart_ioctl(struct file *filep, int cmd, unsigned long arg);
 
 #endif /* CONFIG_16550_UART */
 #endif /* __INCLUDE_NUTTX_SERIAL_UART_16550_H */

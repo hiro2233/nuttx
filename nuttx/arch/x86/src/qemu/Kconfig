@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 if ARCH_CHIP_QEMU
@@ -24,5 +24,12 @@ config QEMU_VGA
 		framebuffer interfaces and, hence, cannot be used with the NuttX
 		graphics subsystem.  Such a conversion to the standard NuttX
 		framebuffer interface would, however, not be a big job.
+
+config QEMU_GPIOIRQ
+	bool "GPIO interrupt support"
+	default n
+	depends on EXPERIMENTAL
+	---help---
+		Enable support for GPIO interrupts (not implemented)
 
 endif

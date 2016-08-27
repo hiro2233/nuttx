@@ -34,8 +34,8 @@
  *
  ************************************************************************************/
 
-#ifndef __Z80_SWITCH_H
-#define __Z80_SWITCH_H
+#ifndef __ARCH_Z80_SRC_Z8_SWITCH_H
+#define __ARCH_Z80_SRC_Z8_SWITCH_H
 
 /************************************************************************************
  * Included Files
@@ -49,7 +49,7 @@
 #include "common/up_internal.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Z8_IRQSTATE_* definitions ********************************************************
@@ -116,7 +116,7 @@
  *
  * NOTE: Nested interrupts are not supported in this implementation.  If you want
  * to implement nested interrupts, you would have to change the way that
- * current_regs is handled.  The savestate variable would not work for
+ * g_current_regs is handled.  The savestate variable would not work for
  * that purpose as implemented here because only the outermost nested
  * interrupt can result in a context switch (it can probably be deleted).
  */
@@ -130,7 +130,7 @@
     savestate.regs     = g_z8irqstate.regs; \
     g_z8irqstate.state = Z8_IRQSTATE_ENTRY; \
     g_z8irqstate.regs  = (regs); \
-    up_maskack_irq(irq); \
+    up_ack_irq(irq); \
   } while (0)
 
 /* The following macro is used when the system exits interrupt handling logic */
@@ -139,7 +139,6 @@
   do { \
     g_z8irqstate.state = savestate.state; \
     g_z8irqstate.regs  = savestate.regs; \
-    up_enable_irq(irq); \
   } while (0)
 
 /* The following macro is used to sample the interrupt state (as a opaque handle) */
@@ -208,7 +207,7 @@ struct z8_irqstate_s
 #endif
 
 /************************************************************************************
- * Public Variables
+ * Public Data
  ************************************************************************************/
 
 #ifndef __ASSEMBLY__
@@ -229,7 +228,7 @@ extern "C"
 
 /* Defined in z8_irq.c */
 
-void up_maskack_irq(int irq);
+void up_ack_irq(int irq);
 
 /* Defined in z8_saveusercontext.asm */
 
@@ -256,4 +255,4 @@ void z8_registerdump(void);
 #endif
 #endif
 
-#endif  /* __Z80_SWITCH_H */
+#endif  /* __ARCH_Z80_SRC_Z8_SWITCH_H */

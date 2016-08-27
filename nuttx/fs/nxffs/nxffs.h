@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/nxffs/nxffs.h
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References: Linux/Documentation/filesystems/romfs.txt
@@ -316,7 +316,7 @@ struct nxffs_blkstats_s
 };
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /* The magic number that appears that the beginning of each NXFFS (logical)
@@ -553,7 +553,7 @@ off_t nxffs_iotell(FAR struct nxffs_volume_s *volume);
  *   over bad blocks and block headers as necessary.
  *
  * Input Parameters:
- *   volume - Describes the NXFFS volume.  The paramters ioblock and iooffset
+ *   volume - Describes the NXFFS volume.  The parameters ioblock and iooffset
  *     in the volume structure determine the behavior of nxffs_getc().
  *   reserve - If less than this much space is available at the end of the
  *     block, then skip to the next block.
@@ -577,7 +577,7 @@ int nxffs_getc(FAR struct nxffs_volume_s *volume, uint16_t reserve);
  *   to dispose of that memory when the inode entry is no longer needed.
  *
  *   Note that the nxffs_entry_s containing structure is not freed.  The
- *   caller may call kfree upon return of this function if necessary to
+ *   caller may call kmm_free upon return of this function if necessary to
  *   free the entry container.
  *
  * Input parameters:
@@ -1098,7 +1098,8 @@ int nxffs_readdir(FAR struct inode *mountpt, FAR struct fs_dirent_s *dir);
 int nxffs_rewinddir(FAR struct inode *mountpt, FAR struct fs_dirent_s *dir);
 int nxffs_bind(FAR struct inode *blkdriver, FAR const void *data,
                FAR void **handle);
-int nxffs_unbind(FAR void *handle, FAR struct inode **blkdriver);
+int nxffs_unbind(FAR void *handle, FAR struct inode **blkdriver,
+                 unsigned int flags);
 int nxffs_statfs(FAR struct inode *mountpt, FAR struct statfs *buf);
 int nxffs_stat(FAR struct inode *mountpt, FAR const char *relpath,
                FAR struct stat *buf);

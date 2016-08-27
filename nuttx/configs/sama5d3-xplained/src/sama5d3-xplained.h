@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/sama5d3-xplained/src/sama5d3-xplained.h
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -95,7 +95,7 @@
  * asked to mount the NAND part
  */
 
-#if defined(CONFIG_DISABLE_MOUNTPOINT) || !defined(CONFIG_SAMA5D3XPLAINED_NAND_AUTOMOUNT)
+#if defined(CONFIG_DISABLE_MOUNTPOINT) || !defined(CONFIG_SAMA5D3XPLAINED_NAND_BLOCKMOUNT)
 #  undef HAVE_NAND
 #endif
 
@@ -237,7 +237,7 @@
 
 /* Check if we should enable the USB monitor before starting NSH */
 
-#ifndef CONFIG_SYSTEM_USBMONITOR
+#ifndef CONFIG_USBMONITOR
 #  undef HAVE_USBMONITOR
 #endif
 
@@ -255,8 +255,18 @@
 
 /* Networking */
 
-#if !defined(CONFIG_NET) || (!defined(CONFIG_SAMA5_EMAC) && !defined(CONFIG_SAMA5_GMAC))
+#if !defined(CONFIG_NET) || (!defined(CONFIG_SAMA5_EMACA) && !defined(CONFIG_SAMA5_GMAC))
 #  undef HAVE_NETWORK
+#endif
+
+/* procfs File System */
+
+#ifdef CONFIG_FS_PROCFS
+#  ifdef CONFIG_NSH_PROC_MOUNTPOINT
+#    define SAMA5_PROCFS_MOUNTPOINT CONFIG_NSH_PROC_MOUNTPOINT
+#  else
+#    define SAMA5_PROCFS_MOUNTPOINT "/proc"
+#  endif
 #endif
 
 /* LEDs *****************************************************************************/
@@ -382,26 +392,33 @@
  *
  *   PIO  Signal Name Function
  *   ---- ----------- -------------------------------------------------------
- *   PE4  EN5V_USBB   VBus power enable (via MN3 AIC1526 Dual USB High-Side
- *                    Power Switch).  To the A1 pin of J7 Dual USB A
- *                    connector
+ *   PE3  EN5V_USBB   VBus power enable via MN3 SP2526A-2E dual power
+ *                    switch.  PE3 (EN5V_USBB)connects to ENB pin of MN3.
+ *                    MN3 OUTB (5V_USBB) is provided to pin 5 of J7 Dual USB
+ *                    A connector
+ *
+ *                    Active high for SP2526A-1; active low for SP2526A-2
  */
 
 #define PIO_USBB_VBUS_ENABLE \
-                     (PIO_OUTPUT | PIO_CFG_DEFAULT | PIO_OUTPUT_CLEAR | \
-                      PIO_PORT_PIOE | PIO_PIN4)
+                     (PIO_OUTPUT | PIO_CFG_DEFAULT | PIO_OUTPUT_SET | \
+                      PIO_PORT_PIOE | PIO_PIN3)
 
 /* Port C
  *
  *   PIO  Signal Name Function
  *   ---- ----------- -------------------------------------------------------
- *   PE3  EN5V_USBC   VBus power enable (via MN3 power switch).  To the B1
- *                    pin of J7 Dual USB A connector
+ *   PE4  EN5V_USBC   VBus power enable via MN3 SP2526A-2E dual power
+ *                    switch.  PE4 (EN5V_USBC) connects to ENA pin of the
+ *                    MN3. MN3 OUTA (5V_USBC) is provided to the pin 1 of J7
+ *                    Dual USB A connector
+ *
+ *                    Active high for SP2526A-1; active low for SP2526A-2
  */
 
 #define PIO_USBC_VBUS_ENABLE \
-                     (PIO_OUTPUT | PIO_CFG_DEFAULT | PIO_OUTPUT_CLEAR | \
-                      PIO_PORT_PIOE | PIO_PIN3)
+                     (PIO_OUTPUT | PIO_CFG_DEFAULT | PIO_OUTPUT_SET | \
+                      PIO_PORT_PIOE | PIO_PIN4)
 
 /*  Both Ports B and C
  *
@@ -418,33 +435,34 @@
 
 /* Ethernet */
 
-#ifdef CONFIG_SAMA4_EMAC
- /* ETH1: Ethernet 10/100 (EMAC) Port
-  *
-  * The main board contains a MICREL PHY device (KSZ8051) operating at 10/100 Mbps.
-  * The board supports MII and RMII interface modes.
-  *
-  * The two independent PHY devices embedded on CM and MB boards are connected to
-  * independent RJ-45 connectors with built-in magnetic and status LEDs.
-  *
-  * At the De-Assertion of Reset:
-  *   PHY ADD[2:0]:001
-  *   CONFIG[2:0]:001,Mode:RMII
-  *   Duplex Mode:Half Duplex
-  *   Isolate Mode:Disable
-  *   Speed Mode:100Mbps
-  *   Nway Auto-Negotiation:Enable
-  *
-  * The KSZ8051 PHY interrtup is available on PE30 INT_ETH1
-  */
+#ifdef CONFIG_SAMA5_EMACA
+  /* ETH1: Ethernet 10/100 (EMAC A) Port
+   *
+   * The main board contains a MICREL PHY device (KSZ8051) operating at 10/100 Mbps.
+   * The board supports MII and RMII interface modes.
+   *
+   * The two independent PHY devices embedded on CM and MB boards are connected to
+   * independent RJ-45 connectors with built-in magnetic and status LEDs.
+   *
+   * At the De-Assertion of Reset:
+   *   PHY ADD[2:0]:001
+   *   CONFIG[2:0]:001,Mode:RMII
+   *   Duplex Mode:Half Duplex
+   *   Isolate Mode:Disable
+   *   Speed Mode:100Mbps
+   *   Nway Auto-Negotiation:Enable
+   *
+   * The KSZ8051 PHY interrupt is available on PE30 INT_ETH1.  The sense of
+   * the interrupt is configurable but is, by default, active low.
+   */
 
 #define PIO_INT_ETH1 (PIO_INPUT | PIO_CFG_PULLUP | PIO_CFG_DEGLITCH | \
-                      PIO_INT_BOTHEDGES | PIO_PORT_PIOE | PIO_PIN30)
+                      PIO_INT_FALLING | PIO_PORT_PIOE | PIO_PIN30)
 #define IRQ_INT_ETH1 SAM_IRQ_PE30
 
 #endif
 
-#ifdef CONFIG_SAMA4_GMAC
+#ifdef CONFIG_SAMA5_GMAC
   /* ETH0: Tri-Speed Ethernet PHY
    *
    * The SAMA5D3 series-CM board is equipped with a MICREL PHY devices (MICREL
@@ -454,11 +472,12 @@
    * activity indicators. These signals can be used to connect to a 10/100/1000
    * BaseT RJ45 connector integrated on the main board.
    *
-   * The KSZ9021/31 interrupt is available on PB35 INT_GETH0
+   * The KSZ9021/31 interrupt is available on PB35 INT_GETH0.  The sense of
+   * the interrupt is configurable but is, by default, active low.
    */
 
 #define PIO_INT_ETH0 (PIO_INPUT | PIO_CFG_PULLUP | PIO_CFG_DEGLITCH | \
-                      PIO_INT_BOTHEDGES | PIO_PORT_PIOB | PIO_PIN25)
+                      PIO_INT_FALLING | PIO_PORT_PIOB | PIO_PIN25)
 #define IRQ_INT_ETH0 SAM_IRQ_PB25
 
 #endif
@@ -485,6 +504,92 @@
                         PIO_PORT_PIOD | PIO_PIN13)
 #define AT25_PORT      SPI0_CS0
 
+/* Itead Joystick Shield
+ *
+ * See http://imall.iteadstudio.com/im120417014.html for more information
+ * about this joystick.
+ *
+ *   --------- ----------------- ---------------------------------
+ *   ARDUINO   ITEAD             SAMA5D3 XPLAINED
+ *   PIN NAME  SIGNAL            CONNECTOR  SIGNAL
+ *   --------- ----------------- ---------- ----------------------
+ *    D3       Button E Output   J18 pin 4  PC8
+ *    D4       Button D Output   J18 pin 5  PC28
+ *    D5       Button C Output   J18 pin 6  PC7
+ *    D6       Button B Output   J18 pin 7  PC6
+ *    D7       Button A Output   J18 pin 8  PC5
+ *    D8       Button F Output   J15 pin 1  PC4
+ *    D9       Button G Output   J15 pin 2  PC3
+ *    A0       Joystick Y Output J17 pin 1  PC18  AD0 (function 4)
+ *    A1       Joystick X Output J17 pin 2  PD21  AD1 (function 1)
+ *   --------- ----------------- ---------- ----------------------
+ *
+ * All buttons are pulled on the shield.  A sensed low value indicates
+ * when the button is pressed.
+ */
+
+#define ADC_XOUPUT   1 /* X output is on ADC channel 1 */
+#define ADC_YOUPUT   0 /* Y output is on ADC channel 0 */
+
+#define PIO_BUTTON_A (PIO_INPUT | PIO_CFG_PULLUP | PIO_CFG_DEGLITCH | \
+                      PIO_INT_BOTHEDGES | PIO_PORT_PIOC | PIO_PIN5)
+#define IRQ_BUTTON_A  SAM_IRQ_PC5
+#define PIO_BUTTON_B (PIO_INPUT | PIO_CFG_PULLUP | PIO_CFG_DEGLITCH | \
+                      PIO_INT_BOTHEDGES | PIO_PORT_PIOC | PIO_PIN6)
+#define IRQ_BUTTON_B  SAM_IRQ_PC6
+#define PIO_BUTTON_C (PIO_INPUT | PIO_CFG_PULLUP | PIO_CFG_DEGLITCH | \
+                      PIO_INT_BOTHEDGES | PIO_PORT_PIOC | PIO_PIN7)
+#define IRQ_BUTTON_C  SAM_IRQ_PC7
+#define PIO_BUTTON_D (PIO_INPUT | PIO_CFG_PULLUP | PIO_CFG_DEGLITCH | \
+                      PIO_INT_BOTHEDGES | PIO_PORT_PIOC | PIO_PIN28)
+#define IRQ_BUTTON_D  SAM_IRQ_PC28
+#define PIO_BUTTON_E (PIO_INPUT | PIO_CFG_PULLUP | PIO_CFG_DEGLITCH | \
+                      PIO_INT_BOTHEDGES | PIO_PORT_PIOC | PIO_PIN8)
+#define IRQ_BUTTON_E  SAM_IRQ_PC8
+#define PIO_BUTTON_F (PIO_INPUT | PIO_CFG_PULLUP | PIO_CFG_DEGLITCH | \
+                      PIO_INT_BOTHEDGES | PIO_PORT_PIOC | PIO_PIN4)
+#define IRQ_BUTTON_F  SAM_IRQ_PC4
+#define PIO_BUTTON_G (PIO_INPUT | PIO_CFG_PULLUP | PIO_CFG_DEGLITCH | \
+                      PIO_INT_BOTHEDGES | PIO_PORT_PIOC | PIO_PIN3)
+#define IRQ_BUTTON_G  SAM_IRQ_PC3
+
+/* Itead Joystick Signal interpretation:
+ *
+ *   --------- ----------------------- ---------------------------
+ *   BUTTON     TYPE                    NUTTX ALIAS
+ *   --------- ----------------------- ---------------------------
+ *   Button A  Large button A          JUMP/BUTTON 3
+ *   Button B  Large button B          FIRE/BUTTON 2
+ *   Button C  Joystick select button  SELECT/BUTTON 1
+ *   Button D  Tiny Button D           BUTTON 6
+ *   Button E  Tiny Button E           BUTTON 7
+ *   Button F  Large Button F          BUTTON 4
+ *   Button G  Large Button G          BUTTON 5
+ *   --------- ----------------------- ---------------------------
+ */
+
+#define PIO_BUTTON_1 PIO_BUTTON_C
+#define IRQ_BUTTON_1 IRQ_BUTTON_C
+#define PIO_BUTTON_2 PIO_BUTTON_B
+#define IRQ_BUTTON_2 IRQ_BUTTON_B
+#define PIO_BUTTON_3 PIO_BUTTON_A
+#define IRQ_BUTTON_3 IRQ_BUTTON_A
+#define PIO_BUTTON_4 PIO_BUTTON_F
+#define IRQ_BUTTON_4 IRQ_BUTTON_F
+#define PIO_BUTTON_5 PIO_BUTTON_G
+#define IRQ_BUTTON_5 IRQ_BUTTON_G
+#define PIO_BUTTON_6 PIO_BUTTON_D
+#define IRQ_BUTTON_6 IRQ_BUTTON_D
+#define PIO_BUTTON_7 PIO_BUTTON_E
+#define IRQ_BUTTON_7 IRQ_BUTTON_E
+
+#define PIO_SELECT   PIO_BUTTON_1
+#define IRQ_SELECT   IRQ_BUTTON_1
+#define PIO_FIRE     PIO_BUTTON_2
+#define IRQ_FIRE     IRQ_BUTTON_2
+#define PIO_JUMP     PIO_BUTTON_3
+#define IRQ_JUMP     IRQ_BUTTON_3
+
 /************************************************************************************
  * Public Types
  ************************************************************************************/
@@ -500,7 +605,7 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Name: sam_spiinitialize
+ * Name: sam_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select PIO pins for the SAMA5D3-Xplained board.
@@ -508,11 +613,11 @@
  ************************************************************************************/
 
 #if defined(CONFIG_SAMA5_SPI0) || defined(CONFIG_SAMA5_SPI1)
-void weak_function sam_spiinitialize(void);
+void weak_function sam_spidev_initialize(void);
 #endif
 
 /************************************************************************************
- * Name: board_sdram_config
+ * Name: sam_sdram_config
  *
  * Description:
  *   Configures DDR2 (MT47H128M16RT 128MB or, optionally,  MT47H64M16HR)
@@ -532,7 +637,7 @@ void weak_function sam_spiinitialize(void);
  *  This logic was taken from Atmel sample code for the SAMA5D3-Xplained.
  *
  *  Input Parameters:
- *     devtype - Either DDRAM_MT47H128M16RT or DDRAM_MT47H64M16HR
+ *     None
  *
  *  Assumptions:
  *    The DDR memory regions is configured as strongly ordered memory.  When we
@@ -544,7 +649,7 @@ void weak_function sam_spiinitialize(void);
 #if defined(CONFIG_SAMA5_DDRCS) && !defined(CONFIG_SAMA5_BOOT_SDRAM)
 void sam_sdram_config(void);
 #else
-#  define board_sdram_config(t)
+#  define sam_sdram_config()
 #endif
 
 /****************************************************************************
@@ -611,7 +716,7 @@ bool sam_writeprotected(int slotno);
  * Name: sam_usbinitialize
  *
  * Description:
- *   Called from sam_usbinitialize very early in inialization to setup USB-related
+ *   Called from sam_usbinitialize very early in initialization to setup USB-related
  *   PIO pins for the SAMA5D3-Xplained board.
  *
  ************************************************************************************/
@@ -646,29 +751,15 @@ void weak_function sam_netinitialize(void);
 #endif
 
 /************************************************************************************
- * Name: board_led_initialize
- ************************************************************************************/
-
-#ifdef CONFIG_ARCH_LEDS
-void board_led_initialize(void);
-#endif
-
-/************************************************************************************
- * Name: nsh_archinitialize
+ * Name: board_adc_initialize
  *
  * Description:
- *   Perform architecture specific initialization for NSH.
- *
- *   CONFIG_NSH_ARCHINIT=y :
- *     Called from the NSH library
- *
- *   CONFIG_BOARD_INITIALIZE=y, CONFIG_NSH_LIBRARY=y, && CONFIG_NSH_ARCHINIT=n :
- *     Called from board_initialize().
+ *   Initialize and register the ADC driver
  *
  ************************************************************************************/
 
-#ifdef CONFIG_NSH_LIBRARY
-int nsh_archinitialize(void);
+#ifdef CONFIG_SAMA5_ADC
+int board_adc_initialize(void);
 #endif
 
 #endif /* __ASSEMBLY__ */

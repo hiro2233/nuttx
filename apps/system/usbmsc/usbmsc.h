@@ -89,26 +89,6 @@
 #  undef CONFIG_SYSTEM_USBMSC_DEVPATH3
 #endif
 
-/* Debug ********************************************************************/
-
-#ifdef CONFIG_CPP_HAVE_VARARGS
-#  ifdef CONFIG_DEBUG
-#    define message(...) lowsyslog(__VA_ARGS__)
-#    define msgflush()
-#  else
-#    define message(...) printf(__VA_ARGS__)
-#    define msgflush() fflush(stdout)
-#  endif
-#else
-#  ifdef CONFIG_DEBUG
-#    define message lowsyslog
-#    define msgflush()
-#  else
-#    define message printf
-#    define msgflush() fflush(stdout)
-#  endif
-#endif
-
 /****************************************************************************
  * Public Types
  ****************************************************************************/
@@ -158,17 +138,5 @@ extern struct usbmsc_state_s g_usbmsc;
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
-
-/****************************************************************************
- * Name: usbmsc_archinitialize
- *
- * Description:
- *   Perform architecture specific initialization.  This function must
- *   configure the block device to export via USB.  This function must be
- *   provided by architecture-specific logic in order to use this add-on.
- *
- ****************************************************************************/
-
-extern int usbmsc_archinitialize(void);
 
 #endif /* __SYSTEM_USBMSC_USBMSC_H */

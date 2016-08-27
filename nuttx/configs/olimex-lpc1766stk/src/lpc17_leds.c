@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/olimex-lpc1766stk/src/lpc17_leds.c
  *
- *   Copyright (C) 2010-2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010-2011, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,7 @@
 #include <stdbool.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -54,28 +55,12 @@
 #include "lpc1766stk.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
-
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define ledvdbg lldbg
-#  else
-#    define ledvdbg(x...)
-#  endif
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
 
 /* Dump GPIO registers */
 
-#if defined(CONFIG_DEBUG_VERBOSE) && defined(CONFIG_DEBUG_LEDS)
+#ifdef CONFIG_DEBUG_LEDS_INFO
 #  define led_dumpgpio(m) lpc17_dumpgpio(LPC1766STK_LED1, m)
 #else
 #  define led_dumpgpio(m)
@@ -98,31 +83,31 @@ static bool g_uninitialized = true;
  ****************************************************************************/
 
 /****************************************************************************
- * Name: lpc17_ledinit/board_led_initialize
+ * Name: board_userled_initialize/board_autoled_initialize
  ****************************************************************************/
 
 #ifndef CONFIG_ARCH_LEDS
-void lpc17_ledinit(void) /* Name when invoked externally */
+void board_userled_initialize(void) /* Name when invoked externally */
 #else
-void board_led_initialize(void)    /* Name when invoked via lpc17_boot.c */
+void board_autoled_initialize(void) /* Name when invoked via lpc17_boot.c */
 #endif
 {
   /* Configure all LED GPIO lines */
 
-  led_dumpgpio("board_led_initialize() Entry)");
+  led_dumpgpio("board_*led_initialize() Entry)");
 
   lpc17_configgpio(LPC1766STK_LED1);
   lpc17_configgpio(LPC1766STK_LED2);
 
-  led_dumpgpio("board_led_initialize() Exit");
+  led_dumpgpio("board_*led_initialize() Exit");
 }
 
 /****************************************************************************
- * Name: lpc17_setled
+ * Name: board_userled
  ****************************************************************************/
 
 #ifndef CONFIG_ARCH_LEDS
-void lpc17_setled(int led, bool ledon)
+void board_userled(int led, bool ledon)
 {
   if (led == BOARD_LED1)
     {
@@ -136,11 +121,11 @@ void lpc17_setled(int led, bool ledon)
 #endif
 
 /****************************************************************************
- * Name: lpc17_setleds
+ * Name: board_userled_all
  ****************************************************************************/
 
 #ifndef CONFIG_ARCH_LEDS
-void lpc17_setleds(uint8_t ledset)
+void board_userled_all(uint8_t ledset)
 {
   lpc17_gpiowrite(LPC1766STK_LED1, (ledset & BOARD_LED1_BIT) == 0);
   lpc17_gpiowrite(LPC1766STK_LED2, (ledset & BOARD_LED2_BIT) == 0);
@@ -148,11 +133,11 @@ void lpc17_setleds(uint8_t ledset)
 #endif
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   switch (led)
     {
@@ -180,11 +165,11 @@ void board_led_on(int led)
 #endif
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   switch (led)
     {

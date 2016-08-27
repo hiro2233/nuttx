@@ -2,7 +2,7 @@
  * configs/open1788/src/lpc17_userleds.c
  * arch/arm/src/board/lpc17_userleds.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,28 +57,12 @@
 #ifndef CONFIG_ARCH_LEDS
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
-
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define ledvdbg lldbg
-#  else
-#    define ledvdbg(x...)
-#  endif
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
 
 /* Dump GPIO registers */
 
-#if defined(CONFIG_DEBUG_VERBOSE) && defined(CONFIG_DEBUG_LEDS)
+#ifdef CONFIG_DEBUG_LEDS_INFO
 #  define led_dumpgpio(m) lpc17_dumpgpio(???, m)
 #else
 #  define led_dumpgpio(m)
@@ -95,26 +79,14 @@ static uint32_t g_ledcfg[BOARD_NLEDS] =
 };
 
 /****************************************************************************
- * Private Function Protototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: lpc17_ledinit
+ * Name: board_userled_initialize
  ****************************************************************************/
 
-void lpc17_ledinit(void)
+void board_userled_initialize(void)
 {
   /* Configure LED1-4 GPIOs for output */
 
@@ -125,10 +97,10 @@ void lpc17_ledinit(void)
 }
 
 /****************************************************************************
- * Name: lpc17_setled
+ * Name: board_userled
  ****************************************************************************/
 
-void lpc17_setled(int led, bool ledon)
+void board_userled(int led, bool ledon)
 {
   if ((unsigned)led < BOARD_NLEDS)
     {
@@ -137,10 +109,10 @@ void lpc17_setled(int led, bool ledon)
 }
 
 /****************************************************************************
- * Name: lpc17_setleds
+ * Name: board_userled_all
  ****************************************************************************/
 
-void lpc17_setleds(uint8_t ledset)
+void board_userled_all(uint8_t ledset)
 {
   lpc17_gpiowrite(GPIO_LED1, (ledset & BOARD_LED1_BIT) == 0);
   lpc17_gpiowrite(GPIO_LED2, (ledset & BOARD_LED2_BIT) == 0);

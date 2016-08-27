@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 comment "LPC214x Configuration Options"
@@ -92,12 +92,12 @@ menu "LPC214x Peripheral Support"
 config LPC214X_UART0
 	bool
 	default y
-	select ARCH_HAVE_UART0
+	select UART0_SERIALDRIVER
 
 config LPC214X_UART1
 	bool
 	default y
-	select ARCH_HAVE_UART1
+	select UART1_SERIALDRIVER
 
 config LPC214X_USBDEV
 	bool "USB Device"
@@ -140,7 +140,7 @@ config LPC214X_USBDEV_FRAME_INTERRUPT
 config LPC214X_USBDEV_REGDEBUG
 	bool "USB Device Register-Level Debug Output"
 	default n
-	depends on DEBUG
+	depends on DEBUG_FEATURES
 
 endmenu
 endif

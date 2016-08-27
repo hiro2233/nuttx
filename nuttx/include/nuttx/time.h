@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/time.h
  *
- *   Copyright (C) 2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,7 +46,7 @@
 #include <time.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* If Gregorian time is not supported, then neither is Julian */
@@ -74,7 +74,8 @@
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -87,7 +88,7 @@ extern "C" {
  *
  ****************************************************************************/
 
-EXTERN int clock_isleapyear(int year);
+int clock_isleapyear(int year);
 
 /****************************************************************************
  * Function:  clock_daysbeforemonth
@@ -97,7 +98,27 @@ EXTERN int clock_isleapyear(int year);
  *
  ****************************************************************************/
 
-EXTERN int clock_daysbeforemonth(int month, bool leapyear);
+int clock_daysbeforemonth(int month, bool leapyear);
+
+/****************************************************************************
+ * Function:  clock_dayoftheweek
+ *
+ * Description:
+ *    Get the day of the week
+ *
+ * Input Parameters:
+ *   mday  - The day of the month 1 - 31
+ *   month - The month of the year 1 - 12
+ *   year  - the year including the 1900
+ *
+ * Returned value:
+ *   Zero based day of the week 0-6, 0 = Sunday, 1 = Monday... 6 = Saturday
+ *
+ ****************************************************************************/
+
+#if defined(CONFIG_TIME_EXTENDED)
+int clock_dayoftheweek(int mday, int month, int year);
+#endif
 
 /****************************************************************************
  * Function:  clock_calendar2utc
@@ -110,7 +131,7 @@ EXTERN int clock_daysbeforemonth(int month, bool leapyear);
  *
  ****************************************************************************/
 
-EXTERN time_t clock_calendar2utc(int year, int month, int day);
+time_t clock_calendar2utc(int year, int month, int day);
 
 #undef EXTERN
 #ifdef __cplusplus

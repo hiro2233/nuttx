@@ -80,12 +80,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -151,7 +145,7 @@ NuttX buildroot Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -293,7 +287,7 @@ On-Demand Paging
 ^^^^^^^^^^^^^^^^
 
   There is a configuration that was used to verify the On-Demand Paging
-  feature for the ARM926 (see http://nuttx.sourceforge.net/NuttXDemandPaging.html).
+  feature for the ARM926 (see https://bitbucket.org/nuttx/documentation/src/master/NuttXDemandPaging.html).
   That configuration is contained in the pgnsh sub-directory.  The pgnsh configuration
   is only a test configuration, and lacks some logic to provide the full On-Demand
   Paging solution (see below).
@@ -618,7 +612,7 @@ Common Configuration Notes
      change a configurations using that tool, you should:
 
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-        and misc/tools/
+        see additional README.txt files in the NuttX tools repository.
 
      b. Execute 'make menuconfig' in nuttx/ in order to start the
         reconfiguration process.

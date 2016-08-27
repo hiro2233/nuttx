@@ -50,12 +50,12 @@
 #include <debug.h>
 
 #include <nuttx/mtd/mtd.h>
-#include <nuttx/configdata.h>
+#include <nuttx/mtd/configdata.h>
 #include <nuttx/fs/ioctl.h>
 #include <sys/ioctl.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 /* The default is to use the RAM MTD device at drivers/mtd/rammtd.c.  But
@@ -102,14 +102,6 @@
 #  define CONFIG_EXAMPLES_CONFIGDATA_VERBOSE 0
 #endif
 
-#if defined(CONFIG_DEBUG) && defined(CONFIG_DEBUG_FS)
-#  define message    syslog
-#  define msgflush()
-#else
-#  define message    printf
-#  define msgflush() fflush(stdout);
-#endif
-
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -142,8 +134,10 @@ static int g_ntests, g_nverified;
 static int g_ntotalalloc, g_ntotaldelete;
 
 static struct mallinfo g_mmbefore;
-static struct mallinfo g_mmprevious;
 static struct mallinfo g_mmafter;
+#ifndef CONFIG_EXAMPLES_CONFIGDATA_SILENT
+static struct mallinfo g_mmprevious;
+#endif
 
 /****************************************************************************
  * External Functions
@@ -164,19 +158,20 @@ extern FAR struct mtd_dev_s *configdata_archinitialize(void);
 static void configdata_showmemusage(struct mallinfo *mmbefore,
                                struct mallinfo *mmafter)
 {
-  message("VARIABLE  BEFORE   AFTER\n");
-  message("======== ======== ========\n");
-  message("arena    %8x %8x\n", mmbefore->arena,    mmafter->arena);
-  message("ordblks  %8d %8d\n", mmbefore->ordblks,  mmafter->ordblks);
-  message("mxordblk %8x %8x\n", mmbefore->mxordblk, mmafter->mxordblk);
-  message("uordblks %8x %8x\n", mmbefore->uordblks, mmafter->uordblks);
-  message("fordblks %8x %8x\n", mmbefore->fordblks, mmafter->fordblks);
+  printf("VARIABLE  BEFORE   AFTER\n");
+  printf("======== ======== ========\n");
+  printf("arena    %8x %8x\n", mmbefore->arena,    mmafter->arena);
+  printf("ordblks  %8d %8d\n", mmbefore->ordblks,  mmafter->ordblks);
+  printf("mxordblk %8x %8x\n", mmbefore->mxordblk, mmafter->mxordblk);
+  printf("uordblks %8x %8x\n", mmbefore->uordblks, mmafter->uordblks);
+  printf("fordblks %8x %8x\n", mmbefore->fordblks, mmafter->fordblks);
 }
 
 /****************************************************************************
  * Name: configdata_loopmemusage
  ****************************************************************************/
 
+#ifndef CONFIG_EXAMPLES_CONFIGDATA_SILENT
 static void configdata_loopmemusage(void)
 {
   /* Get the current memory usage */
@@ -189,7 +184,7 @@ static void configdata_loopmemusage(void)
 
   /* Show the change from the previous loop */
 
-  message("\nEnd of loop memory usage:\n");
+  printf("\nEnd of loop memory usage:\n");
   configdata_showmemusage(&g_mmprevious, &g_mmafter);
 
   /* Set up for the next test */
@@ -200,6 +195,7 @@ static void configdata_loopmemusage(void)
   memcpy(&g_mmprevious, &g_mmafter, sizeof(struct mallinfo));
 #endif
 }
+#endif
 
 /****************************************************************************
  * Name: configdata_endmemusage
@@ -212,13 +208,13 @@ static void configdata_endmemusage(void)
 #else
   (void)mallinfo(&g_mmafter);
 #endif
-  message("\nFinal memory usage:\n");
+  printf("\nFinal memory usage:\n");
   configdata_showmemusage(&g_mmbefore, &g_mmafter);
 
-  message("\nTotal adds: %d  Total deletes : %d\n",
-          g_ntotalalloc, g_ntotaldelete);
-  message("Total tests: %d  Number passed: %d  Failed: %d\n",
-          g_ntests, g_nverified, g_ntests - g_nverified);
+  printf("\nTotal adds: %d  Total deletes : %d\n",
+         g_ntotalalloc, g_ntotaldelete);
+  printf("Total tests: %d  Number passed: %d  Failed: %d\n",
+         g_ntests, g_nverified, g_ntests - g_nverified);
 }
 
 /****************************************************************************
@@ -279,10 +275,12 @@ static inline uint8_t configdata_randinstance(void)
  * Name: configdata_freefile
  ****************************************************************************/
 
+#if 0 /* Not used */
 static void configdata_freeentry(FAR struct configdata_entrydesc_s *entry)
 {
   memset(entry, 0, sizeof(struct configdata_entrydesc_s));
 }
+#endif
 
 /****************************************************************************
  * Name: configdata_wrentry
@@ -349,14 +347,14 @@ static int configdata_fillconfig(void)
           if (ret < 0)
             {
 #if CONFIG_EXAMPLES_CONFIGDATA_VERBOSE != 0
-              message("  /dev/config full\n");
+              printf("  /dev/config full\n");
 #endif
               return ERROR;
             }
 
 #if CONFIG_EXAMPLES_CONFIGDATA_VERBOSE != 0
-         message("  Created entry %04X, %d  Len=%d\n",
-                 entry->id, entry->instance, entry->len);
+         printf("  Created entry %04X, %d  Len=%d\n",
+                entry->id, entry->instance, entry->len);
 #endif
          g_nentries++;
          g_ntotalalloc++;
@@ -393,9 +391,9 @@ static inline int configdata_rdentry(FAR struct configdata_entrydesc_s *entry)
   crc = crc32(g_entryimage, entry->len);
   if (crc != entry->crc)
     {
-      message("ERROR: Bad CRC: %d vs %d\n", crc, entry->crc);
-      message("  Entry id:   %04X\n", entry->id);
-      message("  Entry size: %d\n", entry->len);
+      printf("ERROR: Bad CRC: %u vs %u\n", crc, entry->crc);
+      printf("  Entry id:   %04X\n", entry->id);
+      printf("  Entry size: %d\n", entry->len);
       return ERROR;
     }
 
@@ -410,7 +408,7 @@ static int configdata_verifyconfig(void)
 {
   FAR struct configdata_entrydesc_s *entry;
   int ret;
-  int err = OK;
+  int errcode = OK;
   int i;
   static int iteration = 0;
 
@@ -434,16 +432,16 @@ static int configdata_verifyconfig(void)
 
                   g_nverified++;
 #if CONFIG_EXAMPLES_CONFIGDATA_VERBOSE != 0
-                  message("  Verified delete %04X, %d\n", entry->id,
-                          entry->instance);
+                  printf("  Verified delete %04X, %d\n", entry->id,
+                         entry->instance);
 #endif
                 }
               else
                 {
-                  message("ERROR: Failed to read an entry: %d\n", i);
-                  message("  Entry id:   %04X\n", entry->id);
-                  message("  Entry size: %d\n", entry->len);
-                  err = ERROR;
+                  printf("ERROR: Failed to read an entry: %d\n", i);
+                  printf("  Entry id:   %04X\n", entry->id);
+                  printf("  Entry size: %d\n", entry->len);
+                  errcode = ERROR;
                 }
             }
           else
@@ -452,23 +450,23 @@ static int configdata_verifyconfig(void)
 
               if (entry->deleted)
                 {
-                  message("ERROR: Succesffully read a deleted entry\n");
-                  message("  Entry id:   %04X\n", entry->id);
-                  message("  Entry size: %d\n", entry->len);
-                  err = ERROR;
+                  printf("ERROR: Succesffully read a deleted entry\n");
+                  printf("  Entry id:   %04X\n", entry->id);
+                  printf("  Entry size: %d\n", entry->len);
+                  errcode = ERROR;
                 }
               else
                 {
                   g_nverified++;
 #if CONFIG_EXAMPLES_CONFIGDATA_VERBOSE != 0
-                  message("  Verifed entry %04X, %d\n", entry->id, entry->instance);
+                  printf("  Verifed entry %04X, %d\n", entry->id, entry->instance);
 #endif
                 }
             }
         }
     }
 
-  return err;
+  return errcode;
 }
 
 /****************************************************************************
@@ -517,15 +515,15 @@ static int configdata_delentries(void)
               ret = ioctl(g_fd, CFGDIOC_SETCONFIG, (unsigned long) &hdr);
               if (ret < 0)
                 {
-                  message("ERROR: Delete %d failed: %d\n", i+1, errno);
-                  message("  Entry id:    %04X\n", entry->id);
-                  message("  Entry size:  %d\n", entry->len);
-                  message("  Entry index: %d\n", j);
+                  printf("ERROR: Delete %d failed: %d\n", i+1, errno);
+                  printf("  Entry id:    %04X\n", entry->id);
+                  printf("  Entry size:  %d\n", entry->len);
+                  printf("  Entry index: %d\n", j);
                 }
               else
                 {
 #if CONFIG_EXAMPLES_CONFIGDATA_VERBOSE != 0
-                  message("  Deleted entry %04X\n", entry->id);
+                  printf("  Deleted entry %04X\n", entry->id);
 #endif
                   entry->deleted = true;
                   g_ndeleted++;
@@ -573,7 +571,7 @@ static int configdata_getnextdeleted(void)
  * Name: configdata_cleardeleted
  ****************************************************************************/
 
-static int configdata_cleardeleted(void)
+static void configdata_cleardeleted(void)
 {
   int nextdeleted;
   int x;
@@ -597,8 +595,8 @@ static int configdata_cleardeleted(void)
           /* Move this entry to the deleted entry location */
 
 #if CONFIG_EXAMPLES_CONFIGDATA_VERBOSE != 0
-          message("  Overwrite entry %d, OLD=%04X  NEW=%04X\n",
-                  nextdeleted, g_entries[nextdeleted].id, g_entries[x].id);
+          printf("  Overwrite entry %d, OLD=%04X  NEW=%04X\n",
+                 nextdeleted, g_entries[nextdeleted].id, g_entries[x].id);
 #endif
 
           g_entries[nextdeleted] = g_entries[x];
@@ -624,7 +622,11 @@ static int configdata_cleardeleted(void)
  * Name: configdata_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int configdata_main(int argc, char *argv[])
+#endif
 {
   unsigned int i;
   int ret;
@@ -640,28 +642,28 @@ int configdata_main(int argc, char *argv[])
   mtd = configdata_archinitialize();
 #else
 #if CONFIG_EXAMPLES_CONFIGDATA_VERBOSE != 0
-  message("Creating %d byte RAM drive\n", EXAMPLES_CONFIGDATA_BUFSIZE);
+  printf("Creating %d byte RAM drive\n", EXAMPLES_CONFIGDATA_BUFSIZE);
 #endif
   mtd = rammtd_initialize(g_simflash, EXAMPLES_CONFIGDATA_BUFSIZE);
 #endif
   if (!mtd)
     {
-      message("ERROR: Failed to create RAM MTD instance\n");
-      msgflush();
+      printf("ERROR: Failed to create RAM MTD instance\n");
+      fflush(stdout);
       exit(1);
     }
 
   /* Initialize to provide CONFIGDATA on an MTD interface */
 
 #if CONFIG_EXAMPLES_CONFIGDATA_VERBOSE != 0
-  message("Registering /dev/config device\n");
+  printf("Registering /dev/config device\n");
 #endif
   MTD_IOCTL(mtd, MTDIOC_BULKERASE, 0);
   ret = mtdconfig_register(mtd);
   if (ret < 0)
     {
-      message("ERROR: /dev/config registration failed: %d\n", -ret);
-      msgflush();
+      printf("ERROR: /dev/config registration failed: %d\n", -ret);
+      fflush(stdout);
       exit(2);
     }
 
@@ -674,8 +676,8 @@ int configdata_main(int argc, char *argv[])
   g_fd = open("/dev/config", O_RDOK);
   if (g_fd == -1)
     {
-      message("ERROR: Failed to open /dev/config %d\n", -errno);
-      msgflush();
+      printf("ERROR: Failed to open /dev/config %d\n", -errno);
+      fflush(stdout);
       exit(2);
     }
 
@@ -706,12 +708,12 @@ int configdata_main(int argc, char *argv[])
        */
 
 #ifndef CONFIG_EXAMPLES_CONFIGDATA_SILENT
-      message("\n=== FILLING %u =============================\n", i);
+      printf("\n=== FILLING %u =============================\n", i);
 #endif
       (void)configdata_fillconfig();
 #ifndef CONFIG_EXAMPLES_CONFIGDATA_SILENT
-      message("Filled /dev/config\n");
-      message("  Number of entries: %d\n", g_nentries);
+      printf("Filled /dev/config\n");
+      printf("  Number of entries: %d\n", g_nentries);
 #endif
 
       /* Verify all files entries to FLASH */
@@ -719,15 +721,15 @@ int configdata_main(int argc, char *argv[])
       ret = configdata_verifyconfig();
       if (ret < 0)
         {
-          message("ERROR: Failed to verify partition\n");
-          message("  Number of entries: %d\n", g_nentries);
+          printf("ERROR: Failed to verify partition\n");
+          printf("  Number of entries: %d\n", g_nentries);
         }
       else
         {
 #ifndef CONFIG_EXAMPLES_CONFIGDATA_SILENT
 #if CONFIG_EXAMPLES_CONFIGDATA_VERBOSE != 0
-          message("Verified!\n");
-          message("  Number of entries: %d\n", g_nentries);
+          printf("Verified!\n");
+          printf("  Number of entries: %d\n", g_nentries);
 #endif
 #endif
         }
@@ -735,21 +737,21 @@ int configdata_main(int argc, char *argv[])
       /* Delete some entries */
 
 #ifndef CONFIG_EXAMPLES_CONFIGDATA_SILENT
-      message("\n=== DELETING %u ============================\n", i);
+      printf("\n=== DELETING %u ============================\n", i);
 #endif
       ret = configdata_delentries();
       if (ret < 0)
         {
-          message("ERROR: Failed to delete enries\n");
-          message("  Number of entries: %d\n", g_nentries);
-          message("  Number deleted:    %d\n", g_ndeleted);
+          printf("ERROR: Failed to delete enries\n");
+          printf("  Number of entries: %d\n", g_nentries);
+          printf("  Number deleted:    %d\n", g_ndeleted);
         }
       else
         {
 #ifndef CONFIG_EXAMPLES_CONFIGDATA_SILENT
-          message("Deleted some enries\n");
-          message("  Number of entries: %d\n", g_nentries);
-          message("  Number deleted:    %d\n", g_ndeleted);
+          printf("Deleted some enries\n");
+          printf("  Number of entries: %d\n", g_nentries);
+          printf("  Number deleted:    %d\n", g_ndeleted);
 #endif
         }
 
@@ -758,17 +760,17 @@ int configdata_main(int argc, char *argv[])
       ret = configdata_verifyconfig();
       if (ret < 0)
         {
-          message("ERROR: Failed to verify partition\n");
-          message("  Number of entries: %d\n", g_nentries);
-          message("  Number deleted:    %d\n", g_ndeleted);
+          printf("ERROR: Failed to verify partition\n");
+          printf("  Number of entries: %d\n", g_nentries);
+          printf("  Number deleted:    %d\n", g_ndeleted);
         }
       else
         {
 #ifndef CONFIG_EXAMPLES_CONFIGDATA_SILENT
 #if CONFIG_EXAMPLES_CONFIGDATA_VERBOSE != 0
-          message("Verified!\n");
-          message("  Number of entries: %d\n", g_nentries);
-          message("  Number deleted:    %d\n", g_ndeleted);
+          printf("Verified!\n");
+          printf("  Number of entries: %d\n", g_nentries);
+          printf("  Number deleted:    %d\n", g_ndeleted);
 #endif
 #endif
         }
@@ -781,12 +783,12 @@ int configdata_main(int argc, char *argv[])
 
 #ifndef CONFIG_EXAMPLES_CONFIGDATA_SILENT
       configdata_loopmemusage();
-      msgflush();
+      fflush(stdout);
 #else
       if ((i % EXAMPLES_CONFIGDATA_REPORT) == 0)
         {
-          message("%u\n", i);
-          msgflush();
+          printf("%u\n", i);
+          fflush(stdout);
         }
 #endif
     }
@@ -795,6 +797,6 @@ int configdata_main(int argc, char *argv[])
 
   //configdata_delallfiles();
   configdata_endmemusage();
-  msgflush();
+  fflush(stdout);
   return 0;
 }

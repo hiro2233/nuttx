@@ -46,7 +46,7 @@
 #include "mips32-memorymap.h"
 
 /************************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* Physical Memory Map **************************************************************/
 
@@ -520,7 +520,8 @@
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

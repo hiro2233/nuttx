@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/sama5d3x-ek/src/sama5d3x-ek.h
  *
- *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -64,6 +64,7 @@
 #define HAVE_USBMONITOR 1
 #define HAVE_NETWORK    1
 #define HAVE_CAMERA     1
+#define HAVE_WM8904     1
 
 /* HSMCI */
 /* Can't support MMC/SD if the card interface(s) are not enable */
@@ -97,7 +98,7 @@
  * asked to mount the NAND part
  */
 
-#if defined(CONFIG_DISABLE_MOUNTPOINT) || !defined(CONFIG_SAMA5_NAND_AUTOMOUNT)
+#if defined(CONFIG_DISABLE_MOUNTPOINT) || !defined(CONFIG_SAMA5D3XEK_NAND_BLOCKMOUNT)
 #  undef HAVE_NAND
 #endif
 
@@ -142,7 +143,7 @@
  * asked to mount the AT25 part
  */
 
-#if defined(CONFIG_DISABLE_MOUNTPOINT) || !defined(CONFIG_SAMA5D3xEK_AT25_AUTOMOUNT)
+#if defined(CONFIG_DISABLE_MOUNTPOINT) || !defined(CONFIG_SAMA5D3xEK_AT25_BLOCKMOUNT)
 #  undef HAVE_AT25
 #endif
 
@@ -192,7 +193,7 @@
  * asked to mount the AT25 part
  */
 
-#if defined(CONFIG_DISABLE_MOUNTPOINT) || !defined(CONFIG_SAMA5D3xEK_AT24_AUTOMOUNT)
+#if defined(CONFIG_DISABLE_MOUNTPOINT) || !defined(CONFIG_SAMA5D3xEK_AT24_BLOCKMOUNT)
 #  undef HAVE_AT24
 #endif
 
@@ -296,7 +297,7 @@
 
 /* Check if we should enable the USB monitor before starting NSH */
 
-#ifndef CONFIG_SYSTEM_USBMONITOR
+#ifndef CONFIG_USBMONITOR
 #  undef HAVE_USBMONITOR
 #endif
 
@@ -314,8 +315,48 @@
 
 /* Networking */
 
-#if !defined(CONFIG_NET) || (!defined(CONFIG_SAMA5_EMAC) && !defined(CONFIG_SAMA5_GMAC))
+#if !defined(CONFIG_NET) || (!defined(CONFIG_SAMA5_EMACA) && !defined(CONFIG_SAMA5_GMAC))
 #  undef HAVE_NETWORK
+#endif
+
+/* Audio */
+/* PCM/WM8904 driver */
+
+#ifndef CONFIG_AUDIO_WM8904
+#  undef HAVE_WM8904
+#endif
+
+#ifdef HAVE_WM8904
+#  ifndef CONFIG_SAMA5_TWI0
+#    warning CONFIG_SAMA5_TWI0 is required for audio support
+#    undef HAVE_WM8904
+#  endif
+
+#  ifndef CONFIG_SAMA5_SSC0
+#    warning CONFIG_SAMA5_SSC0 is required for audio support
+#    undef HAVE_WM8904
+#  endif
+
+#  if !defined(CONFIG_SAMA5_PIOD_IRQ)
+#    warning CONFIG_SAMA5_PIOD_IRQ is required for audio support
+#    undef HAVE_HSMCI
+#  endif
+
+#  ifndef CONFIG_AUDIO_FORMAT_PCM
+#    warning CONFIG_AUDIO_FORMAT_PCM is required for audio support
+#    undef HAVE_WM8904
+#  endif
+
+#  ifndef CONFIG_SAMA5D3xEK_WM8904_I2CFREQUENCY
+#    warning Defaulting to maximum WM8904 I2C frequency
+#    define CONFIG_SAMA5D3xEK_WM8904_I2CFREQUENCY 400000
+#  endif
+
+#  if CONFIG_SAMA5D3xEK_WM8904_I2CFREQUENCY > 400000
+#    warning WM8904 I2C frequency cannot exceed 400KHz
+#    undef CONFIG_SAMA5D3xEK_WM8904_I2CFREQUENCY
+#    define CONFIG_SAMA5D3xEK_WM8904_I2CFREQUENCY 400000
+#  endif
 #endif
 
 /* Camera */
@@ -334,6 +375,16 @@
 #if defined(HAVE_CAMERA) && !defined(CONFIG_SAMA5_TWI1)
 #  warning OV2640 camera demo requires CONFIG_SAMA5_TWI1
 #  undef HAVE_CAMERA
+#endif
+
+/* procfs File System */
+
+#ifdef CONFIG_FS_PROCFS
+#  ifdef CONFIG_NSH_PROC_MOUNTPOINT
+#    define SAMA5_PROCFS_MOUNTPOINT CONFIG_NSH_PROC_MOUNTPOINT
+#  else
+#    define SAMA5_PROCFS_MOUNTPOINT "/proc"
+#  endif
 #endif
 
 /* LEDs *****************************************************************************/
@@ -504,33 +555,34 @@
 
 /* Ethernet */
 
-#ifdef CONFIG_SAMA4_EMAC
- /* ETH1: Ethernet 10/100 (EMAC) Port
-  *
-  * The main board contains a MICREL PHY device (KSZ8051) operating at 10/100 Mbps.
-  * The board supports MII and RMII interface modes.
-  *
-  * The two independent PHY devices embedded on CM and MB boards are connected to
-  * independent RJ-45 connectors with built-in magnetic and status LEDs.
-  *
-  * At the De-Assertion of Reset:
-  *   PHY ADD[2:0]:001
-  *   CONFIG[2:0]:001,Mode:RMII
-  *   Duplex Mode:Half Duplex
-  *   Isolate Mode:Disable
-  *   Speed Mode:100Mbps
-  *   Nway Auto-Negotiation:Enable
-  *
-  * The KSZ8051 PHY interrtup is available on PE30 INT_ETH1
-  */
+#ifdef CONFIG_SAMA5_EMACA
+  /* ETH1: Ethernet 10/100 (EMAC A) Port
+   *
+   * The main board contains a MICREL PHY device (KSZ8051) operating at 10/100 Mbps.
+   * The board supports MII and RMII interface modes.
+   *
+   * The two independent PHY devices embedded on CM and MB boards are connected to
+   * independent RJ-45 connectors with built-in magnetic and status LEDs.
+   *
+   * At the De-Assertion of Reset:
+   *   PHY ADD[2:0]:001
+   *   CONFIG[2:0]:001,Mode:RMII
+   *   Duplex Mode:Half Duplex
+   *   Isolate Mode:Disable
+   *   Speed Mode:100Mbps
+   *   Nway Auto-Negotiation:Enable
+   *
+   * The KSZ8051 PHY interrupt is available on PE30 INT_ETH1.  The sense of
+   * the interrupt is configurable but is, by default, active low.
+   */
 
 #define PIO_INT_ETH1 (PIO_INPUT | PIO_CFG_PULLUP | PIO_CFG_DEGLITCH | \
-                      PIO_INT_BOTHEDGES | PIO_PORT_PIOE | PIO_PIN30)
+                      PIO_INT_FALLING | PIO_PORT_PIOE | PIO_PIN30)
 #define IRQ_INT_ETH1 SAM_IRQ_PE30
 
 #endif
 
-#ifdef CONFIG_SAMA4_GMAC
+#ifdef CONFIG_SAMA5_GMAC
   /* ETH0: Tri-Speed Ethernet PHY
    *
    * The SAMA5D3 series-CM board is equipped with a MICREL PHY devices (MICREL
@@ -540,14 +592,51 @@
    * activity indicators. These signals can be used to connect to a 10/100/1000
    * BaseT RJ45 connector integrated on the main board.
    *
-   * The KSZ9021/31 interrupt is available on PB35 INT_GETH0
+   * The KSZ9021/31 interrupt is available on PB35 INT_GETH0.  The sense of
+   * the interrupt is configurable but is, by default, active low.
    */
 
 #define PIO_INT_ETH0 (PIO_INPUT | PIO_CFG_PULLUP | PIO_CFG_DEGLITCH | \
-                      PIO_INT_BOTHEDGES | PIO_PORT_PIOB | PIO_PIN25)
+                      PIO_INT_FALLING | PIO_PORT_PIOB | PIO_PIN25)
 #define IRQ_INT_ETH0 SAM_IRQ_PB25
 
 #endif
+
+/* WM8904 Audio Codec ***************************************************************/
+/* SAMA5D3-EK Interface
+ *   ------------- ---------------- -----------------
+ *   WM8904        SAMA5D3          NuttX Pin Name
+ *   ------------- ---------------- -----------------
+ *    3 SDA        PA30 TWD0        PIO_TWI0_D
+ *    2 SCLK       PA31 TWCK0       PIO_TWI0_CK
+ *   28 MCLK       PD30 PCK0        PIO_PMC_PCK0
+ *   29 BCLK/GPIO4 PC16 TK          PIO_SSC0_TK
+ *   "" "        " PC19 RK          PIO_SSC0_RK
+ *   30 LRCLK      PC17 TF          PIO_SSC0_TF
+ *   "" "   "      PC20 RF          PIO_SSC0_RF
+ *   31 ADCDAT     PC21 RD          PIO_SSC0_RD
+ *   32 DACDAT     PC18 TD          PIO_SSC0_TD
+ *    1 IRQ/GPIO1  PD16 INT_AUDIO   N/A
+ *   ------------- ---------------- -----------------
+ */
+
+/* Audio Interrupt. All interrupts are default, active high level.  Pull down
+ * internally in the WM8904.  So we want no pull-up/downs and we want to
+ * interrupt on the high level.
+ */
+
+#define PIO_INT_WM8904 (PIO_INPUT | PIO_CFG_DEFAULT | PIO_CFG_DEGLITCH | \
+                        PIO_INT_HIGHLEVEL | PIO_PORT_PIOD | PIO_PIN16)
+#define IRQ_INT_WM8904 SAM_IRQ_PD16
+
+/* The MW8904 communicates on TWI0, I2C address 0x1a for control operations */
+
+#define WM8904_TWI_BUS      0
+#define WM8904_I2C_ADDRESS  0x1a
+
+/* The MW8904 transfers data on SSC0 */
+
+#define WM8904_SSC_BUS      0
 
 /* SPI Chip Selects *****************************************************************/
 /* Both the Ronetix and Embest versions of the SAMAD3x CPU modules include an
@@ -586,7 +675,7 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Name: sam_spiinitialize
+ * Name: sam_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select PIO pins for the SAMA5D3x-EK board.
@@ -594,11 +683,11 @@
  ************************************************************************************/
 
 #if defined(CONFIG_SAMA5_SPI0) || defined(CONFIG_SAMA5_SPI1)
-void weak_function sam_spiinitialize(void);
+void weak_function sam_spidev_initialize(void);
 #endif
 
 /************************************************************************************
- * Name: board_sdram_config
+ * Name: sam_sdram_config
  *
  * Description:
  *   Configures DDR2 (MT47H128M16RT 128MB or, optionally,  MT47H64M16HR)
@@ -618,7 +707,7 @@ void weak_function sam_spiinitialize(void);
  *  This logic was taken from Atmel sample code for the SAMA5D3x-EK.
  *
  *  Input Parameters:
- *     devtype - Either DDRAM_MT47H128M16RT or DDRAM_MT47H64M16HR
+ *    None
  *
  *  Assumptions:
  *    The DDR memory regions is configured as strongly ordered memory.  When we
@@ -630,7 +719,7 @@ void weak_function sam_spiinitialize(void);
 #if defined(CONFIG_SAMA5_DDRCS) && !defined(CONFIG_SAMA5_BOOT_SDRAM)
 void sam_sdram_config(void);
 #else
-#  define board_sdram_config(t)
+#  define sam_sdram_config()
 #endif
 
 /****************************************************************************
@@ -743,31 +832,26 @@ int sam_usbhost_initialize(void);
 void weak_function sam_netinitialize(void);
 #endif
 
-/************************************************************************************
- * Name: board_led_initialize
- ************************************************************************************/
-
-#ifdef CONFIG_ARCH_LEDS
-void board_led_initialize(void);
-#endif
-
-/************************************************************************************
- * Name: nsh_archinitialize
+/****************************************************************************
+ * Name: sam_wm8904_initialize
  *
  * Description:
- *   Perform architecture specific initialization for NSH.
+ *   This function is called by platform-specific, setup logic to configure
+ *   and register the WM8904 device.  This function will register the driver
+ *   as /dev/wm8904[x] where x is determined by the minor device number.
  *
- *   CONFIG_NSH_ARCHINIT=y :
- *     Called from the NSH library
+ * Input Parameters:
+ *   minor - The input device minor number
  *
- *   CONFIG_BOARD_INITIALIZE=y, CONFIG_NSH_LIBRARY=y, && CONFIG_NSH_ARCHINIT=n :
- *     Called from board_initialize().
+ * Returned Value:
+ *   Zero is returned on success.  Otherwise, a negated errno value is
+ *   returned to indicate the nature of the failure.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
-#ifdef CONFIG_NSH_LIBRARY
-int nsh_archinitialize(void);
-#endif
+#ifdef HAVE_WM8904
+int sam_wm8904_initialize(int minor);
+#endif /* HAVE_WM8904 */
 
 #endif /* __ASSEMBLY__ */
 #endif /* __CONFIGS_SAMA5D3X_EK_SRC_SAMA5D3X_EK_H */

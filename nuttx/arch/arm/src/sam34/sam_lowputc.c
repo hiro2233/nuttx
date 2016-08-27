@@ -1,4 +1,4 @@
-/**************************************************************************
+/****************************************************************************
  * arch/arm/src/sam34/sam_lowputc.c
  *
  *   Copyright (C) 2010, 2013-2014 Gregory Nutt. All rights reserved.
@@ -31,18 +31,17 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Included Files
- **************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
 #include <stdint.h>
 
-#include <arch/irq.h>
-#include <arch/board/board.h>
+#include <nuttx/irq.h>
 
 #include "up_internal.h"
 #include "up_arch.h"
@@ -52,8 +51,8 @@
 #include "sam_lowputc.h"
 
 #if defined(CONFIG_ARCH_CHIP_SAM3U) || defined(CONFIG_ARCH_CHIP_SAM3X) || \
-    defined(CONFIG_ARCH_CHIP_SAM3A) || defined(CONFIG_ARCH_CHIP_SAM4S) || \
-    defined(CONFIG_ARCH_CHIP_SAM4E)
+    defined(CONFIG_ARCH_CHIP_SAM3A) || defined(CONFIG_ARCH_CHIP_SAM4CM) || \
+    defined(CONFIG_ARCH_CHIP_SAM4S) || defined(CONFIG_ARCH_CHIP_SAM4E)
 #  include "chip/sam_uart.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM4L)
 #  include "chip/sam4l_usart.h"
@@ -61,11 +60,14 @@
 #  error Unknown UART
 #endif
 
-#include "chip/sam_pinmap.h"
+/* The board.h file may redefine pin configurations defined in sam_pinmap.h */
 
-/**************************************************************************
- * Private Definitions
- **************************************************************************/
+#include "chip/sam_pinmap.h"
+#include <arch/board/board.h>
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
 /* Configuration **********************************************************/
 
@@ -73,16 +75,16 @@
  * for our purposes.
  */
 
-#ifndef CONFIG_USART0_ISUART
+#ifndef CONFIG_USART0_SERIALDRIVER
 #  undef CONFIG_SAM34_USART0
 #endif
-#ifndef CONFIG_USART1_ISUART
+#ifndef CONFIG_USART1_SERIALDRIVER
 #  undef CONFIG_SAM34_USART1
 #endif
-#ifndef CONFIG_USART2_ISUART
+#ifndef CONFIG_USART2_SERIALDRIVER
 #  undef CONFIG_SAM34_USART2
 #endif
-#ifndef CONFIG_USART3_ISUART
+#ifndef CONFIG_USART3_SERIALDRIVER
 #  undef CONFIG_SAM34_USART3
 #endif
 
@@ -155,8 +157,8 @@
    */
 
 #  if defined(CONFIG_ARCH_CHIP_SAM3U) || defined(CONFIG_ARCH_CHIP_SAM3X) || \
-      defined(CONFIG_ARCH_CHIP_SAM3A) || defined(CONFIG_ARCH_CHIP_SAM4S) || \
-      defined(CONFIG_ARCH_CHIP_SAM4E)
+      defined(CONFIG_ARCH_CHIP_SAM3A) || defined(CONFIG_ARCH_CHIP_SAM4CM) || \
+      defined(CONFIG_ARCH_CHIP_SAM4S) || defined(CONFIG_ARCH_CHIP_SAM4E)
 #    define SAM_MR_USCLKS    UART_MR_USCLKS_MCK   /* Source = Main clock */
 #    define SAM_USART_CLOCK  BOARD_MCK_FREQUENCY  /* Frequency of the main clock */
 #  elif defined(CONFIG_ARCH_CHIP_SAM4L)
@@ -244,44 +246,44 @@
 
 #endif /* HAVE_CONSOLE */
 
-/**************************************************************************
+/****************************************************************************
  * Private Types
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Private Function Prototypes
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
- * Global Variables
- **************************************************************************/
+/****************************************************************************
+ * Public Data
+ ****************************************************************************/
 
-/**************************************************************************
- * Private Variables
- **************************************************************************/
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Private Functions
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Public Functions
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Name: up_lowputc
  *
  * Description:
  *   Output one byte on the serial console
  *
- **************************************************************************/
+ ****************************************************************************/
 
 void up_lowputc(char ch)
 {
 #ifdef HAVE_CONSOLE
   irqstate_t flags;
 
-  for (;;)
+  for (; ; )
     {
       /* Wait for the transmitter to be available */
 
@@ -292,18 +294,18 @@ void up_lowputc(char ch)
        * atomic.
        */
 
-      flags = irqsave();
+      flags = enter_critical_section();
       if ((getreg32(SAM_CONSOLE_BASE + SAM_UART_SR_OFFSET) &
         UART_INT_TXEMPTY) != 0)
         {
           /* Send the character */
 
           putreg32((uint32_t)ch, SAM_CONSOLE_BASE + SAM_UART_THR_OFFSET);
-          irqrestore(flags);
+          leave_critical_section(flags);
           return;
         }
 
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 #endif
 }
@@ -334,7 +336,7 @@ int up_putc(int ch)
   return ch;
 }
 
-/**************************************************************************
+/****************************************************************************
  * Name: sam_lowsetup
  *
  * Description:
@@ -342,7 +344,7 @@ int up_putc(int ch)
  *   console.  Its purpose is to get the console output availabe as soon
  *   as possible.
  *
- **************************************************************************/
+ ****************************************************************************/
 
 void sam_lowsetup(void)
 {

@@ -35,14 +35,14 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- **************************************************************************/
+ ****************************************************************************/
 
 #ifndef __INCLUDE_NUTTX_IRQ_H
 #error "This file should never be included directly! Use <nuttx/irq.h>"
 #endif
 
-#ifndef _CALYPSO_IRQ_H
-#define _CALYPSO_IRQ_H
+#ifndef __ARCH_ARM_INCLUDE_CALYPSO_IRQ_H
+#define __ARCH_ARM_INCLUDE_CALYPSO_IRQ_H
 
 #ifndef __ASSEMBLY__
 
@@ -78,4 +78,4 @@ enum irq_nr {
 
 #define IRQ_SYSTIMER		IRQ_TIMER2
 
-#endif /* _CALYPSO_IRQ_H */
+#endif /* __ARCH_ARM_INCLUDE_CALYPSO_IRQ_H */

@@ -1,7 +1,7 @@
 #!/bin/bash
 # configure.sh
 #
-#   Copyright (C) 2007, 2008, 2011 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2007, 2008, 2011, 2015 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -41,7 +41,7 @@ USAGE: ${0} [-d] [-a <app-dir>] <board-name>/<config-name>
 Where:
   <board-name> is the name of the board in the configs directory
   <config-name> is the name of the board configuration sub-directory
-  <add-dir> is the path to the apps/ directory, relative to the nuttx directory
+  <app-dir> is the path to the apps/ directory, relative to the nuttx directory
 
 "
 
@@ -144,7 +144,7 @@ winnative=`grep CONFIG_WINDOWS_NATIVE= "${src_config}" | cut -d'=' -f2`
 defappdir=y
 if [ -z "${appdir}" ]; then
   quoted=`grep "^CONFIG_APPS_DIR=" "${src_config}" | cut -d'=' -f2`
-  if [ ! -z "${appdir}" ]; then
+  if [ ! -z "${quoted}" ]; then
     appdir=`echo ${quoted} | sed -e "s/\"//g"`
     defappdir=n
   fi
@@ -165,7 +165,6 @@ if [ -z "${appdir}" ]; then
 
   if [ -d "${TOPDIR}/../apps" ]; then
     appdir="../apps"
-
   else
     # Check for a versioned apps/ directory
 

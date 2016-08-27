@@ -1,4 +1,4 @@
-/**************************************************************************
+/****************************************************************************
  * arch/arm/src/str71x/str71x_lowputc.c
  *
  *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Included Files
- **************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <stdint.h>
@@ -44,11 +44,11 @@
 #include "up_arch.h"
 #include "up_internal.h"
 
-#include "str71x_internal.h"
+#include "str71x.h"
 
-/**************************************************************************
- * Pre-procesor Definitions
- **************************************************************************/
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
 /* Configuration **********************************************************/
 
@@ -78,7 +78,7 @@
  *   RX needs to be configured for input, tristate, cmos {0, 1, 0}
  */
 
-#if CONFIG_STR71X_UART0
+#ifdef CONFIG_STR71X_UART0
 #  define STR71X_UART0_GPIO0_MASK    (0x0300)        /* P0.8->U0.TX, B0.9->U0.RX */
 #  define STR71X_UART0_GPIO0_PC0BITS (0x0200)
 #  define STR71X_UART0_GPIO0_PC1BITS (0x0300)
@@ -90,7 +90,7 @@
 #  define STR71X_UART0_GPIO0_PC2BITS (0)
 #endif
 
-#if CONFIG_STR71X_UART1
+#ifdef CONFIG_STR71X_UART1
 #  define STR71X_UART1_GPIO0_MASK    (0x0c00)        /* P0,10->U1.RX, P0.11->U1.TX */
 #  define STR71X_UART1_GPIO0_PC0BITS (0x0800)
 #  define STR71X_UART1_GPIO0_PC1BITS (0x0c00)
@@ -102,7 +102,7 @@
 #  define STR71X_UART1_GPIO0_PC2BITS (0)
 #endif
 
-#if CONFIG_STR71X_UART2
+#ifdef CONFIG_STR71X_UART2
 #  define STR71X_UART2_GPIO0_MASK    (0x6000)        /* P0.13->U2.RX, P0.14>U2.TX */
 #  define STR71X_UART2_GPIO0_PC0BITS (0x4000)
 #  define STR71X_UART2_GPIO0_PC1BITS (0x6000)
@@ -114,7 +114,7 @@
 #  define STR71X_UART2_GPIO0_PC2BITS (0)
 #endif
 
-#if CONFIG_STR71X_UART3
+#ifdef CONFIG_STR71X_UART3
 #  define STR71X_UART3_GPIO0_MASK    (0x0003)        /* P0.0->U3.TX, P0.1->U3.RX */
 #  define STR71X_UART3_GPIO0_PC0BITS (0x0001)
 #  define STR71X_UART3_GPIO0_PC1BITS (0x0003)
@@ -126,14 +126,18 @@
 #  define STR71X_UART3_GPIO0_PC2BITS (0)
 #endif
 
-#define STR71X_UART_GPIO0_MASK       (STR71X_UART0_GPIO0_MASK   |STR71X_UART1_GPIO0_MASK|\
-                                      STR71X_UART2_GPIO0_MASK   |STR71X_UART3_GPIO0_MASK)
-#define STR71X_UART_GPIO0_PC0BITS    (STR71X_UART0_GPIO0_PC0BITS|STR71X_UART1_GPIO0_PC0BITS|\
-                                      STR71X_UART2_GPIO0_PC0BITS|STR71X_UART3_GPIO0_PC0BITS)
-#define STR71X_UART_GPIO0_PC1BITS    (STR71X_UART0_GPIO0_PC1BITS|STR71X_UART1_GPIO0_PC1BITS|\
-                                      STR71X_UART2_GPIO0_PC1BITS|STR71X_UART3_GPIO0_PC1BITS)
-#define STR71X_UART_GPIO0_PC2BITS    (STR71X_UART0_GPIO0_PC2BITS|STR71X_UART1_GPIO0_PC2BITS|\
-                                      STR71X_UART2_GPIO0_PC2BITS|STR71X_UART3_GPIO0_PC2BITS)
+#define STR71X_UART_GPIO0_MASK \
+  (STR71X_UART0_GPIO0_MASK    | STR71X_UART1_GPIO0_MASK | \
+   STR71X_UART2_GPIO0_MASK    | STR71X_UART3_GPIO0_MASK)
+#define STR71X_UART_GPIO0_PC0BITS \
+  (STR71X_UART0_GPIO0_PC0BITS | STR71X_UART1_GPIO0_PC0BITS | \
+   STR71X_UART2_GPIO0_PC0BITS | STR71X_UART3_GPIO0_PC0BITS)
+#define STR71X_UART_GPIO0_PC1BITS \
+  (STR71X_UART0_GPIO0_PC1BITS | STR71X_UART1_GPIO0_PC1BITS | \
+   STR71X_UART2_GPIO0_PC1BITS | STR71X_UART3_GPIO0_PC1BITS)
+#define STR71X_UART_GPIO0_PC2BITS \
+  (STR71X_UART0_GPIO0_PC2BITS | STR71X_UART1_GPIO0_PC2BITS | \
+   STR71X_UART2_GPIO0_PC2BITS | STR71X_UART3_GPIO0_PC2BITS)
 
 /* Select UART parameters for the selected console */
 
@@ -203,8 +207,9 @@
 #  define STR71X_UARTCR_STOP STR71X_UARTCR_STOPBIT10
 #endif
 
-#define STR71X_UARTCR_VALUE (STR71X_UARTCR_MODE|STR71X_UARTCR_PARITY|STR71X_UARTCR_STOP|\
-                             STR71X_UARTCR_RUN|STR71X_UARTCR_RXENABLE|STR71X_UARTCR_FIFOENABLE)
+#define STR71X_UARTCR_VALUE \
+  (STR71X_UARTCR_MODE | STR71X_UARTCR_PARITY   | STR71X_UARTCR_STOP | \
+   STR71X_UARTCR_RUN  | STR71X_UARTCR_RXENABLE | STR71X_UARTCR_FIFOENABLE)
 
 /* Calculate BAUD rate from PCLK1:
  *
@@ -218,37 +223,37 @@
 #define UART_BAUDDIVISOR (16 * STR71X_UART_BAUD)
 #define UART_BAUDRATE    ((STR71X_PCLK1 + (UART_BAUDDIVISOR/2)) / UART_BAUDDIVISOR)
 
-/**************************************************************************
+/****************************************************************************
  * Private Types
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Private Function Prototypes
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
- * Global Variables
- **************************************************************************/
+/****************************************************************************
+ * Public Data
+ ****************************************************************************/
 
-/**************************************************************************
- * Private Variables
- **************************************************************************/
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Private Functions
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Public Functions
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Name: up_lowputc
  *
  * Description:
  *   Output one byte on the serial console
  *
- **************************************************************************/
+ ****************************************************************************/
 
 void up_lowputc(char ch)
 {
@@ -263,7 +268,7 @@ void up_lowputc(char ch)
 #endif
 }
 
-/**************************************************************************
+/****************************************************************************
  * Name: up_lowsetup
  *
  * Description:
@@ -271,7 +276,7 @@ void up_lowputc(char ch)
  *   console.  Its purpose is to get the console output availabe as soon
  *   as possible.
  *
- **************************************************************************/
+ ****************************************************************************/
 
 void up_lowsetup(void)
 {
@@ -298,7 +303,7 @@ void up_lowsetup(void)
    * (the serial driver later depends on this configuration)
    */
 
-#if HAVE_UART
+#ifdef HAVE_UART
   reg16  = getreg16(STR71X_GPIO0_PC0);
   reg16 &= ~STR71X_UART_GPIO0_MASK;
   reg16 |= STR71X_UART_GPIO0_PC0BITS;

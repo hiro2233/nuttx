@@ -1,7 +1,7 @@
 ############################################################################
 # libc/Makefile
 #
-#   Copyright (C) 2007-2014 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2007-2014, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -37,11 +37,19 @@
 
 # CFLAGS
 
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
   KDEFINE = ${shell $(TOPDIR)\tools\define.bat "$(CC)" __KERNEL__}
 else
   KDEFINE = ${shell $(TOPDIR)/tools/define.sh "$(CC)" __KERNEL__}
+endif
+else
+ifeq ($(CONFIG_BUILD_KERNEL),y)
+ifeq ($(CONFIG_WINDOWS_NATIVE),y)
+  KDEFINE = ${shell $(TOPDIR)\tools\define.bat "$(CC)" __KERNEL__}
+else
+  KDEFINE = ${shell $(TOPDIR)/tools/define.sh "$(CC)" __KERNEL__}
+endif
 endif
 endif
 
@@ -53,27 +61,32 @@ CSRCS =
 DEPPATH := --dep-path .
 VPATH := .
 
-include stdio/Make.defs
-include stdlib/Make.defs
-include unistd/Make.defs
-include sched/Make.defs
-include string/Make.defs
+include aio/Make.defs
+include audio/Make.defs
+include dirent/Make.defs
+include fixedmath/Make.defs
+include hex2bin/Make.defs
+include libgen/Make.defs
+include math/Make.defs
+include misc/Make.defs
+include net/Make.defs
+include netdb/Make.defs
 include pthread/Make.defs
+include queue/Make.defs
+include sched/Make.defs
 include semaphore/Make.defs
 include signal/Make.defs
-include mqueue/Make.defs
-include math/Make.defs
-include fixedmath/Make.defs
-include net/Make.defs
-include time/Make.defs
-include libgen/Make.defs
-include dirent/Make.defs
-include termios/Make.defs
 include spawn/Make.defs
-include queue/Make.defs
+include stdio/Make.defs
+include stdlib/Make.defs
+include string/Make.defs
+include symtab/Make.defs
+include syslog/Make.defs
+include termios/Make.defs
+include time/Make.defs
+include tls/Make.defs
+include unistd/Make.defs
 include wqueue/Make.defs
-include misc/Make.defs
-include audio/Make.defs
 
 # REVISIT: Backslash causes problems in $(COBJS) target
 DELIM := $(strip /)
@@ -104,6 +117,9 @@ $(COBJS): $(BINDIR)$(DELIM)%$(OBJEXT): %.c
 
 $(BIN): $(OBJS)
 	$(call ARCHIVE, $@, $(OBJS))
+ifeq ($(CONFIG_LIB_ZONEINFO_ROMFS),y)
+	$(Q) $(MAKE) -C zoneinfo all TOPDIR=$(TOPDIR) BIN=$(BIN)
+endif
 
 # C library for the user phase of the two-pass kernel build
 
@@ -119,14 +135,24 @@ $(KBIN):
 	$(Q) $(MAKE) $(KBIN) BIN=$(KBIN) BINDIR=kbin TOPDIR=$(TOPDIR) EXTRADEFINES=$(EXTRADEFINES)
 endif
 
+# Context
+
+context:
+ifeq ($(CONFIG_LIB_ZONEINFO_ROMFS),y)
+	$(Q) $(MAKE) -C zoneinfo context TOPDIR=$(TOPDIR) BIN=$(BIN)
+endif
+
 # Dependencies
 
 .depend: Makefile $(SRCS)
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
 	$(Q) $(MKDEP) --obj-path ubin --obj-suffix $(OBJEXT) $(DEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make_ubin.dep
 	$(Q) $(MKDEP) --obj-path kbin --obj-suffix $(OBJEXT) $(DEPPATH) "$(CC)" -- $(CFLAGS) $(KDEFINE) -- $(SRCS) >Make_kbin.dep
 else
 	$(Q) $(MKDEP) --obj-path bin --obj-suffix $(OBJEXT) $(DEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make_bin.dep
+endif
+ifeq ($(CONFIG_LIB_ZONEINFO_ROMFS),y)
+	$(Q) $(MAKE) -C zoneinfo depend TOPDIR=$(TOPDIR) BIN=$(BIN)
 endif
 	$(Q) touch $@
 
@@ -138,6 +164,7 @@ clean:
 	$(Q) $(MAKE) -C bin  clean TOPDIR=$(TOPDIR)
 	$(Q) $(MAKE) -C ubin clean TOPDIR=$(TOPDIR)
 	$(Q) $(MAKE) -C kbin clean TOPDIR=$(TOPDIR)
+	$(Q) $(MAKE) -C zoneinfo clean TOPDIR=$(TOPDIR) BIN=$(BIN)
 	$(call DELFILE, $(BIN))
 	$(call DELFILE, $(UBIN))
 	$(call DELFILE, $(KBIN))
@@ -149,6 +176,7 @@ distclean: clean
 	$(Q) $(MAKE) -C bin  distclean TOPDIR=$(TOPDIR)
 	$(Q) $(MAKE) -C ubin distclean TOPDIR=$(TOPDIR)
 	$(Q) $(MAKE) -C kbin distclean TOPDIR=$(TOPDIR)
+	$(Q) $(MAKE) -C zoneinfo distclean TOPDIR=$(TOPDIR) BIN=$(BIN)
 	$(call DELFILE, Make_bin.dep)
 	$(call DELFILE, Make_ubin.dep)
 	$(call DELFILE, Make_kbin.dep)

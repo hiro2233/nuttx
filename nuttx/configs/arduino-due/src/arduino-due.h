@@ -86,7 +86,7 @@
  *
  * Thus if LED L is statically on, NuttX has successfully booted and is,
  * apparently, running normmally.  If LED RX is glowing, then NuttX is
- * handling interupts (and also signals and assertions).  If TX is flashing
+ * handling interrupts (and also signals and assertions).  If TX is flashing
  * at approximately 2Hz, then a fatal error has been detected and the system
  */
 
@@ -320,21 +320,13 @@
 void sam_sram_initialize(void);
 #endif
 
-/************************************************************************************
- * Name: board_led_initialize
- ************************************************************************************/
-
-#ifdef CONFIG_ARCH_LEDS
-void board_led_initialize(void);
-#endif
-
 /****************************************************************************
  * Name: sam_sdinitialize
  *
  * Description:
  *   Initialize the SPI-based SD card.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 #if defined(CONFIG_ARDUINO_ITHEAD_TFT) && defined(CONFIG_SPI_BITBANG) && \
     defined(CONFIG_MMCSD_SPI)

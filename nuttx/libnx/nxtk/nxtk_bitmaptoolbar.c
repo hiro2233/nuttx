@@ -46,7 +46,7 @@
 #include <nuttx/nx/nx.h>
 #include <nuttx/nx/nxtk.h>
 
-#include "nxtk_internal.h"
+#include "nxtk.h"
 
 /****************************************************************************
  * Pre-Processor Definitions
@@ -102,7 +102,7 @@ int nxtk_bitmaptoolbar(NXTKWINDOW hfwnd, FAR const struct nxgl_rect_s *dest,
   struct nxgl_point_s wndorigin;
   struct nxgl_rect_s clipdest;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!hfwnd || !dest || !src || !origin)
     {
       set_errno(EINVAL);

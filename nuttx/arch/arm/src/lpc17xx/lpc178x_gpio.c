@@ -79,7 +79,7 @@
  * actually set up to interrupt until the interrupt is enabled.
  */
 
-#ifdef CONFIG_GPIO_IRQ
+#ifdef CONFIG_LPC17_GPIOIRQ
 uint64_t g_intedge0;
 uint64_t g_intedge2;
 #endif
@@ -217,7 +217,8 @@ static uint32_t lpc17_getioconmask(unsigned int port, unsigned int pin)
  *
  ****************************************************************************/
 
-static void lpc17_seti2cmode(unsigned int port,unsigned int pin, uint32_t value)
+static void lpc17_seti2cmode(unsigned int port, unsigned int pin,
+                             uint32_t value)
 {
   uint32_t regaddr;
   uint32_t regval;
@@ -525,7 +526,7 @@ static void lpc17_setpullup(lpc17_pinset_t cfgset, unsigned int port,
  *
  ****************************************************************************/
 
-#ifdef CONFIG_GPIO_IRQ
+#ifdef CONFIG_LPC17_GPIOIRQ
 static void lpc17_setintedge(unsigned int port, unsigned int pin,
                              unsigned int value)
 {
@@ -553,7 +554,7 @@ static void lpc17_setintedge(unsigned int port, unsigned int pin,
   *intedge &= ~((uint64_t)3     << shift);
   *intedge |=  ((uint64_t)value << shift);
 }
-#endif /* CONFIG_GPIO_IRQ */
+#endif /* CONFIG_LPC17_GPIOIRQ */
 
 /****************************************************************************
  * Name: lpc17_configinput
@@ -600,7 +601,7 @@ static inline int lpc17_configinput(lpc17_pinset_t cfgset, unsigned int port,
 
       /* Forget about any falling/rising edge interrupt enabled */
 
-#ifdef CONFIG_GPIO_IRQ
+#ifdef CONFIG_LPC17_GPIOIRQ
       lpc17_setintedge(port, pin, 0);
 #endif
     }
@@ -655,7 +656,7 @@ static inline int lpc17_configinterrupt(lpc17_pinset_t cfgset, unsigned int port
   /* Then just remember the rising/falling edge interrupt enabled */
 
   DEBUGASSERT(port == 0 || port == 2);
-#ifdef CONFIG_GPIO_IRQ
+#ifdef CONFIG_LPC17_GPIOIRQ
   lpc17_setintedge(port, pin, (cfgset & GPIO_EDGE_MASK) >> GPIO_EDGE_SHIFT);
 #endif
   return OK;
@@ -786,7 +787,7 @@ static int lpc17_configalternate(lpc17_pinset_t cfgset, unsigned int port,
 }
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************

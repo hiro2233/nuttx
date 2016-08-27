@@ -1,7 +1,7 @@
 /****************************************************************************
- * common/up_idle.c
+ * arch/z16/src/common/up_idle.c
  *
- *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,13 +42,10 @@
 #include <stdint.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
 
 /****************************************************************************
  * Private Data
@@ -57,10 +54,6 @@
 #if defined(CONFIG_ARCH_LEDS) && defined(CONFIG_ARCH_BRINGUP)
 static uint8_t g_ledtoggle = 0;
 #endif
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -87,11 +80,11 @@ void up_idle(void)
   g_ledtoggle++;
   if (g_ledtoggle == 0x80)
     {
-      board_led_on(LED_IDLE);
+      board_autoled_on(LED_IDLE);
     }
   else if (g_ledtoggle == 0x00)
     {
-      board_led_off(LED_IDLE);
+      board_autoled_off(LED_IDLE);
     }
 #endif
 

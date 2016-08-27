@@ -37,14 +37,12 @@
  * Included Files
  ****************************************************************************/
 
+#include <nuttx/config.h>
 #include <nuttx/irq.h>
 #include "up_internal.h"
+#include "svcall.h"
 
 	.file	"arm_fullcontextrestore.S"
-
-/****************************************************************************
- * Preprocessor Definitions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Symbols
@@ -53,23 +51,20 @@
 	.globl	up_fullcontextrestore
 
 /****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
  * Name: up_fullcontextrestore
+ *
+ * Description:
+ *   Restore the specified task context. Full prototype is:
+ *
+ *     void up_fullcontextrestore(uint32_t *restoreregs) noreturn_function;
+ *
+ * Return:
+ *   None
+ *
  ****************************************************************************/
 
 	.globl	up_fullcontextrestore
@@ -83,7 +78,7 @@ up_fullcontextrestore:
 
 #ifdef CONFIG_ARCH_FPU
 	/* First, restore the floating point registers.  Lets do this before we
-	 * restore the arm registers so that we have plentry of registers to
+	 * restore the ARM registers so that we have plenty of registers to
 	 * work with.
 	 */
 
@@ -102,6 +97,28 @@ up_fullcontextrestore:
 	ldr		r2, [r1], #4			/* Fetch the floating point control and status register */
 	vmsr	fpscr, r2				/* Restore the FPCSR */
 #endif
+
+#ifdef CONFIG_BUILD_KERNEL
+	/* For the kernel build, we need to be able to transition gracefully
+	 * between kernel- and user-mode tasks.  Here we do that with a system
+	 * call; the system call will execute in kernel mode and but can return
+	 * to either user or kernel mode.
+	 */
+
+	/* Perform the System call with R0=SYS_context_restore, R1=restoreregs */
+
+	mov		r1, r0					/* R1: restoreregs */
+	mov		r0, #SYS_context_restore	/* R0: SYS_context_restore syscall */
+	svc		#0x900001				/* Perform the system call */
+
+	/* This call should not return */
+
+	bx		lr						/* Unnecessary ... will not return */
+
+#else
+	/* For a flat build, we can do all of this here... Just think of this as
+	 * a longjmp() all on steriods.
+	 */
 
 	/* Recover all registers except for r0, r1, R15, and CPSR */
 
@@ -139,4 +156,7 @@ up_fullcontextrestore:
 	 */
 
 	ldr		pc, [sp], #4
+
+#endif
+
 	.size up_fullcontextrestore, . - up_fullcontextrestore

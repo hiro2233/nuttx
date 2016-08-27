@@ -1,7 +1,7 @@
 /********************************************************************************************
  * drivers/input/max11802.h
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2014 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *            Petteri Aimonen <jpa@nx.mail.kapsi.fi>
  *
@@ -50,15 +50,15 @@
 #include <stdint.h>
 #include <semaphore.h>
 #include <poll.h>
-#include <wdog.h>
 #include <nuttx/wqueue.h>
 
-#include <nuttx/spi/spi.h>
+#include <nuttx/wdog.h>
 #include <nuttx/clock.h>
+#include <nuttx/spi/spi.h>
 #include <nuttx/input/max11802.h>
 
 /********************************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ********************************************************************************************/
 /* Configuration ****************************************************************************/
 
@@ -90,7 +90,7 @@
 
 /* Poll the pen position while the pen is down at this rate (50MS): */
 
-#define MAX11802_WDOG_DELAY  ((50 + (MSEC_PER_TICK-1))/ MSEC_PER_TICK)
+#define MAX11802_WDOG_DELAY     MSEC2TICK(50)
 
 /********************************************************************************************
  * Public Types

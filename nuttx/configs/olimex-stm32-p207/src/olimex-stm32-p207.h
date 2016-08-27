@@ -1,4 +1,4 @@
-/******************************************************************************
+/****************************************************************************
  * configs/olimex-stm32-p107/src/olimex-stm32-p207.h
  *
  *   Copyright (C) 2013 Max Holtzberg. All rights reserved.
@@ -31,22 +31,22 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ******************************************************************************/
+ ****************************************************************************/
 
-#ifndef __CONFIGS_OLIMEX_STM32_P207_SRC_INTERNAL_H
-#define __CONFIGS_OLIMEX_STM32_P207_SRC_INTERNAL_H
+#ifndef __CONFIGS_OLIMEX_STM32_P207_SRC_H
+#define __CONFIGS_OLIMEX_STM32_P207_SRC_H
 
-/******************************************************************************
+/****************************************************************************
  * Included Files
- ******************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <nuttx/compiler.h>
 #include <stdint.h>
 
-/******************************************************************************
- * Definitions
- ******************************************************************************/
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
 /* Olimex-STM32-P207 GPIOs ****************************************************/
 /* LEDs */
@@ -125,25 +125,6 @@ int stm32_usbhost_initialize(void);
 #endif
 
 /************************************************************************************
- * Name: nsh_archinitialize
- *
- * Description:
- *   Perform architecture specific initialization for NSH.
- *
- *   CONFIG_NSH_ARCHINIT=y :
- *     Called from the NSH library
- *
- *   CONFIG_BOARD_INITIALIZE=y, CONFIG_NSH_LIBRARY=y, &&
- *   CONFIG_NSH_ARCHINIT=n :
- *     Called from board_initialize().
- *
- ************************************************************************************/
-
-#ifdef CONFIG_NSH_LIBRARY
-int nsh_archinitialize(void);
-#endif
-
-/************************************************************************************
  * Name: stm32_adc_initialize
  *
  * Description:
@@ -168,4 +149,4 @@ int stm32_can_initialize(void);
 #endif
 
 #endif  /* __ASSEMBLY__ */
-#endif /* __CONFIGS_OLIMEX_STM32_P207_SRC_INTERNAL_H */
+#endif /* __CONFIGS_OLIMEX_STM32_P207_SRC_H */

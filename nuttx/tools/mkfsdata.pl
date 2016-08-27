@@ -41,7 +41,7 @@ opendir(DIR, ".");
 @files =  grep { !/^\./ && !/(CVS|~)/ } readdir(DIR);
 closedir(DIR);
 
-print(OUTPUT "#include <apps/netutils/httpd.h>\n\n");
+print(OUTPUT "#include \"netutils/httpd.h\"\n\n");
 print(OUTPUT "#ifndef NULL\n#define NULL 0\n#endif\n\n");
 
 foreach $file (@files) {
@@ -86,7 +86,8 @@ foreach $file (@files) {
                 print(OUTPUT "  ");
             }
         }
-        print(OUTPUT "0x00\n};\n\n");
+#       print(OUTPUT "0x00\n};\n\n");
+        print(OUTPUT "\n};\n\n");
         close(FILE);
         push(@fvars, $fvar);
         push(@pfiles, $file);

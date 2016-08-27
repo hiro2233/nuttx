@@ -45,9 +45,10 @@
 #include <stdint.h>
 
 #include "stm32.h"
-#include "chip/stm32_otgfs.h"
 
-#if defined(CONFIG_STM32_OTGFS) || defined (CONFIG_STM32_OTGFS2)
+#include "chip/stm32fxxxxx_otgfs.h"
+
+#if defined(CONFIG_STM32_OTGFS)
 
 /************************************************************************************
  * Pre-processor Definitions
@@ -73,7 +74,7 @@ extern "C"
 #define EXTERN extern
 #endif
 
-/*******************************************************************************
+/****************************************************************************
  * Name: stm32_otgfshost_initialize
  *
  * Description:
@@ -96,7 +97,7 @@ extern "C"
  * - Class drivers should be initialized prior to calling this function.
  *   Otherwise, there is a race condition if the device is already connected.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_USBHOST
 struct usbhost_connection_s;

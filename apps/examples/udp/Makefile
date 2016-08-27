@@ -1,7 +1,7 @@
 ############################################################################
 # apps/examples/udp/Makefile
 #
-#   Copyright (C) 2007-2008, 2011-2012 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2007-2008, 2011-2012, 2014 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -39,77 +39,106 @@ include $(APPDIR)/Make.defs
 
 # UDP Test
 
-TARG_ASRCS	=
+TARG_ASRCS =
 
-TARG_CSRCS	= target.c
+TARG_CSRCS =
 ifeq ($(CONFIG_EXAMPLES_UDP_SERVER),y)
-TARG_CSRCS	+= udp-server.c
+TARG_CSRCS += udp-server.c
 else
-TARG_CSRCS	+= udp-client.c
+TARG_CSRCS += udp-client.c
 endif
+TARG_MAINSRC = target.c
 
-TARG_AOBJS	= $(TARG_ASRCS:.S=$(OBJEXT))
-TARG_COBJS	= $(TARG_CSRCS:.c=$(OBJEXT))
+TARG_AOBJS = $(TARG_ASRCS:.S=$(OBJEXT))
+TARG_COBJS = $(TARG_CSRCS:.c=$(OBJEXT))
+TARG_MAINOBJ = $(TARG_MAINSRC:.c=$(OBJEXT))
 
-TARG_SRCS	= $(TARG_ASRCS) $(TARG_CSRCS)
-TARG_OBJS	= $(TARG_AOBJS) $(TARG_COBJS)
+TARG_SRCS = $(TARG_ASRCS) $(TARG_CSRCS) $(TARG_MAINSRC)
+TARG_OBJS = $(TARG_AOBJS) $(TARG_COBJS)
+
+ifneq ($(CONFIG_BUILD_KERNEL),y)
+  TARG_OBJS += $(TARG_MAINOBJ)
+endif
 
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
-  TARG_BIN	= ..\..\libapps$(LIBEXT)
+  TARG_BIN = ..\..\libapps$(LIBEXT)
 else
 ifeq ($(WINTOOL),y)
-  TARG_BIN	= ..\\..\\libapps$(LIBEXT)
+  TARG_BIN = ..\\..\\libapps$(LIBEXT)
 else
-  TARG_BIN	= ../../libapps$(LIBEXT)
+  TARG_BIN = ../../libapps$(LIBEXT)
 endif
 endif
 
-HOSTCFLAGS	+= -DCONFIG_EXAMPLES_UDP_HOST=1
-ifeq ($(CONFIG_EXAMPLES_UDP_SERVER),y)
-HOSTCFLAGS	+= -DCONFIG_EXAMPLES_UDP_SERVER=1 \
-		   -DCONFIG_EXAMPLES_UDP_SERVERIP="$(CONFIG_EXAMPLES_UDP_SERVERIP)"
-endif
+HOSTCFLAGS += -DEXAMPLES_UDP_HOST=1
 
-HOST_SRCS	= host.c
+HOST_SRCS = host.c
 ifeq ($(CONFIG_EXAMPLES_UDP_SERVER),y)
-HOST_SRCS	+= udp-client.c
+HOST_SRCS += udp-client.c
 else
-HOST_SRCS	+= udp-server.c
+HOST_SRCS += udp-server.c
 endif
 
-HOST_OBJS	= $(HOST_SRCS:.c=.o)
-HOST_BIN	= host
+HOST_OBJS = $(HOST_SRCS:.c=.o)
+HOST_BIN = host
 
-ROOTDEPPATH	= --dep-path .
+ifeq ($(WINTOOL),y)
+  INSTALL_DIR = "${shell cygpath -w $(BIN_DIR)}"
+else
+  INSTALL_DIR = $(BIN_DIR)
+endif
+
+CONFIG_XYZ_PROGNAME ?= udp$(EXEEXT)
+PROGNAME = $(CONFIG_XYZ_PROGNAME)
+
+ROOTDEPPATH = --dep-path .
 
 # Common build
 
-VPATH		=
+VPATH =
 
 all: .built
-.PHONY:	clean depend distclean
+.PHONY: clean depend distclean
 
 $(TARG_AOBJS): %$(OBJEXT): %.S
 	$(call ASSEMBLE, $<, $@)
 
-$(TARG_COBJS): %$(OBJEXT): %.c
+$(TARG_COBJS) $(TARG_MAINOBJ): %$(OBJEXT): %.c
 	$(call COMPILE, $<, $@)
 
-"$(TARG_BIN)": $(TARG_OBJS) $(HOST_BIN)
+$(TARG_BIN): $(TARG_OBJS) $(HOST_BIN)
 	$(call ARCHIVE, $@, $(TARG_OBJS))
 
 $(HOST_OBJS): %.o: %.c
-	$(HOSTCC) -c $(HOSTCFLAGS) $< -o $@
+	@echo "CC:  $<"
+	$(Q) $(HOSTCC) -c $(HOSTCFLAGS) $< -o $@
 
-$(HOST_BIN): $(HOST_OBJS)
-	$(HOSTCC) $(HOSTLDFLAGS) $(HOST_OBJS) -o $@
+config.h: $(TOPDIR)/include/nuttx/config.h
+	@echo "CP:  $<"
+	$(Q) cp $< $@
 
-.built: $(TARG_BIN) $(HOST_BIN)
-	@touch .built
+$(HOST_BIN): config.h $(HOST_OBJS)
+	$(Q) $(HOSTCC) $(HOSTLDFLAGS) $(HOST_OBJS) -o $@
+
+.built: config.h $(TARG_BIN) $(HOST_BIN)
+	$(Q) touch .built
+
+ifeq ($(CONFIG_BUILD_KERNEL),y)
+$(BIN_DIR)$(DELIM)$(PROGNAME): $(OBJS) $(TARG_MAINOBJ)
+	@echo "LD: $(PROGNAME)"
+	$(Q) $(LD) $(LDELFFLAGS) $(LDLIBPATH) -o $(INSTALL_DIR)$(DELIM)$(PROGNAME) $(ARCHCRT0OBJ) $(TARG_MAINOBJ) $(LDLIBS)
+	$(Q) $(NM) -u  $(INSTALL_DIR)$(DELIM)$(PROGNAME)
+
+install: $(BIN_DIR)$(DELIM)$(PROGNAME)
+
+else
+install:
+
+endif
 
 context:
 
-.depend: Makefile $(TARG_SRCS)
+.depend: Makefile config.h $(TARG_SRCS)
 	@$(MKDEP) $(ROOTDEPPATH) "$(CC)" -- $(CFLAGS) -- $(TARG_SRCS) >Make.dep
 	@touch $@
 
@@ -120,6 +149,7 @@ clean:
 	$(call DELFILE, $(TARG_BIN))
 	$(call DELFILE, $(HOST_BIN))
 	$(call DELFILE, *.dSYM)
+	$(call DELFILE, config.h)
 	$(call CLEAN)
 
 distclean: clean
@@ -128,3 +158,5 @@ distclean: clean
 
 -include Make.dep
 
+.PHONY: preconfig
+preconfig:

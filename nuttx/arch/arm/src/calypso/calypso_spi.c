@@ -43,6 +43,8 @@
 #include <unistd.h>
 #include <semaphore.h>
 #include <debug.h>
+#include <assert.h>
+#include <errno.h>
 
 #include "up_arch.h"
 #include "calypso_spi.h"
@@ -59,16 +61,35 @@ struct calypso_spidev_s
 {
   struct spi_dev_s spidev;  /* External driver interface */
   int              nbits;   /* Number of transfered bits */
-
-#ifndef CONFIG_SPI_OWNBUS
-  sem_t            exclsem; /* Mutual exclusion of devices */
-#endif
+  sem_t            exclsem; /* Supports mutually exclusive access */
 };
 
+static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
+{
+  struct calypso_spidev_s *priv = (struct calypso_spidev_s *)dev;
+
+  if (lock)
+    {
+      /* Take the semaphore (perhaps waiting) */
+
+      while (sem_wait(&priv->exclsem) != 0)
+        {
+          /* The only case that an error should occur here is if the wait
+           * was awakened by a signal.
+           */
+
+          DEBUGASSERT(errno == EINTR);
+        }
+    }
+  else
+    {
+      (void)sem_post(&priv->exclsem);
+    }
+
+  return OK;
+}
+
 /* STUBS! */
-#ifndef CONFIG_SPI_OWNBUS
-static int spi_lock(FAR struct spi_dev_s *dev, bool lock);
-#endif
 
 static void spi_select(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
                        bool selected)
@@ -99,7 +120,7 @@ static void spi_exchange(FAR struct spi_dev_s *dev, FAR const void *txbuffer,
 
   for (i = 0; i < nwords; i++)
     {
-      spi_xfer(0, priv->nbits, txbuffer+i, rxbuffer+i);
+      spi_xfer(0, priv->nbits, txbuffer + i, rxbuffer + i);
     }
 }
 
@@ -112,16 +133,17 @@ static uint16_t spi_send(FAR struct spi_dev_s *dev, uint16_t wd)
 
 static const struct spi_ops_s g_spiops =
 {
-#ifndef CONFIG_SPI_OWNBUS
   .lock              = spi_lock,
-#endif
   .select            = spi_select,
   .setfrequency      = spi_setfrequency,
   .setmode           = spi_setmode,
   .setbits           = spi_setbits,
+#ifdef CONFIG_SPI_HWFEATURES
+  .hwfeatures        = 0,
+#endif
   .status            = 0,
 #ifdef CONFIG_SPI_CMDDATA
-  .cmddata           = ,
+  .cmddata           = 0,
 #endif
   .send              = spi_send,
 #ifdef CONFIG_SPI_EXCHANGE
@@ -136,7 +158,8 @@ static const struct spi_ops_s g_spiops =
 static struct calypso_spidev_s g_spidev =
 {
   .spidev  = { &g_spiops },
-  .nbits  = 0,
+  .nbits   = 0,
+  .exclsem = SEM_INITIALIZER(1)
 };
 
 void spi_init(void)
@@ -193,8 +216,8 @@ int spi_xfer(uint8_t dev_idx, uint8_t bitlen, const void *dout, void *din)
       tmp <<= (32-bitlen);    /* align to MSB */
     }
 
-  dbg("spi_xfer(dev_idx=%u, bitlen=%u, data_out=0x%08x): ",
-      dev_idx, bitlen, tmp);
+  spiinfo("spi_xfer(dev_idx=%u, bitlen=%u, data_out=0x%08x): ",
+          dev_idx, bitlen, tmp);
 
   /* fill transmit registers */
 
@@ -213,23 +236,23 @@ int spi_xfer(uint8_t dev_idx, uint8_t bitlen, const void *dout, void *din)
     }
 
   putreg16(reg_ctrl, SPI_REG(REG_CTRL));
-  dbg("reg_ctrl=0x%04x ", reg_ctrl);
+  spiinfo("reg_ctrl=0x%04x ", reg_ctrl);
 
   /* wait until the transfer is complete */
 
   while (1)
-  {
-    reg_status = getreg16(SPI_REG(REG_STATUS));
-    dbg("status=0x%04x ", reg_status);
-    if (din && (reg_status & SPI_STATUS_RE))
-      {
-        break;
-      }
-    else if (reg_status & SPI_STATUS_WE)
-      {
-        break;
-      }
-  }
+    {
+      reg_status = getreg16(SPI_REG(REG_STATUS));
+      spiinfo("status=0x%04x ", reg_status);
+      if (din && (reg_status & SPI_STATUS_RE))
+        {
+          break;
+        }
+      else if (reg_status & SPI_STATUS_WE)
+        {
+          break;
+        }
+    }
 
   /* FIXME: calibrate how much delay we really need (seven 13MHz cycles) */
 
@@ -239,7 +262,7 @@ int spi_xfer(uint8_t dev_idx, uint8_t bitlen, const void *dout, void *din)
     {
       tmp = getreg16(SPI_REG(REG_RX_MSB)) << 16;
       tmp |= getreg16(SPI_REG(REG_RX_LSB));
-      dbg("data_in=0x%08x ", tmp);
+      spiinfo("data_in=0x%08x ", tmp);
 
       if (bitlen <= 8)
         {
@@ -255,12 +278,26 @@ int spi_xfer(uint8_t dev_idx, uint8_t bitlen, const void *dout, void *din)
         }
     }
 
-  dbg("\n");
+  spiinfo("\n");
 
   return 0;
 }
 
-FAR struct spi_dev_s *up_spiinitialize(int port)
+/****************************************************************************
+ * Name: calypso_spibus_initialize
+ *
+ * Description:
+ *   Initialize the selected SPI port
+ *
+ * Input Parameter:
+ *   Port number (for hardware that has mutiple SPI interfaces)
+ *
+ * Returned Value:
+ *   Valid SPI device structure reference on succcess; a NULL on failure
+ *
+ ****************************************************************************/
+
+FAR struct spi_dev_s *calypso_spibus_initialize(int port)
 {
   switch (port)
     {

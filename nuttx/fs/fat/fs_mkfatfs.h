@@ -110,17 +110,14 @@ struct fat_var_s
 };
 
 /****************************************************************************
- * Global Variables
- ****************************************************************************/
-
-/****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -141,8 +138,9 @@ extern "C" {
  *    Zero on success; negated errno on failure
  *
  ****************************************************************************/
-EXTERN int mkfatfs_configfatfs(FAR struct fat_format_s *fmt,
-                               FAR struct fat_var_s *var);
+
+int mkfatfs_configfatfs(FAR struct fat_format_s *fmt,
+                        FAR struct fat_var_s *var);
 
 /****************************************************************************
  * Name: mkfatfs_writefat
@@ -159,8 +157,9 @@ EXTERN int mkfatfs_configfatfs(FAR struct fat_format_s *fmt,
  *    Zero on success; negated errno on failure
  *
  ****************************************************************************/
-EXTERN int mkfatfs_writefatfs(FAR struct fat_format_s *fmt,
-                              FAR struct fat_var_s *var);
+
+int mkfatfs_writefatfs(FAR struct fat_format_s *fmt,
+                       FAR struct fat_var_s *var);
 
 #undef EXTERN
 #if defined(__cplusplus)

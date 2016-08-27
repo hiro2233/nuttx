@@ -51,11 +51,25 @@
 
 #include <nuttx/kmalloc.h>
 #include <nuttx/fs/fs.h>
-#include <nuttx/fs/ramdisk.h>
+#include <nuttx/drivers/ramdisk.h>
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
+
+/* Helpers for rdflags */
+
+/* User input flags */
+
+#define RDFLAG_USER            (RDFLAG_WRENABLED | RDFLAG_FUNLINK)
+
+#define RDFLAG_IS_WRENABLED(f) (((f) & RDFLAG_WRENABLED) != 0)
+#define RDFLAG_IS_FUNLINK(f)   (((f) & RDFLAG_WRENABLED) != 0)
+
+/* Flag set when the RAM disk block driver is unlink */
+
+#define RDFLAG_UNLINK(f)       do { (f) |= RDFLAG_UNLINKED; } while (0)
+#define RDFLAG_IS_UNLINKED(f)  (((f) & RDFLAG_UNLINKED) != 0)
 
 /****************************************************************************
  * Private Types
@@ -63,13 +77,16 @@
 
 struct rd_struct_s
 {
-  uint32_t       rd_nsectors;     /* Number of sectors on device */
-  uint16_t       rd_sectsize;     /* The size of one sector */
+  uint32_t rd_nsectors;         /* Number of sectors on device */
+  uint16_t rd_sectsize;         /* The size of one sector */
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+  uint8_t rd_crefs;             /* Open reference count */
+#endif
+  uint8_t rd_flags;             /* See RDFLAG_* definitions */
 #ifdef CONFIG_FS_WRITABLE
-  bool           rd_writeenabled; /* true: can write to ram disk */
-  uint8_t       *rd_buffer;       /* RAM disk backup memory */
+  FAR uint8_t *rd_buffer;       /* RAM disk backup memory */
 #else
-  const uint8_t *rd_buffer;       /* ROM disk backup memory */
+  FAR const uint8_t *rd_buffer; /* ROM disk backup memory */
 #endif
 };
 
@@ -77,16 +94,28 @@ struct rd_struct_s
  * Private Function Prototypes
  ****************************************************************************/
 
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+static void    rd_destroy(FAR struct rd_struct_s *dev);
+
 static int     rd_open(FAR struct inode *inode);
 static int     rd_close(FAR struct inode *inode);
-static ssize_t rd_read(FAR struct inode *inode, unsigned char *buffer,
-                       size_t start_sector, unsigned int nsectors);
-#ifdef CONFIG_FS_WRITABLE
-static ssize_t rd_write(FAR struct inode *inode, const unsigned char *buffer,
-                        size_t start_sector, unsigned int nsectors);
 #endif
-static int     rd_geometry(FAR struct inode *inode, struct geometry *geometry);
-static int     rd_ioctl(FAR struct inode *inode, int cmd, unsigned long arg);
+
+static ssize_t rd_read(FAR struct inode *inode, FAR unsigned char *buffer,
+                 size_t start_sector, unsigned int nsectors);
+#ifdef CONFIG_FS_WRITABLE
+static ssize_t rd_write(FAR struct inode *inode,
+                 FAR const unsigned char *buffer, size_t start_sector,
+                 unsigned int nsectors);
+#endif
+static int     rd_geometry(FAR struct inode *inode,
+                 FAR struct geometry *geometry);
+static int     rd_ioctl(FAR struct inode *inode, int cmd,
+                 unsigned long arg);
+
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+static int     rd_unlink(FAR struct inode *inode);
+#endif
 
 /****************************************************************************
  * Private Data
@@ -94,8 +123,13 @@ static int     rd_ioctl(FAR struct inode *inode, int cmd, unsigned long arg);
 
 static const struct block_operations g_bops =
 {
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
   rd_open,     /* open     */
   rd_close,    /* close    */
+#else
+  0,           /* open     */
+  0,           /* close    */
+#endif
   rd_read,     /* read     */
 #ifdef CONFIG_FS_WRITABLE
   rd_write,    /* write    */
@@ -103,12 +137,45 @@ static const struct block_operations g_bops =
   NULL,        /* write    */
 #endif
   rd_geometry, /* geometry */
-  rd_ioctl     /* ioctl    */
+  rd_ioctl,    /* ioctl    */
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+  rd_unlink    /* unlink   */
+#endif
 };
 
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
+
+/****************************************************************************
+ * Name: rd_destroy
+ *
+ * Description:
+ *   Free all resources used by the RAM disk
+ *
+ ****************************************************************************/
+
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+static void rd_destroy(FAR struct rd_struct_s *dev)
+{
+  finfo("Destroying RAM disk\n");
+
+  /* We we configured to free the RAM disk memory when unlinked? */
+
+#ifdef CONFIG_FS_WRITABLE
+  if (RDFLAG_IS_UNLINKED(dev->rd_flags))
+    {
+      /* Yes.. do it */
+
+      kmm_free(dev->rd_buffer);
+    }
+#endif
+
+  /* And free the block driver itself */
+
+  kmm_free(dev);
+}
+#endif
 
 /****************************************************************************
  * Name: rd_open
@@ -117,24 +184,64 @@ static const struct block_operations g_bops =
  *
  ****************************************************************************/
 
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
 static int rd_open(FAR struct inode *inode)
 {
-  fvdbg("Entry\n");
+  FAR struct rd_struct_s *dev;
+
+  DEBUGASSERT(inode && inode->i_private);
+  dev = (FAR struct rd_struct_s *)inode->i_private;
+
+  /* Increment the open reference count */
+
+  dev->rd_crefs++;
+  DEBUGASSERT(dev->rd_crefs > 0);
+
+  finfo("rd_crefs: %d\n", dev->rd_crefs);
   return OK;
 }
+#endif
 
 /****************************************************************************
- * Name: rd_closel
+ * Name: rd_close
  *
  * Description: close the block device
  *
  ****************************************************************************/
 
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
 static int rd_close(FAR struct inode *inode)
 {
-  fvdbg("Entry\n");
+  FAR struct rd_struct_s *dev;
+
+  DEBUGASSERT(inode && inode->i_private);
+  dev = (FAR struct rd_struct_s *)inode->i_private;
+
+  /* Increment the open reference count */
+
+  DEBUGASSERT(dev->rd_crefs > 0);
+  dev->rd_crefs--;
+  finfo("rd_crefs: %d\n", dev->rd_crefs);
+
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+  /* Was that the last open reference to the RAM disk? */
+
+  if (dev->rd_crefs == 0)
+    {
+      /* Yes..  Have we been unlinked? */
+
+      if (RDFLAG_IS_UNLINKED(dev->rd_flags))
+        {
+          /* Yes.. Release all of the RAM disk resources */
+
+          rd_destroy(dev);
+        }
+    }
+#endif
+
   return OK;
 }
+#endif
 
 /****************************************************************************
  * Name: rd_read
@@ -146,18 +253,18 @@ static int rd_close(FAR struct inode *inode)
 static ssize_t rd_read(FAR struct inode *inode, unsigned char *buffer,
                        size_t start_sector, unsigned int nsectors)
 {
-  struct rd_struct_s *dev;
+  FAR struct rd_struct_s *dev;
 
   DEBUGASSERT(inode && inode->i_private);
-  dev = (struct rd_struct_s *)inode->i_private;
+  dev = (FAR struct rd_struct_s *)inode->i_private;
 
-  fvdbg("sector: %d nsectors: %d sectorsize: %d\n",
+  finfo("sector: %d nsectors: %d sectorsize: %d\n",
         start_sector, dev->rd_sectsize, nsectors);
 
   if (start_sector < dev->rd_nsectors &&
       start_sector + nsectors <= dev->rd_nsectors)
     {
-       fvdbg("Transfer %d bytes from %p\n",
+       finfo("Transfer %d bytes from %p\n",
              nsectors * dev->rd_sectsize,
              &dev->rd_buffer[start_sector * dev->rd_sectsize]);
 
@@ -186,17 +293,17 @@ static ssize_t rd_write(FAR struct inode *inode, const unsigned char *buffer,
   DEBUGASSERT(inode && inode->i_private);
   dev = (struct rd_struct_s *)inode->i_private;
 
-  fvdbg("sector: %d nsectors: %d sectorsize: %d\n",
+  finfo("sector: %d nsectors: %d sectorsize: %d\n",
         start_sector, dev->rd_sectsize, nsectors);
 
-  if (!dev->rd_writeenabled)
+  if (!RDFLAG_IS_WRENABLED(dev->rd_flags))
     {
       return -EACCES;
     }
   else if (start_sector < dev->rd_nsectors &&
            start_sector + nsectors <= dev->rd_nsectors)
     {
-      fvdbg("Transfer %d bytes from %p\n",
+      finfo("Transfer %d bytes from %p\n",
              nsectors * dev->rd_sectsize,
              &dev->rd_buffer[start_sector * dev->rd_sectsize]);
 
@@ -221,7 +328,7 @@ static int rd_geometry(FAR struct inode *inode, struct geometry *geometry)
 {
   struct rd_struct_s *dev;
 
-  fvdbg("Entry\n");
+  finfo("Entry\n");
 
   DEBUGASSERT(inode);
   if (geometry)
@@ -230,16 +337,16 @@ static int rd_geometry(FAR struct inode *inode, struct geometry *geometry)
       geometry->geo_available     = true;
       geometry->geo_mediachanged  = false;
 #ifdef CONFIG_FS_WRITABLE
-      geometry->geo_writeenabled  = dev->rd_writeenabled;
+      geometry->geo_writeenabled  = RDFLAG_IS_WRENABLED(dev->rd_flags);
 #else
       geometry->geo_writeenabled  = false;
 #endif
       geometry->geo_nsectors      = dev->rd_nsectors;
       geometry->geo_sectorsize    = dev->rd_sectsize;
 
-      fvdbg("available: true mediachanged: false writeenabled: %s\n",
+      finfo("available: true mediachanged: false writeenabled: %s\n",
             geometry->geo_writeenabled ? "true" : "false");
-      fvdbg("nsectors: %d sectorsize: %d\n",
+      finfo("nsectors: %d sectorsize: %d\n",
             geometry->geo_nsectors, geometry->geo_sectorsize);
 
       return OK;
@@ -251,26 +358,27 @@ static int rd_geometry(FAR struct inode *inode, struct geometry *geometry)
 /****************************************************************************
  * Name: rd_ioctl
  *
- * Description: Return device geometry
+ * Description:
+ *   Return device geometry
  *
  ****************************************************************************/
 
 static int rd_ioctl(FAR struct inode *inode, int cmd, unsigned long arg)
 {
-  struct rd_struct_s *dev ;
-  void **ppv = (void**)((uintptr_t)arg);
+  FAR struct rd_struct_s *dev;
+  FAR void **ppv = (void**)((uintptr_t)arg);
 
-  fvdbg("Entry\n");
+  finfo("Entry\n");
 
   /* Only one ioctl command is supported */
 
   DEBUGASSERT(inode && inode->i_private);
   if (cmd == BIOC_XIPBASE && ppv)
     {
-      dev  = (struct rd_struct_s *)inode->i_private;
-      *ppv = (void*)dev->rd_buffer;
+      dev  = (FAR struct rd_struct_s *)inode->i_private;
+      *ppv = (FAR void *)dev->rd_buffer;
 
-      fvdbg("ppv: %p\n", *ppv);
+      finfo("ppv: %p\n", *ppv);
       return OK;
     }
 
@@ -278,21 +386,65 @@ static int rd_ioctl(FAR struct inode *inode, int cmd, unsigned long arg)
 }
 
 /****************************************************************************
+ * Name: rd_unlink
+ *
+ * Description:
+ *   The block driver has been unlinked.
+ *
+ ****************************************************************************/
+
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+static int rd_unlink(FAR struct inode *inode)
+{
+  FAR struct rd_struct_s *dev;
+
+  DEBUGASSERT(inode && inode->i_private);
+  dev = (FAR struct rd_struct_s *)inode->i_private;
+
+  /* Mark the pipe unlinked */
+
+  RDFLAG_UNLINK(dev->rd_flags);
+
+  /* Are the any open references to the driver? */
+
+  if (dev->rd_crefs == 0)
+    {
+      /* No... release all resources held by the block driver */
+
+      rd_destroy(dev);
+    }
+
+  return OK;
+}
+#endif
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: ramdisk_register
+ * Name: ramdisk_register or romdisk_register
  *
- * Description: Register the a ramdisk
-
+ * Description:
+ *   Non-standard function to register a ramdisk or a romdisk
+ *
+ * Input Parmeters:
+ *   minor:         Selects suffix of device named /dev/ramN, N={1,2,3...}
+ *   nsectors:      Number of sectors on device
+ *   sectize:       The size of one sector
+ *   rdflags:       See RDFLAG_* definitions
+ *   buffer:        RAM disk backup memory
+ *
+ * Returned Valued:
+ *   Zero on success; a negated errno value on failure.
+ *
  ****************************************************************************/
 
 #ifdef CONFIG_FS_WRITABLE
-int ramdisk_register(int minor, uint8_t *buffer, uint32_t nsectors,
-                     uint16_t sectsize, bool writeenabled)
+int ramdisk_register(int minor, FAR uint8_t *buffer, uint32_t nsectors,
+                     uint16_t sectsize, uint8_t rdflags)
 #else
-int romdisk_register(int minor, uint8_t *buffer, uint32_t nsectors,
+int romdisk_register(int minor, FAR const uint8_t *buffer, uint32_t nsectors,
                      uint16_t sectsize)
 #endif
 {
@@ -300,11 +452,11 @@ int romdisk_register(int minor, uint8_t *buffer, uint32_t nsectors,
   char devname[16];
   int ret = -ENOMEM;
 
-  fvdbg("buffer: %p nsectors: %d sectsize: %d\n", buffer, nsectors, sectsize);
+  finfo("buffer: %p nsectors: %d sectsize: %d\n", buffer, nsectors, sectsize);
 
   /* Sanity check */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (minor < 0 || minor > 255 || !buffer || !nsectors || !sectsize)
     {
       return -EINVAL;
@@ -313,17 +465,18 @@ int romdisk_register(int minor, uint8_t *buffer, uint32_t nsectors,
 
   /* Allocate a ramdisk device structure */
 
-  dev = (struct rd_struct_s *)kmalloc(sizeof(struct rd_struct_s));
+  dev = (struct rd_struct_s *)kmm_zalloc(sizeof(struct rd_struct_s));
   if (dev)
     {
       /* Initialize the ramdisk device structure */
 
       dev->rd_nsectors     = nsectors;     /* Number of sectors on device */
       dev->rd_sectsize     = sectsize;     /* The size of one sector */
-#ifdef CONFIG_FS_WRITABLE
-      dev->rd_writeenabled = writeenabled; /* true: can write to ram disk */
-#endif
       dev->rd_buffer       = buffer;       /* RAM disk backup memory */
+
+#ifdef CONFIG_FS_WRITABLE
+      dev->rd_flags        = rdflags & RDFLAG_USER;
+#endif
 
       /* Create a ramdisk device name */
 
@@ -334,8 +487,8 @@ int romdisk_register(int minor, uint8_t *buffer, uint32_t nsectors,
       ret = register_blockdriver(devname, &g_bops, 0, dev);
       if (ret < 0)
         {
-          fdbg("register_blockdriver failed: %d\n", -ret);
-          kfree(dev);
+          ferr("register_blockdriver failed: %d\n", -ret);
+          kmm_free(dev);
         }
     }
 

@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/sama5d3x-ek/src/sam_usb.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/usb/usbdev.h>
 #include <nuttx/usb/usbhost.h>
 #include <nuttx/usb/usbdev_trace.h>
@@ -63,12 +64,12 @@
  * Pre-processor Definitions
  ************************************************************************************/
 
-#ifndef CONFIG_USBHOST_DEFPRIO
-#  define CONFIG_USBHOST_DEFPRIO 50
+#ifndef CONFIG_SAMA5D3xEK_USBHOST_PRIO
+#  define CONFIG_SAMA5D3xEK_USBHOST_PRIO 50
 #endif
 
-#ifndef CONFIG_USBHOST_STACKSIZE
-#  define CONFIG_USBHOST_STACKSIZE 1024
+#ifndef CONFIG_SAMA5D3xEK_USBHOST_STACKSIZE
+#  define CONFIG_SAMA5D3xEK_USBHOST_STACKSIZE 1024
 #endif
 
 #ifdef HAVE_USBDEV
@@ -112,35 +113,23 @@ static int usbhost_waiter(struct usbhost_connection_s *dev, const char *hcistr)
 static int usbhost_waiter(struct usbhost_connection_s *dev)
 #endif
 {
-  bool connected[SAM_OHCI_NRHPORT] = {false, false, false};
-  int rhpndx;
-  int ret;
+  struct usbhost_hubport_s *hport;
 
-  uvdbg("%s Waiter Running\n", hcistr);
+  uinfo("Running\n");
   for (;;)
     {
       /* Wait for the device to change state */
 
-      rhpndx = CONN_WAIT(dev, connected);
-      DEBUGASSERT(rhpndx >= 0 && rhpndx < SAM_OHCI_NRHPORT);
-
-      connected[rhpndx] = !connected[rhpndx];
-
-      uvdbg("%s RHport%d %s\n",
-            hcistr, rhpndx + 1, connected[rhpndx] ? "connected" : "disconnected");
+      DEBUGVERIFY(CONN_WAIT(dev, &hport));
+      uinfo("%s\n", hport->connected ? "connected" : "disconnected");
 
       /* Did we just become connected? */
 
-      if (connected[rhpndx])
+      if (hport->connected)
         {
           /* Yes.. enumerate the newly connected device */
 
-          ret = CONN_ENUMERATE(dev, rhpndx);
-          if (ret < 0)
-            {
-              uvdbg("%s RHport%d CONN_ENUMERATE failed: %d\n", hcistr, rhpndx+1, ret);
-              connected[rhpndx] = false;
-            }
+          (void)CONN_ENUMERATE(dev, hport);
         }
     }
 
@@ -309,24 +298,48 @@ int sam_usbhost_initialize(void)
   int ret;
 
   /* First, register all of the class drivers needed to support the drivers
-   * that we care about
-   *
-   * Register theUSB host Mass Storage Class:
+   * that we care about/
    */
 
-  ret = usbhost_storageinit();
+#ifdef CONFIG_USBHOST_HUB
+  /* Initialize USB hub class support */
+
+  ret = usbhost_hub_initialize();
+  if (ret < 0)
+    {
+      uerr("ERROR: usbhost_hub_initialize failed: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_USBHOST_MSC
+  /* Register the USB host Mass Storage Class */
+
+  ret = usbhost_msc_initialize();
   if (ret != OK)
     {
-      udbg("ERROR: Failed to register the mass storage class: %d\n", ret);
+      uerr("ERROR: Failed to register the mass storage class: %d\n", ret);
     }
+#endif
 
+#ifdef CONFIG_USBHOST_CDCACM
+  /* Register the CDC/ACM serial class */
+
+  ret = usbhost_cdcacm_initialize();
+  if (ret != OK)
+    {
+      uerr("ERROR: Failed to register the CDC/ACM serial class: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_USBHOST_HIDKBD
   /* Register the USB host HID keyboard class driver */
 
   ret = usbhost_kbdinit();
   if (ret != OK)
     {
-      udbg("ERROR: Failed to register the KBD class\n");
+      uerr("ERROR: Failed to register the KBD class\n");
     }
+#endif
 
   /* Then get an instance of the USB host interface. */
 
@@ -336,17 +349,18 @@ int sam_usbhost_initialize(void)
   g_ohciconn = sam_ohci_initialize(0);
   if (!g_ohciconn)
     {
-      udbg("ERROR: sam_ohci_initialize failed\n");
+      uerr("ERROR: sam_ohci_initialize failed\n");
       return -ENODEV;
     }
 
   /* Start a thread to handle device connection. */
 
-  pid = TASK_CREATE("OHCI Monitor", CONFIG_USBHOST_DEFPRIO,  CONFIG_USBHOST_STACKSIZE,
+  pid = task_create("OHCI Monitor", CONFIG_SAMA5D3xEK_USBHOST_PRIO,
+                    CONFIG_SAMA5D3xEK_USBHOST_STACKSIZE,
                     (main_t)ohci_waiter, (FAR char * const *)NULL);
   if (pid < 0)
     {
-      udbg("ERROR: Failed to create ohci_waiter task: %d\n", ret);
+      uerr("ERROR: Failed to create ohci_waiter task: %d\n", ret);
       return -ENODEV;
     }
 #endif
@@ -357,17 +371,18 @@ int sam_usbhost_initialize(void)
   g_ehciconn = sam_ehci_initialize(0);
   if (!g_ehciconn)
     {
-      udbg("ERROR: sam_ehci_initialize failed\n");
+      uerr("ERROR: sam_ehci_initialize failed\n");
       return -ENODEV;
     }
 
   /* Start a thread to handle device connection. */
 
-  pid = TASK_CREATE("EHCI Monitor", CONFIG_USBHOST_DEFPRIO,  CONFIG_USBHOST_STACKSIZE,
+  pid = task_create("EHCI Monitor", CONFIG_SAMA5D3xEK_USBHOST_PRIO,
+                    CONFIG_SAMA5D3xEK_USBHOST_STACKSIZE,
                     (main_t)ehci_waiter, (FAR char * const *)NULL);
   if (pid < 0)
     {
-      udbg("ERROR: Failed to create ehci_waiter task: %d\n", ret);
+      uerr("ERROR: Failed to create ehci_waiter task: %d\n", ret);
       return -ENODEV;
     }
 #endif
@@ -398,7 +413,7 @@ void sam_usbhost_vbusdrive(int rhport, bool enable)
 {
   pio_pinset_t pinset = 0;
 
-  uvdbg("RHPort%d: enable=%d\n", rhport+1, enable);
+  uinfo("RHPort%d: enable=%d\n", rhport+1, enable);
 
   /* Pick the PIO configuration associated with the selected root hub port */
 
@@ -406,7 +421,7 @@ void sam_usbhost_vbusdrive(int rhport, bool enable)
     {
     case SAM_RHPORT1:
 #ifndef CONFIG_SAMA5_UHPHS_RHPORT1
-      udbg("ERROR: RHPort1 is not available in this configuration\n");
+      uerr("ERROR: RHPort1 is not available in this configuration\n");
       return;
 #else
       pinset = PIO_USBA_VBUS_ENABLE;
@@ -415,7 +430,7 @@ void sam_usbhost_vbusdrive(int rhport, bool enable)
 
     case SAM_RHPORT2:
 #ifndef CONFIG_SAMA5_UHPHS_RHPORT2
-      udbg("ERROR: RHPort2 is not available in this configuration\n");
+      uerr("ERROR: RHPort2 is not available in this configuration\n");
       return;
 #else
       pinset = PIO_USBB_VBUS_ENABLE;
@@ -424,7 +439,7 @@ void sam_usbhost_vbusdrive(int rhport, bool enable)
 
     case SAM_RHPORT3:
 #ifndef CONFIG_SAMA5_UHPHS_RHPORT3
-      udbg("ERROR: RHPort3 is not available in this configuration\n");
+      uerr("ERROR: RHPort3 is not available in this configuration\n");
       return;
 #else
       pinset = PIO_USBC_VBUS_ENABLE;
@@ -432,7 +447,7 @@ void sam_usbhost_vbusdrive(int rhport, bool enable)
 #endif
 
     default:
-      udbg("ERROR: RHPort%d is not supported\n", rhport+1);
+      uerr("ERROR: RHPort%d is not supported\n", rhport+1);
       return;
     }
 
@@ -463,7 +478,7 @@ void sam_usbhost_vbusdrive(int rhport, bool enable)
  *   REVISIT: Since this is a common signal, we will need to come up with some way
  *   to inform both EHCI and OHCI drivers when this error occurs.
  *
- * Input paramter:
+ * Input Parameter:
  *   handler - New overcurrent interrupt handler
  *
  * Returned value:
@@ -484,22 +499,22 @@ xcpt_t sam_setup_overcurrent(xcpt_t handler)
    * following operations are atomic.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
-  /* Get the old button interrupt handler and save the new one */
+  /* Get the old interrupt handler and save the new one */
 
   oldhandler  = g_ochandler;
   g_ochandler = handler;
 
   /* Configure the interrupt */
 
-  sam_pioirq(IRQ_USBBC_VBUS_OVERCURRENT);
+  sam_pioirq(PIO_USBBC_VBUS_OVERCURRENT);
   (void)irq_attach(IRQ_USBBC_VBUS_OVERCURRENT, handler);
   sam_pioirqenable(IRQ_USBBC_VBUS_OVERCURRENT);
 
-  /* Return the old button handler (so that it can be restored) */
+  /* Return the old handler (so that it can be restored) */
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return oldhandler;
 
 #else
@@ -523,7 +538,7 @@ xcpt_t sam_setup_overcurrent(xcpt_t handler)
 #ifdef CONFIG_USBDEV
 void sam_usbsuspend(FAR struct usbdev_s *dev, bool resume)
 {
-  ulldbg("resume: %d\n", resume);
+  uinfo("resume: %d\n", resume);
 }
 #endif
 

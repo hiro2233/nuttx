@@ -51,22 +51,6 @@
 #include "nxffs.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Public Types
- ****************************************************************************/
-
-/****************************************************************************
- * Public Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -105,7 +89,7 @@ int nxffs_verifyblock(FAR struct nxffs_volume_s *volume, off_t block)
     {
       /* Perhaps we are at the end of the media */
 
-      fdbg("ERROR: Failed to read data into cache: %d\n", ret);
+      ferr("ERROR: Failed to read data into cache: %d\n", ret);
       return -EIO;
     }
 
@@ -185,6 +169,6 @@ int nxffs_validblock(struct nxffs_volume_s *volume, off_t *block)
    * valid blocks left in the volume.
    */
 
-  fdbg("ERROR: No valid block found\n");
+  ferr("ERROR: No valid block found\n");
   return -ENOSPC;
 }

@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/avr/src/avr32/up_dumpstate.c
  *
- *   Copyright (C) 2010-2011, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010-2011, 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,31 +49,10 @@
 #include <arch/board/board.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 
 #ifdef CONFIG_ARCH_STACKDUMP
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/* Check if we can dump stack usage information */
-
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_STACK
-#endif
-
-/* Output debug info if stack dump is selected -- even if debug is not
- * selected.
- */
-
-#undef  lldbg
-#define lldbg lowsyslog
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -106,8 +85,8 @@ static void up_stackdump(uint32_t sp, uint32_t stack_base)
 
   for (stack = sp & ~0x1f; stack < stack_base; stack += 32)
     {
-      uint32_t *ptr = (uint32_t*)stack;
-      lldbg("%08x: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+      uint32_t *ptr = (uint32_t *)stack;
+      _alert("%08x: %08x %08x %08x %08x %08x %08x %08x %08x\n",
              stack, ptr[0], ptr[1], ptr[2], ptr[3],
              ptr[4], ptr[5], ptr[6], ptr[7]);
     }
@@ -121,29 +100,25 @@ static inline void up_registerdump(void)
 {
   /* Are user registers available from interrupt processing? */
 
-  if (current_regs)
+  if (g_current_regs)
     {
-      lldbg("R%d: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+      _alert("R%d: %08x %08x %08x %08x %08x %08x %08x %08x\n",
             0,
-            current_regs[REG_R0], current_regs[REG_R1],
-            current_regs[REG_R2], current_regs[REG_R3],
-            current_regs[REG_R4], current_regs[REG_R5],
-            current_regs[REG_R6], current_regs[REG_R7]);
+            g_current_regs[REG_R0], g_current_regs[REG_R1],
+            g_current_regs[REG_R2], g_current_regs[REG_R3],
+            g_current_regs[REG_R4], g_current_regs[REG_R5],
+            g_current_regs[REG_R6], g_current_regs[REG_R7]);
 
-      lldbg("R%d: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+      _alert("R%d: %08x %08x %08x %08x %08x %08x %08x %08x\n",
             8,
-            current_regs[REG_R8],  current_regs[REG_R9],
-            current_regs[REG_R10], current_regs[REG_R11],
-            current_regs[REG_R12], current_regs[REG_R13],
-            current_regs[REG_R14], current_regs[REG_R15]);
+            g_current_regs[REG_R8],  g_current_regs[REG_R9],
+            g_current_regs[REG_R10], g_current_regs[REG_R11],
+            g_current_regs[REG_R12], g_current_regs[REG_R13],
+            g_current_regs[REG_R14], g_current_regs[REG_R15]);
 
-      lldbg("SR: %08x\n", current_regs[REG_SR]);
+      _alert("SR: %08x\n", g_current_regs[REG_SR]);
     }
 }
-
-/****************************************************************************
- * Name: _up_assert
- ****************************************************************************/
 
 /****************************************************************************
  * Name: up_dumpstate
@@ -151,7 +126,7 @@ static inline void up_registerdump(void)
 
 void up_dumpstate(void)
 {
-  struct tcb_s *rtcb = (struct tcb_s*)g_readytorun.head;
+  struct tcb_s *rtcb = this_task();
   uint32_t sp = up_getsp();
   uint32_t ustackbase;
   uint32_t ustacksize;
@@ -181,12 +156,12 @@ void up_dumpstate(void)
 
   /* Show interrupt stack info */
 
-  lldbg("sp:     %08x\n", sp);
-  lldbg("IRQ stack:\n");
-  lldbg("  base: %08x\n", istackbase);
-  lldbg("  size: %08x\n", istacksize);
-#ifdef CONFIG_DEBUG_STACK
-  lldbg("  used: %08x\n", up_check_intstack());
+  _alert("sp:     %08x\n", sp);
+  _alert("IRQ stack:\n");
+  _alert("  base: %08x\n", istackbase);
+  _alert("  size: %08x\n", istacksize);
+#ifdef CONFIG_STACK_COLORATION
+  _alert("  used: %08x\n", up_check_intstack());
 #endif
 
   /* Does the current stack pointer lie within the interrupt
@@ -205,17 +180,17 @@ void up_dumpstate(void)
    * pointer (and the above range check should have failed).
    */
 
-  if (current_regs)
+  if (g_current_regs)
     {
-      sp = current_regs[REG_R13];
-      lldbg("sp:     %08x\n", sp);
+      sp = g_current_regs[REG_R13];
+      _alert("sp:     %08x\n", sp);
     }
 
-  lldbg("User stack:\n");
-  lldbg("  base: %08x\n", ustackbase);
-  lldbg("  size: %08x\n", ustacksize);
-#ifdef CONFIG_DEBUG_STACK
-  lldbg("  used: %08x\n", up_check_tcbstack(rtcb));
+  _alert("User stack:\n");
+  _alert("  base: %08x\n", ustackbase);
+  _alert("  size: %08x\n", ustacksize);
+#ifdef CONFIG_STACK_COLORATION
+  _alert("  used: %08x\n", up_check_tcbstack(rtcb));
 #endif
 
   /* Dump the user stack if the stack pointer lies within the allocated user
@@ -227,11 +202,11 @@ void up_dumpstate(void)
       up_stackdump(sp, ustackbase);
     }
 #else
-  lldbg("sp:         %08x\n", sp);
-  lldbg("stack base: %08x\n", ustackbase);
-  lldbg("stack size: %08x\n", ustacksize);
-#ifdef CONFIG_DEBUG_STACK
-  lldbg("stack used: %08x\n", up_check_tcbstack(rtcb));
+  _alert("sp:         %08x\n", sp);
+  _alert("stack base: %08x\n", ustackbase);
+  _alert("stack size: %08x\n", ustacksize);
+#ifdef CONFIG_STACK_COLORATION
+  _alert("stack used: %08x\n", up_check_tcbstack(rtcb));
 #endif
 
   /* Dump the user stack if the stack pointer lies within the allocated user
@@ -240,7 +215,7 @@ void up_dumpstate(void)
 
   if (sp > ustackbase || sp <= ustackbase - ustacksize)
     {
-      lldbg("ERROR: Stack pointer is not within allocated stack\n");
+      _alert("ERROR: Stack pointer is not within allocated stack\n");
     }
   else
     {

@@ -44,7 +44,7 @@
 #include <nuttx/fs/fs.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Data entry declaration prototypes ****************************************/
 
@@ -129,7 +129,8 @@ struct procfs_dir_priv_s
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -178,6 +179,28 @@ extern "C" {
 size_t procfs_memcpy(FAR const char *src, size_t srclen,
                      FAR char *dest, size_t destlen,
                      off_t *offset);
+
+/****************************************************************************
+ * Name: procfs_register
+ *
+ * Description:
+ *   Add a new entry to the procfs file system.
+ *
+ *   NOTE: This function should be called *prior* to mounting the procfs
+ *   file system to prevent concurrency problems with the modification of
+ *   the procfs data set while it is in use.
+ *
+ * Input Parameters:
+ *   entry - Describes the entry to be registered.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_FS_PROCFS_REGISTER
+int procfs_register(FAR const struct procfs_entry_s *entry);
+#endif
 
 #undef EXTERN
 #ifdef __cplusplus

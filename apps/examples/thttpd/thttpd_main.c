@@ -49,24 +49,38 @@
 #include <debug.h>
 
 #include <net/if.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <netinet/ether.h>
 
 #include <nuttx/net/arp.h>
-#include <apps/netutils/uiplib.h>
-#include <apps/netutils/thttpd.h>
+#include "netutils/netlib.h"
+#include "netutils/thttpd.h"
 
-#include <nuttx/fs/ramdisk.h>
+#include <nuttx/drivers/ramdisk.h>
 #include <nuttx/binfmt/binfmt.h>
-#include <nuttx/binfmt/nxflat.h>
+
+#ifdef CONFIG_THTTPD_NXFLAT
+#  include <nuttx/binfmt/nxflat.h>
+#endif
+
+#ifdef CONFIG_THTTPD_BINFS
+#  include <nuttx/fs/unionfs.h>
+#  include <nuttx/binfmt/builtin.h>
+#endif
+
 #ifdef CONFIG_NET_SLIP
 #  include <nuttx/net/net.h>
 #endif
 
 #include "content/romfs.h"
-#include "content/symtab.h"
+
+#ifdef CONFIG_THTTPD_NXFLAT
+#  include "content/symtab.h"
+#endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Check configuration.  This is not all of the configuration settings that
@@ -77,29 +91,55 @@
 #  error "You must provide file descriptors via CONFIG_NFILE_DESCRIPTORS in your configuration file"
 #endif
 
-#ifndef CONFIG_NXFLAT
-#  error "You must select CONFIG_NXFLAT in your configuration file"
-#endif
-
-#ifndef CONFIG_FS_ROMFS
-#  error "You must select CONFIG_FS_ROMFS in your configuration file"
-#endif
-
-#ifdef CONFIG_DISABLE_MOUNTPOINT
-#  error "You must not disable mountpoints via CONFIG_DISABLE_MOUNTPOINT in your configuration file"
-#endif
-
 #ifdef CONFIG_BINFMT_DISABLE
 #  error "You must not disable loadable modules via CONFIG_BINFMT_DISABLE in your configuration file"
+#endif
+
+#ifdef CONFIG_THTTPD_NXFLAT
+#  ifndef CONFIG_NXFLAT
+#    error "You must select CONFIG_NXFLAT in your configuration file"
+#  endif
+
+#  ifndef CONFIG_FS_ROMFS
+#    error "You must select CONFIG_FS_ROMFS in your configuration file"
+#  endif
+
+#  ifdef CONFIG_DISABLE_MOUNTPOINT
+#    error "You must not disable mountpoints via CONFIG_DISABLE_MOUNTPOINT in your configuration file"
+#  endif
+#endif
+
+#ifdef CONFIG_THTTPD_BINFS
+#  ifndef CONFIG_BUILTIN
+#    error "You must select CONFIG_BUILTIN=y in your configuration file"
+#  endif
+
+#  ifndef CONFIG_FS_BINFS
+#    error "You must select CONFIG_FS_BINFS=y in your configuration file"
+#  endif
+
+#  ifndef CONFIG_FS_UNIONFS
+#    error "CONFIG_FS_UNIONFS=y is required in this configuration"
+#  endif
+#endif
+
+/* Ethernet specific configuration */
+
+#ifdef CONFIG_NET_ETHERNET
+   /* Use the standard Ethernet device name */
+
+#  define NET_DEVNAME "eth0"
+
+#else
+
+   /* No Ethernet -> No MAC address operations */
+
+#  undef CONFIG_EXAMPLES_THTTPD_NOMAC
 #endif
 
 /* SLIP-specific configuration */
 
 #ifdef CONFIG_NET_SLIP
-
-   /* No MAC address operations */
-
-#  undef CONFIG_EXAMPLES_THTTPD_NOMAC
 
    /* TTY device to use */
 
@@ -108,37 +148,26 @@
 #  endif
 
 #  define SLIP_DEVNO 0
-#  define NET_DEVNAME "sl0"
-#else
 
-   /* Otherwise, use the standard ethernet device name */
-
-#  define NET_DEVNAME "eth0"
+#  ifndef NET_DEVNAME
+#    define NET_DEVNAME "sl0"
+#  endif
 #endif
 
 /* Describe the ROMFS file system */
 
-#define SECTORSIZE   512
+#define SECTORSIZE   64
 #define NSECTORS(b)  (((b)+SECTORSIZE-1)/SECTORSIZE)
 #define ROMFSDEV     "/dev/ram0"
-#define MOUNTPT      CONFIG_THTTPD_PATH
 
-#ifdef CONFIG_CPP_HAVE_VARARGS
-#  ifdef CONFIG_DEBUG
-#    define message(...) lowsyslog(__VA_ARGS__)
-#    define msgflush()
-#  else
-#    define message(...) printf(__VA_ARGS__)
-#    define msgflush()   fflush(stdout)
-#  endif
+#ifdef CONFIG_THTTPD_BINFS
+#  define ROMFS_MOUNTPT      "/mnt/tmp1"
+#  define ROMFS_PREFIX       NULL
+#  define BINFS_MOUNTPT      "/mnt/tmp2"
+#  define BINFS_PREFIX       "cgi-bin"
+#  define UNIONFS_MOUNTPT    CONFIG_THTTPD_PATH
 #else
-#  ifdef CONFIG_DEBUG
-#    define message      lowsyslog
-#    define msgflush()
-#  else
-#    define message      printf
-#    define msgflush()   fflush(stdout)
-#  endif
+#  define ROMFS_MOUNTPT      CONFIG_THTTPD_PATH
 #endif
 
 /****************************************************************************
@@ -149,6 +178,7 @@
  * Public Data
  ****************************************************************************/
 
+#ifdef CONFIG_THTTPD_NXFLAT
 /* These values must be provided by the user before the THTTPD task daemon
  * is started:
  *
@@ -160,6 +190,7 @@
 
 FAR const struct symtab_s *g_thttpdsymtab;
 int                         g_thttpdnsymbols;
+#endif
 
 /****************************************************************************
  * Public Functions
@@ -169,7 +200,11 @@ int                         g_thttpdnsymbols;
  * thttp_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int thttp_main(int argc, char *argv[])
+#endif
 {
   struct in_addr addr;
 #ifdef CONFIG_EXAMPLES_THTTPD_NOMAC
@@ -184,7 +219,7 @@ int thttp_main(int argc, char *argv[])
   ret = slip_initialize(SLIP_DEVNO, CONFIG_NET_SLIPTTY);
   if (ret < 0)
     {
-      message("ERROR: SLIP initialization failed: %d\n", ret);
+      printf("ERROR: SLIP initialization failed: %d\n", ret);
       exit(1);
     }
 #endif
@@ -192,7 +227,7 @@ int thttp_main(int argc, char *argv[])
 /* Many embedded network interfaces must have a software assigned MAC */
 
 #ifdef CONFIG_EXAMPLES_THTTPD_NOMAC
-  message("Assigning MAC\n");
+  printf("Assigning MAC\n");
 
   mac[0] = 0x00;
   mac[1] = 0xe0;
@@ -200,68 +235,111 @@ int thttp_main(int argc, char *argv[])
   mac[3] = 0xad;
   mac[4] = 0xbe;
   mac[5] = 0xef;
-  uip_setmacaddr(NET_DEVNAME, mac);
+  netlib_setmacaddr(NET_DEVNAME, mac);
 #endif
 
   /* Set up our host address */
 
-  message("Setup network addresses\n");
+  printf("Setup network addresses\n");
   addr.s_addr = HTONL(CONFIG_THTTPD_IPADDR);
-  uip_sethostaddr(NET_DEVNAME, &addr);
+  netlib_set_ipv4addr(NET_DEVNAME, &addr);
 
   /* Set up the default router address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_THTTPD_DRIPADDR);
-  uip_setdraddr(NET_DEVNAME, &addr);
+  netlib_set_dripv4addr(NET_DEVNAME, &addr);
 
   /* Setup the subnet mask */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_THTTPD_NETMASK);
-  uip_setnetmask(NET_DEVNAME, &addr);
+  netlib_set_ipv4netmask(NET_DEVNAME, &addr);
 
+#ifdef CONFIG_THTTPD_NXFLAT
   /* Initialize the NXFLAT binary loader */
 
-  message("Initializing the NXFLAT binary loader\n");
+  printf("Initializing the NXFLAT binary loader\n");
   ret = nxflat_initialize();
   if (ret < 0)
     {
-      message("ERROR: Initialization of the NXFLAT loader failed: %d\n", ret);
+      printf("ERROR: Initialization of the NXFLAT loader failed: %d\n", ret);
       exit(2);
     }
+#endif
 
   /* Create a ROM disk for the ROMFS filesystem */
 
-  message("Registering romdisk\n");
+  printf("Registering romdisk\n");
+
   ret = romdisk_register(0, (uint8_t*)romfs_img, NSECTORS(romfs_img_len), SECTORSIZE);
   if (ret < 0)
     {
-      message("ERROR: romdisk_register failed: %d\n", ret);
+      printf("ERROR: romdisk_register failed: %d\n", ret);
+#ifdef CONFIG_THTTPD_NXFLAT
       nxflat_uninitialize();
+#endif
       exit(1);
     }
 
-  /* Mount the file system */
+  /* Mount the ROMFS file system */
 
-  message("Mounting ROMFS filesystem at target=%s with source=%s\n",
-         MOUNTPT, ROMFSDEV);
+  printf("Mounting ROMFS filesystem at target=%s with source=%s\n",
+         ROMFS_MOUNTPT, ROMFSDEV);
 
-  ret = mount(ROMFSDEV, MOUNTPT, "romfs", MS_RDONLY, NULL);
+  ret = mount(ROMFSDEV, ROMFS_MOUNTPT, "romfs", MS_RDONLY, NULL);
   if (ret < 0)
     {
-      message("ERROR: mount(%s,%s,romfs) failed: %s\n",
-              ROMFSDEV, MOUNTPT, errno);
+      printf("ERROR: mount(%s,%s,romfs) failed: %d\n",
+             ROMFSDEV, ROMFS_MOUNTPT, errno);
+#ifdef CONFIG_THTTPD_NXFLAT
       nxflat_uninitialize();
+#endif
     }
+
+#ifdef CONFIG_THTTPD_BINFS
+  /* Initialize the BINFS binary loader */
+
+  printf("Initializing the Built-In binary loader\n");
+
+  ret = builtin_initialize();
+  if (ret < 0)
+    {
+      printf("ERROR: Initialization of the Built-In loader failed: %d\n", ret);
+      exit(2);
+    }
+
+  /* Mount the BINFS file system */
+
+  printf("Mounting BINFS filesystem at %s\n", BINFS_MOUNTPT);
+
+  ret = mount(NULL, BINFS_MOUNTPT, "binfs", MS_RDONLY, NULL);
+  if (ret < 0)
+    {
+      printf("ERROR: mount(NULL,%s,binfs) failed: %d\n", BINFS_MOUNTPT, errno);
+    }
+
+  /* Now create and mount the union file system */
+
+  printf("Creating UNIONFS filesystem at %s\n", UNIONFS_MOUNTPT);
+
+  ret = unionfs_mount(ROMFS_MOUNTPT, ROMFS_PREFIX, BINFS_MOUNTPT, BINFS_PREFIX,
+                      UNIONFS_MOUNTPT);
+  if (ret < 0)
+    {
+      printf("ERROR: Failed to create the union file system at %s: %d\n", UNIONFS_MOUNTPT, ret);
+    }
+#endif
 
   /* Start THTTPD.  At present, symbol table info is passed via global variables */
 
+#ifdef CONFIG_THTTPD_NXFLAT
   g_thttpdsymtab   = exports;
   g_thttpdnsymbols = NEXPORTS;
+#endif
 
-  message("Starting THTTPD\n");
-  msgflush();
+  printf("Starting THTTPD\n");
+  fflush(stdout);
   thttpd_main(1, &thttpd_argv);
-  message("THTTPD terminated\n");
-  msgflush();
+  printf("THTTPD terminated\n");
+  fflush(stdout);
   return 0;
 }

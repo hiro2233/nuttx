@@ -48,7 +48,7 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/binfmt/binfmt.h>
 
-#include "binfmt_internal.h"
+#include "binfmt.h"
 
 #ifndef CONFIG_BINFMT_DISABLE
 
@@ -87,19 +87,19 @@
 static inline int exec_dtors(FAR struct binary_s *binp)
 {
   binfmt_dtor_t *dtor = binp->dtors;
-#ifdef CONFIG_ADDRENV
-  hw_addrenv_t oldenv;
+#ifdef CONFIG_ARCH_ADDRENV
+  save_addrenv_t oldenv;
   int ret;
 #endif
   int i;
 
-  /* Instantiate the address enviroment containing the destructors */
+  /* Instantiate the address environment containing the destructors */
 
-#ifdef CONFIG_ADDRENV
-  ret = up_addrenv_select(binp->addrenv, &oldenv);
+#ifdef CONFIG_ARCH_ADDRENV
+  ret = up_addrenv_select(&binp->addrenv, &oldenv);
   if (ret < 0)
     {
-      bdbg("up_addrenv_select() failed: %d\n", ret);
+      berr("ERROR: up_addrenv_select() failed: %d\n", ret);
       return ret;
     }
 #endif
@@ -108,16 +108,16 @@ static inline int exec_dtors(FAR struct binary_s *binp)
 
   for (i = 0; i < binp->ndtors; i++)
     {
-      bvdbg("Calling dtor %d at %p\n", i, (FAR void *)dtor);
+      binfo("Calling dtor %d at %p\n", i, (FAR void *)dtor);
 
       (*dtor)();
       dtor++;
     }
 
-  /* Restore the address enviroment */
+  /* Restore the address environment */
 
-#ifdef CONFIG_ADDRENV
-  return up_addrenv_restore(oldenv);
+#ifdef CONFIG_ARCH_ADDRENV
+  return up_addrenv_restore(&oldenv);
 #else
   return OK;
 #endif
@@ -161,7 +161,7 @@ int unload_module(FAR struct binary_s *binp)
           ret = binp->unload(binp);
           if (ret < 0)
             {
-              bdbg("binp->unload() failed: %d\n", ret);
+              berr("binp->unload() failed: %d\n", ret);
               set_errno(-ret);
               return ERROR;
             }
@@ -173,17 +173,21 @@ int unload_module(FAR struct binary_s *binp)
       ret = exec_dtors(binp);
       if (ret < 0)
         {
-          bdbg("exec_ctors() failed: %d\n", ret);
+          berr("exec_ctors() failed: %d\n", ret);
           set_errno(-ret);
           return ERROR;
         }
 #endif
 
+      /* Free any allocated argv[] strings */
+
+      binfmt_freeargv(binp);
+
       /* Unmap mapped address spaces */
 
       if (binp->mapped)
         {
-          bvdbg("Unmapping address space: %p\n", binp->mapped);
+          binfo("Unmapping address space: %p\n", binp->mapped);
 
           munmap(binp->mapped, binp->mapsize);
         }
@@ -194,8 +198,8 @@ int unload_module(FAR struct binary_s *binp)
         {
           if (binp->alloc[i])
             {
-              bvdbg("Freeing alloc[%d]: %p\n", i, binp->alloc[i]);
-              kufree((FAR void *)binp->alloc[i]);
+              binfo("Freeing alloc[%d]: %p\n", i, binp->alloc[i]);
+              kumm_free((FAR void *)binp->alloc[i]);
             }
         }
 

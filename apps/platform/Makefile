@@ -1,7 +1,7 @@
 ############################################################################
 # apps/platform/Makefile
 #
-#   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2013-2014, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -35,6 +35,10 @@
 
 -include $(TOPDIR)/.config
 -include $(TOPDIR)/Make.defs
+
+CONFIG_ARCH_BOARD ?= dummy
+DELIM ?= $(strip /)
+
 include $(APPDIR)$(DELIM)Make.defs
 
 # Platform-specific Appliction Support
@@ -56,10 +60,15 @@ endif
 
 # Directories
 
-PLATFORMDIR = $(APPDIR)$(DELIM)platform$(DELIM)board
+PLATFORMDIR = board
 DUMMYDIR    = $(APPDIR)$(DELIM)platform$(DELIM)dummy
-BOARDDIR    = $(APPDIR)$(DELIM)platform$(DELIM)$(CONFIG_ARCH_BOARD)
-LINKDIR     = $(if $(wildcard $(BOARDDIR)$(DELIM)Make.defs),$(BOARDDIR),$(DUMMYDIR))
+
+ifeq ($(CONFIG_ARCH_BOARD_CUSTOM),y)
+  LINKDIR   = $(DUMMYDIR)
+else
+  BOARDDIR  = $(APPDIR)$(DELIM)platform$(DELIM)$(CONFIG_ARCH_BOARD)
+  LINKDIR   = $(if $(wildcard $(BOARDDIR)$(DELIM)Make.defs),$(BOARDDIR),$(DUMMYDIR))
+endif
 
 VPATH       = board
 
@@ -109,12 +118,18 @@ endif
 
 # Build context setup
 
+$(TOPDIR)$(DELIM).config:
+
 $(PLATFORMDIR): $(TOPDIR)$(DELIM).config
 	@echo "LN: platform$(DELIM)board to $(LINKDIR)"
 	$(Q) $(DIRUNLINK) $(PLATFORMDIR)
 	$(Q) $(DIRLINK) $(LINKDIR) $(PLATFORMDIR)
 
-context: $(PLATFORMDIR)
+dirlinks:  $(PLATFORMDIR)
+
+install:
+
+context: dirlinks
 
 # Dependencies
 
@@ -126,7 +141,7 @@ depend: .depend
 
 # Clean targets
 
-clean: $(PLATFORMDIR)
+clean:
 	$(call DELFILE, .built)
 	$(Q) $(MAKE) -C bin TOPDIR="$(TOPDIR)" APPDIR="$(APPDIR)" clean
 
@@ -137,3 +152,5 @@ distclean: clean
 
 -include Make.dep
 
+.PHONY: preconfig
+preconfig:

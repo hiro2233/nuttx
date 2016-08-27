@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/nxlines/nxlines.h
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@
 #include <nuttx/video/rgbcolors.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Configuration ************************************************************/
@@ -116,26 +116,6 @@
 #  endif
 #endif
 
-/* Debug ********************************************************************/
-
-#ifdef CONFIG_CPP_HAVE_VARARGS
-#  ifdef CONFIG_DEBUG
-#    define message(...) lowsyslog(__VA_ARGS__)
-#    define msgflush()
-#  else
-#    define message(...) printf(__VA_ARGS__)
-#    define msgflush() fflush(stdout)
-#  endif
-#else
-#  ifdef CONFIG_DEBUG
-#    define message lowsyslog
-#    define msgflush()
-#  else
-#    define message printf
-#    define msgflush() fflush(stdout)
-#  endif
-#endif
-
 /****************************************************************************
  * Public Types
  ****************************************************************************/
@@ -171,7 +151,7 @@ struct nxlines_data_s
 };
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /* NXLINES state data */
@@ -186,12 +166,8 @@ extern const struct nx_callback_s g_nxlinescb;
  * Public Function Prototypes
  ****************************************************************************/
 
-#ifdef CONFIG_EXAMPLES_NXLINES_EXTERNINIT
-extern FAR NX_DRIVERTYPE *up_nxdrvinit(unsigned int devno);
-#endif
-
 /* Background window interfaces */
 
-extern void nxlines_test(NXWINDOW hwnd);
+void nxlines_test(NXWINDOW hwnd);
 
 #endif /* __APPS_EXAMPLES_NXLINES_NXLINES_H */

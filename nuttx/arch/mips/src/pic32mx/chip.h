@@ -44,7 +44,7 @@
 #include <arch/pic32mx/chip.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /****************************************************************************
  * Public Types
@@ -62,7 +62,8 @@
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

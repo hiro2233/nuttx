@@ -43,7 +43,7 @@
 #include <nuttx/config.h>
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* IRQ numbers.  The IRQ number corresponds vector number and hence map directly to
@@ -211,8 +211,7 @@
 #  define TIVA_RESERVED_153   (153) /* Vector 153: Reserved */
 #  define TIVA_RESERVED_154   (154) /* Vector 154: Reserved */
 
-#  define NR_VECTORS          (155)
-#  define NR_IRQS             (123) /* (Really fewer because of reserved vectors) */
+#  define NR_IRQS             (155) /* (Really fewer because of reserved vectors) */
 
 #else
 #  error "IRQ Numbers not known for this Stellaris chip"

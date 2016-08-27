@@ -59,6 +59,7 @@
 #define HAVE_AT25       1
 #define HAVE_USBDEV     1
 #define HAVE_USBMONITOR 1
+#define HAVE_NETWORK    1
 
 /* HSMCI */
 /* Can't support MMC/SD if the card interface is not enabled */
@@ -92,7 +93,7 @@
  * asked to mount the AT25 part
  */
 
-#if defined(CONFIG_DISABLE_MOUNTPOINT) || !defined(CONFIG_SAM4EEK_AT25_AUTOMOUNT)
+#if defined(CONFIG_DISABLE_MOUNTPOINT) || !defined(CONFIG_SAM4EEK_AT25_BLOCKMOUNT)
 #  undef HAVE_AT25
 #endif
 
@@ -129,8 +130,14 @@
 #  undef CONFIG_USBDEV_TRACE
 #endif
 
-#if !defined(CONFIG_SYSTEM_USBMONITOR) || !defined(CONFIG_USBDEV_TRACE)
+#if !defined(CONFIG_USBMONITOR) || !defined(CONFIG_USBDEV_TRACE)
 #  undef HAVE_USBMONITOR
+#endif
+
+/* Networking */
+
+#if !defined(CONFIG_NET) || !defined(CONFIG_SAM34_EMAC)
+#  undef HAVE_NETWORK
 #endif
 
 /* SAM4E-EK GPIO Pin Definitions ****************************************************/
@@ -171,7 +178,7 @@
  *   21  PC11  RD
  *   22  PC8   WR
  *   23  PC19  RS
- *   24  PD18  CS        Via J8, pulled high.  Connects to NRST.
+ *   24  PD18  CS        Via J8, pulled high.
  *   25        RESET     Connects to NSRST
  *   26        IM0       Pulled high
  *   27        IM1       Grounded
@@ -243,8 +250,8 @@
 
 /* Ethernet MAC.  The PHY interrupt is available on pin PD28 */
 
-#define GPIO_PHY_IRQ  (GPIO_INPUT | GPIO_CFG_PULLUP | GPIO_INT_BOTHEDGES | \
-                       GPIO_PORT_PIOD | GPIO_PIN28)
+#define GPIO_PHY_IRQ  (GPIO_INPUT | GPIO_CFG_PULLUP | GPIO_CFG_DEGLITCH | \
+                       GPIO_INT_FALLING | GPIO_PORT_PIOD | GPIO_PIN28)
 #define SAM_PHY_IRQ   SAM_IRQ_PD28
 
 /* LEDs
@@ -284,10 +291,6 @@
 #define IRQ_SCROLLDWN  SAM_IRQ_PA2
 #define IRQ_WAKU       SAM_IRQ_PA19
 #define IRQ_TAMP       SAM_IRQ_PA20
-#define IRQ_SCROLLUP   SAM_IRQ_PA1
-#define IRQ_SCROLLDWN  SAM_IRQ_PA2
-#define IRQ_WAKU       SAM_IRQ_PA19
-#define IRQ_TAMP       SAM_IRQ_PA20
 
 /* USART1: To avoid any electrical conflict, the RS232 and RS485 transceiver
  * are isolated from the receiving line PA21.
@@ -297,9 +300,9 @@
  */
 
 #define GPIO_RS232_ENABLE (GPIO_OUTPUT | GPIO_CFG_DEFAULT | \
-                           GPIO_OUTPUT_CLEAR | GPIO_PORT_PIOA | GPIO_PIN21)
+                           GPIO_OUTPUT_CLEAR | GPIO_PORT_PIOA | GPIO_PIN23)
 #define GPIO_RS485_ENABLE (GPIO_OUTPUT | GPIO_CFG_DEFAULT | \
-                           GPIO_OUTPUT_SET | GPIO_PORT_PIOA | GPIO_PIN21)
+                           GPIO_OUTPUT_SET | GPIO_PORT_PIOA | GPIO_PIN23)
 
 /* HSMCI SD Card Detect
  *
@@ -374,14 +377,14 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Name: sam_spiinitialize
+ * Name: sam_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the SAM4E-EK board.
  *
  ************************************************************************************/
 
-void weak_function sam_spiinitialize(void);
+void weak_function sam_spidev_initialize(void);
 
 /************************************************************************************
  * Name: sam_hsmci_initialize
@@ -395,6 +398,18 @@ void weak_function sam_spiinitialize(void);
 int sam_hsmci_initialize(int minor);
 #else
 # define sam_hsmci_initialize(minor) (-ENOSYS)
+#endif
+
+/************************************************************************************
+ * Name: sam_netinitialize
+ *
+ * Description:
+ *   Configure board resources to support networking.
+ *
+ ************************************************************************************/
+
+#ifdef HAVE_NETWORK
+void weak_function sam_netinitialize(void);
 #endif
 
 /************************************************************************************
@@ -438,16 +453,6 @@ bool sam_writeprotected(int slotno);
 int sam_at25_automount(int minor);
 #else
 #  define sam_at25_automount(minor) (-ENOSYS)
-#endif
-
-/************************************************************************************
- * Name: board_led_initialize
- ************************************************************************************/
-
-#ifdef CONFIG_ARCH_LEDS
-void board_led_initialize(void);
-#else
-#  define board_led_initialize()
 #endif
 
 #endif /* __ASSEMBLY__ */

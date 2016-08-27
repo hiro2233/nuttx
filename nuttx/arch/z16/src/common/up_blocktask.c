@@ -1,7 +1,7 @@
 /****************************************************************************
- * common/up_blocktask.c
+ * arch/z16/src/common/up_blocktask.c
  *
- *   Copyright (C) 2008-2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,21 +44,10 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/sched.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -86,7 +75,7 @@
 
 void up_block_task(FAR struct tcb_s *tcb, tstate_t task_state)
 {
-  FAR struct tcb_s *rtcb = (FAR struct tcb_s*)g_readytorun.head;
+  FAR struct tcb_s *rtcb = this_task();
   bool switch_needed;
 
   /* Verify that the context switch can be performed */
@@ -94,7 +83,7 @@ void up_block_task(FAR struct tcb_s *tcb, tstate_t task_state)
   ASSERT((tcb->task_state >= FIRST_READY_TO_RUN_STATE) &&
          (tcb->task_state <= LAST_READY_TO_RUN_STATE));
 
-  /* dbg("Blocking TCB=%p\n", tcb); */
+  /* sinfo("Blocking TCB=%p\n", tcb); */
 
   /* Remove the tcb task from the ready-to-run list.  If we
    * are blocking the task at the head of the task list (the
@@ -109,7 +98,7 @@ void up_block_task(FAR struct tcb_s *tcb, tstate_t task_state)
 
   sched_addblocked(tcb, (tstate_t)task_state);
 
-  /* If there are any pending tasks, then add them to the g_readytorun
+  /* If there are any pending tasks, then add them to the ready-to-run
    * task list now
    */
 
@@ -122,6 +111,10 @@ void up_block_task(FAR struct tcb_s *tcb, tstate_t task_state)
 
   if (switch_needed)
     {
+      /* Update scheduler parameters */
+
+      sched_suspend_scheduler(rtcb);
+
       /* Are we in an interrupt handler? */
 
       if (IN_INTERRUPT)
@@ -133,11 +126,14 @@ void up_block_task(FAR struct tcb_s *tcb, tstate_t task_state)
           SAVE_IRQCONTEXT(rtcb);
 
           /* Restore the exception context of the rtcb at the (new) head
-           * of the g_readytorun task list.
+           * of the ready-to-run task list.
            */
 
-          rtcb = (FAR struct tcb_s*)g_readytorun.head;
-          /* dbg("New Active Task TCB=%p\n", rtcb); */
+          rtcb = this_task();
+
+          /* Reset scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
 
           /* Then setup so that the context will be performed on exit
            * from the interrupt.
@@ -147,18 +143,21 @@ void up_block_task(FAR struct tcb_s *tcb, tstate_t task_state)
         }
 
       /* Copy the user C context into the TCB at the (old) head of the
-       * g_readytorun Task list. if SAVE_USERCONTEXT returns a non-zero
+       * ready-to-run Task list. if SAVE_USERCONTEXT returns a non-zero
        * value, then this is really the previously running task restarting!
        */
 
       else if (!SAVE_USERCONTEXT(rtcb))
         {
           /* Restore the exception context of the rtcb at the (new) head
-           * of the g_readytorun task list.
+           * of the ready-to-run task list.
            */
 
-          rtcb = (FAR struct tcb_s*)g_readytorun.head;
-          /* dbg("New Active Task TCB=%p\n", rtcb); */
+          rtcb = this_task();
+
+          /* Reset scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
 
           /* Then switch contexts */
 

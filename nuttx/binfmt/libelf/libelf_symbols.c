@@ -1,7 +1,7 @@
 /****************************************************************************
  * binfmt/libelf/libelf_symbols.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@
 #include "libelf.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #ifndef CONFIG_ELF_BUFFERINCR
@@ -76,6 +76,10 @@
  *   0 (OK) is returned on success and a negated errno is returned on
  *   failure.
  *
+ *   EINVAL - There is something inconsistent in the symbol table (should only
+ *            happen if the file is corrupted).
+ *   ESRCH - Symbol has no name
+ *
  ****************************************************************************/
 
 static int elf_symname(FAR struct elf_loadinfo_s *loadinfo,
@@ -93,8 +97,8 @@ static int elf_symname(FAR struct elf_loadinfo_s *loadinfo,
 
   if (sym->st_name == 0)
     {
-      bdbg("Symbol has no name\n");
-      return -ENOENT;
+      berr("Symbol has no name\n");
+      return -ESRCH;
     }
 
   offset = loadinfo->shdr[loadinfo->strtabidx].sh_offset + sym->st_name;
@@ -103,7 +107,7 @@ static int elf_symname(FAR struct elf_loadinfo_s *loadinfo,
 
   bytesread = 0;
 
-  for (;;)
+  for (; ; )
     {
       /* Get the number of bytes to read */
 
@@ -112,7 +116,7 @@ static int elf_symname(FAR struct elf_loadinfo_s *loadinfo,
         {
           if (loadinfo->filelen <= offset)
             {
-              bdbg("At end of file\n");
+              berr("At end of file\n");
               return -EINVAL;
             }
 
@@ -125,7 +129,7 @@ static int elf_symname(FAR struct elf_loadinfo_s *loadinfo,
       ret = elf_read(loadinfo, buffer, readlen, offset);
       if (ret < 0)
         {
-          bdbg("elf_read failed: %d\n", ret);
+          berr("elf_read failed: %d\n", ret);
           return ret;
         }
 
@@ -145,7 +149,7 @@ static int elf_symname(FAR struct elf_loadinfo_s *loadinfo,
       ret = elf_reallocbuffer(loadinfo, CONFIG_ELF_BUFFERINCR);
       if (ret < 0)
         {
-          bdbg("elf_reallocbuffer failed: %d\n", ret);
+          berr("elf_reallocbuffer failed: %d\n", ret);
           return ret;
         }
     }
@@ -191,7 +195,7 @@ int elf_findsymtab(FAR struct elf_loadinfo_s *loadinfo)
 
   if (loadinfo->symtabidx == 0)
     {
-      bdbg("No symbols in ELF file\n");
+      berr("No symbols in ELF file\n");
       return -EINVAL;
     }
 
@@ -225,7 +229,7 @@ int elf_readsym(FAR struct elf_loadinfo_s *loadinfo, int index,
 
   if (index < 0 || index > (symtab->sh_size / sizeof(Elf32_Sym)))
     {
-      bdbg("Bad relocation symbol index: %d\n", index);
+      berr("Bad relocation symbol index: %d\n", index);
       return -EINVAL;
     }
 
@@ -235,7 +239,7 @@ int elf_readsym(FAR struct elf_loadinfo_s *loadinfo, int index,
 
   /* And, finally, read the symbol table entry into memory */
 
-  return elf_read(loadinfo, (FAR uint8_t*)sym, sizeof(Elf32_Sym), offset);
+  return elf_read(loadinfo, (FAR uint8_t *)sym, sizeof(Elf32_Sym), offset);
 }
 
 /****************************************************************************
@@ -253,6 +257,12 @@ int elf_readsym(FAR struct elf_loadinfo_s *loadinfo, int index,
  *   0 (OK) is returned on success and a negated errno is returned on
  *   failure.
  *
+ *   EINVAL - There is something inconsistent in the symbol table (should only
+ *            happen if the file is corrupted).
+ *   ENOSYS - Symbol lies in common
+ *   ESRCH  - Symbol has no name
+ *   ENOENT - Symbol undefined and not provided via a symbol table
+ *
  ****************************************************************************/
 
 int elf_symvalue(FAR struct elf_loadinfo_s *loadinfo, FAR Elf32_Sym *sym,
@@ -268,15 +278,15 @@ int elf_symvalue(FAR struct elf_loadinfo_s *loadinfo, FAR Elf32_Sym *sym,
       {
         /* NuttX ELF modules should be compiled with -fno-common. */
 
-        bdbg("SHN_COMMON: Re-compile with -fno-common\n");
-        return -EINVAL;
+        berr("SHN_COMMON: Re-compile with -fno-common\n");
+        return -ENOSYS;
       }
 
     case SHN_ABS:
       {
         /* st_value already holds the correct value */
 
-        bvdbg("SHN_ABS: st_value=%08lx\n", (long)sym->st_value);
+        binfo("SHN_ABS: st_value=%08lx\n", (long)sym->st_value);
         return OK;
       }
 
@@ -287,7 +297,13 @@ int elf_symvalue(FAR struct elf_loadinfo_s *loadinfo, FAR Elf32_Sym *sym,
         ret = elf_symname(loadinfo, sym);
         if (ret < 0)
           {
-            bdbg("SHN_UNDEF: Failed to get symbol name: %d\n", ret);
+            /* There are a few relocations for a few architectures that do
+             * no depend upon a named symbol.  We don't know if that is the
+             * case here, but return and special error to the caller to
+             * indicate the nameless symbol.
+             */
+
+            berr("SHN_UNDEF: Failed to get symbol name: %d\n", ret);
             return ret;
           }
 
@@ -300,13 +316,13 @@ int elf_symvalue(FAR struct elf_loadinfo_s *loadinfo, FAR Elf32_Sym *sym,
 #endif
         if (!symbol)
           {
-            bdbg("SHN_UNDEF: Exported symbol \"%s\" not found\n", loadinfo->iobuffer);
+            berr("SHN_UNDEF: Exported symbol \"%s\" not found\n", loadinfo->iobuffer);
             return -ENOENT;
           }
 
         /* Yes... add the exported symbol value to the ELF symbol table entry */
 
-        bvdbg("SHN_ABS: name=%s %08x+%08x=%08x\n",
+        binfo("SHN_ABS: name=%s %08x+%08x=%08x\n",
               loadinfo->iobuffer, sym->st_value, symbol->sym_value,
               sym->st_value + symbol->sym_value);
 
@@ -318,7 +334,7 @@ int elf_symvalue(FAR struct elf_loadinfo_s *loadinfo, FAR Elf32_Sym *sym,
       {
         secbase = loadinfo->shdr[sym->st_shndx].sh_addr;
 
-        bvdbg("Other: %08x+%08x=%08x\n",
+        binfo("Other: %08x+%08x=%08x\n",
               sym->st_value, secbase, sym->st_value + secbase);
 
         sym->st_value += secbase;

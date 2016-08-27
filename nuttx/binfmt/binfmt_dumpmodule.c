@@ -45,9 +45,9 @@
 
 #include <nuttx/binfmt/binfmt.h>
 
-#include "binfmt_internal.h"
+#include "binfmt.h"
 
-#if defined(CONFIG_DEBUG) && defined(CONFIG_DEBUG_BINFMT) && !defined(CONFIG_BINFMT_DISABLE)
+#if defined(CONFIG_DEBUG_FEATURES) && defined(CONFIG_DEBUG_BINFMT) && !defined(CONFIG_BINFMT_DISABLE)
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -65,11 +65,11 @@
  * Private Functions
  ****************************************************************************/
 
-/***********************************************************************
+/****************************************************************************
  * Public Functions
- ***********************************************************************/
+ ****************************************************************************/
 
-/***********************************************************************
+/****************************************************************************
  * Name: dump_module
  *
  * Description:
@@ -80,27 +80,27 @@
  *   0 (OK) is returned on success and a negated errno is returned on
  *   failure.
  *
- ***********************************************************************/
+ ****************************************************************************/
 
 int dump_module(FAR const struct binary_s *bin)
 {
   if (bin)
     {
-      bdbg("Module:\n");
-      bdbg("  filename:  %s\n", bin->filename);
-      bdbg("  argv:      %p\n", bin->argv);
-      bdbg("  entrypt:   %p\n", bin->entrypt);
-      bdbg("  mapped:    %p size=%d\n", bin->mapped, bin->mapsize);
-      bdbg("  alloc:     %p %p %p\n", bin->alloc[0], bin->alloc[1], bin->alloc[2]);
+      berr("Module:\n");
+      berr("  filename:  %s\n", bin->filename);
+      berr("  argv:      %p\n", bin->argv);
+      berr("  entrypt:   %p\n", bin->entrypt);
+      berr("  mapped:    %p size=%d\n", bin->mapped, bin->mapsize);
+      berr("  alloc:     %p %p %p\n", bin->alloc[0], bin->alloc[1], bin->alloc[2]);
 #ifdef CONFIG_BINFMT_CONSTRUCTORS
-      bdbg("  ctors:     %p nctors=%d\n", bin->ctors, bin->nctors);
-      bdbg("  dtors:     %p ndtors=%d\n", bin->dtors, bin->ndtors);
+      berr("  ctors:     %p nctors=%d\n", bin->ctors, bin->nctors);
+      berr("  dtors:     %p ndtors=%d\n", bin->dtors, bin->ndtors);
 #endif
-#ifdef CONFIG_ADDRENV
-      bdbg("  addrenv:   %p\n", bin->addrenv);
+#ifdef CONFIG_ARCH_ADDRENV
+      berr("  addrenv:   %p\n", bin->addrenv);
 #endif
-      bdbg("  stacksize: %d\n", bin->stacksize);
-      bdbg("  unload:    %p\n", bin->unload);
+      berr("  stacksize: %d\n", bin->stacksize);
+      berr("  unload:    %p\n", bin->unload);
     }
 
   return OK;

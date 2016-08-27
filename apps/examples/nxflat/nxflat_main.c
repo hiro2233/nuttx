@@ -49,7 +49,7 @@
 #include <debug.h>
 #include <errno.h>
 
-#include <nuttx/fs/ramdisk.h>
+#include <nuttx/drivers/ramdisk.h>
 #include <nuttx/binfmt/binfmt.h>
 #include <nuttx/binfmt/nxflat.h>
 
@@ -58,7 +58,7 @@
 #include "tests/symtab.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Check configuration.  This is not all of the configuration settings that
@@ -96,25 +96,25 @@
 #define ROMFSDEV     "/dev/ram0"
 #define MOUNTPT      "/mnt/romfs"
 
-/* If CONFIG_DEBUG is enabled, use dbg instead of printf so that the
+/* If CONFIG_DEBUG_FEATURES is enabled, use info/err instead of printf so that the
  * output will be synchronous with the debug output.
  */
 
 #ifdef CONFIG_CPP_HAVE_VARARGS
-#  ifdef CONFIG_DEBUG
-#    define message(format, ...)    dbg(format, ##__VA_ARGS__)
-#    define err(format, ...)        dbg(format, ##__VA_ARGS__)
+#  ifdef CONFIG_DEBUG_FEATURES
+#    define message(format, ...)    _info(format, ##__VA_ARGS__)
+#    define errmsg(format, ...)     _err(format, ##__VA_ARGS__)
 #  else
 #    define message(format, ...)    printf(format, ##__VA_ARGS__)
-#    define err(format, ...)        fprintf(stderr, format, ##__VA_ARGS__)
+#    define errmsg(format, ...)     fprintf(stderr, format, ##__VA_ARGS__)
 #  endif
 #else
-#  ifdef CONFIG_DEBUG
-#    define message                 dbg
-#    define err                     dbg
+#  ifdef CONFIG_DEBUG_FEATURES
+#    define message                 _info
+#    define errmsg                  _err
 #  else
 #    define message                 printf
-#    define err                     printf
+#    define errmsg                  printf
 #  endif
 #endif
 
@@ -154,7 +154,11 @@ static inline void testheader(FAR const char *progname)
  * Name: nxflat_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int nxflat_main(int argc, char *argv[])
+#endif
 {
   struct binary_s bin;
   int ret;
@@ -166,7 +170,7 @@ int nxflat_main(int argc, char *argv[])
   ret = nxflat_initialize();
   if (ret < 0)
     {
-      err("ERROR: Initialization of the NXFLAT loader failed: %d\n", ret);
+      errmsg("ERROR: Initialization of the NXFLAT loader failed: %d\n", ret);
       exit(1);
     }
 
@@ -176,7 +180,7 @@ int nxflat_main(int argc, char *argv[])
   ret = romdisk_register(0, (FAR uint8_t *)romfs_img, NSECTORS(romfs_img_len), SECTORSIZE);
   if (ret < 0)
     {
-      err("ERROR: romdisk_register failed: %d\n", ret);
+      errmsg("ERROR: romdisk_register failed: %d\n", ret);
       nxflat_uninitialize();
       exit(1);
     }
@@ -189,8 +193,8 @@ int nxflat_main(int argc, char *argv[])
   ret = mount(ROMFSDEV, MOUNTPT, "romfs", MS_RDONLY, NULL);
   if (ret < 0)
     {
-      err("ERROR: mount(%s,%s,romfs) failed: %s\n",
-              ROMFSDEV, MOUNTPT, errno);
+      errmsg("ERROR: mount(%s,%s,romfs) failed: %s\n",
+             ROMFSDEV, MOUNTPT, errno);
       nxflat_uninitialize();
     }
 
@@ -237,7 +241,7 @@ int nxflat_main(int argc, char *argv[])
       ret = load_module(&bin);
       if (ret < 0)
         {
-          err("ERROR: Failed to load program '%s'\n", dirlist[i]);
+          errmsg("ERROR: Failed to load program '%s'\n", dirlist[i]);
           exit(1);
         }
 
@@ -246,7 +250,7 @@ int nxflat_main(int argc, char *argv[])
       ret = exec_module(&bin);
       if (ret < 0)
         {
-          err("ERROR: Failed to execute program '%s'\n", dirlist[i]);
+          errmsg("ERROR: Failed to execute program '%s'\n", dirlist[i]);
           unload_module(&bin);
         }
 

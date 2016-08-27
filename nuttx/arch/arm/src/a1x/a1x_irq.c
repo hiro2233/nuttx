@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/a1x/a1x_irq.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,10 +45,8 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
-#include <arch/irq.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 #include "sctlr.h"
 
@@ -56,22 +54,16 @@
 #include "a1x_irq.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private types
- ****************************************************************************/
-
-/****************************************************************************
  * Public Data
  ****************************************************************************/
 
-volatile uint32_t *current_regs;
+/* g_current_regs[] holds a references to the current interrupt level
+ * register storage structure.  If is non-NULL only during interrupt
+ * processing.  Access to g_current_regs[] must be through the macro
+ * CURRENT_REGS for portability.
+ */
 
-/****************************************************************************
- * Private Data
- ****************************************************************************/
+volatile uint32_t *g_current_regs[1];
 
 /****************************************************************************
  * Private Functions
@@ -85,49 +77,51 @@ volatile uint32_t *current_regs;
  *
  ****************************************************************************/
 
-#if defined(CONFIG_DEBUG_IRQ)
+#if defined(CONFIG_DEBUG_IRQ_INFO)
 static void a1x_dumpintc(const char *msg, int irq)
 {
   irqstate_t flags;
 
   /* Dump some relevant ARMv7 register contents */
 
-  flags = irqsave();
-  lldbg("ARMv7 (%s, irq=%d):\n", msg, irq);
-  lldbg("  CPSR: %08x SCTLR: %08x\n", flags, cp15_rdsctlr());
+  flags = enter_critical_section();
+
+  irqinfo("ARMv7 (%s, irq=%d):\n", msg, irq);
+  irqinfo("  CPSR: %08x SCTLR: %08x\n", flags, cp15_rdsctlr());
 
   /* Dump all of the (readable) INTC register contents */
 
-  lldbg("INTC (%s, irq=%d):\n", msg, irq);
-  lldbg("  VECTOR: %08x BASE: %08x PROTECT: %08x NMICTRL: %08x\n",
-        getreg32(A1X_INTC_VECTOR),    getreg32(A1X_INTC_BASEADDR),
-        getreg32(A1X_INTC_PROTECT),   getreg32(A1X_INTC_NMICTRL));
-  lldbg("  IRQ PEND: %08x %08x %08x\n",
-        getreg32(A1X_INTC_IRQ_PEND0), getreg32(A1X_INTC_IRQ_PEND1),
-        getreg32(A1X_INTC_IRQ_PEND2));
-  lldbg("  FIQ PEND: %08x %08x %08x\n",
-        getreg32(A1X_INTC_FIQ_PEND0), getreg32(A1X_INTC_FIQ_PEND1),
-        getreg32(A1X_INTC_FIQ_PEND2));
-  lldbg("  SEL:      %08x %08x %08x\n",
-        getreg32(A1X_INTC_IRQ_SEL0),  getreg32(A1X_INTC_IRQ_SEL1),
-        getreg32(A1X_INTC_IRQ_SEL2));
-  lldbg("  EN:       %08x %08x %08x\n",
-        getreg32(A1X_INTC_EN0),       getreg32(A1X_INTC_EN1),
-        getreg32(A1X_INTC_EN2));
-  lldbg("  MASK:     %08x %08x %08x\n",
-        getreg32(A1X_INTC_MASK0),     getreg32(A1X_INTC_MASK1),
-        getreg32(A1X_INTC_MASK2));
-  lldbg("  RESP:     %08x %08x %08x\n",
-        getreg32(A1X_INTC_RESP0),     getreg32(A1X_INTC_RESP1),
-        getreg32(A1X_INTC_RESP2));
-  lldbg("  FF:       %08x %08x %08x\n",
-        getreg32(A1X_INTC_FF0),       getreg32(A1X_INTC_FF1),
-        getreg32(A1X_INTC_FF2));
-  lldbg("  PRIO:     %08x %08x %08x %08x %08x\n",
-        getreg32(A1X_INTC_PRIO0),     getreg32(A1X_INTC_PRIO1),
-        getreg32(A1X_INTC_PRIO2),     getreg32(A1X_INTC_PRIO3),
-        getreg32(A1X_INTC_PRIO4));
-  irqrestore(flags);
+  irqinfo("INTC (%s, irq=%d):\n", msg, irq);
+  irqinfo("  VECTOR: %08x BASE: %08x PROTECT: %08x NMICTRL: %08x\n",
+          getreg32(A1X_INTC_VECTOR),    getreg32(A1X_INTC_BASEADDR),
+          getreg32(A1X_INTC_PROTECT),   getreg32(A1X_INTC_NMICTRL));
+  irqinfo("  IRQ PEND: %08x %08x %08x\n",
+          getreg32(A1X_INTC_IRQ_PEND0), getreg32(A1X_INTC_IRQ_PEND1),
+          getreg32(A1X_INTC_IRQ_PEND2));
+  irqinfo("  FIQ PEND: %08x %08x %08x\n",
+          getreg32(A1X_INTC_FIQ_PEND0), getreg32(A1X_INTC_FIQ_PEND1),
+          getreg32(A1X_INTC_FIQ_PEND2));
+  irqinfo("  SEL:      %08x %08x %08x\n",
+          getreg32(A1X_INTC_IRQ_SEL0),  getreg32(A1X_INTC_IRQ_SEL1),
+          getreg32(A1X_INTC_IRQ_SEL2));
+  irqinfo("  EN:       %08x %08x %08x\n",
+          getreg32(A1X_INTC_EN0),       getreg32(A1X_INTC_EN1),
+          getreg32(A1X_INTC_EN2));
+  irqinfo("  MASK:     %08x %08x %08x\n",
+          getreg32(A1X_INTC_MASK0),     getreg32(A1X_INTC_MASK1),
+          getreg32(A1X_INTC_MASK2));
+  irqinfo("  RESP:     %08x %08x %08x\n",
+          getreg32(A1X_INTC_RESP0),     getreg32(A1X_INTC_RESP1),
+          getreg32(A1X_INTC_RESP2));
+  irqinfo("  FF:       %08x %08x %08x\n",
+          getreg32(A1X_INTC_FF0),       getreg32(A1X_INTC_FF1),
+          getreg32(A1X_INTC_FF2));
+  irqinfo("  PRIO:     %08x %08x %08x %08x %08x\n",
+          getreg32(A1X_INTC_PRIO0),     getreg32(A1X_INTC_PRIO1),
+          getreg32(A1X_INTC_PRIO2),     getreg32(A1X_INTC_PRIO3),
+          getreg32(A1X_INTC_PRIO4));
+
+  leave_critical_section(flags);
 }
 #else
 #  define a1x_dumpintc(msg, irq)
@@ -167,7 +161,7 @@ void up_irqinitialize(void)
 
   /* Colorize the interrupt stack for debug purposes */
 
-#if defined(CONFIG_DEBUG_STACK) && CONFIG_ARCH_INTERRUPTSTACK > 3
+#if defined(CONFIG_STACK_COLORATION) && CONFIG_ARCH_INTERRUPTSTACK > 3
   {
     size_t intstack_size = (CONFIG_ARCH_INTERRUPTSTACK & ~3);
     up_stack_color((FAR void *)((uintptr_t)&g_intstackbase - intstack_size),
@@ -183,7 +177,7 @@ void up_irqinitialize(void)
 
   /* currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  CURRENT_REGS = NULL;
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
 #ifdef CONFIG_A1X_PIO_IRQ
@@ -194,7 +188,7 @@ void up_irqinitialize(void)
 
   /* And finally, enable interrupts */
 
-  (void)irqenable();
+  (void)up_irq_enable();
 #endif
 
   a1x_dumpintc("initial", 0);
@@ -227,10 +221,10 @@ uint32_t *arm_decodeirq(uint32_t *regs)
 #if 0 /* Use PEND registers instead */
   uint32_t regval;
 
- /* During initialization, the BASE address register was set to zero.
-  * Therefore, when we read the VECTOR address register, we get the IRQ number
-  * shifted left by two.
-  */
+  /* During initialization, the BASE address register was set to zero.
+   * Therefore, when we read the VECTOR address register, we get the IRQ number
+   * shifted left by two.
+   */
 
   regval = getreg32(A1X_INTC_VECTOR);
 
@@ -340,7 +334,7 @@ void up_disable_irq(int irq)
     {
       /* These operations must be atomic */
 
-      flags = irqsave();
+      flags = enter_critical_section();
 
       /* Make sure that the interrupt is disabled. */
 
@@ -357,7 +351,7 @@ void up_disable_irq(int irq)
       putreg32(regval, regaddr);
 
       a1x_dumpintc("disable", irq);
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 
 #ifdef CONFIG_A1X_PIO_IRQ
@@ -388,7 +382,7 @@ void up_enable_irq(int irq)
     {
       /* These operations must be atomic */
 
-      flags = irqsave();
+      flags = enter_critical_section();
 
       /* Make sure that the interrupt is enabled. */
 
@@ -405,7 +399,7 @@ void up_enable_irq(int irq)
       putreg32(regval, regaddr);
 
       a1x_dumpintc("enable", irq);
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 
 #ifdef CONFIG_A1X_PIO_IRQ
@@ -416,25 +410,6 @@ void up_enable_irq(int irq)
       a1x_pio_irqenable(irq);
     }
 #endif
-}
-
-/****************************************************************************
- * Name: up_maskack_irq
- *
- * Description:
- *   Mask the IRQ and acknowledge it
- *
- ****************************************************************************/
-
-void up_maskack_irq(int irq)
-{
-  /* Disable the interrupt */
-
-  up_disable_irq(irq);
-
-  /* There is no need to acknowledge the interrupt.  The pending interrupt
-   * was cleared in arm_decodeirq() when the PEND register was read.
-   */
 }
 
 /****************************************************************************
@@ -460,7 +435,7 @@ int up_prioritize_irq(int irq, int priority)
     {
       /* These operations must be atomic */
 
-      flags = irqsave();
+      flags = enter_critical_section();
 
       /* Set the new priority */
 
@@ -471,7 +446,7 @@ int up_prioritize_irq(int irq, int priority)
       putreg32(regval, regaddr);
 
       a1x_dumpintc("prioritize", irq);
-      irqrestore(flags);
+      leave_critical_section(flags);
       return OK;
     }
 

@@ -129,7 +129,7 @@
   This document summarizes the design of NuttX on-demand paging.
   This feature permits embedded MCUs with some limited RAM space to execute large programs from some non-random access media.
   This feature was first discussed in this email thread:
-  <a href="http://tech.groups.yahoo.com/group/nuttx/message/213">http://tech.groups.yahoo.com/group/nuttx/message/213</a>.
+  <a href="https://groups.yahoo.com/neo/groups/nuttx/conversations/messages/213">https://groups.yahoo.com/neo/groups/nuttx/conversations/messages/213</a>.
 </p>
 <p>
   What kind of platforms can support NuttX on-demang paging?
@@ -213,7 +213,7 @@
  </p>
  <p>
    Declarations for <code>g_waitingforfill</code>, <code>g_pgworker</code>, and other
-   internal, private definitions will be provided in <code>sched/pg_internal.h</code>.
+   internal, private definitions will be provided in <code>sched/paging/paging.h</code>.
    All public definitions that should be used by the architecture-specific code will be available
    in <code>include/nuttx/page.h</code>.
    Most architecture-specific functions are declared in <code>include/nuttx/arch.h</code>,

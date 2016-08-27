@@ -33,8 +33,8 @@
  *
  ************************************************************************************/
 
-#ifndef _CONFIGS_OLIMEX_LPC1766STK_SRC_LPC1766STK_INTERNAL_H
-#define _CONFIGS_OLIMEX_LPC1766STK_SRC_LPC1766STK_INTERNAL_H
+#ifndef _CONFIGS_OLIMEX_LPC1766STK_SRC_LPC1766STK_H
+#define _CONFIGS_OLIMEX_LPC1766STK_SRC_LPC1766STK_H
 
 /************************************************************************************
  * Included Files
@@ -44,7 +44,7 @@
 #include <nuttx/compiler.h>
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* LPC1766-STK GPIO Pin Definitions *************************************************/
@@ -251,15 +251,15 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Name: lpc1766stk_sspinitialize
+ * Name: lpc1766stk_sspdev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the Olimex LPC1766-STK board.
  *
  ************************************************************************************/
 
-void weak_function lpc1766stk_sspinitialize(void);
+void weak_function lpc1766stk_sspdev_initialize(void);
 
 #endif /* __ASSEMBLY__ */
-#endif /* _CONFIGS_OLIMEX_LPC1766STK_SRC_LPC1766STK_INTERNAL_H */
+#endif /* _CONFIGS_OLIMEX_LPC1766STK_SRC_LPC1766STK_H */
 

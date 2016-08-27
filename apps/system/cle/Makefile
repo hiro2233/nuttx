@@ -1,7 +1,7 @@
 ############################################################################
 # apps/system/cle/Makefile
 #
-#   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -36,10 +36,6 @@
 -include $(TOPDIR)/.config
 -include $(TOPDIR)/Make.defs
 include $(APPDIR)/Make.defs
-
-ifeq ($(WINTOOL),y)
-INCDIROPT	= -w
-endif
 
 # EMACS-like Command Line Editor (CLE)
 
@@ -81,6 +77,8 @@ $(COBJS): %$(OBJEXT): %.c
 	$(call ARCHIVE, $(BIN), $(OBJS))
 	$(Q) touch .built
 
+install:
+
 context:
 
 # Create dependencies
@@ -101,3 +99,5 @@ distclean: clean
 
 -include Make.dep
 
+.PHONY: preconfig
+preconfig:

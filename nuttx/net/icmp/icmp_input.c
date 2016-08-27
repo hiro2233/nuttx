@@ -1,8 +1,8 @@
 /****************************************************************************
  * net/icmp/icmp_input.c
- * Handling incoming ICMP/ICMP6 input
+ * Handling incoming ICMP input
  *
- *   Copyright (C) 2007-2009, 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2012, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Adapted for NuttX from logic in uIP which also has a BSD-like license:
@@ -49,11 +49,16 @@
 #include <debug.h>
 
 #include <net/if.h>
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip.h>
-#include <nuttx/net/uip/uip-arch.h>
+#include <arpa/inet.h>
 
-#include "uip/uip_internal.h"
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/netdev.h>
+#include <nuttx/net/netstats.h>
+#include <nuttx/net/ip.h>
+
+#include "devif/devif.h"
+#include "icmp/icmp.h"
+#include "utils/utils.h"
 
 #ifdef CONFIG_NET_ICMP
 
@@ -61,36 +66,20 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define ICMPBUF ((struct uip_icmpip_hdr *)&dev->d_buf[UIP_LLH_LEN])
-
-/****************************************************************************
- * Public Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Variables
- ****************************************************************************/
-
-#ifdef CONFIG_NET_ICMP_PING
-struct uip_callback_s *g_echocallback = NULL;
-#endif
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
+#define ICMPBUF ((struct icmp_iphdr_s *)&dev->d_buf[NET_LL_HDRLEN(dev)])
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: uip_icmpinput
+ * Name: icmp_input
  *
  * Description:
- *   Handle incoming ICMP/ICMP6 input
+ *   Handle incoming ICMP input
  *
  * Parameters:
- *   dev - The device driver structure containing the received ICMP/ICMP6
+ *   dev - The device driver structure containing the received ICMP
  *         packet
  *
  * Return:
@@ -101,16 +90,13 @@ struct uip_callback_s *g_echocallback = NULL;
  *
  ****************************************************************************/
 
-void uip_icmpinput(struct uip_driver_s *dev)
+void icmp_input(FAR struct net_driver_s *dev)
 {
-  struct uip_icmpip_hdr *picmp = ICMPBUF;
+  FAR struct icmp_iphdr_s *picmp = ICMPBUF;
 
 #ifdef CONFIG_NET_STATISTICS
-  uip_stat.icmp.recv++;
+  g_netstats.icmp.recv++;
 #endif
-
-#ifndef CONFIG_NET_IPv6
-  /* ICMPv4 processing code follows. */
 
   /* ICMP echo (i.e., ping) processing. This is simple, we only change the
    * ICMP type from ECHO to ECHO_REPLY and adjust the ICMP checksum before
@@ -119,26 +105,14 @@ void uip_icmpinput(struct uip_driver_s *dev)
 
   if (picmp->type == ICMP_ECHO_REQUEST)
     {
-      /* If we are configured to use ping IP address assignment, we use
-       * the destination IP address of this ping packet and assign it to
-       * ourself.
-       */
-
-#ifdef CONFIG_NET_PINGADDRCONF
-      if (dev->d_ipaddr == 0)
-        {
-          dev->d_ipaddr = picmp->destipaddr;
-        }
-#endif
-
       /* Change the ICMP type */
 
       picmp->type = ICMP_ECHO_REPLY;
 
       /* Swap IP addresses. */
 
-      uiphdr_ipaddr_copy(picmp->destipaddr, picmp->srcipaddr);
-      uiphdr_ipaddr_copy(picmp->srcipaddr, &dev->d_ipaddr);
+      net_ipv4addr_hdrcopy(picmp->destipaddr, picmp->srcipaddr);
+      net_ipv4addr_hdrcopy(picmp->srcipaddr, &dev->d_ipaddr);
 
       /* Recalculate the ICMP checksum */
 
@@ -146,7 +120,7 @@ void uip_icmpinput(struct uip_driver_s *dev)
       /* The slow way... sum over the ICMP message */
 
       picmp->icmpchksum = 0;
-      picmp->icmpchksum = ~uip_icmpchksum(dev, (((uint16_t)picmp->len[0] << 8) | (uint16_t)picmp->len[1]) - UIP_IPH_LEN);
+      picmp->icmpchksum = ~icmp_chksum(dev, (((uint16_t)picmp->len[0] << 8) | (uint16_t)picmp->len[1]) - IPv4_HDRLEN);
       if (picmp->icmpchksum == 0)
         {
           picmp->icmpchksum = 0xffff;
@@ -166,12 +140,12 @@ void uip_icmpinput(struct uip_driver_s *dev)
         }
 #endif
 
-      nllvdbg("Outgoing ICMP packet length: %d (%d)\n",
+      ninfo("Outgoing ICMP packet length: %d (%d)\n",
               dev->d_len, (picmp->len[0] << 8) | picmp->len[1]);
 
 #ifdef CONFIG_NET_STATISTICS
-      uip_stat.icmp.sent++;
-      uip_stat.ip.sent++;
+      g_netstats.icmp.sent++;
+      g_netstats.ipv4.sent++;
 #endif
     }
 
@@ -180,9 +154,9 @@ void uip_icmpinput(struct uip_driver_s *dev)
    */
 
 #ifdef CONFIG_NET_ICMP_PING
-  else if (picmp->type == ICMP_ECHO_REPLY && g_echocallback)
+  else if (picmp->type == ICMP_ECHO_REPLY && dev->d_conncb)
     {
-      (void)uip_callbackexecute(dev, picmp, UIP_ECHOREPLY, g_echocallback);
+      (void)devif_conn_event(dev, picmp, ICMP_ECHOREPLY, dev->d_conncb);
     }
 #endif
 
@@ -190,7 +164,7 @@ void uip_icmpinput(struct uip_driver_s *dev)
 
   else
     {
-      nlldbg("Unknown ICMP cmd: %d\n", picmp->type);
+      nwarn("WARNING: Unknown ICMP cmd: %d\n", picmp->type);
       goto typeerr;
     }
 
@@ -198,119 +172,10 @@ void uip_icmpinput(struct uip_driver_s *dev)
 
 typeerr:
 #ifdef CONFIG_NET_STATISTICS
-  uip_stat.icmp.typeerr++;
-  uip_stat.icmp.drop++;
+  g_netstats.icmp.typeerr++;
+  g_netstats.icmp.drop++;
 #endif
   dev->d_len = 0;
-
-#else /* !CONFIG_NET_IPv6 */
-
-  /* If we get a neighbor solicitation for our address we should send
-   * a neighbor advertisement message back.
-   */
-
-  if (picmp->type == ICMP6_NEIGHBOR_SOLICITATION)
-    {
-      if (uip_ipaddr_cmp(picmp->icmp6data, dev->d_ipaddr))
-        {
-          if (picmp->options[0] == ICMP6_OPTION_SOURCE_LINK_ADDRESS)
-            {
-              /* Save the sender's address in our neighbor list. */
-
-              uiphdr_neighbor_add(picmp->srcipaddr, &(picmp->options[2]));
-            }
-
-          /* We should now send a neighbor advertisement back to where the
-           * neighbor solicitation came from.
-           */
-
-          picmp->type = ICMP6_NEIGHBOR_ADVERTISEMENT;
-          picmp->flags = ICMP6_FLAG_S; /* Solicited flag. */
-
-          picmp->reserved1 = picmp->reserved2 = picmp->reserved3 = 0;
-
-          uiphdr_ipaddr_copy(picmp->destipaddr, picmp->srcipaddr);
-          uiphdr_ipaddr_copy(picmp->srcipaddr, &dev->d_ipaddr);
-          picmp->options[0] = ICMP6_OPTION_TARGET_LINK_ADDRESS;
-          picmp->options[1] = 1;  /* Options length, 1 = 8 bytes. */
-          memcpy(&(picmp->options[2]), &dev->d_mac, IFHWADDRLEN);
-          picmp->icmpchksum = 0;
-          picmp->icmpchksum = ~uip_icmp6chksum(dev);
-        }
-      else
-        {
-          goto drop;
-        }
-    }
-  else if (picmp->type == ICMP6_ECHO_REQUEST)
-    {
-      /* ICMP echo (i.e., ping) processing. This is simple, we only
-       * change the ICMP type from ECHO to ECHO_REPLY and update the
-       * ICMP checksum before we return the packet.
-       */
-
-      picmp->type = ICMP6_ECHO_REPLY;
-
-      uiphdr_ipaddr_copy(picmp->destipaddr, picmp->srcipaddr);
-      uiphdr_ipaddr_copy(picmp->srcipaddr, &dev->d_ipaddr);
-      picmp->icmpchksum = 0;
-      picmp->icmpchksum = ~uip_icmp6chksum(dev);
-    }
-
-  /* If an ICMP echo reply is received then there should also be
-   * a thread waiting to received the echo response.
-   */
-
-#ifdef CONFIG_NET_ICMP_PING
-  else if (picmp->type == ICMP6_ECHO_REPLY && g_echocallback)
-    {
-      uint16_t flags = UIP_ECHOREPLY;
-
-      if (g_echocallback)
-        {
-          /* Dispatch the ECHO reply to the waiting thread */
-
-          flags = uip_callbackexecute(dev, picmp, flags, g_echocallback);
-        }
-
-      /* If the ECHO reply was not handled, then drop the packet */
-
-      if (flags == UIP_ECHOREPLY)
-        {
-          /* The ECHO reply was not handled */
-
-          goto drop;
-        }
-    }
-#endif
-
-  else
-    {
-      nlldbg("Unknown ICMP6 cmd: %d\n", picmp->type);
-      goto typeerr;
-    }
-
-  nllvdbg("Outgoing ICMP6 packet length: %d (%d)\n",
-          dev->d_len, (picmp->len[0] << 8) | picmp->len[1]);
-
-#ifdef CONFIG_NET_STATISTICS
-  uip_stat.icmp.sent++;
-  uip_stat.ip.sent++;
-#endif
-  return;
-
-typeerr:
-#ifdef CONFIG_NET_STATISTICS
-  uip_stat.icmp.typeerr++;
-#endif
-
-drop:
-#ifdef CONFIG_NET_STATISTICS
-  uip_stat.icmp.drop++;
-#endif
-  dev->d_len = 0;
-
-#endif /* !CONFIG_NET_IPv6 */
 }
 
 #endif /* CONFIG_NET_ICMP */

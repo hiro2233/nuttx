@@ -1,7 +1,7 @@
-/************************************************************************
+/****************************************************************************
  * arch/arm/src/lpc31xx/lpc31_allocateheap.c
  *
- *   Copyright (C) 2009-2010, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2010, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
@@ -43,6 +43,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/kmalloc.h>
 #include <arch/board/board.h>
 
@@ -57,9 +58,9 @@
 #  include "pg_macros.h"
 #endif
 
-/************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- ************************************************************************/
+ ****************************************************************************/
 
 /* Configuration ********************************************************/
 
@@ -141,25 +142,25 @@
 #  endif
 #endif
 
-/************************************************************************
+/****************************************************************************
  * Private Data
- ************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************
+/****************************************************************************
  * Private Functions
- ************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************
+/****************************************************************************
  * Public Functions
- ************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************
+/****************************************************************************
  * Name: up_allocate_heap
  *
  * Description:
  *   This function will be called to dynamically set aside the heap region.
  *
- *   For the kernel build (CONFIG_NUTTX_KERNEL=y) with both kernel- and
+ *   For the kernel build (CONFIG_BUILD_KERNEL=y) with both kernel- and
  *   user-space heaps (CONFIG_MM_KERNEL_HEAP=y), this function provides the
  *   size of the unprotected, user-space heap.
  *
@@ -175,37 +176,37 @@
  *   NOTE: Ignore the erroneous nomenclature DRAM and SDRAM.  That names
  *   date back to an earlier platform that had SDRAM.
  *
- ************************************************************************/
+ ****************************************************************************/
 
 void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 {
-  board_led_on(LED_HEAPALLOCATE);
-  *heap_start = (FAR void*)g_idle_topstack;
+  board_autoled_on(LED_HEAPALLOCATE);
+  *heap_start = (FAR void *)g_idle_topstack;
   *heap_size  = LPC31_HEAP_VEND - g_idle_topstack;
 }
 
-/************************************************************************
+/****************************************************************************
  * Name: up_addregion
  *
  * Description:
  *   Memory may be added in non-contiguous chunks.  Additional chunks are
  *   added by calling this function.
  *
- ************************************************************************/
+ ****************************************************************************/
 
 #if CONFIG_MM_REGIONS > 1
 void up_addregion(void)
 {
 #if defined(CONFIG_LPC31_EXTSRAM0) && defined(CONFIG_LPC31_EXTSRAM0HEAP)
-  kmm_addregion((FAR void*)LPC31_EXTSRAM0_VSECTION, CONFIG_LPC31_EXTSRAM0SIZE);
+  kmm_addregion((FAR void *)LPC31_EXTSRAM0_VSECTION, CONFIG_LPC31_EXTSRAM0SIZE);
 #endif
 
 #if defined(CONFIG_LPC31_EXTSRAM1) && defined(CONFIG_LPC31_EXTSRAM1HEAP)
-  kmm_addregion((FAR void*)LPC31_EXTSRAM1_VSECTION, CONFIG_LPC31_EXTSRAM1SIZE);
+  kmm_addregion((FAR void *)LPC31_EXTSRAM1_VSECTION, CONFIG_LPC31_EXTSRAM1SIZE);
 #endif
 
 #if defined(CONFIG_LPC31_EXTDRAM) && defined(CONFIG_LPC31_EXTDRAMHEAP)
-  kmm_addregion((FAR void*)LPC31_EXTSDRAM_VSECTION, CONFIG_LPC31_EXTDRAMSIZE);
+  kmm_addregion((FAR void *)LPC31_EXTSDRAM_VSECTION, CONFIG_LPC31_EXTDRAMSIZE);
 #endif
 }
 #endif

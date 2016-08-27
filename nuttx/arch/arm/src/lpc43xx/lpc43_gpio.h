@@ -1,7 +1,7 @@
 /********************************************************************************************
  * arch/arm/src/lpc43xx/lpc43_gpio.h
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -143,7 +143,7 @@
  * ..CC C... .... ....
  */
 
-#define GPIO_PININT_SHIFT          (10)        /* Bits 11-13: Pin interrupt number */
+#define GPIO_PININT_SHIFT          (11)        /* Bits 11-13: Pin interrupt number */
 #define GPIO_PININT_MASK           (7 << GPIO_PININT_SHIFT)
 #  define GPIO_PININT0             (0 << GPIO_PININT_SHIFT)
 #  define GPIO_PININT1             (1 << GPIO_PININT_SHIFT)
@@ -162,9 +162,9 @@
  * .... .III .... ....
  */
 
-#define _GPIO_INT_LEVEL            (1 << 10)  /* Bit 10: 1=Level (vs edge) */
-#define _GPIO_INT_HIGH             (1 << 9)   /* Bit 9:  1=High level or rising edge */
-#define _GPIO_INT_LOW              (1 << 8)   /* Bit 8:  1=Low level or falling edge */
+#define _GPIO_INT_EDGE             (1 << 10)  /* Bit 10: 1=Edge (vs level) */
+#define _GPIO_INT_LOW              (1 << 9)   /* Bit 9:  1=Low level or falling edge */
+#define _GPIO_INT_HIGH             (1 << 8)   /* Bit 8:  1=High level or rising edge */
 
 #define GPIO_INT_SHIFT             (8)        /* Bits 8-10: Interrupt mode */
 #define GPIO_INT_MASK              (7 << GPIO_INT_SHIFT)
@@ -176,8 +176,8 @@
 
 #define GPIO_IS_ACTIVE_HI(p)       (((p) & _GPIO_INT_HIGH)  != 0)
 #define GPIO_IS_ACTIVE_LOW(p)      (((p) & _GPIO_INT_LOW)   != 0)
-#define GPIO_IS_EDGE(p)            (((p) & _GPIO_INT_LEVEL) == 0)
-#define GPIO_IS_LEVEL(p)           (((p) & _GPIO_INT_LEVEL) != 0)
+#define GPIO_IS_LEVEL(p)           (((p) & _GPIO_INT_EDGE) == 0)
+#define GPIO_IS_EDGE(p)            (((p) & _GPIO_INT_EDGE) != 0)
 
 /* GPIO Port Number:
  *
@@ -252,7 +252,8 @@
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -273,7 +274,7 @@ extern "C" {
  *
  ********************************************************************************************/
 
-EXTERN int lpc43_gpio_config(uint16_t gpiocfg);
+int lpc43_gpio_config(uint16_t gpiocfg);
 
 /********************************************************************************************
  * Name: lpc43_gpio_write
@@ -286,7 +287,7 @@ EXTERN int lpc43_gpio_config(uint16_t gpiocfg);
  *
  ********************************************************************************************/
 
-EXTERN void lpc43_gpio_write(uint16_t gpiocfg, bool value);
+void lpc43_gpio_write(uint16_t gpiocfg, bool value);
 
 /********************************************************************************************
  * Name: lpc43_gpio_read
@@ -299,7 +300,7 @@ EXTERN void lpc43_gpio_write(uint16_t gpiocfg, bool value);
  *
  ********************************************************************************************/
 
-EXTERN bool lpc43_gpio_read(uint16_t gpiocfg);
+bool lpc43_gpio_read(uint16_t gpiocfg);
 
 /********************************************************************************************
  * Function:  lpc43_gpio_dump
@@ -309,8 +310,8 @@ EXTERN bool lpc43_gpio_read(uint16_t gpiocfg);
  *
  ********************************************************************************************/
 
-#ifdef CONFIG_DEBUG
-EXTERN int lpc43_gpio_dump(uint16_t gpiocfg, const char *msg);
+#ifdef CONFIG_DEBUG_FEATURES
+int lpc43_gpio_dump(uint16_t gpiocfg, const char *msg);
 #else
 #  define lpc43_gpio_dump(p,m)
 #endif

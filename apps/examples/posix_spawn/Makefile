@@ -40,13 +40,19 @@ include $(APPDIR)/Make.defs
 # ELF Example
 
 ASRCS =
-CSRCS = spawn_main.c symtab.c
+CSRCS = symtab.c
+MAINSRC = spawn_main.c
 
 AOBJS = $(ASRCS:.S=$(OBJEXT))
 COBJS = $(CSRCS:.c=$(OBJEXT))
+MAINOBJ = $(MAINSRC:.c=$(OBJEXT))
 
-SRCS = $(ASRCS) $(CSRCS)
+SRCS = $(ASRCS) $(CSRCS) $(MAINSRC)
 OBJS = $(AOBJS) $(COBJS)
+
+ifneq ($(CONFIG_BUILD_KERNEL),y)
+  OBJS += $(MAINOBJ)
+endif
 
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
   BIN		= ..\..\libapps$(LIBEXT)
@@ -57,6 +63,15 @@ else
   BIN		= ../../libapps$(LIBEXT)
 endif
 endif
+
+ifeq ($(WINTOOL),y)
+  INSTALL_DIR = "${shell cygpath -w $(BIN_DIR)}"
+else
+  INSTALL_DIR = $(BIN_DIR)
+endif
+
+CONFIG_XYZ_PROGNAME ?= posix_spawn$(EXEEXT)
+PROGNAME = $(CONFIG_XYZ_PROGNAME)
 
 ROOTDEPPATH	= --dep-path . --dep-path filesystem
 
@@ -70,7 +85,7 @@ all: build
 $(AOBJS): %$(OBJEXT): %.S
 	$(call ASSEMBLE, $<, $@)
 
-$(COBJS): %$(OBJEXT): %.c
+$(COBJS) $(MAINOBJ): %$(OBJEXT): %.c
 	$(call COMPILE, $<, $@)
 
 # This is a little messy.  The build is broken into two pieces:  (1) the
@@ -84,6 +99,19 @@ build_lib: $(OBJS)
 build:
 	@$(MAKE) -C filesystem TOPDIR="$(TOPDIR)" APPDIR="$(APPDIR)" CROSSDEV=$(CROSSDEV)
 	@$(MAKE) TOPDIR="$(TOPDIR)" APPDIR="$(APPDIR)" build_lib
+
+ifeq ($(CONFIG_BUILD_KERNEL),y)
+$(BIN_DIR)$(DELIM)$(PROGNAME): $(OBJS) $(MAINOBJ)
+	@echo "LD: $(PROGNAME)"
+	$(Q) $(LD) $(LDELFFLAGS) $(LDLIBPATH) -o $(INSTALL_DIR)$(DELIM)$(PROGNAME) $(ARCHCRT0OBJ) $(MAINOBJ) $(LDLIBS)
+	$(Q) $(NM) -u  $(INSTALL_DIR)$(DELIM)$(PROGNAME)
+
+install: $(BIN_DIR)$(DELIM)$(PROGNAME)
+
+else
+install:
+
+endif
 
 context:
 
@@ -120,7 +148,7 @@ spawn_main.o: spawn_main.c \
 	$(TOPDIR)/include/spawn.h \
 	$(TOPDIR)/include/debug.h \
 	$(TOPDIR)/include/errno.h \
-	$(TOPDIR)/include/nuttx/fs/ramdisk.h \
+	$(TOPDIR)/include/nuttx/drivers/ramdisk.h \
 	$(TOPDIR)/include/nuttx/binfmt/elf.h \
 	$(TOPDIR)/include/nuttx/binfmt/symtab.h \
 	filesystem/romfs.h
@@ -128,3 +156,5 @@ spawn_main.o: spawn_main.c \
 symtab.o: filesystem/symtab.c \
 	$(TOPDIR)/include/nuttx/compiler.h \
 	$(TOPDIR)/include/nuttx/binfmt/symtab.h
+.PHONY: preconfig
+preconfig:

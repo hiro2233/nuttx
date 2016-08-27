@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sama5/sam_hsmci.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,16 +45,16 @@
 #include <string.h>
 #include <assert.h>
 #include <debug.h>
-#include <wdog.h>
 #include <errno.h>
 
-#include <nuttx/clock.h>
 #include <nuttx/arch.h>
+#include <nuttx/clock.h>
+#include <nuttx/wdog.h>
 #include <nuttx/sdio.h>
 #include <nuttx/wqueue.h>
 #include <nuttx/mmcsd.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -74,21 +74,88 @@
     defined(CONFIG_SAMA5_HSMCI2)
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Configuration ************************************************************/
 
-#if defined(CONFIG_SAMA5_HSMCI0) && !defined(CONFIG_SAMA5_DMAC0)
-#  warning "HSMCI0 support requires CONFIG_SAMA5_DMAC0"
+#ifndef CONFIG_DEBUG_MEMCARD_INFO
+#  undef CONFIG_SAMA5_HSMCI_REGDEBUG
 #endif
 
-#if defined(CONFIG_SAMA5_HSMCI1) && !defined(CONFIG_SAMA5_DMAC1)
-#  warning "HSMCI1 support requires CONFIG_SAMA5_DMAC1"
-#endif
+#if defined(ATSAMA5D3)
+  /* The SAMA5D3 has three HSMCI blocks: HSMCI0-2.  HSMCI0 requires DMAC0
+   * support, HSMCI1-2 require DMAC1 support.
+   */
 
-#if defined(CONFIG_SAMA5_HSMCI2) && !defined(CONFIG_SAMA5_DMAC1)
-#  warning "HSMCI2 support requires CONFIG_SAMA5_DMAC1"
+#  define HSMCI0_DMAC 0
+#  define HSMCI1_DMAC 1
+#  define HSMCI2_DMAC 1
+
+#  if defined(CONFIG_SAMA5_HSMCI0) && !defined(CONFIG_SAMA5_DMAC0)
+#    error "HSMCI0 support requires CONFIG_SAMA5_DMAC0"
+#  endif
+
+#  if defined(CONFIG_SAMA5_HSMCI1) && !defined(CONFIG_SAMA5_DMAC1)
+#    error "HSMCI1 support requires CONFIG_SAMA5_DMAC1"
+#  endif
+
+#  if defined(CONFIG_SAMA5_HSMCI2) && !defined(CONFIG_SAMA5_DMAC1)
+#    error "HSMCI2 support requires CONFIG_SAMA5_DMAC1"
+#  endif
+
+  /* System Bus Interfaces */
+
+#  define HSMCI_SYSBUS_IF  DMACH_FLAG_PERIPHAHB_AHB_IF2
+#  define MEMORY_SYSBUS_IF DMACH_FLAG_MEMAHB_AHB_IF0
+
+#elif defined(ATSAMA5D4)
+  /* The SAMA5D3 has two HSMCI blocks: HSMCI0-1.  They can be driven
+   * either by XDMAC0 (secure) or XDMAC1 (unsecure).
+   */
+
+#  if !defined(CONFIG_SAMA5_XDMAC0) && !defined(CONFIG_SAMA5_XDMAC1)
+#    error HSMCI0/1 require CONFIG_SAMA5_XDMAC0 and/or CONFIG_SAMA5_XDMAC1
+#  endif
+
+  /* If both XDMAC blocks are enabled, then we have to select which
+   * used by each HSMCI block.
+   */
+
+#  if defined(CONFIG_SAMA5_HSMCI0)
+#    if defined(CONFIG_SAMA5_HSMCI0_XDMAC0) && defined(CONFIG_SAMA5_XDMAC0)
+#      define HSMCI0_DMAC 0
+#    elif defined(CONFIG_SAMA5_HSMCI0_XDMAC1) && defined(CONFIG_SAMA5_XDMAC1)
+#      define HSMCI0_DMAC 1
+#    else
+#      error No valid DMA configuration for HSMCI0
+#    endif
+#  endif
+
+#  if defined(CONFIG_SAMA5_HSMCI1)
+#    if defined(CONFIG_SAMA5_HSMCI1_XDMAC0) && defined(CONFIG_SAMA5_XDMAC0)
+#      define HSMCI1_DMAC 0
+#    elif defined(CONFIG_SAMA5_HSMCI0_XDMAC1) && defined(CONFIG_SAMA5_XDMAC1)
+#      define HSMCI1_DMAC 1
+#    else
+#      error No valid DMA configuration for HSMCI1
+#    endif
+#  endif
+
+  /* System Bus Interfaces
+   *
+   * HSMCI0 is on H32MX, APB1; HSMCI1 is on H32MX, APB0.  Both are
+   * accessible on MATRIX IF1.
+   *
+   * Memory is available on either port 5 (IF0 for both XDMAC0 and 1) or
+   * port 6 (IF1 for both XDMAC0 and 1).
+   */
+
+#  define HSMCI_SYSBUS_IF  DMACH_FLAG_PERIPHAHB_AHB_IF1
+#  define MEMORY_SYSBUS_IF DMACH_FLAG_MEMAHB_AHB_IF0
+
+#else
+#  error Unrecognized SAMA5 architecture
 #endif
 
 #ifndef CONFIG_SCHED_WORKQUEUE
@@ -99,7 +166,7 @@
 #  error "This driver requires CONFIG_SDIO_BLOCKSETUP"
 #endif
 
-#if !defined(CONFIG_DEBUG_FS) || !defined(CONFIG_DEBUG_VERBOSE)
+#if !defined(CONFIG_DEBUG_FS) || !defined(CONFIG_DEBUG_INFO)
 #  undef CONFIG_SAMA5_HSMCI_CMDDEBUG
 #  undef CONFIG_SAMA5_HSMCI_XFRDEBUG
 #endif
@@ -118,21 +185,16 @@
 #  endif
 #endif
 
-/* TX-DMA is not reliable.  Often, the TX DMA will hang after transferring 64 bytes or so.
- * I don't have any clue why at the moment.  This option suppresses TX DMA (only).
+/* There is some unresolved issue with the SAMA5D3 DMA.  TX DMA is currently
+ * disabled.
  */
 
-#define HSCMI_NOTXDMA            1
+#undef  HSCMI_NORXDMA            /* Define to disable RX DMA */
+#undef  HSCMI_NOTXDMA            /* Define to disable TX DMA */
 
-/* There are two ways to DMA:
- *
- *   (1) Use the FIFO address, incrementing the address on the HSMCI side
- *   (2) Use the TDR/RDR address with no address increment
- *
- * Both work.
- */
-
-#undef HSCMI_FIFODMA
+#ifdef ATSAMA5D3
+#  define HSCMI_NOTXDMA 1        /* Disabled */
+#endif
 
 /* Timing */
 
@@ -143,36 +205,17 @@
 
 #define HSMCI_DTIMER_DATATIMEOUT (0x000fffff)
 
-/* DMA configuration flags.  There are two ways to to this:
- *
- *   (1) Use the FIFO address, incrementing the address on the HSMCI side
- *   (2) Use the TDR/RDR address with no address increment
- *
- * REVISIT:  Is memory always on IF0?
- */
+/* DMA configuration flags */
 
 #define HSMCI_DMA_CHKSIZE HSMCI_DMA_CHKSIZE_1
 
-#ifdef HSCMI_FIFODMA
-#  define DMA_FLAGS(pid) \
-    (((pid) << DMACH_FLAG_PERIPHPID_SHIFT) | DMACH_FLAG_PERIPHAHB_AHB_IF2 | \
-     DMACH_FLAG_PERIPHH2SEL | DMACH_FLAG_PERIPHISPERIPH |  \
-     DMACH_FLAG_PERIPHWIDTH_32BITS | DMACH_FLAG_PERIPHINCREMENT | \
-     DMACH_FLAG_PERIPHCHUNKSIZE_1 | \
-     ((0x3f) << DMACH_FLAG_MEMPID_SHIFT) | DMACH_FLAG_MEMAHB_AHB_IF0 | \
-     DMACH_FLAG_MEMWIDTH_32BITS | DMACH_FLAG_MEMINCREMENT | \
-     DMACH_FLAG_MEMCHUNKSIZE_4)
-
-#else
-#  define DMA_FLAGS(pid) \
-    (((pid) << DMACH_FLAG_PERIPHPID_SHIFT) | DMACH_FLAG_PERIPHAHB_AHB_IF2 | \
-     DMACH_FLAG_PERIPHH2SEL | DMACH_FLAG_PERIPHISPERIPH |  \
-     DMACH_FLAG_PERIPHWIDTH_32BITS | DMACH_FLAG_PERIPHCHUNKSIZE_1 | \
-     ((0x3f) << DMACH_FLAG_MEMPID_SHIFT) | DMACH_FLAG_MEMAHB_AHB_IF0 | \
-     DMACH_FLAG_MEMWIDTH_32BITS | DMACH_FLAG_MEMINCREMENT | \
-     DMACH_FLAG_MEMCHUNKSIZE_4)
-
-#endif
+#define DMA_FLAGS(pid) \
+  (DMACH_FLAG_PERIPHPID(pid) | HSMCI_SYSBUS_IF | \
+   DMACH_FLAG_PERIPHH2SEL | DMACH_FLAG_PERIPHISPERIPH |  \
+   DMACH_FLAG_PERIPHWIDTH_32BITS | DMACH_FLAG_PERIPHCHUNKSIZE_1 | \
+   DMACH_FLAG_MEMPID_MAX | MEMORY_SYSBUS_IF | \
+   DMACH_FLAG_MEMWIDTH_32BITS | DMACH_FLAG_MEMINCREMENT | \
+   DMACH_FLAG_MEMCHUNKSIZE_4 | DMACH_FLAG_MEMBURST_1)
 
 /* Status errors:
  *
@@ -190,9 +233,9 @@
  */
 
 #define HSMCI_STATUS_ERRORS \
-  ( HSMCI_INT_UNRE  | HSMCI_INT_OVRE  | HSMCI_INT_BLKOVRE | HSMCI_INT_CSTOE | \
-    HSMCI_INT_DTOE  | HSMCI_INT_DCRCE | HSMCI_INT_RTOE    | HSMCI_INT_RENDE | \
-    HSMCI_INT_RCRCE | HSMCI_INT_RDIRE | HSMCI_INT_RINDE )
+  (HSMCI_INT_UNRE  | HSMCI_INT_OVRE  | HSMCI_INT_BLKOVRE | HSMCI_INT_CSTOE | \
+   HSMCI_INT_DTOE  | HSMCI_INT_DCRCE | HSMCI_INT_RTOE    | HSMCI_INT_RENDE | \
+   HSMCI_INT_RCRCE | HSMCI_INT_RDIRE | HSMCI_INT_RINDE)
 
 /* Response errors:
  *
@@ -205,13 +248,13 @@
  */
 
 #define HSMCI_RESPONSE_ERRORS \
-  ( HSMCI_INT_CSTOE | HSMCI_INT_RTOE  | HSMCI_INT_RENDE   | HSMCI_INT_RCRCE | \
-    HSMCI_INT_RDIRE | HSMCI_INT_RINDE )
+  (HSMCI_INT_CSTOE | HSMCI_INT_RTOE  | HSMCI_INT_RENDE   | HSMCI_INT_RCRCE | \
+   HSMCI_INT_RDIRE | HSMCI_INT_RINDE)
 #define HSMCI_RESPONSE_NOCRC_ERRORS \
-  ( HSMCI_INT_CSTOE | HSMCI_INT_RTOE  | HSMCI_INT_RENDE   | HSMCI_INT_RDIRE | \
-    HSMCI_INT_RINDE )
+  (HSMCI_INT_CSTOE | HSMCI_INT_RTOE  | HSMCI_INT_RENDE   | HSMCI_INT_RDIRE | \
+   HSMCI_INT_RINDE)
 #define HSMCI_RESPONSE_TIMEOUT_ERRORS \
-  ( HSMCI_INT_CSTOE | HSMCI_INT_RTOE )
+  (HSMCI_INT_CSTOE | HSMCI_INT_RTOE)
 
 /* Data transfer errors:
  *
@@ -224,18 +267,18 @@
  */
 
 #define HSMCI_DATA_ERRORS \
-  ( HSMCI_INT_UNRE  | HSMCI_INT_OVRE  | HSMCI_INT_BLKOVRE | HSMCI_INT_CSTOE | \
-    HSMCI_INT_DTOE  | HSMCI_INT_DCRCE )
+  (HSMCI_INT_UNRE  | HSMCI_INT_OVRE  | HSMCI_INT_BLKOVRE | HSMCI_INT_CSTOE | \
+   HSMCI_INT_DTOE  | HSMCI_INT_DCRCE)
 
 #define HSMCI_DATA_TIMEOUT_ERRORS \
-  ( HSMCI_INT_CSTOE | HSMCI_INT_DTOE )
+  (HSMCI_INT_CSTOE | HSMCI_INT_DTOE)
 
-#define HSMCI_DATA_DMARECV_ERRORS \
-  ( HSMCI_INT_OVRE  | HSMCI_INT_BLKOVRE | HSMCI_INT_CSTOE | HSMCI_INT_DTOE | \
-    HSMCI_INT_DCRCE )
+#define HSMCI_DATA_RECV_ERRORS \
+  (HSMCI_INT_OVRE  | HSMCI_INT_BLKOVRE | HSMCI_INT_CSTOE | HSMCI_INT_DTOE | \
+   HSMCI_INT_DCRCE)
 
 #define HSMCI_DATA_DMASEND_ERRORS \
-  ( HSMCI_INT_UNRE  | HSMCI_INT_CSTOE | HSMCI_INT_DTOE    | HSMCI_INT_DCRCE )
+  (HSMCI_INT_UNRE  | HSMCI_INT_CSTOE | HSMCI_INT_DTOE    | HSMCI_INT_DCRCE)
 
 /* Data transfer status and interrupt mask bits.
  *
@@ -251,10 +294,12 @@
  *   1: DMA buffer transfer has completed.
  */
 
+#define HSMCI_RECV_INTS \
+  (HSMCI_DATA_RECV_ERRORS | HSMCI_INT_RXRDY)
 #define HSMCI_DMARECV_INTS \
-  ( HSMCI_DATA_DMARECV_ERRORS | HSMCI_INT_XFRDONE /* | HSMCI_INT_DMADONE */ )
+  (HSMCI_DATA_RECV_ERRORS | HSMCI_INT_XFRDONE /* | HSMCI_INT_DMADONE */)
 #define HSMCI_DMASEND_INTS \
-  ( HSMCI_DATA_DMASEND_ERRORS | HSMCI_INT_XFRDONE /* | HSMCI_INT_DMADONE */ )
+  (HSMCI_DATA_DMASEND_ERRORS | HSMCI_INT_XFRDONE /* | HSMCI_INT_DMADONE */)
 
 /* Event waiting interrupt mask bits.
  *
@@ -266,9 +311,9 @@
  */
 
 #define HSMCI_CMDRESP_INTS \
-  ( HSMCI_RESPONSE_ERRORS | HSMCI_INT_CMDRDY )
+  (HSMCI_RESPONSE_ERRORS | HSMCI_INT_CMDRDY)
 #define HSMCI_CMDRESP_NOCRC_INTS \
-  ( HSMCI_RESPONSE_NOCRC_ERRORS | HSMCI_INT_CMDRDY )
+  (HSMCI_RESPONSE_NOCRC_ERRORS | HSMCI_INT_CMDRDY)
 
 /* Register logging support */
 
@@ -279,12 +324,14 @@
 #    define SAMPLENDX_AFTER_SETUP   2
 #    define SAMPLENDX_END_TRANSFER  3
 #    define SAMPLENDX_DMA_CALLBACK  4
-#    define DEBUG_NDMASAMPLES       5
+#    define SAMPLENDX_TIMEOUT       5
+#    define DEBUG_NDMASAMPLES       6
 #  else
 #    define SAMPLENDX_BEFORE_SETUP  0
 #    define SAMPLENDX_AFTER_SETUP   1
 #    define SAMPLENDX_END_TRANSFER  2
-#    define DEBUG_NDMASAMPLES       3
+#    define SAMPLENDX_TIMEOUT       3
+#    define DEBUG_NDMASAMPLES       4
 #  endif
 #endif
 
@@ -353,8 +400,9 @@ struct sam_dev_s
   volatile sdio_eventset_t wkupevent; /* The event that caused the wakeup */
   WDOG_ID            waitwdog;   /* Watchdog that handles event timeouts */
   uint8_t            hsmci;      /* HSMCI (0, 1, or 2) */
-  bool               dmabusy;    /* TRUE: DMA transfer is in progress (not used) */
-  bool               txbusy;     /* TRUE: TX transfer is in progress (for delay calculation) */
+  volatile bool      dmabusy;    /* TRUE: DMA transfer is in progress */
+  volatile bool      xfrbusy;    /* TRUE: Transfer is in progress */
+  volatile bool      txbusy;     /* TRUE: TX transfer is in progress (for delay calculation) */
 
   /* Callback support */
 
@@ -367,6 +415,11 @@ struct sam_dev_s
   /* Interrupt mode data transfer support */
 
   uint32_t           xfrmask;    /* Interrupt enables for data transfer */
+
+  /* Interrupt mode data transfer support */
+
+  uint32_t          *buffer;     /* Address of current R/W buffer */
+  ssize_t            remaining;  /* Number of bytes remaining in the transfer */
 
   /* DMA data transfer support */
 
@@ -420,7 +473,7 @@ static inline void sam_putreg(struct sam_dev_s *priv, uint32_t value,
 
 static inline void sam_configwaitints(struct sam_dev_s *priv, uint32_t waitmask,
               sdio_eventset_t waitevents);
-static void sam_disablewaitints(struct sam_dev_s *priv, sdio_eventset_t wkupevents);
+static void sam_disablewaitints(struct sam_dev_s *priv, sdio_eventset_t wkupevent);
 static inline void sam_configxfrints(struct sam_dev_s *priv, uint32_t xfrmask);
 static void sam_disablexfrints(struct sam_dev_s *priv);
 static inline void sam_enableints(struct sam_dev_s *priv);
@@ -440,8 +493,8 @@ static void sam_hsmcidump(struct sam_dev_s *priv,
 #ifdef CONFIG_SAMA5_HSMCI_XFRDEBUG
 static void sam_xfrsampleinit(struct sam_dev_s *priv);
 static void sam_xfrsample(struct sam_dev_s *priv, int index);
-static void sam_xfrdumpone(struct sam_dev_s *priv,
-              struct sam_xfrregs_s *regs, const char *msg);
+static void sam_xfrdumpone(struct sam_dev_s *priv, int index,
+              const char *msg);
 static void sam_xfrdump(struct sam_dev_s *priv);
 #else
 #  define   sam_xfrsampleinit(priv)
@@ -505,6 +558,10 @@ static int  sam_sendcmd(FAR struct sdio_dev_s *dev, uint32_t cmd,
               uint32_t arg);
 static void sam_blocksetup(FAR struct sdio_dev_s *dev, unsigned int blocklen,
               unsigned int nblocks);
+static int  sam_recvsetup(FAR struct sdio_dev_s *dev, FAR uint8_t *buffer,
+              size_t nbytes);
+static int  sam_sendsetup(FAR struct sdio_dev_s *dev, FAR const uint8_t *buffer,
+              size_t nbytes);
 static int  sam_cancel(FAR struct sdio_dev_s *dev);
 static int  sam_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd);
 static int  sam_recvshort(FAR struct sdio_dev_s *dev, uint32_t cmd,
@@ -530,10 +587,14 @@ static int  sam_registercallback(FAR struct sdio_dev_s *dev,
 #ifdef CONFIG_SDIO_DMA
 static bool sam_dmasupported(FAR struct sdio_dev_s *dev);
 #endif
+#ifndef HSCMI_NORXDMA
 static int  sam_dmarecvsetup(FAR struct sdio_dev_s *dev,
               FAR uint8_t *buffer, size_t buflen);
+#endif
+#ifndef HSCMI_NOTXDMA
 static int  sam_dmasendsetup(FAR struct sdio_dev_s *dev,
               FAR const uint8_t *buffer, size_t buflen);
+#endif
 
 /* Initialization/uninitialization/reset ************************************/
 
@@ -553,8 +614,8 @@ static const struct sdio_dev_s g_callbacks =
   .attach           = sam_attach,
   .sendcmd          = sam_sendcmd,
   .blocksetup       = sam_blocksetup,
-  .recvsetup        = sam_dmarecvsetup,
-  .sendsetup        = sam_dmasendsetup,
+  .recvsetup        = sam_recvsetup,
+  .sendsetup        = sam_sendsetup,
   .cancel           = sam_cancel,
   .waitresponse     = sam_waitresponse,
   .recvR1           = sam_recvshort,
@@ -570,8 +631,16 @@ static const struct sdio_dev_s g_callbacks =
   .registercallback = sam_registercallback,
 #ifdef CONFIG_SDIO_DMA
   .dmasupported     = sam_dmasupported,
+#ifndef HSCMI_NORXDMA
   .dmarecvsetup     = sam_dmarecvsetup,
+#else
+  .dmarecvsetup     = sam_recvsetup,
+#endif
+#ifndef HSCMI_NOTXDMA
   .dmasendsetup     = sam_dmasendsetup,
+#else
+  .dmasendsetup     = sam_sendsetup,
+#endif
 #endif
 };
 
@@ -660,7 +729,7 @@ static bool sam_checkreg(struct sam_dev_s *priv, bool wr, uint32_t value,
         {
           /* Yes... show how many times we did it */
 
-          lldbg("...[Repeats %d times]...\n", priv->ntimes);
+          mcinfo("...[Repeats %d times]...\n", priv->ntimes);
         }
 
       /* Save information about the new access */
@@ -693,7 +762,7 @@ static inline uint32_t sam_getreg(struct sam_dev_s *priv, unsigned int offset)
 #ifdef CONFIG_SAMA5_HSMCI_REGDEBUG
   if (sam_checkreg(priv, false, value, address))
     {
-      lldbg("%08x->%08x\n", address, value);
+      mcinfo("%08x->%08x\n", address, value);
     }
 #endif
 
@@ -716,7 +785,7 @@ static inline void sam_putreg(struct sam_dev_s *priv, uint32_t value,
 #ifdef CONFIG_SAMA5_HSMCI_REGDEBUG
   if (sam_checkreg(priv, true, value, address))
     {
-      lldbg("%08x<-%08x\n", address, value);
+      mcinfo("%08x<-%08x\n", address, value);
     }
 #endif
 
@@ -750,11 +819,11 @@ static inline void sam_configwaitints(struct sam_dev_s *priv,
 
   /* Save all of the data in one, atomic operation. */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   priv->waitevents = waitevents;
   priv->wkupevent  = 0;
   priv->waitmask   = waitmask;
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -781,12 +850,12 @@ static void sam_disablewaitints(struct sam_dev_s *priv,
    * operation.
    */
 
-  flags = irqsave();
+  flags            = enter_critical_section();
   priv->waitevents = 0;
   priv->wkupevent  = wkupevent;
   priv->waitmask   = 0;
   sam_putreg(priv, ~priv->xfrmask, SAM_HSMCI_IDR_OFFSET);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -829,10 +898,10 @@ static inline void sam_configxfrints(struct sam_dev_s *priv, uint32_t xfrmask)
 
 static void sam_disablexfrints(struct sam_dev_s *priv)
 {
-  irqstate_t flags = irqsave();
+  irqstate_t flags = enter_critical_section();
   priv->xfrmask = 0;
   sam_putreg(priv, ~priv->waitmask, SAM_HSMCI_IDR_OFFSET);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -938,23 +1007,23 @@ static void sam_hsmcisample(struct sam_dev_s *priv,
 static void sam_hsmcidump(struct sam_dev_s *priv,
                           struct sam_hsmciregs_s *regs, const char *msg)
 {
-  fdbg("HSMCI Registers: %s\n", msg);
-  fdbg("     MR[%08x]: %08x\n", priv->base + SAM_HSMCI_MR_OFFSET,    regs->mr);
-  fdbg("   DTOR[%08x]: %08x\n", priv->base + SAM_HSMCI_DTOR_OFFSET,  regs->dtor);
-  fdbg("   SDCR[%08x]: %08x\n", priv->base + SAM_HSMCI_SDCR_OFFSET,  regs->sdcr);
-  fdbg("   ARGR[%08x]: %08x\n", priv->base + SAM_HSMCI_ARGR_OFFSET,  regs->argr);
-  fdbg("   BLKR[%08x]: %08x\n", priv->base + SAM_HSMCI_BLKR_OFFSET,  regs->blkr);
-  fdbg("  CSTOR[%08x]: %08x\n", priv->base + SAM_HSMCI_CSTOR_OFFSET, regs->cstor);
-  fdbg("  RSPR0[%08x]: %08x\n", priv->base + SAM_HSMCI_RSPR0_OFFSET, regs->rsp0);
-  fdbg("  RSPR1[%08x]: %08x\n", priv->base + SAM_HSMCI_RSPR1_OFFSET, regs->rsp1);
-  fdbg("  RSPR2[%08x]: %08x\n", priv->base + SAM_HSMCI_RSPR2_OFFSET, regs->rsp2);
-  fdbg("  RSPR3[%08x]: %08x\n", priv->base + SAM_HSMCI_RSPR3_OFFSET, regs->rsp3);
-  fdbg("     SR[%08x]: %08x\n", priv->base + SAM_HSMCI_SR_OFFSET,    regs->sr);
-  fdbg("    IMR[%08x]: %08x\n", priv->base + SAM_HSMCI_IMR_OFFSET,   regs->imr);
-  fdbg("    DMA[%08x]: %08x\n", priv->base + SAM_HSMCI_DMA_OFFSET,   regs->dma);
-  fdbg("    CFG[%08x]: %08x\n", priv->base + SAM_HSMCI_CFG_OFFSET,   regs->cfg);
-  fdbg("   WPMR[%08x]: %08x\n", priv->base + SAM_HSMCI_WPMR_OFFSET,  regs->wpmr);
-  fdbg("   WPSR[%08x]: %08x\n", priv->base + SAM_HSMCI_WPSR_OFFSET,  regs->wpsr);
+  lcdinfo("HSMCI Registers: %s\n", msg);
+  lcdinfo("      MR[%08x]: %08x\n", priv->base + SAM_HSMCI_MR_OFFSET,    regs->mr);
+  lcdinfo("    DTOR[%08x]: %08x\n", priv->base + SAM_HSMCI_DTOR_OFFSET,  regs->dtor);
+  lcdinfo("    SDCR[%08x]: %08x\n", priv->base + SAM_HSMCI_SDCR_OFFSET,  regs->sdcr);
+  lcdinfo("    ARGR[%08x]: %08x\n", priv->base + SAM_HSMCI_ARGR_OFFSET,  regs->argr);
+  lcdinfo("    BLKR[%08x]: %08x\n", priv->base + SAM_HSMCI_BLKR_OFFSET,  regs->blkr);
+  lcdinfo("   CSTOR[%08x]: %08x\n", priv->base + SAM_HSMCI_CSTOR_OFFSET, regs->cstor);
+  lcdinfo("   RSPR0[%08x]: %08x\n", priv->base + SAM_HSMCI_RSPR0_OFFSET, regs->rsp0);
+  lcdinfo("   RSPR1[%08x]: %08x\n", priv->base + SAM_HSMCI_RSPR1_OFFSET, regs->rsp1);
+  lcdinfo("   RSPR2[%08x]: %08x\n", priv->base + SAM_HSMCI_RSPR2_OFFSET, regs->rsp2);
+  lcdinfo("   RSPR3[%08x]: %08x\n", priv->base + SAM_HSMCI_RSPR3_OFFSET, regs->rsp3);
+  lcdinfo("      SR[%08x]: %08x\n", priv->base + SAM_HSMCI_SR_OFFSET,    regs->sr);
+  lcdinfo("     IMR[%08x]: %08x\n", priv->base + SAM_HSMCI_IMR_OFFSET,   regs->imr);
+  lcdinfo("     DMA[%08x]: %08x\n", priv->base + SAM_HSMCI_DMA_OFFSET,   regs->dma);
+  lcdinfo("     CFG[%08x]: %08x\n", priv->base + SAM_HSMCI_CFG_OFFSET,   regs->cfg);
+  lcdinfo("    WPMR[%08x]: %08x\n", priv->base + SAM_HSMCI_WPMR_OFFSET,  regs->wpmr);
+  lcdinfo("    WPSR[%08x]: %08x\n", priv->base + SAM_HSMCI_WPSR_OFFSET,  regs->wpsr);
 }
 #endif
 
@@ -969,13 +1038,18 @@ static void sam_hsmcidump(struct sam_dev_s *priv,
 #ifdef CONFIG_SAMA5_HSMCI_XFRDEBUG
 static void sam_xfrsample(struct sam_dev_s *priv, int index)
 {
-  struct sam_xfrregs_s *regs = &priv->xfrsamples[index];
+  /* On a multiple block transfer, only sample on the first block */
+
+  if ((priv->smplset & (1 << index)) == 0)
+    {
+      struct sam_xfrregs_s *regs = &priv->xfrsamples[index];
 
 #ifdef CONFIG_DEBUG_DMA
-  sam_dmasample(priv->dma, &regs->dma);
+      sam_dmasample(priv->dma, &regs->dma);
 #endif
-  sam_hsmcisample(priv, &regs->hsmci);
-  priv->smplset |= (1 << index);
+      sam_hsmcisample(priv, &regs->hsmci);
+      priv->smplset |= (1 << index);
+    }
 }
 #endif
 
@@ -1009,13 +1083,22 @@ static void sam_xfrsampleinit(struct sam_dev_s *priv)
  ****************************************************************************/
 
 #ifdef CONFIG_SAMA5_HSMCI_XFRDEBUG
-static void sam_xfrdumpone(struct sam_dev_s *priv,
-                           struct sam_xfrregs_s *regs, const char *msg)
+static void sam_xfrdumpone(struct sam_dev_s *priv, int index,
+                           const char *msg)
 {
+  if ((priv->smplset & (1 << index)) != 0)
+    {
+      struct sam_xfrregs_s *regs = &priv->xfrsamples[index];
+
 #ifdef CONFIG_DEBUG_DMA
-  sam_dmadump(priv->dma, &regs->dma, msg);
+      sam_dmadump(priv->dma, &regs->dma, msg);
 #endif
-  sam_hsmcidump(priv, &regs->hsmci, msg);
+      sam_hsmcidump(priv, &regs->hsmci, msg);
+    }
+  else
+    {
+      lcdinfo("%s: Not collected\n", msg);
+    }
 }
 #endif
 
@@ -1034,38 +1117,16 @@ static void  sam_xfrdump(struct sam_dev_s *priv)
   if (priv->xfrinitialized)
 #endif
     {
-      if ((priv->smplset & (1 << SAMPLENDX_BEFORE_SETUP)) != 0)
-        {
-          sam_xfrdumpone(priv, &priv->xfrsamples[SAMPLENDX_BEFORE_SETUP],
-                         "Before setup");
-        }
+      sam_xfrdumpone(priv, SAMPLENDX_BEFORE_SETUP, "Before setup");
 #ifdef CONFIG_DEBUG_DMA
-      if ((priv->smplset & (1 << SAMPLENDX_BEFORE_SETUP)) != 0)
-        {
-          sam_xfrdumpone(priv, &priv->xfrsamples[SAMPLENDX_BEFORE_ENABLE],
-                         "Before DMA enable");
-        }
+      sam_xfrdumpone(priv, SAMPLENDX_BEFORE_ENABLE, "Before DMA enable");
 #endif
-
-      if ((priv->smplset & (1 << SAMPLENDX_BEFORE_SETUP)) != 0)
-        {
-          sam_xfrdumpone(priv, &priv->xfrsamples[SAMPLENDX_AFTER_SETUP],
-                         "After setup");
-        }
-
-      if ((priv->smplset & (1 << SAMPLENDX_BEFORE_SETUP)) != 0)
-        {
-          sam_xfrdumpone(priv, &priv->xfrsamples[SAMPLENDX_END_TRANSFER],
-                         "End of transfer");
-        }
-
+      sam_xfrdumpone(priv, SAMPLENDX_AFTER_SETUP, "After setup");
+      sam_xfrdumpone(priv, SAMPLENDX_END_TRANSFER, "End of transfer");
 #ifdef CONFIG_DEBUG_DMA
-      if ((priv->smplset & (1 << SAMPLENDX_BEFORE_SETUP)) != 0)
-        {
-          sam_xfrdumpone(priv, &priv->xfrsamples[SAMPLENDX_DMA_CALLBACK],
-                         "DMA Callback");
-        }
+      sam_xfrdumpone(priv, SAMPLENDX_DMA_CALLBACK, "DMA Callback");
 #endif
+      sam_xfrdumpone(priv, SAMPLENDX_TIMEOUT, "Timeout");
 
       priv->smplset        = 0;
 #ifdef CONFIG_SAMA5_HSMCI_CMDDEBUG
@@ -1134,7 +1195,7 @@ static void sam_cmddump(struct sam_dev_s *priv)
     {
       sam_hsmcidump(priv, &priv->cmdsamples[SAMPLENDX_AFTER_CMDR],
                     "After command setup");
-      sam_hsmcidump(priv, &g_cmdsamples[SAMPLENDX_AT_WAKEUP],
+      sam_hsmcidump(priv, &priv->cmdsamples[SAMPLENDX_AT_WAKEUP],
                     "After wakeup");
 #ifdef CONFIG_SAMA5_HSMCI_XFRDEBUG
       priv->cmdinitialized = false;
@@ -1158,16 +1219,59 @@ static void sam_cmddump(struct sam_dev_s *priv)
 static void sam_dmacallback(DMA_HANDLE handle, void *arg, int result)
 {
   struct sam_dev_s *priv = (struct sam_dev_s *)arg;
+  sdio_eventset_t wkupevent;
 
-  /* We don't really do anything at the completion of DMA.  The termination
-   * of the transfer is driven by the HSMCI interrupts.
-   *
-   * Mark the DMA not busy.
+  /* Is DMA still active?  We can get this callback when sam_dmastop() is
+   * called too.
    */
 
-  priv->dmabusy = false;
+  if (priv->dmabusy)
+    {
+      /* Mark the DMA not busy and sample DMA registers */
 
-  sam_xfrsample((struct sam_dev_s *)arg, SAMPLENDX_DMA_CALLBACK);
+      priv->dmabusy = false;
+      sam_xfrsample((struct sam_dev_s *)arg, SAMPLENDX_DMA_CALLBACK);
+
+      /* Disable the DMA handshaking */
+
+      sam_putreg(priv, 0, SAM_HSMCI_DMA_OFFSET);
+
+      /* Terminate the transfer with an I/O error in the event of a DMA failure */
+
+      if (result < 0)
+        {
+          wkupevent = (result == -ETIMEDOUT ? SDIOWAIT_TIMEOUT : SDIOWAIT_ERROR);
+          mcerr("ERROR: DMA failed: result=%d wkupevent=%04x\n", result, wkupevent);
+
+          /* sam_endtransfer will terminate the transfer and wait up the waiting
+           * client in this case.
+           */
+
+          sam_endtransfer(priv, wkupevent);
+        }
+
+      /* The DMA completed without error.  Wake-up the waiting client if (1) both the
+       * HSMCI and DMA completion events, and (2) There is a client waiting for
+       * this event.
+       *
+       * If the HSMCI transfer event has already completed, it must have completed
+       * successfully (because the DMA was not cancelled).  sam_endtransfer() should
+       * have already received the SDIOWAIT_TRANSFERDONE event, but this event would
+       * not yet have been recorded.  We need to post the SDIOWAIT_TRANSFERDONE
+       * again in this case here.
+       *
+       * The timeout will remain active until sam_endwait() is eventually called
+       * so we should not have any concern about hangs if the HSMCI transfer never
+       * completed.
+       */
+
+      else if (!priv->xfrbusy && (priv->waitevents & SDIOWAIT_TRANSFERDONE) != 0)
+        {
+          /* Okay.. wake up any waiting threads */
+
+          sam_endwait(priv, SDIOWAIT_TRANSFERDONE);
+        }
+    }
 }
 
 /****************************************************************************
@@ -1212,18 +1316,32 @@ static void sam_eventtimeout(int argc, uint32_t arg)
   struct sam_dev_s *priv = (struct sam_dev_s *)arg;
 
   DEBUGASSERT(argc == 1 && priv != NULL);
+  sam_xfrsample((struct sam_dev_s *)arg, SAMPLENDX_TIMEOUT);
 
-  /* This can, apparently, happen under certain race conditions */
-  /* DEBUGASSERT((priv->waitevents & SDIOWAIT_TIMEOUT) != 0); */
+  /* Make sure that any hung DMA is stopped.  dmabusy == false is the cue
+   * so the DMA callback is ignored.
+   */
 
-  /* Is a data transfer complete event expected? */
+  priv->dmabusy = false;
+  sam_dmastop(priv->dma);
+
+  /* Disable the DMA handshaking */
+
+  sam_putreg(priv, 0, SAM_HSMCI_DMA_OFFSET);
+
+  /* Make sure that any hung HSMCI transfer is stopped */
+
+  sam_disablexfrints(priv);
+  sam_notransfer(priv);
+
+  /* Is a data timeout complete event expected? (should always be the case) */
 
   if ((priv->waitevents & SDIOWAIT_TIMEOUT) != 0)
     {
       /* Yes.. wake up any waiting threads */
 
       sam_endwait(priv, SDIOWAIT_TIMEOUT);
-      flldbg("Timeout\n");
+      mcerr("ERROR: Timeout\n");
     }
 }
 
@@ -1300,18 +1418,31 @@ static void sam_endtransfer(struct sam_dev_s *priv,
    * on an error condition).
    */
 
-  sam_dmastop(priv->dma);
-  priv->dmabusy = false;
-
-  /* Disable the DMA handshaking */
-
-  sam_putreg(priv, 0, SAM_HSMCI_DMA_OFFSET);
-
-  /* Is a thread wait for these data transfer complete events? */
-
-  if ((priv->waitevents & wkupevent) != 0)
+  if ((wkupevent & (SDIOWAIT_TIMEOUT | SDIOWAIT_ERROR)) != 0)
     {
-      /* Yes.. wake up any waiting threads */
+      /* dmabusy == false gives the DMA callback handler a clue about what
+       * is going on.
+       */
+
+      priv->dmabusy = false;
+      sam_dmastop(priv->dma);
+
+      /* Disable the DMA handshaking */
+
+      sam_putreg(priv, 0, SAM_HSMCI_DMA_OFFSET);
+    }
+
+  /* The transfer is complete.  Wake-up the waiting client if (1) both the
+   * HSMCI and DMA completion events, and (2) There is a client waiting for
+   * this event.
+   *
+   * The timeout will remain active until sam_endwait() is eventually called
+   * so we should not have any concern about hangs if the DMA never completes.
+   */
+
+  if (!priv->dmabusy && (priv->waitevents & wkupevent) != 0)
+    {
+      /* Okay.. wake up any waiting threads */
 
       sam_endwait(priv, wkupevent);
     }
@@ -1321,8 +1452,9 @@ static void sam_endtransfer(struct sam_dev_s *priv,
  * Name: sam_notransfer
  *
  * Description:
- *   Setup for no transfer.  This is the default setup that is overriddden
- *   by sam_dmarecvsetup or sam_dmasendsetup
+ *   Setup for no transfer.  This is called both before beginning a new
+ *   transfer and when a transfer completes.  In the first case, this is the
+ *   default setup that is overridden by sam_dmarecvsetup or sam_dmasendsetup
  *
  * Input Parameters:
  *   priv   - An instance of the HSMCI device interface
@@ -1334,21 +1466,28 @@ static void sam_endtransfer(struct sam_dev_s *priv,
 
 static void sam_notransfer(struct sam_dev_s *priv)
 {
+  uint32_t regval;
+
   /* Make read/write proof (or not).  This is a legacy behavior: This really
    * just needs be be done once at initialization time.
    */
 
-  uint32_t regval = sam_getreg(priv, SAM_HSMCI_MR_OFFSET);
+  regval  = sam_getreg(priv, SAM_HSMCI_MR_OFFSET);
   regval &= ~(HSMCI_MR_RDPROOF | HSMCI_MR_WRPROOF);
   sam_putreg(priv, regval, SAM_HSMCI_MR_OFFSET);
 
   /* Clear the block size and count */
 
   sam_putreg(priv, 0, SAM_HSMCI_BLKR_OFFSET);
+
+  /* Clear transfer flags (DMA could still be active in a corner case) */
+
+  priv->xfrbusy = false;
+  priv->txbusy  = false;
 }
 
 /****************************************************************************
- * Interrrupt Handling
+ * Interrupt Handling
  ****************************************************************************/
 
 /****************************************************************************
@@ -1374,7 +1513,7 @@ static int sam_hsmci_interrupt(struct sam_dev_s *priv)
 
   /* Loop while there are pending interrupts. */
 
-  for (;;)
+  for (; ; )
     {
       /* Check the HSMCI status register.  Mask out all bits that don't
        * correspond to enabled interrupts.  (This depends on the fact that
@@ -1391,34 +1530,64 @@ static int sam_hsmci_interrupt(struct sam_dev_s *priv)
         }
 
       /* Handle in progress, interrupt driven data transfers ****************/
-      /* Do any of these interrupts signal the end a data transfer? */
+      /* Do any of these interrupts signal a data transfer event? */
 
       pending = enabled & priv->xfrmask;
       if (pending != 0)
         {
-          /* Yes.. the transfer is complete.  Did it complete with an error? */
+          /* Yes.. Did the transfer complete with an error? */
 
           if ((pending & HSMCI_DATA_ERRORS) != 0)
             {
               /* Yes.. Was it some kind of timeout error? */
 
-              flldbg("ERROR: enabled: %08x pending: %08x\n", enabled, pending);
+              mcerr("ERROR: enabled: %08x pending: %08x\n", enabled, pending);
               if ((pending & HSMCI_DATA_TIMEOUT_ERRORS) != 0)
                 {
                   /* Yes.. Terminate with a timeout. */
 
-                  sam_endtransfer(priv, SDIOWAIT_TRANSFERDONE|SDIOWAIT_TIMEOUT);
+                  sam_endtransfer(priv, SDIOWAIT_TRANSFERDONE | SDIOWAIT_TIMEOUT);
                 }
               else
                 {
                   /* No..  Terminate with an I/O error. */
 
-                  sam_endtransfer(priv, SDIOWAIT_TRANSFERDONE|SDIOWAIT_ERROR);
+                  sam_endtransfer(priv, SDIOWAIT_TRANSFERDONE | SDIOWAIT_ERROR);
                 }
             }
+
+          /* No, If RXRDY is enabled, then we are doing a non-DMA receive.
+           * We need to transfer word(s) from the RDR register to the user
+           * buffer.
+           */
+
+          else if ((pending & HSMCI_INT_RXRDY) != 0)
+            {
+              /* Interrupt mode data transfer support */
+
+              DEBUGASSERT(!priv->dmabusy && priv->xfrbusy && !priv->txbusy);
+              DEBUGASSERT(priv->buffer && priv->remaining > 0);
+
+              *priv->buffer++  = sam_getreg(priv, SAM_HSMCI_RDR_OFFSET);
+              priv->remaining -= sizeof(uint32_t);
+
+              /* Are we finished? */
+
+              if (priv->remaining <= 0)
+                {
+                  /* Yes.. End the transfer */
+
+                  priv->buffer    = NULL;
+                  priv->remaining = 0;
+                  sam_endtransfer(priv, SDIOWAIT_TRANSFERDONE);
+                }
+            }
+
+          /* Otherwise it must be a DMA transfer that completed successfully */
+
           else
             {
-              /* No.. Then the transfer must have completed successfully */
+              /* End the transfer */
 
               sam_endtransfer(priv, SDIOWAIT_TRANSFERDONE);
             }
@@ -1444,32 +1613,34 @@ static int sam_hsmci_interrupt(struct sam_dev_s *priv)
                 {
                   /* Yes.. Was the error some kind of timeout? */
 
-                  fllvdbg("ERROR: events: %08x SR: %08x\n",
-                          priv->cmdrmask, enabled);
+                  mcerr("ERROR: events: %08x SR: %08x\n",
+                        priv->cmdrmask, enabled);
 
                   if ((pending & HSMCI_RESPONSE_TIMEOUT_ERRORS) != 0)
                     {
                       /* Yes.. signal a timeout error */
 
-                      wkupevent = SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE|SDIOWAIT_TIMEOUT;
+                      wkupevent = SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE |
+                                  SDIOWAIT_TIMEOUT;
                     }
                   else
                     {
                       /* No.. signal some generic I/O error */
 
-                      wkupevent = SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE|SDIOWAIT_ERROR;
+                      wkupevent = SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE |
+                                  SDIOWAIT_ERROR;
                     }
                 }
               else
-               {
+                {
                   /* The Command-Response sequence ended with no error */
 
-                      wkupevent = SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE;
+                  wkupevent = SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE;
                 }
 
-             /* Yes.. Is there a thread waiting for this event set? */
+              /* Yes.. Is there a thread waiting for this event set? */
 
-             wkupevent &= priv->waitevents;
+              wkupevent &= priv->waitevents;
               if (wkupevent != 0)
                 {
                   /* Yes.. wake the thread up */
@@ -1543,7 +1714,7 @@ static void sam_reset(FAR struct sdio_dev_s *dev)
 
   /* Reset the MCI */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   sam_putreg(priv, HSMCI_CR_SWRST, SAM_HSMCI_CR_OFFSET);
 
   /* Disable the MCI */
@@ -1590,7 +1761,6 @@ static void sam_reset(FAR struct sdio_dev_s *dev)
   priv->waitmask   = 0;      /* Interrupt enables for event waiting */
   priv->wkupevent  = 0;      /* The event that caused the wakeup */
   priv->dmabusy    = false;  /* No DMA in progress */
-  priv->txbusy     = false;  /* No TX in progress */
   wd_cancel(priv->waitwdog); /* Cancel any timeouts */
 
   /* Interrupt mode data transfer support */
@@ -1600,7 +1770,7 @@ static void sam_reset(FAR struct sdio_dev_s *dev)
   /* DMA data transfer support */
 
   priv->widebus    = false;  /* Required for DMA support */
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -1683,10 +1853,10 @@ static void sam_clock(FAR struct sdio_dev_s *dev, enum sdio_clock_e rate)
   regval = sam_getreg(priv, SAM_HSMCI_MR_OFFSET);
   regval &= ~(HSMCI_MR_CLKDIV_MASK | HSMCI_MR_PWSDIV_MASK | HSMCI_MR_CLKODD);
 
- /* These clock devisor values that must be defined in the board-specific
-  * board.h header file: HSMCI_INIT_CLKDIV, HSMCI_MMCXFR_CLKDIV,
-  * HSMCI_SDXFR_CLKDIV, and HSMCI_SDWIDEXFR_CLKDIV.
-  */
+  /* These clock devisor values that must be defined in the board-specific
+   * board.h header file: HSMCI_INIT_CLKDIV, HSMCI_MMCXFR_CLKDIV,
+   * HSMCI_SDXFR_CLKDIV, and HSMCI_SDWIDEXFR_CLKDIV.
+   */
 
   switch (rate)
     {
@@ -1822,13 +1992,13 @@ static int sam_attach(FAR struct sdio_dev_s *dev)
 static int sam_sendcmd(FAR struct sdio_dev_s *dev,
                        uint32_t cmd, uint32_t arg)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   uint32_t regval;
   uint32_t cmdidx;
 
   sam_cmdsampleinit(priv);
 
-    /* Set the HSMCI Argument value */
+  /* Set the HSMCI Argument value */
 
   sam_putreg(priv, arg, SAM_HSMCI_ARGR_OFFSET);
 
@@ -1880,7 +2050,7 @@ static int sam_sendcmd(FAR struct sdio_dev_s *dev,
       break;
     }
 
-  /* 'OR' in data transer related bits */
+  /* 'OR' in data transfer related bits */
 
   switch (cmd & MMCSD_DATAXFR_MASK)
     {
@@ -1924,7 +2094,7 @@ static int sam_sendcmd(FAR struct sdio_dev_s *dev,
 
   /* Write the fully decorated command to CMDR */
 
-  fvdbg("cmd: %08x arg: %08x regval: %08x\n", cmd, arg, regval);
+  mcinfo("cmd: %08x arg: %08x regval: %08x\n", cmd, arg, regval);
   sam_putreg(priv, regval, SAM_HSMCI_CMDR_OFFSET);
   sam_cmdsample1(priv, SAMPLENDX_AFTER_CMDR);
   return OK;
@@ -1951,7 +2121,8 @@ static void sam_blocksetup(FAR struct sdio_dev_s *dev, unsigned int blocklen,
   struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   uint32_t regval;
 
-  DEBUGASSERT(dev != NULL && nblocks > 0 && nblocks < 65535 && blocklen < 65535);
+  DEBUGASSERT(dev != NULL && nblocks > 0 && nblocks < 65535);
+  DEBUGASSERT(blocklen < 65535 && (blocklen & 3) == 0);
 
   /* Make read/write proof (or not).  This is a legacy behavior: This really
    * just needs be be done once at initialization time.
@@ -1967,6 +2138,138 @@ static void sam_blocksetup(FAR struct sdio_dev_s *dev, unsigned int blocklen,
   regval = (blocklen << HSMCI_BLKR_BLKLEN_SHIFT) |
            (nblocks  << HSMCI_BLKR_BCNT_SHIFT);
   sam_putreg(priv, regval, SAM_HSMCI_BLKR_OFFSET);
+}
+
+/****************************************************************************
+ * Name: sam_recvsetup
+ *
+ * Description:
+ *   Setup hardware in preparation for data transfer from the card in non-DMA
+ *   (interrupt driven mode).  This method will do whatever controller setup
+ *   is necessary.  This would be called for SD memory just BEFORE sending
+ *   CMD13 (SEND_STATUS), CMD17 (READ_SINGLE_BLOCK), CMD18
+ *   (READ_MULTIPLE_BLOCKS), ACMD51 (SEND_SCR), etc.  Normally, SDIO_WAITEVENT
+ *   will be called to receive the indication that the transfer is complete.
+ *
+ * Input Parameters:
+ *   dev    - An instance of the SDIO device interface
+ *   buffer - Address of the buffer in which to receive the data
+ *   buflen - The number of bytes in the transfer
+ *
+ * Returned Value:
+ *   Number of bytes sent on success; a negated errno on failure
+ *
+ ****************************************************************************/
+
+static int sam_recvsetup(FAR struct sdio_dev_s *dev, FAR uint8_t *buffer,
+                         size_t buflen)
+{
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
+
+  DEBUGASSERT(priv != NULL && buffer != NULL && buflen > 0);
+  DEBUGASSERT(((uint32_t)buffer & 3) == 0);
+
+  /* Initialize register sampling */
+
+  sam_xfrsampleinit(priv);
+  sam_xfrsample(priv, SAMPLENDX_BEFORE_SETUP);
+
+  /* Disable DMA handshaking */
+
+  sam_putreg(priv, 0, SAM_HSMCI_DMA_OFFSET);
+
+  /* Setup of the transfer configuration */
+
+  priv->dmabusy = false;
+  priv->xfrbusy = true;
+  priv->txbusy  = false;
+
+  /* Save the destination buffer information for use by the interrupt handler */
+
+  priv->buffer    = (uint32_t *)buffer;
+  priv->remaining = buflen;
+
+  /* And enable interrupts */
+
+  sam_configxfrints(priv, HSMCI_RECV_INTS);
+  sam_xfrsample(priv, SAMPLENDX_AFTER_SETUP);
+  return OK;
+}
+
+/****************************************************************************
+ * Name: sam_sendsetup
+ *
+ * Description:
+ *   Setup hardware in preparation for data transfer from the card.  This method
+ *   will do whatever controller setup is necessary.  This would be called
+ *   for SD memory just AFTER sending CMD24 (WRITE_BLOCK), CMD25
+ *   (WRITE_MULTIPLE_BLOCK), ... and before SDIO_SENDDATA is called.
+ *
+ * Input Parameters:
+ *   dev    - An instance of the SDIO device interface
+ *   buffer - Address of the buffer containing the data to send
+ *   buflen - The number of bytes in the transfer
+ *
+ * Returned Value:
+ *   Number of bytes sent on success; a negated errno on failure
+ *
+ ****************************************************************************/
+
+static int sam_sendsetup(FAR struct sdio_dev_s *dev, FAR const uint8_t *buffer,
+                         size_t buflen)
+{
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
+  unsigned int nwords;
+  const uint32_t *ptr;
+  uint32_t sr;
+
+  DEBUGASSERT(priv != NULL && buffer != NULL && buflen > 0);
+  DEBUGASSERT(((uint32_t)buffer & 3) == 0);
+
+  /* Disable DMA handshaking */
+
+  sam_putreg(priv, 0, SAM_HSMCI_DMA_OFFSET);
+  sam_configxfrints(priv, HSMCI_DMASEND_INTS);
+
+  priv->dmabusy = false;
+  priv->xfrbusy = true;
+  priv->txbusy  = true;
+
+  /* Nullify register sampling */
+
+  sam_xfrsampleinit(priv);
+
+  /* Copy each word to the TX FIFO
+   *
+   * REVISIT:  If TX data underruns occur, then it may be necessary to
+   * disable pre-emption around this loop.
+   */
+
+  nwords = (buflen + 3) >> 2;
+  ptr = (const uint32_t *)buffer;
+
+  while (nwords > 0)
+    {
+      /* Check the HSMCI status */
+
+      sr = sam_getreg(priv, SAM_HSMCI_SR_OFFSET);
+      if ((sr & HSMCI_DATA_DMASEND_ERRORS) != 0)
+        {
+          /* Some fatal error has occurred */
+
+          lcderr("ERROR: sr %08x\n", sr);
+          return -EIO;
+        }
+      else if ((sr & HSMCI_INT_TXRDY) != 0)
+        {
+          /* TXRDY -- transfer another word */
+
+          sam_putreg(priv, *ptr++, SAM_HSMCI_TDR_OFFSET);
+          nwords--;
+        }
+    }
+
+  return OK;
 }
 
 /****************************************************************************
@@ -1988,7 +2291,7 @@ static void sam_blocksetup(FAR struct sdio_dev_s *dev, unsigned int blocklen,
 
 static int sam_cancel(FAR struct sdio_dev_s *dev)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
 
   /* Disable all transfer- and event- related interrupts */
 
@@ -2010,11 +2313,12 @@ static int sam_cancel(FAR struct sdio_dev_s *dev)
   /* Make sure that the DMA is stopped (it will be stopped automatically
    * on normal transfers, but not necessarily when the transfer terminates
    * on an error condition.
+   *
+   * dmabusy == false let's the DMA callback know what is happening.
    */
 
-  sam_dmastop(priv->dma);
   priv->dmabusy = false;
-  priv->txbusy  = false;
+  sam_dmastop(priv->dma);
 
   /* Disable the DMA handshaking */
 
@@ -2040,7 +2344,7 @@ static int sam_cancel(FAR struct sdio_dev_s *dev)
 
 static int sam_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   uint32_t sr;
   uint32_t pending;
   int32_t  timeout;
@@ -2070,7 +2374,7 @@ static int sam_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd)
 
   /* Then wait for the response (or timeout) */
 
-  for (;;)
+  for (; ; )
     {
       /* Did a Command-Response sequence termination evernt occur? */
 
@@ -2088,21 +2392,23 @@ static int sam_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd)
             {
               /* Yes.. Was the error some kind of timeout? */
 
-              fdbg("ERROR: cmd: %08x events: %08x SR: %08x\n",
+              lcderr("ERROR: cmd: %08x events: %08x SR: %08x\n",
                    cmd, priv->cmdrmask, sr);
 
               if ((pending & HSMCI_RESPONSE_TIMEOUT_ERRORS) != 0)
                 {
                   /* Yes.. return a timeout error */
 
-                  priv->wkupevent = SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE|SDIOWAIT_TIMEOUT;
+                  priv->wkupevent = SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE |
+                                    SDIOWAIT_TIMEOUT;
                   return -ETIMEDOUT;
                 }
               else
                 {
                   /* No.. return some generic I/O error */
 
-                  priv->wkupevent = SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE|SDIOWAIT_ERROR;
+                  priv->wkupevent = SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE |
+                                    SDIOWAIT_ERROR;
                   return -EIO;
                 }
             }
@@ -2110,14 +2416,14 @@ static int sam_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd)
             {
               /* The Command-Response sequence ended with no error */
 
-              priv->wkupevent = SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE;
+              priv->wkupevent = SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE;
               return OK;
             }
        }
       else if (--timeout <= 0)
         {
-          fdbg("ERROR: Timeout cmd: %08x events: %08x SR: %08x\n",
-               cmd, priv->cmdrmask, sr);
+          lcderr("ERROR: Timeout cmd: %08x events: %08x SR: %08x\n",
+                 cmd, priv->cmdrmask, sr);
 
           priv->wkupevent = SDIOWAIT_TIMEOUT;
           return -ETIMEDOUT;
@@ -2150,7 +2456,7 @@ static int sam_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd)
 static int sam_recvshort(FAR struct sdio_dev_s *dev,
                          uint32_t cmd, uint32_t *rshort)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   int ret = OK;
 
   /* These responses could have CRC errors:
@@ -2188,10 +2494,10 @@ static int sam_recvshort(FAR struct sdio_dev_s *dev,
    *     0         1               End bit
    */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!rshort)
     {
-      fdbg("ERROR: rshort=NULL\n");
+      lcderr("ERROR: rshort=NULL\n");
       ret = -EINVAL;
     }
 
@@ -2203,7 +2509,7 @@ static int sam_recvshort(FAR struct sdio_dev_s *dev,
            (cmd & MMCSD_RESPONSE_MASK) != MMCSD_R3_RESPONSE &&
            (cmd & MMCSD_RESPONSE_MASK) != MMCSD_R7_RESPONSE)
     {
-      fdbg("ERROR: Wrong response CMD=%08x\n", cmd);
+      lcderr("ERROR: Wrong response CMD=%08x\n", cmd);
       ret = -EINVAL;
     }
   else
@@ -2236,24 +2542,24 @@ static int sam_recvshort(FAR struct sdio_dev_s *dev,
 
 static int sam_recvlong(FAR struct sdio_dev_s *dev, uint32_t cmd, uint32_t rlong[4])
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   int ret = OK;
 
- /* R2  CID, CSD register (136-bit)
-  *     135       0               Start bit
-  *     134       0               Transmission bit (0=from card)
-  *     133:128   bit5   - bit0   Reserved
-  *     127:1     bit127 - bit1   127-bit CID or CSD register
-  *                               (including internal CRC)
-  *     0         1               End bit
-  */
+  /* R2  CID, CSD register (136-bit)
+   *     135       0               Start bit
+   *     134       0               Transmission bit (0=from card)
+   *     133:128   bit5   - bit0   Reserved
+   *     127:1     bit127 - bit1   127-bit CID or CSD register
+   *                               (including internal CRC)
+   *     0         1               End bit
+   */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   /* Check that R1 is the correct response to this command */
 
   if ((cmd & MMCSD_RESPONSE_MASK) != MMCSD_R2_RESPONSE)
     {
-      fdbg("ERROR: Wrong response CMD=%08x\n", cmd);
+      lcderr("ERROR: Wrong response CMD=%08x\n", cmd);
       ret = -EINVAL;
     }
   else
@@ -2292,7 +2598,7 @@ static int sam_recvlong(FAR struct sdio_dev_s *dev, uint32_t cmd, uint32_t rlong
 static int sam_recvnotimpl(FAR struct sdio_dev_s *dev,
                            uint32_t cmd, uint32_t *rnotimpl)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   priv->wkupevent = 0;
   return -ENOSYS;
 }
@@ -2335,7 +2641,7 @@ static int sam_recvnotimpl(FAR struct sdio_dev_s *dev,
 static void sam_waitenable(FAR struct sdio_dev_s *dev,
                            sdio_eventset_t eventset)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   uint32_t waitmask;
 
   DEBUGASSERT(priv != NULL);
@@ -2349,7 +2655,7 @@ static void sam_waitenable(FAR struct sdio_dev_s *dev,
    */
 
   waitmask = 0;
-  if ((eventset & (SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE)) != 0)
+  if ((eventset & (SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE)) != 0)
     {
       waitmask |= priv->cmdrmask;
     }
@@ -2394,7 +2700,7 @@ static void sam_waitenable(FAR struct sdio_dev_s *dev,
 static sdio_eventset_t sam_eventwait(FAR struct sdio_dev_s *dev,
                                      uint32_t timeout)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   sdio_eventset_t wkupevent = 0;
   int ret;
 
@@ -2411,7 +2717,7 @@ static sdio_eventset_t sam_eventwait(FAR struct sdio_dev_s *dev,
   sam_enableints(priv);
 
   /* There is a race condition here... the event may have completed before
-   * we get here.  In this case waitevents will be zero, but wkupevents will
+   * we get here.  In this case waitevents will be zero, but wkupevent will
    * be non-zero (and, hopefully, the semaphore count will also be non-zero).
    */
 
@@ -2425,7 +2731,7 @@ static sdio_eventset_t sam_eventwait(FAR struct sdio_dev_s *dev,
 
       if (!timeout)
         {
-           return SDIOWAIT_TIMEOUT;
+          return SDIOWAIT_TIMEOUT;
         }
 
       /* Start the watchdog timer.  I am not sure why this is, but I am
@@ -2439,12 +2745,12 @@ static sdio_eventset_t sam_eventwait(FAR struct sdio_dev_s *dev,
           timeout = MAX(5000, timeout);
         }
 
-      delay = (timeout + (MSEC_PER_TICK-1)) / MSEC_PER_TICK;
+      delay = MSEC2TICK(timeout);
       ret   = wd_start(priv->waitwdog, delay, (wdentry_t)sam_eventtimeout,
                        1, (uint32_t)priv);
       if (ret != OK)
         {
-           fdbg("ERROR: wd_start failed: %d\n", ret);
+           lcderr("ERROR: wd_start failed: %d\n", ret);
         }
     }
 
@@ -2454,7 +2760,7 @@ static sdio_eventset_t sam_eventwait(FAR struct sdio_dev_s *dev,
    * may have already occurred before this function was called!
    */
 
-  for (;;)
+  for (; ; )
     {
       /* Wait for an event in event set to occur.  If this the event has already
        * occurred, then the semaphore will already have been incremented and
@@ -2508,9 +2814,9 @@ static sdio_eventset_t sam_eventwait(FAR struct sdio_dev_s *dev,
 static void sam_callbackenable(FAR struct sdio_dev_s *dev,
                                sdio_eventset_t eventset)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
 
-  fvdbg("eventset: %02x\n", eventset);
+  mcinfo("eventset: %02x\n", eventset);
   DEBUGASSERT(priv != NULL);
 
   priv->cbevents = eventset;
@@ -2542,11 +2848,11 @@ static void sam_callbackenable(FAR struct sdio_dev_s *dev,
 static int sam_registercallback(FAR struct sdio_dev_s *dev,
                                 worker_t callback, void *arg)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
 
   /* Disable callbacks and register this callback and is argument */
 
-  fvdbg("Register %p(%p)\n", callback, arg);
+  mcinfo("Register %p(%p)\n", callback, arg);
   DEBUGASSERT(priv != NULL);
 
   priv->cbevents = 0;
@@ -2595,35 +2901,59 @@ static bool sam_dmasupported(FAR struct sdio_dev_s *dev)
  *
  ****************************************************************************/
 
+#ifndef HSCMI_NORXDMA
 static int sam_dmarecvsetup(FAR struct sdio_dev_s *dev, FAR uint8_t *buffer,
-                          size_t buflen)
+                            size_t buflen)
 {
   struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   uint32_t paddr;
   uint32_t maddr;
+  uint32_t regval;
+  unsigned int blocksize;
+  unsigned int nblocks;
+  unsigned int offset;
+  unsigned int i;
 
   DEBUGASSERT(priv != NULL && buffer != NULL && buflen > 0);
   DEBUGASSERT(((uint32_t)buffer & 3) == 0);
 
-  /* Physical address of the HSCMI RDR register and of the buffer location
-   * in RAM.
+  /* How many blocks?  That should have been saved by the sam_blocksetup()
+   * method earlier.
    */
 
-#ifdef HSCMI_FIFODMA
-  paddr = hsmci_physregaddr(priv, SAM_HSMCI_FIFO_OFFSET);
-#else
-  paddr = hsmci_physregaddr(priv, SAM_HSMCI_RDR_OFFSET);
-#endif
-  maddr = sam_physramaddr((uintptr_t)buffer);
+  regval    = sam_getreg(priv, SAM_HSMCI_BLKR_OFFSET);
+  nblocks   = ((regval &  HSMCI_BLKR_BCNT_MASK) >> HSMCI_BLKR_BCNT_SHIFT);
+  blocksize = ((regval &  HSMCI_BLKR_BLKLEN_MASK) >> HSMCI_BLKR_BLKLEN_SHIFT);
 
-  /* Setup register sampling */
+  DEBUGASSERT(nblocks > 0 && blocksize > 0 && (blocksize & 3) == 0);
+
+  /* Physical address of the HSCMI source register, either the TDR (for
+   * single transfers) or the first FIFO register, and the physical address
+   * of the buffer in RAM.
+   */
+
+  offset = (nblocks == 1 ? SAM_HSMCI_RDR_OFFSET : SAM_HSMCI_FIFO_OFFSET);
+  paddr  = hsmci_physregaddr(priv, offset);
+  maddr  = sam_physramaddr((uintptr_t)buffer);
+
+  /* Setup register sampling (only works for the case of nblocks == 1) */
 
   sam_xfrsampleinit(priv);
   sam_xfrsample(priv, SAMPLENDX_BEFORE_SETUP);
 
-  /* Configure the RX DMA */
+  /* Set DMA for each block */
 
-  sam_dmarxsetup(priv->dma, paddr, maddr, buflen);
+  for (i = 0; i < nblocks; i++)
+    {
+      /* Configure the RX DMA */
+
+      sam_dmarxsetup(priv->dma, paddr, maddr, buflen);
+
+      /* Update addresses for the next block */
+
+      paddr += sizeof(uint32_t);
+      maddr += blocksize;
+    }
 
   /* Enable DMA handshaking */
 
@@ -2633,11 +2963,12 @@ static int sam_dmarecvsetup(FAR struct sdio_dev_s *dev, FAR uint8_t *buffer,
   /* Start the DMA */
 
   priv->dmabusy = true;
+  priv->xfrbusy = true;
   priv->txbusy  = false;
   sam_dmastart(priv->dma, sam_dmacallback, priv);
 
   /* Configure transfer-related interrupts.  Transfer interrupts are not
-   * enabled until after the transfer is stard with an SD command (i.e.,
+   * enabled until after the transfer is started with an SD command (i.e.,
    * at the beginning of sam_eventwait().
    */
 
@@ -2645,6 +2976,7 @@ static int sam_dmarecvsetup(FAR struct sdio_dev_s *dev, FAR uint8_t *buffer,
   sam_configxfrints(priv, HSMCI_DMARECV_INTS);
   return OK;
 }
+#endif
 
 /****************************************************************************
  * Name: sam_dmasendsetup
@@ -2665,34 +2997,59 @@ static int sam_dmarecvsetup(FAR struct sdio_dev_s *dev, FAR uint8_t *buffer,
  *
  ****************************************************************************/
 
-static int sam_dmasendsetup(FAR struct sdio_dev_s *dev,
-                          FAR const uint8_t *buffer, size_t buflen)
-{
 #ifndef HSCMI_NOTXDMA
+static int sam_dmasendsetup(FAR struct sdio_dev_s *dev,
+                            FAR const uint8_t *buffer, size_t buflen)
+{
   struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   uint32_t paddr;
   uint32_t maddr;
+  uint32_t regval;
+  unsigned int blocksize;
+  unsigned int nblocks;
+  unsigned int offset;
+  unsigned int i;
 
   DEBUGASSERT(priv != NULL && buffer != NULL && buflen > 0);
   DEBUGASSERT(((uint32_t)buffer & 3) == 0);
 
-  /* Physical address of the HSCMI TDR registr */
+  /* How many blocks?  That should have been saved by the sam_blocksetup()
+   * method earlier.
+   */
 
-#ifdef HSCMI_FIFODMA
-  paddr = hsmci_physregaddr(priv, SAM_HSMCI_FIFO_OFFSET);
-#else
-  paddr = hsmci_physregaddr(priv, SAM_HSMCI_TDR_OFFSET);
-#endif
-  maddr = sam_physramaddr((uintptr_t)buffer);
+  regval    = sam_getreg(priv, SAM_HSMCI_BLKR_OFFSET);
+  nblocks   = ((regval &  HSMCI_BLKR_BCNT_MASK) >> HSMCI_BLKR_BCNT_SHIFT);
+  blocksize = ((regval &  HSMCI_BLKR_BLKLEN_MASK) >> HSMCI_BLKR_BLKLEN_SHIFT);
 
-  /* Setup register sampling */
+  DEBUGASSERT(nblocks > 0 && blocksize > 0 && (blocksize & 3) == 0);
+
+  /* Physical address of the HSCMI source register, either the TDR (for
+   * single transfers) or the first FIFO register, and the physical address
+   * of the buffer in RAM.
+   */
+
+  offset = (nblocks == 1 ? SAM_HSMCI_TDR_OFFSET : SAM_HSMCI_FIFO_OFFSET);
+  paddr  = hsmci_physregaddr(priv, offset);
+  maddr  = sam_physramaddr((uintptr_t)buffer);
+
+  /* Setup register sampling (only works for the case of nblocks == 1) */
 
   sam_xfrsampleinit(priv);
   sam_xfrsample(priv, SAMPLENDX_BEFORE_SETUP);
 
-  /* Configure the TX DMA */
+  /* Set DMA for each block */
 
-  sam_dmatxsetup(priv->dma, paddr, maddr, buflen);
+  for (i = 0; i < nblocks; i++)
+    {
+      /* Configure the TX DMA */
+
+      sam_dmatxsetup(priv->dma, paddr, maddr, buflen);
+
+      /* Update addresses for the next block */
+
+      paddr += sizeof(uint32_t);
+      maddr += blocksize;
+    }
 
   /* Enable DMA handshaking */
 
@@ -2702,6 +3059,7 @@ static int sam_dmasendsetup(FAR struct sdio_dev_s *dev,
   /* Start the DMA */
 
   priv->dmabusy = true;
+  priv->xfrbusy = true;
   priv->txbusy  = true;
   sam_dmastart(priv->dma, sam_dmacallback, priv);
 
@@ -2712,61 +3070,9 @@ static int sam_dmasendsetup(FAR struct sdio_dev_s *dev,
 
   sam_xfrsample(priv, SAMPLENDX_AFTER_SETUP);
   sam_configxfrints(priv, HSMCI_DMASEND_INTS);
-
-#else
-  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
-  unsigned int nwords;
-  const uint32_t *ptr;
-  uint32_t sr;
-
-  DEBUGASSERT(priv != NULL && buffer != NULL && buflen > 0);
-  DEBUGASSERT(((uint32_t)buffer & 3) == 0);
-
-  /* Disable DMA handshaking */
-
-  sam_putreg(priv, 0, SAM_HSMCI_DMA_OFFSET);
-  sam_configxfrints(priv, HSMCI_DMASEND_INTS);
-
-  priv->dmabusy = false;
-  priv->txbusy  = true;
-
-  /* Nullify register sampling */
-
-  sam_xfrsampleinit(priv);
-
-  /* Copy each word to the TX FIFO
-   *
-   * REVISIT:  If TX data underruns occur, then it may be necessary to
-   * disable pre-emption around this loop.
-   */
-
-  nwords = (buflen + 3) >> 2;
-  ptr = (const uint32_t *)buffer;
-
-  while (nwords > 0)
-    {
-      /* Check the HSMCI status */
-
-      sr = sam_getreg(priv, SAM_HSMCI_SR_OFFSET);
-      if ((sr & HSMCI_DATA_DMASEND_ERRORS) != 0)
-        {
-          /* Some fatal error has occurred */
-
-          fdbg("ERROR: sr %08x\n", sr);
-          return -EIO;
-        }
-      else if ((sr & HSMCI_INT_TXRDY) != 0)
-        {
-          /* TXRDY -- transfer another word */
-
-          sam_putreg(priv, *ptr++, SAM_HSMCI_TDR_OFFSET);
-          nwords--;
-        }
-    }
-
-#endif
   return OK;
 }
+#endif
 
 /****************************************************************************
  * Initialization/uninitialization/reset
@@ -2786,14 +3092,17 @@ static int sam_dmasendsetup(FAR struct sdio_dev_s *dev,
 
 static void sam_callback(void *arg)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)arg;
+  struct sam_dev_s *priv = (struct sam_dev_s *)arg;
+  irqstate_t flags;
+  int ret;
 
   /* Is a callback registered? */
 
   DEBUGASSERT(priv != NULL);
-  fvdbg("Callback %p(%p) cbevents: %02x cdstatus: %02x\n",
-        priv->callback, priv->cbarg, priv->cbevents, priv->cdstatus);
+  mcinfo("Callback %p(%p) cbevents: %02x cdstatus: %02x\n",
+         priv->callback, priv->cbarg, priv->cbevents, priv->cdstatus);
 
+  flags = enter_critical_section();
   if (priv->callback)
     {
       /* Yes.. Check for enabled callback events */
@@ -2803,8 +3112,8 @@ static void sam_callback(void *arg)
           /* Media is present.  Is the media inserted event enabled? */
 
           if ((priv->cbevents & SDIOMEDIA_INSERTED) == 0)
-           {
-             /* No... return without performing the callback */
+            {
+              /* No... return without performing the callback */
 
               return;
             }
@@ -2827,26 +3136,39 @@ static void sam_callback(void *arg)
 
       priv->cbevents = 0;
 
-      /* Callbacks cannot be performed in the context of an interrupt handler.
-       * If we are in an interrupt handler, then queue the callback to be
-       * performed later on the work thread.
+      /* This function is called either from (1) the context of the calling
+       * thread or from the the context of (2) card detection logic.  The
+       * caller may or may not have interrupts disabled (we have them
+       * disabled here!).
+       *
+       * So to minimize the possibility of recursive behavior and to assure
+       * that callback is always performed outside of the interrupt handling
+       * context and with interrupts enabled, the callback is always performed
+       * on the lower priority work thread.
        */
 
-      if (up_interrupt_context())
-        {
-          /* Yes.. queue it */
+      /* First cancel any existing work */
 
-           fllvdbg("Queuing callback to %p(%p)\n", priv->callback, priv->cbarg);
-          (void)work_queue(LPWORK, &priv->cbwork, (worker_t)priv->callback, priv->cbarg, 0);
+      ret = work_cancel(LPWORK, &priv->cbwork);
+      if (ret < 0)
+        {
+          /* NOTE: Currently, work_cancel only returns success */
+
+          lcderr("ERROR: Failed to cancel work: %d\n", ret);
         }
-      else
-        {
-          /* No.. then just call the callback here */
 
-          fvdbg("Callback to %p(%p)\n", priv->callback, priv->cbarg);
-          priv->callback(priv->cbarg);
+      mcinfo("Queuing callback to %p(%p)\n", priv->callback, priv->cbarg);
+      ret = work_queue(LPWORK, &priv->cbwork, (worker_t)priv->callback,
+                       priv->cbarg, 0);
+      if (ret < 0)
+        {
+          /* NOTE: Currently, work_queue only returns success */
+
+          lcderr("ERROR: Failed to schedule work: %d\n", ret);
         }
     }
+
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -2881,7 +3203,7 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
    * for now, an* HSMCI peripheral does correspond to a slot.
    */
 
-  fdbg("slotno: %d\n", slotno);
+  lcdinfo("slotno: %d\n", slotno);
 
 #ifdef CONFIG_SAMA5_HSMCI0
   if (slotno == 0)
@@ -2898,24 +3220,26 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
       /* Configure PIOs for 4-bit, wide-bus operation.  NOTE: (1) the chip
        * is capable of 8-bit wide bus operation but D4-D7 are not configured,
        * (2) any card detection PIOs must be set up in board-specific logic.
+       *
+       * REVISIT: What about Slot B?
        */
 
       sam_configpio(PIO_MCI0_DA0);   /* Data 0 of Slot A */
       sam_configpio(PIO_MCI0_DA1);   /* Data 1 of Slot A */
       sam_configpio(PIO_MCI0_DA2);   /* Data 2 of Slot A */
       sam_configpio(PIO_MCI0_DA3);   /* Data 3 of Slot A */
-      sam_configpio(PIO_MCI0_CK);    /* SD clock */
-      sam_configpio(PIO_MCI0_CDA);   /* Command/Response */
+      sam_configpio(PIO_MCI0_CK);    /* Common SD clock */
+      sam_configpio(PIO_MCI0_CDA);   /* Command/Response of Slot A */
 
       /* Enable the HSMCI0 peripheral clock.  This really should be done in
-       * sam_enable (as well as disabling peripheal clocks in sam_disable().
+       * sam_enable (as well as disabling peripheral clocks in sam_disable().
        */
 
       sam_hsmci0_enableclk();
 
       /* For DMA channel selection */
 
-      dmac = 0;
+      dmac = HSMCI0_DMAC;
       pid  = SAM_PID_HSMCI0;
     }
   else
@@ -2935,24 +3259,26 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
       /* Configure PIOs for 4-bit, wide-bus operation.  NOTE: (1) the chip
        * is capable of 8-bit wide bus operation but D4-D7 are not configured,
        * (2) any card detection PIOs must be set up in board-specific logic.
+       *
+       * REVISIT: What about Slot B?
        */
 
       sam_configpio(PIO_MCI1_DA0);   /* Data 0 of Slot A */
       sam_configpio(PIO_MCI1_DA1);   /* Data 1 of Slot A */
       sam_configpio(PIO_MCI1_DA2);   /* Data 2 of Slot A */
       sam_configpio(PIO_MCI1_DA3);   /* Data 3 of Slot A */
-      sam_configpio(PIO_MCI1_CK);    /* SD clock */
-      sam_configpio(PIO_MCI1_CDA);   /* Command/Response */
+      sam_configpio(PIO_MCI1_CK);    /* Common SD clock */
+      sam_configpio(PIO_MCI1_CDA);   /* Command/Response of Slot A */
 
       /* Enable the HSMCI1 peripheral clock  This really should be done in
-       * sam_enable (as well as disabling peripheal clocks in sam_disable().
+       * sam_enable (as well as disabling peripheral clocks in sam_disable().
        */
 
       sam_hsmci1_enableclk();
 
       /* For DMA channel selection */
 
-      dmac = 1;
+      dmac = HSMCI1_DMAC;
       pid  = SAM_PID_HSMCI1;
     }
   else
@@ -2972,24 +3298,26 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
       /* Configure PIOs for 4-bit, wide-bus operation.  NOTE: (1) the chip
        * is capable of 8-bit wide bus operation but D4-D7 are not configured,
        * (2) any card detection PIOs must be set up in board-specific logic.
+       *
+       * REVISIT: What about Slot B?
        */
 
       sam_configpio(PIO_MCI2_DA0);   /* Data 0 of Slot A */
       sam_configpio(PIO_MCI2_DA1);   /* Data 1 of Slot A */
       sam_configpio(PIO_MCI2_DA2);   /* Data 2 of Slot A */
       sam_configpio(PIO_MCI1_DA3);   /* Data 3 of Slot A */
-      sam_configpio(PIO_MCI2_DA3);    /* SD clock */
-      sam_configpio(PIO_MCI2_CDA);   /* Command/Response */
+      sam_configpio(PIO_MCI2_CK);    /* Common SD clock */
+      sam_configpio(PIO_MCI2_CDA);   /* Command/Response of Slot A */
 
       /* Enable the HSMCI2 peripheral clock  This really should be done in
-       * sam_enable (as well as disabling peripheal clocks in sam_disable().
+       * sam_enable (as well as disabling peripheral clocks in sam_disable().
        */
 
       sam_hsmci1_enableclk();
 
       /* For DMA channel selection */
 
-      dmac = 1;
+      dmac = HSMCI2_DMAC;
       pid  = SAM_PID_HSMCI2;
     }
   else
@@ -2999,8 +3327,8 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
       return NULL;
     }
 
-  fvdbg("priv: %p base: %08x hsmci: %d dmac: %d pid: %d\n",
-        priv, priv->base, priv->hsmci, dmac, pid);
+  mcinfo("priv: %p base: %08x hsmci: %d dmac: %d pid: %d\n",
+         priv, priv->base, priv->hsmci, dmac, pid);
 
   /* Initialize the HSMCI slot structure */
 
@@ -3042,6 +3370,9 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
  * Returned Values:
  *   None
  *
+ * Assumptions:
+ *   May be called from an interrupt handler.
+ *
  ****************************************************************************/
 
 void sdio_mediachange(FAR struct sdio_dev_s *dev, bool cardinslot)
@@ -3050,9 +3381,12 @@ void sdio_mediachange(FAR struct sdio_dev_s *dev, bool cardinslot)
   uint8_t cdstatus;
   irqstate_t flags;
 
-  /* Update card status */
+  /* Update card status.  Interrupts are disabled here because if we are
+   * not called from an interrupt handler, then the following steps must
+   * still be atomic.
+   */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   cdstatus = priv->cdstatus;
   if (cardinslot)
     {
@@ -3063,7 +3397,7 @@ void sdio_mediachange(FAR struct sdio_dev_s *dev, bool cardinslot)
       priv->cdstatus &= ~SDIO_STATUS_PRESENT;
     }
 
-  fllvdbg("cdstatus OLD: %02x NEW: %02x\n", cdstatus, priv->cdstatus);
+  mcinfo("cdstatus OLD: %02x NEW: %02x\n", cdstatus, priv->cdstatus);
 
   /* Perform any requested callback if the status has changed */
 
@@ -3072,7 +3406,7 @@ void sdio_mediachange(FAR struct sdio_dev_s *dev, bool cardinslot)
       sam_callback(priv);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -3084,7 +3418,7 @@ void sdio_mediachange(FAR struct sdio_dev_s *dev, bool cardinslot)
  *
  * Input Parameters:
  *   dev       - An instance of the SDIO driver device state structure.
- *   wrprotect - true is a card is writeprotected.
+ *   wrprotect - true is a card is write protected.
  *
  * Returned Values:
  *   None
@@ -3098,7 +3432,7 @@ void sdio_wrprotect(FAR struct sdio_dev_s *dev, bool wrprotect)
 
   /* Update card status */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (wrprotect)
     {
       priv->cdstatus |= SDIO_STATUS_WRPROTECTED;
@@ -3108,8 +3442,8 @@ void sdio_wrprotect(FAR struct sdio_dev_s *dev, bool wrprotect)
       priv->cdstatus &= ~SDIO_STATUS_WRPROTECTED;
     }
 
-  fvdbg("cdstatus: %02x\n", priv->cdstatus);
-  irqrestore(flags);
+  mcinfo("cdstatus: %02x\n", priv->cdstatus);
+  leave_critical_section(flags);
 }
 
 #endif /* CONFIG_SAMA5_HSMCI0 || CONFIG_SAMA5_HSMCI1 || CONFIG_SAMA5_HSMCI2 */

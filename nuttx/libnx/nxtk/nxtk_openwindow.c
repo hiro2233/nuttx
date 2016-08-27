@@ -46,7 +46,7 @@
 #include <nuttx/nx/nx.h>
 
 #include "nxcontext.h"
-#include "nxtk_internal.h"
+#include "nxtk.h"
 
 /****************************************************************************
  * Pre-Processor Definitions
@@ -120,7 +120,7 @@ NXTKWINDOW nxtk_openwindow(NXHANDLE handle,
   FAR struct nxtk_framedwindow_s *fwnd;
   int ret;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!handle || !cb)
     {
       set_errno(EINVAL);

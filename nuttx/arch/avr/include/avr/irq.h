@@ -34,7 +34,7 @@
  ****************************************************************************/
 
 /* This file should never be included directed but, rather, only indirectly
- * through nuttx/irq.h
+ * through nuttx/irq.h.
  */
 
 #ifndef __ARCH_AVR_INCLUDE_AVR_IRQ_H
@@ -48,7 +48,7 @@
 #include <arch/avr/avr.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Register state save array indices */
@@ -91,12 +91,11 @@
 
 /* The program counter is automatically pushed when the interrupt occurs */
 
-#define REG_PCH          35 /* PC */
-#define REG_PCL          36
-
-/* Size of the register state save array (in bytes) */
-
-#define XCPTCONTEXT_REGS 37
+#define REG_PC0          35 /* PC */
+#define REG_PC1          36
+#if AVR_PC_SIZE > 16
+# define REG_PC2         37
+#endif
 
 /****************************************************************************
  * Public Types
@@ -116,8 +115,11 @@ struct xcptcontext
 
   /* These are saved copies of PC and SR used during signal processing.*/
 
-  uint8_t saved_pcl;
-  uint8_t saved_pch;
+  uint8_t saved_pc1;
+  uint8_t saved_pc0;
+# if defined(REG_PC2)
+  uint8_t saved_pc2;
+# endif   
   uint8_t saved_sreg;
 #endif
 
@@ -132,6 +134,15 @@ struct xcptcontext
  ****************************************************************************/
 
 #ifndef __ASSEMBLY__
+
+/* Name: up_irq_save, up_irq_restore, and friends.
+ *
+ * NOTE: This function should never be called from application code and,
+ * as a general rule unless you really know what you are doing, this
+ * function should not be called directly from operation system code either:
+ * Typically, the wrapper functions, enter_critical_section() and
+ * leave_critical section(), are probably what you really want.
+ */
 
 /* Read/write the SREG */
 
@@ -149,40 +160,40 @@ static inline void putsreg(irqstate_t sreg)
 
 /* Interrupt enable/disable */
 
-static inline void irqenable()
+static inline void up_irq_enable()
 {
   asm volatile ("sei" ::);
 }
 
-static inline void irqdisable()
+static inline void up_irq_disabled()
 {
   asm volatile ("cli" ::);
 }
 
 /* Save the current interrupt enable state & disable all interrupts */
 
-static inline irqstate_t irqsave(void)
+static inline irqstate_t up_irq_save(void)
 {
   irqstate_t sreg;
   asm volatile
     (
       "\tin %0, __SREG__\n"
-	  "\tcli\n"
-	  : "=&r" (sreg) ::
-	);
+      "\tcli\n"
+      : "=&r" (sreg) ::
+    );
   return sreg;
 }
 
 /* Restore saved interrupt state */
 
-static inline void irqrestore(irqstate_t flags)
+static inline void up_irq_restore(irqstate_t flags)
 {
   asm volatile ("out __SREG__, %0" : : "r" (flags) : );
 }
 #endif /* __ASSEMBLY__ */
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -192,7 +203,8 @@ static inline void irqrestore(irqstate_t flags)
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -204,4 +216,3 @@ extern "C" {
 #endif
 
 #endif /* __ARCH_AVR_INCLUDE_AVR_IRQ_H */
-

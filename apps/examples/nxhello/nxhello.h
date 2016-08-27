@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/nxhello/nxhello.h
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@
 #include <nuttx/nx/nxfonts.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Configuration ************************************************************/
@@ -93,26 +93,6 @@
 #    define CONFIG_EXAMPLES_NXHELLO_FONTCOLOR 0x01
 #  else
 #    define CONFIG_EXAMPLES_NXHELLO_FONTCOLOR 'F'
-#  endif
-#endif
-
-/* Debug ********************************************************************/
-
-#ifdef CONFIG_CPP_HAVE_VARARGS
-#  ifdef CONFIG_DEBUG
-#    define message(...) lowsyslog(__VA_ARGS__)
-#    define msgflush()
-#  else
-#    define message(...) printf(__VA_ARGS__)
-#    define msgflush() fflush(stdout)
-#  endif
-#else
-#  ifdef CONFIG_DEBUG
-#    define message lowsyslog
-#    define msgflush()
-#  else
-#    define message printf
-#    define msgflush() fflush(stdout)
 #  endif
 #endif
 
@@ -174,7 +154,7 @@ struct nxhello_data_s
 };
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /* NXHELLO state data */
@@ -189,12 +169,8 @@ extern const struct nx_callback_s g_nxhellocb;
  * Public Function Prototypes
  ****************************************************************************/
 
-#ifdef CONFIG_EXAMPLES_NXHELLO_EXTERNINIT
-extern FAR NX_DRIVERTYPE *up_nxdrvinit(unsigned int devno);
-#endif
-
 /* Background window interfaces */
 
-extern void nxhello_hello(NXWINDOW hwnd);
+void nxhello_hello(NXWINDOW hwnd);
 
 #endif /* __APPS_EXAMPLES_NXHELLO_NXHELLO_H */

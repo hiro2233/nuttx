@@ -52,7 +52,7 @@
 
 #undef CONFIG_THTTPD
 #if defined(CONFIG_NET) && defined(CONFIG_NET_TCP) && \
-    defined(CONFIG_NET_TCPBACKLOG) && !defined(CONFIG_DISABLE_ENVIRONMENT) && \
+    defined(CONFIG_NET_TCPBACKLOG) && !defined(CONFIG_DISABLE_ENVIRON) && \
     !defined(CONFIG_SDCLONE_DISABLE) && defined(CONFIG_NET_TCP_READAHEAD)
 
 #  define CONFIG_THTTPD 1
@@ -215,9 +215,9 @@
 
 /* Memory debug instrumentation depends on other debug options */
 
-#if (!defined(CONFIG_DEBUG) || !defined(CONFIG_DEBUG_NET)) && defined(CONFIG_THTTPD_MEMDEBUG)
-#  undef CONFIG_THTTPD_MEMDEBUG
-#endif
+#  if (!defined(CONFIG_DEBUG_FEATURES) || !defined(CONFIG_DEBUG_NET)) && defined(CONFIG_THTTPD_MEMDEBUG)
+#    undef CONFIG_THTTPD_MEMDEBUG
+#  endif
 
 /* Tilde mapping. Many URLs use ~username to indicate a user's home directory. thttpd
  * provides two options for mapping this construct to an  actual filename.

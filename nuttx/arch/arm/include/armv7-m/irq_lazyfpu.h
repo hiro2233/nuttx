@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/arm/include/armv7-m/irq.h
+ * arch/arm/include/armv7-m/irq_lazyfpu.h
  *
  *   Copyright (C) 2009, 2011-2012 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -65,7 +65,7 @@
 #define REG_R10             (8)  /* R10 */
 #define REG_R11             (9)  /* R11 */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 #  define REG_EXC_RETURN    (10) /* EXC_RETURN */
 #  define SW_INT_REGS       (11)
 #else
@@ -175,7 +175,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************

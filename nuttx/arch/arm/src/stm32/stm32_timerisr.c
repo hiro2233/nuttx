@@ -46,7 +46,7 @@
 #include <arch/board/board.h>
 
 #include "nvic.h"
-#include "clock_internal.h"
+#include "clock/clock.h"
 #include "up_internal.h"
 #include "up_arch.h"
 
@@ -54,7 +54,7 @@
 #include "stm32.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* The desired timer interrupt frequency is provided by the definition
@@ -71,7 +71,7 @@
 #undef CONFIG_STM32_SYSTICK_HCLKd8 /* Power up default is HCLK, not HCLK/8 */
                                    /* And I don't know now to re-configure it yet */
 
-#if CONFIG_STM32_SYSTICK_HCLKd8
+#ifdef CONFIG_STM32_SYSTICK_HCLKd8
 #  define SYSTICK_RELOAD ((STM32_HCLK_FREQUENCY / 8 / CLK_TCK) - 1)
 #else
 #  define SYSTICK_RELOAD ((STM32_HCLK_FREQUENCY / CLK_TCK) - 1)
@@ -94,7 +94,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -108,14 +108,14 @@
 
 int up_timerisr(int irq, uint32_t *regs)
 {
-   /* Process timer interrupt */
+  /* Process timer interrupt */
 
-   sched_process_timer();
-   return 0;
+  sched_process_timer();
+  return 0;
 }
 
 /****************************************************************************
- * Function:  up_timerinit
+ * Function:  up_timer_initialize
  *
  * Description:
  *   This function is called during start-up to initialize
@@ -123,7 +123,7 @@ int up_timerisr(int irq, uint32_t *regs)
  *
  ****************************************************************************/
 
-void up_timerinit(void)
+void up_timer_initialize(void)
 {
   uint32_t regval;
 
@@ -138,7 +138,7 @@ void up_timerinit(void)
 
 #if 0 /* Does not work.  Comes up with HCLK source and I can't change it */
   regval = getreg32(NVIC_SYSTICK_CTRL);
-#if CONFIG_STM32_SYSTICK_HCLKd8
+#ifdef CONFIG_STM32_SYSTICK_HCLKd8
   regval &= ~NVIC_SYSTICK_CTRL_CLKSOURCE;
 #else
   regval |= NVIC_SYSTICK_CTRL_CLKSOURCE;
@@ -156,7 +156,8 @@ void up_timerinit(void)
 
   /* Enable SysTick interrupts */
 
-  putreg32((NVIC_SYSTICK_CTRL_CLKSOURCE|NVIC_SYSTICK_CTRL_TICKINT|NVIC_SYSTICK_CTRL_ENABLE), NVIC_SYSTICK_CTRL);
+  putreg32((NVIC_SYSTICK_CTRL_CLKSOURCE | NVIC_SYSTICK_CTRL_TICKINT |
+            NVIC_SYSTICK_CTRL_ENABLE), NVIC_SYSTICK_CTRL);
 
   /* And enable the timer interrupt */
 

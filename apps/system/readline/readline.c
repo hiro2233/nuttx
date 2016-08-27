@@ -45,7 +45,7 @@
 #include <errno.h>
 #include <assert.h>
 
-#include <apps/readline.h>
+#include "system/readline.h"
 #include "readline.h"
 
 /****************************************************************************
@@ -186,7 +186,7 @@ static void readline_write(FAR struct rl_common_s *vtbl,
 #endif
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -216,7 +216,7 @@ static void readline_write(FAR struct rl_common_s *vtbl,
  *   EOF is returned to indicate either an end of file condition or a
  *   failure.
  *
- **************************************************************************/
+ ****************************************************************************/
 
 ssize_t readline(FAR char *buf, int buflen, FILE *instream, FILE *outstream)
 {

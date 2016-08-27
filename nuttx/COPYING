@@ -9,10 +9,12 @@ have any licensing concerns.
 NuttX
 ^^^^^^
 
-License for NuttX in general (authorship of individual files may vary):
+License for NuttX in general (authorship and copyright dates on
+individual files will vary):
+
 /*************************************************************************
  *
- *   Copyright (C) 2007-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -91,7 +93,7 @@ has a similar BSD style license:
 IGMP
 ^^^^
 
-IGMP support, if enabled in uIP, adds additional logic by Steve Reynolds:
+IGMP support, if enabled, adds additional logic by Steve Reynolds:
 
   Copyright (c) 2002 CITEL Technologies Ltd.
   All rights reserved.

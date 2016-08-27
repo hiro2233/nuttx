@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 if ARCH_AVR
@@ -12,17 +12,19 @@ choice
 config ARCH_CHIP_ATMEGA
 	bool "ATMega family"
 	select ARCH_FAMILY_AVR
+	select MM_SMALL
 	---help---
 		Atmel ATMega family of 8-bit AVRs.
 
 config ARCH_CHIP_AT90USB
 	bool "AT90USB family"
 	select ARCH_FAMILY_AVR
+	select MM_SMALL
 	---help---
 		Atmel AT90USB family of 8-bit AVRs.
 
 config ARCH_CHIP_AT32UC3
-	bool "AVR23 AT32UC3* family"
+	bool "AVR32 AT32UC3* family"
 	select ARCH_FAMILY_AVR32
 	---help---
 		Atmel AT32UC3A/B/C family of 32-bit AVR32s.

@@ -46,13 +46,13 @@
 
 #ifndef __ASSEMBLY__
 #  include <stdint.h>
-#  ifdef CONFIG_GPIO_IRQ
+#  ifdef CONFIG_SAM34_GPIO_IRQ
 #    include <arch/irq.h>
 #  endif
 #endif
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
@@ -60,13 +60,13 @@
  * definitions will configure clocking with MCK = 120MHz, PLLA = 240, and CPU=120MHz.
  */
 
+#define BOARD_32KOSC_FREQUENCY      (32768)
+#define BOARD_SCLK_FREQUENCY        (BOARD_32KOSC_FREQUENCY)
+#define BOARD_MAINOSC_FREQUENCY     (12000000)
+
 /* Main oscillator register settings */
 
 #define BOARD_CKGR_MOR_MOSCXTST     (63 << PMC_CKGR_MOR_MOSCXTST_SHIFT) /* Start-up Time */
-
-#define BOARD_32KOSC_FREQUENCY      (32768)
-#define BOARD_SLCK_FREQUENCY        (BOARD_32KOSC_FREQUENCY)
-#define BOARD_MAINOSC_FREQUENCY     (12000000)
 
 #ifdef CONFIG_SAM34_UDP
 /* PLLA configuration:
@@ -197,17 +197,17 @@
  *
  *   LED              GPIO
  *   ---------------- -----
- *   D301 Yellow LED   PC10
+ *   D301 Yellow LED  PC23
  *
  * Both can be illuminated by driving the GPIO output to ground (low).
  */
 
-/* LED index values for use with sam_setled() */
+/* LED index values for use with board_userled() */
 
 #define BOARD_D301           0
 #define BOARD_NLEDS          1
 
-/* LED bits for use with sam_setleds() */
+/* LED bits for use with board_userled_all() */
 
 #define BOARD_D301_BIT       (1 << BOARD_D301)
 
@@ -233,7 +233,7 @@
 #define LED_D301_ON false /* GPIO low for ON */
 
 /* Thus if D301 is statically on, NuttX has successfully booted and is,
- * apparently, running normmally.
+ * apparently, running normally.
  */
 
 /* Button definitions ***************************************************************/
@@ -260,7 +260,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -279,22 +280,6 @@ extern "C" {
  ************************************************************************************/
 
 void sam_boardinitialize(void);
-
-/************************************************************************************
- * Name:  sam_ledinit, sam_setled, and sam_setleds
- *
- * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board LEDs.  If
- *   CONFIG_ARCH_LEDS is not defined, then the following interfaces are available to
- *   control the LEDs from user applications.
- *
- ************************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-void sam_ledinit(void);
-void sam_setled(int led, bool ledon);
-void sam_setleds(uint8_t ledset);
-#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/kmalloc.h
  *
- *   Copyright (C) 2007-2008, 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2008, 2011, 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,10 +46,10 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <nuttx/mm.h>
+#include <nuttx/mm/mm.h>
 #include <nuttx/userspace.h>
 
-#if !defined(CONFIG_NUTTX_KERNEL) || defined(__KERNEL__)
+#if !defined(CONFIG_BUILD_PROTECTED) || defined(__KERNEL__)
 
 /****************************************************************************
  * Public Types
@@ -81,7 +81,7 @@ extern "C"
  * from the kernel.  In the flat build, the following are declared in
  * stdlib.h and are directly callable.  In the kernel-phase of the kernel
  * build, the following are defined in userspace.h as macros that call
- * into user-space via a header at the begining of the user-space blob.
+ * into user-space via a header at the beginning of the user-space blob.
  */
 
 #define kumm_initialize(h,s)     umm_initialize(h,s)
@@ -89,34 +89,15 @@ extern "C"
 #define kumm_trysemaphore()      umm_trysemaphore()
 #define kumm_givesemaphore()     umm_givesemaphore()
 
-#ifndef CONFIG_NUTTX_KERNEL
-/* In the flat build, the following are declared in stdlib.h and are
- * directly callable.
- */
-
-# define kumalloc(s)             malloc(s)
-# define kuzalloc(s)             zalloc(s)
-# define kurealloc(p,s)          realloc(p,s)
-# define kumemalign(a,s)         memalign(a,s)
-# define kufree(p)               free(p)
-
-#else
-/* In the kernel-phase of the kernel build, the following are defined
- * in userspace.h as macros that call into user-space via a header at
- * the begining of the user-space blob.
- */
-
-# define kumalloc(s)             umm_malloc(s)
-# define kuzalloc(s)             umm_zalloc(s)
-# define kurealloc(p,s)          umm_realloc(p,s)
-# define kumemalign(a,s)         umm_memalign(a,s)
-# define kufree(p)               umm_free(p)
-
-#endif
+#define kumm_malloc(s)           malloc(s)
+#define kumm_zalloc(s)           zalloc(s)
+#define kumm_realloc(p,s)        realloc(p,s)
+#define kumm_memalign(a,s)       memalign(a,s)
+#define kumm_free(p)             free(p)
 
 /* This family of allocators is used to manage kernel protected memory */
 
-#if !defined(CONFIG_NUTTX_KERNEL)
+#if !defined(CONFIG_BUILD_PROTECTED) && !defined(CONFIG_MM_KERNEL_HEAP)
 /* If this is not a kernel build, then these map to the same interfaces
  * as were used for the user-mode function.
  */
@@ -126,16 +107,16 @@ extern "C"
 # define kmm_trysemaphore()     umm_trysemaphore()
 # define kmm_givesemaphore()    umm_givesemaphore()
 
-# define kmalloc(s)             malloc(s)
-# define kzalloc(s)             zalloc(s)
-# define krealloc(p,s)          realloc(p,s)
-# define kmemalign(a,s)         memalign(a,s)
-# define kfree(p)               free(p)
+# define kmm_malloc(s)          malloc(s)
+# define kmm_zalloc(s)          zalloc(s)
+# define kmm_realloc(p,s)       realloc(p,s)
+# define kmm_memalign(a,s)      memalign(a,s)
+# define kmm_free(p)            free(p)
 
 #elif !defined(CONFIG_MM_KERNEL_HEAP)
 /* If this the kernel phase of a kernel build, and there are only user-space
  * allocators, then the following are defined in userspace.h as macros that
- * call into user-space via a header at the begining of the user-space blob.
+ * call into user-space via a header at the beginning of the user-space blob.
  */
 
 # define kmm_initialize(h,s)    /* Initialization done by kumm_initialize */
@@ -143,44 +124,65 @@ extern "C"
 # define kmm_trysemaphore()     umm_trysemaphore()
 # define kmm_givesemaphore()    umm_givesemaphore()
 
-# define kmalloc(s)             umm_malloc(s)
-# define kzalloc(s)             umm_zalloc(s)
-# define krealloc(p,s)          umm_realloc(p,s)
-# define kmemalign(a,s)         umm_memalign(a,s)
-# define kfree(p)               umm_free(p)
+# define kmm_malloc(s)          umm_malloc(s)
+# define kmm_zalloc(s)          umm_zalloc(s)
+# define kmm_realloc(p,s)       umm_realloc(p,s)
+# define kmm_memalign(a,s)      umm_memalign(a,s)
+# define kmm_free(p)            umm_free(p)
 
 #else
-/* Otherwise, the kernel-space allocators are declared here and we can call
- * them directly.
+/* Otherwise, the kernel-space allocators are declared in include/nuttx/mm/mm.h
+ * and we can call them directly.
  */
 
-void kmm_initialize(FAR void *heap_start, size_t heap_size);
-void kmm_addregion(FAR void *heapstart, size_t heapsize);
-int  kmm_trysemaphore(void);
-void kmm_givesemaphore(void);
-
-FAR void *kmalloc(size_t size);
-FAR void *kzalloc(size_t size);
-FAR void *krealloc(FAR void *oldmem, size_t newsize);
-FAR void *kmemalign(size_t alignment, size_t size);
-void kfree(FAR void *mem);
-
-#ifdef CONFIG_DEBUG
-bool kmm_heapmember(FAR void *mem);
 #endif
+
+#if (defined(CONFIG_BUILD_PROTECTED) || defined(CONFIG_BUILD_KERNEL)) && \
+     defined(CONFIG_MM_KERNEL_HEAP)
+/****************************************************************************
+ * Group memory management
+ *
+ *   Manage memory allocations appropriately for the group type.  If the
+ *   memory is part of a privileged group, then it should be allocated so
+ *   that it is only accessible by privileged code;  Otherwise, it is a
+ *   user mode group and must be allocated so that it accessible by
+ *   unprivileged code.
+ *
+ ****************************************************************************/
+/* Functions defined in group/group_malloc.c ********************************/
+
+FAR void *group_malloc(FAR struct task_group_s *group, size_t nbytes);
+
+/* Functions defined in group/group_zalloc.c ********************************/
+
+FAR void *group_zalloc(FAR struct task_group_s *group, size_t nbytes);
+
+/* Functions defined in group/group_free.c **********************************/
+
+void group_free(FAR struct task_group_s *group, FAR void *mem);
+
+#else
+  /* In the flat build, there is only one memory allocator and no distinction
+   * in privileges.
+   */
+
+#  define group_malloc(g,n) kumm_malloc(n)
+#  define group_zalloc(g,n) kumm_zalloc(n)
+#  define group_free(g,m)   kumm_free(m)
+
 #endif
 
 /* Functions defined in sched/sched_kfree.c **********************************/
 
-/* Handles memory freed from an interrupt handler.  In that context, kfree()
- * (or kufree()) cannot be called.  Instead, the allocations are saved in a
+/* Handles memory freed from an interrupt handler.  In that context, kmm_free()
+ * (or kumm_free()) cannot be called.  Instead, the allocations are saved in a
  * list of delayed allocations that will be periodically cleaned up by
- * sched_garbagecollection().
+ * sched_garbage_collection().
  */
 
 void sched_ufree(FAR void *address);
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#if defined(CONFIG_MM_KERNEL_HEAP) && defined(__KERNEL__)
 void sched_kfree(FAR void *address);
 #else
 #  define sched_kfree(a) sched_ufree(a)
@@ -189,17 +191,29 @@ void sched_kfree(FAR void *address);
 /* Functions defined in sched/sched_garbage *********************************/
 
 /* Must be called periodically to clean up deallocations delayed by
- * sched_kfree().  This may be done from either the IDLE thread or from a
+ * sched_kmm_free().  This may be done from either the IDLE thread or from a
  * worker thread.  The IDLE thread has very low priority and could starve
  * the system for memory in some context.
  */
 
-void sched_garbagecollection(void);
+void sched_garbage_collection(void);
+
+/* Is is not a good idea for the IDLE threads to take the KMM semaphore.
+ * That can cause the IDLE thread to take processing time from higher
+ * priority tasks.  The IDLE threads will only take the KMM semaphore if
+ * there is garbage to be collected.
+ *
+ * Certainly there is a race condition involved in sampling the garbage
+ * state.  The looping nature of the IDLE loops should catch any missed
+ * garbage from the test on the next time arround.
+ */
+
+bool sched_have_garbage(void);
 
 #undef KMALLOC_EXTERN
 #if defined(__cplusplus)
 }
 #endif
 
-#endif /* !CONFIG_NUTTX_KERNEL || __KERNEL__ */
+#endif /* !CONFIG_BUILD_PROTECTED || __KERNEL__ */
 #endif /* __INCLUDE_NUTTX_KMALLOC_H */

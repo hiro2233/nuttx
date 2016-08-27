@@ -53,7 +53,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/video/ov2640.h>
 
 /****************************************************************************
@@ -87,7 +87,8 @@
 #  undef CONFIG_OV2640_JPEG_UXGA_RESOLUTION
 #endif
 
-#if defined(CONFIG_OV2640_QCIF_RESOLUTION) || defined(CONFIG_OV2640_JPEG_QCIF_RESOLUTION)
+#if defined(CONFIG_OV2640_QCIF_RESOLUTION) || \
+    defined(CONFIG_OV2640_JPEG_QCIF_RESOLUTION)
 
 #  define OV2460_IMAGE_WIDTH  176
 #  define OV2460_IMAGE_HEIGHT 144
@@ -107,7 +108,8 @@
 #  undef CONFIG_OV2640_UXGA_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_UXGA_RESOLUTION
 
-#elif defined(CONFIG_OV2640_QVGA_RESOLUTION) || defined(CONFIG_OV2640_JPEG_QVGA_RESOLUTION)
+#elif defined(CONFIG_OV2640_QVGA_RESOLUTION) || \
+      defined(CONFIG_OV2640_JPEG_QVGA_RESOLUTION)
 
 #  define OV2460_IMAGE_WIDTH  320
 #  define OV2460_IMAGE_HEIGHT 240
@@ -127,7 +129,8 @@
 #  undef CONFIG_OV2640_UXGA_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_UXGA_RESOLUTION
 
-#elif defined(CONFIG_OV2640_CIF_RESOLUTION) || defined(CONFIG_OV2640_JPEG_CIF_RESOLUTION)
+#elif defined(CONFIG_OV2640_CIF_RESOLUTION) || \
+      defined(CONFIG_OV2640_JPEG_CIF_RESOLUTION)
 
 #  define OV2460_IMAGE_WIDTH  352
 #  define OV2460_IMAGE_HEIGHT  288
@@ -147,7 +150,8 @@
 #  undef CONFIG_OV2640_UXGA_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_UXGA_RESOLUTION
 
-#elif defined(CONFIG_OV2640_VGA_RESOLUTION) || defined(CONFIG_OV2640_JPEG_VGA_RESOLUTION)
+#elif defined(CONFIG_OV2640_VGA_RESOLUTION) || \
+      defined(CONFIG_OV2640_JPEG_VGA_RESOLUTION)
 
 #  define OV2460_IMAGE_WIDTH  640
 #  define OV2460_IMAGE_HEIGHT 480
@@ -167,7 +171,8 @@
 #  undef CONFIG_OV2640_UXGA_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_UXGA_RESOLUTION
 
-#elif defined(CONFIG_OV2640_SVGA_RESOLUTION) || defined(CONFIG_OV2640_JPEG_SVGA_RESOLUTION)
+#elif defined(CONFIG_OV2640_SVGA_RESOLUTION) || \
+      defined(CONFIG_OV2640_JPEG_SVGA_RESOLUTION)
 
 #  define OV2460_IMAGE_WIDTH  800
 #  define OV2460_IMAGE_HEIGHT 600
@@ -187,7 +192,8 @@
 #  undef CONFIG_OV2640_UXGA_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_UXGA_RESOLUTION
 
-#elif defined(CONFIG_OV2640_XVGA_RESOLUTION) || defined(CONFIG_OV2640_JPEG_XVGA_RESOLUTION)
+#elif defined(CONFIG_OV2640_XVGA_RESOLUTION) || \
+      defined(CONFIG_OV2640_JPEG_XVGA_RESOLUTION)
 
 #  define OV2460_IMAGE_WIDTH  1024
 #  define OV2460_IMAGE_HEIGHT 768
@@ -207,7 +213,8 @@
 #  undef CONFIG_OV2640_UXGA_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_UXGA_RESOLUTION
 
-#elif defined(CONFIG_OV2640_SXGA_RESOLUTION) || defined(CONFIG_OV2640_JPEG_SXVGA_RESOLUTION)
+#elif defined(CONFIG_OV2640_SXGA_RESOLUTION) || \
+      defined(CONFIG_OV2640_JPEG_SXVGA_RESOLUTION)
 
 #  define OV2460_IMAGE_WIDTH  1280
 #  define OV2460_IMAGE_HEIGHT 1024
@@ -227,7 +234,8 @@
 #  undef CONFIG_OV2640_UXGA_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_UXGA_RESOLUTION
 
-#elif defined(CONFIG_OV2640_UXGA_RESOLUTION) || defined(CONFIG_OV2640_JPEG_UXGA_RESOLUTION)
+#elif defined(CONFIG_OV2640_UXGA_RESOLUTION) || \
+      defined(CONFIG_OV2640_JPEG_UXGA_RESOLUTION)
 
 #  define OV2460_IMAGE_WIDTH  1600
 #  define OV2460_IMAGE_HEIGHT 1200
@@ -278,16 +286,16 @@ struct ovr2640_reg_s
 
 /* OV2640 register operations */
 
-static int     ov2640_putreg(FAR struct i2c_dev_s *i2c, uint8_t regaddr,
+static int     ov2640_putreg(FAR struct i2c_master_s *i2c, uint8_t regaddr,
                  uint8_t regval);
-static uint8_t ov2640_getreg(FAR struct i2c_dev_s *i2c, uint8_t regaddr);
-static int     ov2640_putreglist(FAR struct i2c_dev_s *i2c,
+static uint8_t ov2640_getreg(FAR struct i2c_master_s *i2c, uint8_t regaddr);
+static int     ov2640_putreglist(FAR struct i2c_master_s *i2c,
                  FAR const struct ovr2640_reg_s *reglist, size_t nentries);
 
 /* Initialization */
 
-static int     ovr2640_chipid(FAR struct i2c_dev_s *i2c);
-static int     ov2640_reset(FAR struct i2c_dev_s *i2c);
+static int     ovr2640_chipid(FAR struct i2c_master_s *i2c);
+static int     ov2640_reset(FAR struct i2c_master_s *i2c);
 
 /****************************************************************************
  * Private Data
@@ -662,6 +670,7 @@ static const struct ovr2640_reg_s g_ov2640_jpeg_uxga_resolution[] =
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
+
 /****************************************************************************
  * Function: ov2640_putreg
  *
@@ -679,14 +688,15 @@ static const struct ovr2640_reg_s g_ov2640_jpeg_uxga_resolution[] =
  *
  ****************************************************************************/
 
-static int ov2640_putreg(FAR struct i2c_dev_s *i2c, uint8_t regaddr,
+static int ov2640_putreg(FAR struct i2c_master_s *i2c, uint8_t regaddr,
                          uint8_t regval)
 {
+  struct i2c_config_s config;
   uint8_t buffer[2];
   int ret;
 
 #ifdef CONFIG_OV2640_REGDEBUG
-   dbg("%02x <- %02x\n", regaddr, regval);
+   _err("%02x <- %02x\n", regaddr, regval);
 #endif
 
   /* Set up for the transfer */
@@ -694,12 +704,18 @@ static int ov2640_putreg(FAR struct i2c_dev_s *i2c, uint8_t regaddr,
   buffer[0] = regaddr; /* Register address */
   buffer[1] = regval;  /* New register value */
 
+  /* Set up the I2C configuration */
+
+  config.frequency = CONFIG_OV2640_FREQUENCY;
+  config.address   = CONFIG_OV2640_I2CADDR;
+  config.addrlen   = 7;
+
   /* And do it */
 
-  ret = I2C_WRITE(i2c, buffer, 2);
+  ret = i2c_write(i2c, &config, buffer, 2);
   if (ret < 0)
     {
-      gdbg("ERROR: I2C_WRITE failed: %d\n", ret);
+      gerr("ERROR: i2c_write failed: %d\n", ret);
       return ret;
     }
 
@@ -723,32 +739,39 @@ static int ov2640_putreg(FAR struct i2c_dev_s *i2c, uint8_t regaddr,
  *
  ****************************************************************************/
 
-static uint8_t ov2640_getreg(FAR struct i2c_dev_s *i2c, uint8_t regaddr)
+static uint8_t ov2640_getreg(FAR struct i2c_master_s *i2c, uint8_t regaddr)
 {
+  struct i2c_config_s config;
   uint8_t regval;
   int ret;
 
+  /* Set up the I2C configuration */
+
+  config.frequency = CONFIG_OV2640_FREQUENCY;
+  config.address   = CONFIG_OV2640_I2CADDR;
+  config.addrlen   = 7;
+
   /* Write the register address */
 
-  ret = I2C_WRITE(i2c, &regaddr, 1);
+  ret = i2c_write(i2c, &config, &regaddr, 1);
   if (ret < 0)
     {
-      gdbg("ERROR: I2C_WRITE failed: %d\n", ret);
+      gerr("ERROR: i2c_write failed: %d\n", ret);
       return 0;
     }
 
   /* Restart and read 8-bits from the register */
 
-  ret = I2C_READ(i2c, &regval, 1);
+  ret = i2c_read(i2c, &config, &regval, 1);
   if (ret < 0)
     {
-      gdbg("ERROR: I2C_READ failed: %d\n", ret);
+      gerr("ERROR: i2c_read failed: %d\n", ret);
       return 0;
     }
 #ifdef CONFIG_OV2640_REGDEBUG
   else
     {
-      dbg("%02x -> %02x\n", regaddr, regval);
+      _err("%02x -> %02x\n", regaddr, regval);
     }
 #endif
 
@@ -772,7 +795,7 @@ static uint8_t ov2640_getreg(FAR struct i2c_dev_s *i2c, uint8_t regaddr)
  *
  ****************************************************************************/
 
-static int ov2640_putreglist(FAR struct i2c_dev_s *i2c,
+static int ov2640_putreglist(FAR struct i2c_master_s *i2c,
                              FAR const struct ovr2640_reg_s *reglist,
                              size_t nentries)
 {
@@ -784,7 +807,7 @@ static int ov2640_putreglist(FAR struct i2c_dev_s *i2c,
       ret = ov2640_putreg(i2c, entry->regaddr, entry->regval);
       if (ret < 0)
         {
-          gdbg("ERROR: ov2640_putreg failed: %d\n", ret);
+          gerr("ERROR: ov2640_putreg failed: %d\n", ret);
           return ret;
         }
     }
@@ -807,11 +830,11 @@ static int ov2640_putreglist(FAR struct i2c_dev_s *i2c,
  *
  ****************************************************************************/
 
-static int ovr2640_chipid(FAR struct i2c_dev_s *i2c)
+static int ovr2640_chipid(FAR struct i2c_master_s *i2c)
 {
   uint8_t pidl;
   uint8_t pidh;
-#if CONFIG_DEBUG_GRAPHICS
+#ifdef CONFIG_DEBUG_GRAPHICS
   uint8_t midh;
   uint8_t midl;
 #endif
@@ -822,26 +845,26 @@ static int ovr2640_chipid(FAR struct i2c_dev_s *i2c)
   ret = ov2640_putreg(i2c, 0xff, 0x01); /* Select the sensor address bank */
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreg failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreg failed: %d\n", ret);
       return ret;
     }
 
   pidl = ov2640_getreg(i2c, 0x0a);      /* Product ID (MS) */
   pidh = ov2640_getreg(i2c, 0x0b);      /* Product ID (LS) */
 
-#if CONFIG_DEBUG_GRAPHICS
+#ifdef CONFIG_DEBUG_GRAPHICS
   midh = ov2640_getreg(i2c, 0x1c); /* Manufacturer ID (high) = 0x7f */
   midl = ov2640_getreg(i2c, 0x1d); /* Manufacturer ID (low) = 0xa2 */
 #endif
 
   if (pidl != OVR2640_PRODUCT_IDL || pidh != OVR2640_PRODUCT_IDH)
     {
-      gdbg("ERROR: Unsupported PID=%02x$02x MID=%02x%02x\n",
+      gerr("ERROR: Unsupported PID=%02x$02x MID=%02x%02x\n",
             pidh, pidl, midh, midl);
       return -ENOSYS;
     }
 
-  gvdbg("PID=%02x$02x MID=%02x%02x\n", pidh, pidl, midh, midl);
+  ginfo("PID=%02x$02x MID=%02x%02x\n", pidh, pidl, midh, midl);
   return OK;
 }
 
@@ -862,14 +885,14 @@ static int ovr2640_chipid(FAR struct i2c_dev_s *i2c)
  *
  ****************************************************************************/
 
-static int ov2640_reset(FAR struct i2c_dev_s *i2c)
+static int ov2640_reset(FAR struct i2c_master_s *i2c)
 {
   int ret;
 
   ret = ov2640_putreglist(i2c, g_ov2640_reset, OV2640_RESET_NENTRIES);
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreglist failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreglist failed: %d\n", ret);
       return ret;
     }
 
@@ -895,21 +918,16 @@ static int ov2640_reset(FAR struct i2c_dev_s *i2c)
  *
  ****************************************************************************/
 
-int ov2640_initialize(FAR struct i2c_dev_s *i2c)
+int ov2640_initialize(FAR struct i2c_master_s *i2c)
 {
   int ret;
-
-  /* Configure I2C bus for the OV2640 */
-
-  I2C_SETADDRESS(i2c, CONFIG_OV2640_FREQUENCY, 7);
-  I2C_SETFREQUENCY(i2c, CONFIG_OV2640_I2CADDR);
 
   /* Reset the OVR2640 */
 
   ret = ov2640_reset(i2c);
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_reset failed: %d\n", ret);
+      gerr("ERROR: ov2640_reset failed: %d\n", ret);
       goto errout;
     }
 
@@ -918,7 +936,7 @@ int ov2640_initialize(FAR struct i2c_dev_s *i2c)
   ret = ovr2640_chipid(i2c);
   if (ret < 0)
     {
-      gdbg("ERROR: ovr2640_chipid failed: %d\n", ret);
+      gerr("ERROR: ovr2640_chipid failed: %d\n", ret);
       goto errout;
     }
 
@@ -930,35 +948,35 @@ int ov2640_initialize(FAR struct i2c_dev_s *i2c)
   ret = ov2640_putreglist(i2c, g_ov2640_jpeg_init, OV2640_JPEG_INIT_NENTRIES);
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreglist failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreglist failed: %d\n", ret);
       goto errout;
     }
 
   ret = ov2640_putreglist(i2c, g_ov2640_yuv422, OV2640_YUV422_NENTRIES);
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreglist failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreglist failed: %d\n", ret);
       goto errout;
     }
 
   ret = ov2640_putreglist(i2c, g_ov2640_jpeg, OV2640_JPEG_NENTRIES);
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreglist failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreglist failed: %d\n", ret);
       goto errout;
     }
 
   ret = ov2640_putreg(i2c, 0xff, 0x01);
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreg failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreg failed: %d\n", ret);
       goto errout;
     }
 
   ret = ov2640_putreg(i2c, 0x15, 0x00);
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreg failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreg failed: %d\n", ret);
       goto errout;
     }
 
@@ -1000,7 +1018,7 @@ int ov2640_initialize(FAR struct i2c_dev_s *i2c)
 
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreglist failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreglist failed: %d\n", ret);
       goto errout;
     }
 
@@ -1012,7 +1030,7 @@ int ov2640_initialize(FAR struct i2c_dev_s *i2c)
                           OV2640_INITIALREGS_NENTRIES);
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreglist failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreglist failed: %d\n", ret);
       goto errout;
     }
 
@@ -1022,7 +1040,7 @@ int ov2640_initialize(FAR struct i2c_dev_s *i2c)
                           OV2640_RESOLUTION_COMMON_NENTRIES);
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreglist failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreglist failed: %d\n", ret);
       goto errout;
     }
 
@@ -1064,7 +1082,7 @@ int ov2640_initialize(FAR struct i2c_dev_s *i2c)
 
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreglist failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreglist failed: %d\n", ret);
       goto errout;
     }
 
@@ -1074,7 +1092,7 @@ int ov2640_initialize(FAR struct i2c_dev_s *i2c)
                     OV2640_COLORFMT_COMMON_NENTRIES);
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreglist failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreglist failed: %d\n", ret);
       goto errout;
     }
 
@@ -1092,7 +1110,7 @@ int ov2640_initialize(FAR struct i2c_dev_s *i2c)
 
   if (ret < 0)
     {
-      gdbg("ERROR: ov2640_putreglist failed: %d\n", ret);
+      gerr("ERROR: ov2640_putreglist failed: %d\n", ret);
       goto errout;
     }
 
@@ -1101,7 +1119,7 @@ int ov2640_initialize(FAR struct i2c_dev_s *i2c)
   return OK;
 
 errout:
-  gdbg("ERROR: Failed to initialize the OV2640: %d\n", ret);
+  gerr("ERROR: Failed to initialize the OV2640: %d\n", ret);
   (void)ov2640_reset(i2c);
   return ret;
 }

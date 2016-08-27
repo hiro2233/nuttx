@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 if ARCH_BOARD_SAMA5D3_XPLAINED
@@ -20,6 +20,11 @@ config SAMA5D3XPLAINED_528MHZ
 
 endchoice # CPU Frequency
 
+config SAMA5D3XPLAINED_SLOWCLOCK
+	bool
+	default y if SCHED_TICKLESS
+	default n if !SCHED_TICKLESS
+
 choice
 	prompt "SAMA5D3-Xplained DRAM Type"
 	default SAMA5D3XPLAINED_MT47H128M16RT
@@ -37,7 +42,7 @@ config SAMA5D3XPLAINED_MT47H64M16HR
 
 endchoice # SAMA5D3-Xplained DRAM Type
 
-config SAMA5D3XPLAINED_NAND_AUTOMOUNT
+config SAMA5D3XPLAINED_NAND_BLOCKMOUNT
 	bool "NAND FLASH auto-mount"
 	default n
 	depends on NSH_ARCHINIT && SAMA5_EBICS3_NAND
@@ -47,7 +52,7 @@ config SAMA5D3XPLAINED_NAND_AUTOMOUNT
 choice
 	prompt "NAND FLASH configuration"
 	default SAMA5D3XPLAINED_NAND_NXFFS
-	depends on SAMA5D3XPLAINED_NAND_AUTOMOUNT
+	depends on SAMA5D3XPLAINED_NAND_BLOCKMOUNT
 
 config SAMA5D3XPLAINED_NAND_FTL
 	bool "Create NAND FLASH block driver"
@@ -105,6 +110,17 @@ config SAMA5D3XPLAINED_AT25_NXFFS
 		NXFFS is that it can be very slow.
 
 endchoice # AT25 serial FLASH configuration
+
+config SAMA5D3XPLAINED_USBHOST_STACKSIZE
+	int "USB host waiter stack size"
+	default 1536 if USBHOST_HUB
+	default 1024 if !USBHOST_HUB
+	depends on USBHOST
+
+config SAMA5D3XPLAINED_USBHOST_PRIO
+	int "USB host waiter task priority"
+	default 100
+	depends on USBHOST
 
 config SAMA5D3XPLAINED_CHANNEL
 	int "PWM channel number"

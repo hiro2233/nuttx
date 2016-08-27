@@ -42,11 +42,10 @@
 #include <nuttx/irq.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -77,7 +76,7 @@ void up_irqinitialize(void)
    *
    * NOTE:  Normally, there are seperate enables for "global" interrupts
    * and specific device interrupts.  In such a "normal" case, the timer
-   * interrupt should be attached and enabled in the function up_timerinit()
+   * interrupt should be attached and enabled in the function up_timer_initialize()
    */
 
   irq_attach(Z80_IRQ_SYSTIMER, (xcpt_t)up_timerisr);
@@ -85,6 +84,6 @@ void up_irqinitialize(void)
   /* And finally, enable interrupts (including the timer) */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
-  irqrestore(Z80_C_FLAG);
+  up_irq_restore(Z80_C_FLAG);
 #endif
 }

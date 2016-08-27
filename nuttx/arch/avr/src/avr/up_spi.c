@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/avr/up_spi.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@
 #include <debug.h>
 
 #include <arch/board/board.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/spi/spi.h>
 
@@ -57,31 +58,9 @@
 #include "up_arch.h"
 
 #include "chip.h"
-#include "avr_internal.h"
+#include "avr.h"
 
 #ifdef CONFIG_AVR_SPI
-
-/****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/* Enables debug output from this file (needs CONFIG_DEBUG too) */
-
-#undef SPI_DEBUG     /* Define to enable debug */
-#undef SPI_VERBOSE   /* Define to enable verbose debug */
-
-#ifdef SPI_DEBUG
-#  define spidbg  lldbg
-#  ifdef SPI_VERBOSE
-#    define spivdbg lldbg
-#  else
-#    define spivdbg(x...)
-#  endif
-#else
-#  undef SPI_VERBOSE
-#  define spidbg(x...)
-#  define spivdbg(x...)
-#endif
 
 /****************************************************************************
  * Private Types
@@ -90,12 +69,10 @@
 struct avr_spidev_s
 {
   struct spi_dev_s spidev;     /* Externally visible part of the SPI interface */
-#ifndef CONFIG_SPI_OWNBUS
   sem_t            exclsem;    /* Held while chip is selected for mutual exclusion */
   uint32_t         frequency;  /* Requested clock frequency */
   uint32_t         actual;     /* Actual clock frequency */
   uint8_t          mode;       /* Mode 0,1,2,3 */
-#endif
 };
 
 /****************************************************************************
@@ -104,9 +81,7 @@ struct avr_spidev_s
 
 /* SPI methods */
 
-#ifndef CONFIG_SPI_OWNBUS
 static int      spi_lock(FAR struct spi_dev_s *dev, bool lock);
-#endif
 static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency);
 static void     spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode);
 static void     spi_setbits(FAR struct spi_dev_s *dev, int nbits);
@@ -120,13 +95,14 @@ static void     spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_
 
 static const struct spi_ops_s g_spiops =
 {
-#ifndef CONFIG_SPI_OWNBUS
   .lock              = spi_lock,
-#endif
   .select            = avr_spiselect,
   .setfrequency      = spi_setfrequency,
   .setmode           = spi_setmode,
   .setbits           = spi_setbits,
+#ifdef CONFIG_SPI_HWFEATURES
+  .hwfeatures        = 0,                 /* Not supported */
+#endif
   .status            = avr_spistatus,
 #ifdef CONFIG_SPI_CMDDATA
   .cmddata           = avr_spicmddata,
@@ -141,10 +117,6 @@ static struct avr_spidev_s g_spidev =
 {
   .spidev            = { &g_spiops },
 };
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -171,7 +143,6 @@ static struct avr_spidev_s g_spidev =
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 {
   FAR struct avr_spidev_s *priv = (FAR struct avr_spidev_s *)dev;
@@ -195,7 +166,6 @@ static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
     }
   return OK;
 }
-#endif
 
 /****************************************************************************
  * Name: spi_setfrequency
@@ -214,15 +184,13 @@ static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 
 static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
 {
-  uint32_t actual;
-#ifndef CONFIG_SPI_OWNBUS
   FAR struct avr_spidev_s *priv = (FAR struct avr_spidev_s *)dev;
+  uint32_t actual;
 
   /* Has the request frequency changed? */
 
   if (frequency != priv->frequency)
     {
-#endif
       /* Read the SPI status and control registers, clearing all divider bits */
 
       uint8_t spcr = SPCR & ~((1 << SPR0) | (1 << SPR1));
@@ -263,13 +231,14 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
         }
       else /* if (frequency >= BOARD_CPU_CLOCK / 128) */
         {
-          spcr  |= (1 << SPR0)|(1 << SPR1);
+          spcr  |= (1 << SPR0) | (1 << SPR1);
           actual = BOARD_CPU_CLOCK / 128;
         }
 
+#warning REVISIT: spcr/spsr are never used
+
       /* Save the frequency setting */
 
-#ifndef CONFIG_SPI_OWNBUS
       priv->frequency = frequency;
       priv->actual    = actual;
     }
@@ -277,9 +246,8 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
     {
       actual          = priv->actual;
     }
-#endif
 
-  spidbg("Frequency %d->%d\n", frequency, actual);
+  spiinfo("Frequency %d->%d\n", frequency, actual);
   return actual;
 }
 
@@ -300,14 +268,12 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
 
 static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
 {
-#ifndef CONFIG_SPI_OWNBUS
   FAR struct avr_spidev_s *priv = (FAR struct avr_spidev_s *)dev;
 
   /* Has the mode changed? */
 
   if (mode != priv->mode)
     {
-#endif
       uint8_t regval;
 
       /* Yes... Set SPI CR appropriately */
@@ -341,10 +307,8 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
 
       /* Save the mode so that subsequent re-configuratins will be faster */
 
-#ifndef CONFIG_SPI_OWNBUS
       priv->mode = mode;
     }
-#endif
 }
 
 /****************************************************************************
@@ -391,14 +355,14 @@ static uint16_t spi_send(FAR struct spi_dev_s *dev, uint16_t wd)
 
   /* Wait for transmission to complete */
 
-  while (!(SPSR & (1<<SPIF)));
+  while (!(SPSR & (1 << SPIF)));
 
   /* Then return the received value */
 
   return (uint16_t)SPDR;
 }
 
-/*************************************************************************
+/****************************************************************************
  * Name: spi_sndblock
  *
  * Description:
@@ -420,13 +384,13 @@ static uint16_t spi_send(FAR struct spi_dev_s *dev, uint16_t wd)
 
 static void spi_sndblock(FAR struct spi_dev_s *dev, FAR const void *buffer, size_t nwords)
 {
-  FAR uint8_t *ptr = (FAR uint8_t*)buffer;
+  FAR uint8_t *ptr = (FAR uint8_t *)buffer;
 
-  spidbg("nwords: %d\n", nwords);
+  spiinfo("nwords: %d\n", nwords);
   while (nwords-- > 0)
-  {
-    (void)spi_send(dev, (uint16_t)*ptr++);
-  }
+    {
+      (void)spi_send(dev, (uint16_t)*ptr++);
+    }
 }
 
 /****************************************************************************
@@ -451,13 +415,13 @@ static void spi_sndblock(FAR struct spi_dev_s *dev, FAR const void *buffer, size
 
 static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t nwords)
 {
-  FAR uint8_t *ptr = (FAR uint8_t*)buffer;
+  FAR uint8_t *ptr = (FAR uint8_t *)buffer;
 
-  spidbg("nwords: %d\n", nwords);
+  spiinfo("nwords: %d\n", nwords);
   while (nwords-- > 0)
-  {
-    *ptr++ = spi_send(dev, (uint16_t)0xff);
-  }
+    {
+      *ptr++ = spi_send(dev, (uint16_t)0xff);
+    }
 }
 
 /****************************************************************************
@@ -465,7 +429,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t nw
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_spiinitialize
+ * Name: avr_spibus_initialize
  *
  * Description:
  *   Initialize the selected SPI port
@@ -478,7 +442,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t nw
  *
  ****************************************************************************/
 
-FAR struct spi_dev_s *up_spiinitialize(int port)
+FAR struct spi_dev_s *avr_spibus_initialize(int port)
 {
   FAR struct avr_spidev_s *priv = &g_spidev;
   irqstate_t flags;
@@ -486,7 +450,7 @@ FAR struct spi_dev_s *up_spiinitialize(int port)
 
   /* Make sure that clocks are provided to the SPI module */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   power_spi_enable();
 
   /* Set MOSI and SCK as outputs, all others are inputs (default on reset):
@@ -513,14 +477,14 @@ FAR struct spi_dev_s *up_spiinitialize(int port)
   /* Clear status flags by reading them */
 
   regval = SPSR;
+  UNUSED(regval);
   regval = SPDR;
+  UNUSED(regval);
 
   /* Set the initial SPI configuration */
 
-#ifndef CONFIG_SPI_OWNBUS
   priv->frequency = 0;
   priv->mode      = SPIDEV_MODE0;
-#endif
 
   /* Select a default frequency of approx. 400KHz */
 
@@ -528,10 +492,9 @@ FAR struct spi_dev_s *up_spiinitialize(int port)
 
   /* Initialize the SPI semaphore that enforces mutually exclusive access */
 
-#ifndef CONFIG_SPI_OWNBUS
   sem_init(&priv->exclsem, 0, 1);
-#endif
+
+  leave_critical_section(flags);
   return &priv->spidev;
 }
 #endif /* CONFIG_AVR_SPI */
-

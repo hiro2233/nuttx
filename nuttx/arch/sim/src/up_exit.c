@@ -1,5 +1,5 @@
 /****************************************************************************
- * up_exit.c
+ * arch/sim/src/up_exit.c
  *
  *   Copyright (C) 2007-2009 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -44,20 +44,9 @@
 
 #include <nuttx/arch.h>
 
-#include "os_internal.h"
+#include "task/task.h"
+#include "sched/sched.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -76,9 +65,9 @@
 
 void _exit(int status)
 {
-  struct tcb_s* tcb;
+  FAR struct tcb_s *tcb;
 
-  sdbg("TCB=%p exiting\n", tcb);
+  sinfo("TCB=%p exiting\n", tcb);
 
   /* Destroy the task at the head of the ready to run list. */
 
@@ -88,8 +77,8 @@ void _exit(int status)
    * head of the list.
    */
 
-  tcb = (struct tcb_s*)g_readytorun.head;
-  sdbg("New Active Task TCB=%p\n", tcb);
+  tcb = this_task();
+  sinfo("New Active Task TCB=%p\n", tcb);
 
   /* The way that we handle signals in the simulation is kind of
    * a kludge.  This would be unsafe in a truly multi-threaded, interrupt
@@ -98,7 +87,7 @@ void _exit(int status)
 
   if (tcb->xcp.sigdeliver)
     {
-      sdbg("Delivering signals TCB=%p\n", tcb);
+      sinfo("Delivering signals TCB=%p\n", tcb);
       ((sig_deliver_t)tcb->xcp.sigdeliver)(tcb);
       tcb->xcp.sigdeliver = NULL;
     }
@@ -107,4 +96,3 @@ void _exit(int status)
 
   up_longjmp(tcb->xcp.regs, 1);
 }
-

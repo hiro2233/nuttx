@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/sama5d3x-ek/src/sam_ov2640.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,7 @@
 #include <stdlib.h>
 #include <debug.h>
 
-#include <nuttx/i2c.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/video/fb.h>
 #include <nuttx/video/ov2640.h>
 
@@ -51,6 +51,7 @@
 #include "sam_periphclks.h"
 #include "sam_lcd.h"
 #include "sam_pck.h"
+#include "sam_twi.h"
 #include "sam_pio.h"
 #include "chip/sam_pinmap.h"
 
@@ -59,7 +60,7 @@
 #ifdef HAVE_CAMERA
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Typical OV2640 XVCLK is 24MHz */
 
@@ -84,17 +85,17 @@ static inline FAR struct fb_vtable_s *ov2640_lcd_initialize(void)
 
   /* Initialize the frame buffer device */
 
-  ret = up_fbinitialize();
+  ret = up_fbinitialize(0);
   if (ret < 0)
     {
-      gdbg("ERROR: up_fbinitialize failed: %d\n", -ret);
+      gerr("ERROR: up_fbinitialize failed: %d\n", -ret);
       return NULL;
     }
 
-  vplane = up_fbgetvplane(0);
+  vplane = up_fbgetvplane(0, 0);
   if (!vplane)
     {
-      gdbg("ERROR: up_fbgetvplane failed\n");
+      gerr("ERROR: up_fbgetvplane failed\n");
     }
 
   return vplane;
@@ -151,16 +152,16 @@ static inline FAR struct fb_vtable_s *ov2640_lcd_initialize(void)
 
 static inline int ov2640_camera_initialize(void)
 {
-  FAR struct i2c_dev_s *i2c;
+  FAR struct i2c_master_s *i2c;
   uint32_t actual;
   int ret;
 
   /* Get the I2C driver that interfaces with the camers (OV2640_BUS)*/
 
-  i2c = up_i2cinitialize(OV2640_BUS);
+  i2c = sam_i2cbus_initialize(OV2640_BUS);
   if (!i2c)
     {
-      gdbg("ERROR: Failed to initialize TWI%d\n", OV2640_BUS);
+      gerr("ERROR: Failed to initialize TWI%d\n", OV2640_BUS);
       return EXIT_FAILURE;
     }
 
@@ -194,9 +195,10 @@ static inline int ov2640_camera_initialize(void)
 
   /* Configure and enable the PCK1 output */
 
-  actual = sam_pck_configure(PCK1, OV2640_FREQUENCY);
-  gvdbg("Desired PCK1 frequency: %ld Actual: %ld\n",
+  actual = sam_pck_configure(PCK1, PCKSRC_MCK, OV2640_FREQUENCY);
+  ginfo("Desired PCK1 frequency: %ld Actual: %ld\n",
         (long)OV2640_FREQUENCY, (long)actual);
+  UNUSED(actual);
 
   sam_pck_enable(PCK1, true);
 
@@ -208,7 +210,7 @@ static inline int ov2640_camera_initialize(void)
   ret = ov2640_initialize(i2c);
   if (ret < 0)
     {
-      gdbg("ERROR: Failed to initialize the OV2640: %d\n", ret);
+      gerr("ERROR: Failed to initialize the OV2640: %d\n", ret);
       return EXIT_FAILURE;
     }
 
@@ -237,7 +239,7 @@ int ov2640_main(int argc, char *argv[])
   vplane = ov2640_lcd_initialize();
   if (!vplane)
     {
-      gdbg("ERROR: ov2640_lcd_initialize failed\n");
+      gerr("ERROR: ov2640_lcd_initialize failed\n");
       return  EXIT_FAILURE;
     }
 
@@ -246,7 +248,7 @@ int ov2640_main(int argc, char *argv[])
   ret = ov2640_camera_initialize();
   if (ret != EXIT_SUCCESS)
     {
-      gdbg("ERROR: ov2640_camera_initialize failed\n");
+      gerr("ERROR: ov2640_camera_initialize failed\n");
       return  EXIT_FAILURE;
     }
 

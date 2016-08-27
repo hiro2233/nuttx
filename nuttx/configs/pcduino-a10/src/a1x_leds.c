@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/pcduino-a10/src/a1x_leds.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,7 @@
 #include <stdbool.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -51,9 +52,6 @@
 
 #include "pcduino_a10.h"
 
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
 /* The pcDuino v1 has four green LEDs; three can be controlled from software.
  * Two are tied to ground and, hence, illuminated by driving the output pins
  * to a high value:
@@ -89,26 +87,6 @@
  * application if CONFIG_ARCH_LEDS is not defined.
  */
 
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg  lldbg
-#  define ledvdbg llvdbg
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -129,7 +107,7 @@ void a1x_led_initialize(void)
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  *
  * Description:
  *   Select the "logical" ON state:
@@ -153,7 +131,7 @@ void a1x_led_initialize(void)
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   switch (led)
     {
@@ -183,7 +161,7 @@ void board_led_on(int led)
 #endif
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  *
  * Description:
  *   Select the "logical" OFF state:
@@ -207,7 +185,7 @@ void board_led_on(int led)
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   switch (led)
     {
@@ -224,7 +202,7 @@ void board_led_off(int led)
 #endif
 
 /************************************************************************************
- * Name:  a1x_setled and a1x_setleds
+ * Name:  board_userled_initialize, board_userled, and board_userled_all
  *
  * Description:
  *   These interfaces allow user control of the board LEDs.
@@ -238,7 +216,12 @@ void board_led_off(int led)
  *
  ************************************************************************************/
 
-void a1x_setled(int led, bool ledon)
+void board_userled_initialize(void)
+{
+  /* Initialization already performed in a1x_led_initialize */
+}
+
+void board_userled(int led, bool ledon)
 {
   switch (led)
     {
@@ -258,11 +241,11 @@ void a1x_setled(int led, bool ledon)
     }
 }
 
-void a1x_setleds(uint8_t ledset)
+void board_userled_all(uint8_t ledset)
 {
-  a1x_setled(BOARD_LED1, (ledset & BOARD_LED1) != 0);
-  a1x_setled(BOARD_LED3, (ledset & BOARD_LED3) != 0);
+  board_userled(BOARD_LED1, (ledset & BOARD_LED1) != 0);
+  board_userled(BOARD_LED3, (ledset & BOARD_LED3) != 0);
 #ifndef CONFIG_ARCH_LEDS
-  a1x_setled(BOARD_LED4, (ledset & BOARD_LED4) != 0);
+  board_userled(BOARD_LED4, (ledset & BOARD_LED4) != 0);
 #endif
 }

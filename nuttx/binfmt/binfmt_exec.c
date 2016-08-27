@@ -1,7 +1,7 @@
 /****************************************************************************
  * binfmt/binfmt_exec.c
  *
- *   Copyright (C) 2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2013-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,25 +46,9 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/binfmt/binfmt.h>
 
-#include "binfmt_internal.h"
+#include "binfmt.h"
 
 #ifndef CONFIG_BINFMT_DISABLE
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -75,12 +59,16 @@
  *
  * Description:
  *   This is a convenience function that wraps load_ and exec_module into
- *   one call.  If CONFIG_SCHED_ONEXIT is also defined, this function will
- *   automatically call schedule_unload() to unload the module when task
- *   exits.
+ *   one call.  If CONFIG_SCHED_ONEXIT and CONFIG_SCHED_HAVE_PARENT are
+ *   also defined, this function will automatically call schedule_unload()
+ *   to unload the module when task exits.
+ *
+ *   NOTE: This function is flawed and useless without CONFIG_SCHED_ONEXIT
+ *   and CONFIG_SCHED_HAVE_PARENT because there is then no mechanism to
+ *   unload the module once it exits.
  *
  * Input Parameter:
- *   filename - Fulll path to the binary to be loaded
+ *   filename - Full path to the binary to be loaded
  *   argv     - Argument list
  *   exports  - Table of exported symbols
  *   nexports - The number of symbols in exports
@@ -95,32 +83,46 @@
 int exec(FAR const char *filename, FAR char * const *argv,
          FAR const struct symtab_s *exports, int nexports)
 {
-#ifdef CONFIG_SCHED_ONEXIT
+#if defined(CONFIG_SCHED_ONEXIT) && defined(CONFIG_SCHED_HAVE_PARENT)
   FAR struct binary_s *bin;
   int pid;
+  int errcode;
   int ret;
 
   /* Allocate the load information */
 
-  bin = (FAR struct binary_s *)kzalloc(sizeof(struct binary_s));
+  bin = (FAR struct binary_s *)kmm_zalloc(sizeof(struct binary_s));
   if (!bin)
     {
-      set_errno(ENOMEM);
-      return ERROR;
+      berr("ERROR: Failed to allocate binary_s\n");
+      errcode = ENOMEM;
+      goto errout;
     }
 
-  /* Load the module into memory */
+  /* Initialize the binary structure */
 
   bin->filename = filename;
   bin->exports  = exports;
   bin->nexports = nexports;
 
+  /* Copy the argv[] list */
+
+  ret = binfmt_copyargv(bin, argv);
+  if (ret < 0)
+    {
+      errcode = -ret;
+      berr("ERROR: Failed to copy argv[]: %d\n", errcode);
+      goto errout_with_bin;
+    }
+
+  /* Load the module into memory */
+
   ret = load_module(bin);
   if (ret < 0)
     {
-      bdbg("ERROR: Failed to load program '%s'\n", filename);
-      kfree(bin);
-      return ERROR;
+      errcode = get_errno();
+      berr("ERROR: Failed to load program '%s': %d\n", filename, errcode);
+      goto errout_with_argv;
     }
 
   /* Disable pre-emption so that the executed module does
@@ -135,11 +137,9 @@ int exec(FAR const char *filename, FAR char * const *argv,
   pid = exec_module(bin);
   if (pid < 0)
     {
-      bdbg("ERROR: Failed to execute program '%s'\n", filename);
-      sched_unlock();
-      unload_module(bin);
-      kfree(bin);
-      return ERROR;
+      errcode = get_errno();
+      berr("ERROR: Failed to execute program '%s': %d\n", filename, errcode);
+      goto errout_with_lock;
     }
 
   /* Set up to unload the module (and free the binary_s structure)
@@ -149,13 +149,27 @@ int exec(FAR const char *filename, FAR char * const *argv,
   ret = schedule_unload(pid, bin);
   if (ret < 0)
     {
-      bdbg("ERROR: Failed to schedul unload '%s'\n", filename);
+      errcode = get_errno();
+      berr("ERROR: Failed to schedule unload '%s': %d\n", filename, errcode);
     }
 
   sched_unlock();
   return pid;
+
+errout_with_lock:
+  sched_unlock();
+  unload_module(bin);
+errout_with_argv:
+  binfmt_freeargv(bin);
+errout_with_bin:
+  kmm_free(bin);
+errout:
+  set_errno(errcode);
+  return ERROR;
+
 #else
   struct binary_s bin;
+  int errcode;
   int ret;
 
   /* Load the module into memory */
@@ -168,8 +182,9 @@ int exec(FAR const char *filename, FAR char * const *argv,
   ret = load_module(&bin);
   if (ret < 0)
     {
-      bdbg("ERROR: Failed to load program '%s'\n", filename);
-      return ERROR;
+      errcode = get_errno();
+      berr("ERROR: Failed to load program '%s': %d\n", filename, errcode);
+      goto errout;
     }
 
   /* Then start the module */
@@ -177,16 +192,21 @@ int exec(FAR const char *filename, FAR char * const *argv,
   ret = exec_module(&bin);
   if (ret < 0)
     {
-      bdbg("ERROR: Failed to execute program '%s'\n", filename);
-      unload_module(&bin);
-      return ERROR;
+      errcode = get_errno();
+      berr("ERROR: Failed to execute program '%s': %d\n", filename, errcode);
+      goto errout_with_module;
     }
 
   /* TODO:  How does the module get unloaded in this case? */
 
   return ret;
+
+errout_with_module:
+  unload_module(&bin);
+errout:
+  set_errno(errcode);
+  return ERROR;
 #endif
 }
 
-#endif /* CONFIG_BINFMT_DISABLE */
-
+#endif /* !CONFIG_BINFMT_DISABLE */

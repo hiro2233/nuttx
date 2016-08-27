@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/mips/src/mips32/up_assert.c
  *
- *   Copyright (C) 2011-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,12 +46,13 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/usb/usbdev_trace.h>
 
 #include <arch/board/board.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 
 /****************************************************************************
@@ -62,32 +63,6 @@
 #ifndef CONFIG_USBDEV_TRACE
 #  undef CONFIG_ARCH_USBDUMP
 #endif
-
-/* Output debug info if stack dump is selected -- even if debug is not
- * selected.
- */
-
-#ifdef CONFIG_ARCH_STACKDUMP
-# undef  lldbg
-# define lldbg lowsyslog
-#endif
-
-/* The following is just intended to keep some ugliness out of the mainline
- * code.  We are going to print the task name if:
- *
- *  CONFIG_TASK_NAME_SIZE > 0 &&    <-- The task has a name
- *  (defined(CONFIG_DEBUG)    ||    <-- And the debug is enabled (lldbg used)
- *   defined(CONFIG_ARCH_STACKDUMP) <-- Or lowsyslog() is used
- */
-
-#undef CONFIG_PRINT_TASKNAME
-#if CONFIG_TASK_NAME_SIZE > 0 && (defined(CONFIG_DEBUG) || defined(CONFIG_ARCH_STACKDUMP))
-#  define CONFIG_PRINT_TASKNAME 1
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -102,15 +77,15 @@ static void _up_assert(int errorcode)
 {
   /* Are we in an interrupt handler or the idle task? */
 
-  if (current_regs || ((struct tcb_s*)g_readytorun.head)->pid == 0)
+  if (g_current_regs || this_task()->pid == 0)
     {
-       (void)irqsave();
-        for (;;)
+       (void)up_irq_save();
+        for (; ; )
           {
 #ifdef CONFIG_ARCH_LEDS
-            board_led_on(LED_PANIC);
+            board_autoled_on(LED_PANIC);
             up_mdelay(250);
-            board_led_off(LED_PANIC);
+            board_autoled_off(LED_PANIC);
             up_mdelay(250);
 #endif
           }
@@ -126,9 +101,22 @@ static void _up_assert(int errorcode)
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_USBDUMP
-static int assert_tracecallback(struct usbtrace_s *trace, void *arg)
+static int usbtrace_syslog(FAR const char *fmt, ...)
 {
-  usbtrace_trprintf((trprintf_t)lowsyslog, trace->event, trace->value);
+  va_list ap;
+  int ret;
+
+  /* Let vsyslog do the real work */
+
+  va_start(ap, fmt);
+  ret = vsyslog(LOG_EMERG, fmt, ap);
+  va_end(ap);
+  return ret;
+}
+
+static int assert_tracecallback(FAR struct usbtrace_s *trace, FAR void *arg)
+{
+  usbtrace_trprintf(usbtrace_syslog, trace->event, trace->value);
   return 0;
 }
 #endif
@@ -143,17 +131,17 @@ static int assert_tracecallback(struct usbtrace_s *trace, void *arg)
 
 void up_assert(const uint8_t *filename, int lineno)
 {
-#ifdef CONFIG_PRINT_TASKNAME
-  struct tcb_s *rtcb = (struct tcb_s*)g_readytorun.head;
+#if CONFIG_TASK_NAME_SIZE > 0 && defined(CONFIG_DEBUG_ALERT)
+  struct tcb_s *rtcb = this_task();
 #endif
 
-  board_led_on(LED_ASSERTION);
+  board_autoled_on(LED_ASSERTION);
 
-#ifdef CONFIG_PRINT_TASKNAME
-  lldbg("Assertion failed at file:%s line: %d task: %s\n",
+#if CONFIG_TASK_NAME_SIZE > 0
+  _alert("Assertion failed at file:%s line: %d task: %s\n",
         filename, lineno, rtcb->name);
 #else
-  lldbg("Assertion failed at file:%s line: %d\n",
+  _alert("Assertion failed at file:%s line: %d\n",
         filename, lineno);
 #endif
 
@@ -163,6 +151,10 @@ void up_assert(const uint8_t *filename, int lineno)
   /* Dump USB trace data */
 
   (void)usbtrace_enumerate(assert_tracecallback, NULL);
+#endif
+
+#ifdef CONFIG_BOARD_CRASHDUMP
+  board_crashdump(up_getsp(), this_task(), filename, lineno);
 #endif
 
   _up_assert(EXIT_FAILURE);

@@ -1,7 +1,7 @@
 /****************************************************************************
- * up_blockdevice.c
+ * arch/sim/src/up_blockdevice.c
  *
- *   Copyright (C) 2007-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,32 +44,16 @@
 #include <string.h>
 #include <errno.h>
 
-#include <nuttx/fs/ramdisk.h>
+#include <nuttx/drivers/ramdisk.h>
 
 #include "up_internal.h"
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define NSECTORS            2048
 #define LOGICAL_SECTOR_SIZE 512
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -84,5 +68,6 @@
 
 void up_registerblockdevice(void)
 {
-  ramdisk_register(0, (uint8_t*)up_deviceimage(), NSECTORS, LOGICAL_SECTOR_SIZE, true);
+  ramdisk_register(0, (FAR uint8_t *)up_deviceimage(), NSECTORS,
+                   LOGICAL_SECTOR_SIZE, RDFLAG_WRENABLED | RDFLAG_FUNLINK);
 }

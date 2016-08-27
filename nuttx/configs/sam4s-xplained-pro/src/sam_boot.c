@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/sam4s-xplained-pro/src/sam_boot.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,13 +40,15 @@
 #include <nuttx/config.h>
 
 #include <debug.h>
-#include <nuttx/watchdog.h>
 
+#include <nuttx/board.h>
+#include <nuttx/timers/watchdog.h>
 #include <arch/board/board.h>
+
 #include "sam4s-xplained-pro.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /************************************************************************************
@@ -72,7 +74,7 @@ void sam_boardinitialize(void)
 #ifdef CONFIG_ARCH_LEDS
   /* Configure on-board LEDs if LED support has been selected. */
 
-  board_led_initialize();
+  board_autoled_initialize();
 #endif
 }
 
@@ -95,13 +97,13 @@ void board_initialize(void)
 #if (defined(CONFIG_SAM34_WDT) && !defined(CONFIG_WDT_DISABLE_ON_RESET))
   /* Configure watchdog timer and enable kicker kernel thread. */
 
-  DEBUGASSERT(up_wdginitialize() >= 0);
+  DEBUGASSERT(sam_watchdog_initialize() >= 0);
 #endif
 
 #ifndef CONFIG_ARCH_LEDS
   /* Initialize user led */
 
-  sam_ledinit();
+  sam_led_initialize();
 #endif
 
 #ifdef CONFIG_TIMER

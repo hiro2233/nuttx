@@ -1,7 +1,7 @@
 ############################################################################
 # configs/sama5d3x-ek/src/Makefile
 #
-#   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -35,16 +35,8 @@
 
 -include $(TOPDIR)/Make.defs
 
-CFLAGS += -I$(TOPDIR)/sched
-
 ASRCS =
-AOBJS = $(ASRCS:.S=$(OBJEXT))
-
 CSRCS = sam_boot.c
-
-ifeq ($(CONFIG_HAVE_CXX),y)
-CSRCS += sam_cxxinitialize.c
-endif
 
 ifeq ($(CONFIG_SAMA5_SPI0),y)
 CSRCS += sam_spi.c
@@ -98,7 +90,7 @@ CSRCS += sam_usb.c
 endif
 endif
 
-ifeq ($(CONFIG_SAMA5_EMAC),y)
+ifeq ($(CONFIG_SAMA5_EMACA),y)
 CSRCS += sam_ethernet.c
 else
 ifeq ($(CONFIG_SAMA5_GMAC),y)
@@ -106,8 +98,16 @@ CSRCS += sam_ethernet.c
 endif
 endif
 
-ifeq ($(CONFIG_NSH_ARCHINIT),y)
-CSRCS += sam_nsh.c
+ifeq ($(CONFIG_AUDIO_WM8904),y)
+ifeq ($(CONFIG_SAMA5_TWI0),y)
+ifeq ($(CONFIG_SAMA5_SSC0),y)
+CSRCS += sam_wm8904.c
+endif
+endif
+endif
+
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+CSRCS += sam_appinit.c
 endif
 
 ifeq ($(CONFIG_ADC),y)
@@ -158,45 +158,4 @@ ifeq ($(CONFIG_ARCH_BUTTONS),y)
 CSRCS += sam_buttons.c
 endif
 
-COBJS = $(CSRCS:.c=$(OBJEXT))
-
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-ARCH_SRCDIR = $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(WINTOOL),y)
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}"
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/common}"
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/armv7-a}"
-else
-  CFLAGS += -I$(ARCH_SRCDIR)/chip
-  CFLAGS += -I$(ARCH_SRCDIR)/common
-  CFLAGS += -I$(ARCH_SRCDIR)/armv7-a
-endif
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

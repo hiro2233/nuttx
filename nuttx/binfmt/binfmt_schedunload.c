@@ -1,7 +1,7 @@
 /****************************************************************************
  * binfmt/binfmt_schedunload.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,10 +43,11 @@
 #include <debug.h>
 #include <errno.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/binfmt/binfmt.h>
 
-#include "binfmt_internal.h"
+#include "binfmt.h"
 
 #if !defined(CONFIG_BINFMT_DISABLE) && defined(CONFIG_SCHED_HAVE_PARENT)
 
@@ -73,7 +74,7 @@ FAR struct binary_s *g_unloadhead;
  *
  * Description:
  *   If CONFIG_SCHED_HAVE_PARENT is defined then schedul_unload() will
- *   manage instances of struct binary_s allocated with kmalloc.  It
+ *   manage instances of struct binary_s allocated with kmm_malloc.  It
  *   will keep the binary data in a link list and when SIGCHLD is received
  *   (meaning that the task has exit'ed, schedul_unload() will find the
  *   data, unload the module, and free the structure.
@@ -82,9 +83,9 @@ FAR struct binary_s *g_unloadhead;
  *
  * Input Parameter:
  *   pid - The task ID of the child task
- *   bin - This structure must have been allocated with kmalloc() and must
+ *   bin - This structure must have been allocated with kmm_malloc() and must
  *         persist until the task unloads
-
+ *
  *
  * Returned Value:
  *   None
@@ -105,10 +106,10 @@ static void unload_list_add(pid_t pid, FAR struct binary_s *bin)
    * interrupts.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   bin->flink = g_unloadhead;
   g_unloadhead = bin;
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -116,7 +117,7 @@ static void unload_list_add(pid_t pid, FAR struct binary_s *bin)
  *
  * Description:
  *   If CONFIG_SCHED_HAVE_PARENT is defined then schedul_unload() will
- *   manage instances of struct binary_s allocated with kmalloc.  It
+ *   manage instances of struct binary_s allocated with kmm_malloc.  It
  *   will keep the binary data in a link list and when SIGCHLD is received
  *   (meaning that the task has exit'ed, schedul_unload() will find the
  *   data, unload the module, and free the structure.
@@ -187,8 +188,8 @@ static FAR struct binary_s *unload_list_remove(pid_t pid)
  * Description:
  *   If CONFIG_SCHED_HAVE_PARENT is defined, this function may be called to
  *   automatically unload the module when task exits.  It assumes that
- *   bin was allocated with kmalloc() or friends and will also automatically
- *   free the structure with kfree() when the task exists.
+ *   bin was allocated with kmm_malloc() or friends and will also automatically
+ *   free the structure with kmm_free() when the task exists.
  *
  * Input Parameter:
  *   pid - The ID of the task that just exited
@@ -208,7 +209,7 @@ static void unload_callback(int signo, siginfo_t *info, void *ucontext)
 
   if (!info || signo != SIGCHLD)
     {
-      blldbg("ERROR:Bad signal callback: signo=%d info=%p\n", signo, info);
+      berr("ERROR:Bad signal callback: signo=%d info=%p\n", signo, info);
       return;
     }
 
@@ -217,7 +218,7 @@ static void unload_callback(int signo, siginfo_t *info, void *ucontext)
   bin = unload_list_remove(info->si_pid);
   if (!bin)
     {
-      blldbg("ERROR: Could not find load info for PID=%d\n", info->si_pid);
+      berr("ERROR: Could not find load info for PID=%d\n", info->si_pid);
       return;
     }
 
@@ -226,12 +227,12 @@ static void unload_callback(int signo, siginfo_t *info, void *ucontext)
   ret = unload_module(bin);
   if (ret < 0)
     {
-      blldbg("ERROR: unload_module failed: %d\n", get_errno());
+      berr("ERROR: unload_module failed: %d\n", get_errno());
     }
 
   /* Free the load structure */
 
-  kfree(bin);
+  kmm_free(bin);
 }
 
 /****************************************************************************
@@ -245,13 +246,13 @@ static void unload_callback(int signo, siginfo_t *info, void *ucontext)
  *   If CONFIG_SCHED_HAVE_PARENT is defined, this function may be called by
  *   the parent of the newly created task to automatically unload the
  *   module when the task exits.  This assumes that (1) the caller is the
- *   parent of the created task, (2) that bin was allocated with kmalloc()
- *   or friends.  It will also automatically free the structure with kfree()
+ *   parent of the created task, (2) that bin was allocated with kmm_malloc()
+ *   or friends.  It will also automatically free the structure with kmm_free()
  *   after unloading the module.
  *
  * Input Parameter:
  *   pid - The task ID of the child task
- *   bin - This structure must have been allocated with kmalloc() and must
+ *   bin - This structure must have been allocated with kmm_malloc() and must
  *         persist until the task unloads
  *
  * Returned Value:
@@ -268,22 +269,22 @@ int schedule_unload(pid_t pid, FAR struct binary_s *bin)
 {
   struct sigaction act;
   struct sigaction oact;
-  sigset_t sigset;
+  sigset_t set;
   irqstate_t flags;
   int errorcode;
   int ret;
 
   /* Make sure that SIGCHLD is unmasked */
 
-  (void)sigemptyset(&sigset);
-  (void)sigaddset(&sigset, SIGCHLD);
-  ret = sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+  (void)sigemptyset(&set);
+  (void)sigaddset(&set, SIGCHLD);
+  ret = sigprocmask(SIG_UNBLOCK, &set, NULL);
   if (ret != OK)
     {
       /* The errno value will get trashed by the following debug output */
 
       errorcode = get_errno();
-      bvdbg("ERROR: sigprocmask failed: %d\n", ret);
+      berr("ERROR: sigprocmask failed: %d\n", ret);
       goto errout;
     }
 
@@ -309,16 +310,17 @@ int schedule_unload(pid_t pid, FAR struct binary_s *bin)
       /* The errno value will get trashed by the following debug output */
 
       errorcode = get_errno();
-      bvdbg("ERROR: sigaction failed: %d\n" , ret);
+      berr("ERROR: sigaction failed: %d\n" , ret);
 
       /* Emergency removal from the list */
 
-      flags = irqsave();
+      flags = enter_critical_section();
       if (unload_list_remove(pid) != bin)
         {
-          blldbg("ERROR: Failed to remove structure\n");
+          berr("ERROR: Failed to remove structure\n");
         }
 
+      leave_critical_section(flags);
       goto errout;
     }
 

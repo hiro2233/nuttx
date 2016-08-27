@@ -38,15 +38,15 @@
  *
  ************************************************************************************/
 
-#ifndef _ARCH_ARM_SRC_LPC2378_LPC23XX_GPIO_H
-#define _ARCH_ARM_SRC_LPC2378_LPC23XX_GPIO_H
+#ifndef __ARCH_ARM_SRC_LPC2378_LPC23XX_GPIO_H
+#define __ARCH_ARM_SRC_LPC2378_LPC23XX_GPIO_H
 
 /************************************************************************************
  * Included Files
  ************************************************************************************/
 #include "chip.h"
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 #define io_getreg8(o)  		getreg8(LPC23XX_FIO_BASE+(o))
 #define io_getreg(r)   		getreg32(LPC23XX_FIO_BASE+ (r))
@@ -68,4 +68,4 @@
  * Public Function Prototypes
  ************************************************************************************/
 
-#endif  /* _ARCH_ARM_SRC_LPC2378_LPC23XX_GPIO_H */
+#endif  /* __ARCH_ARM_SRC_LPC2378_LPC23XX_GPIO_H */

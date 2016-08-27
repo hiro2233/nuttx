@@ -47,12 +47,16 @@
 #include <semaphore.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 
 #ifndef CONFIG_EXAMPLES_USBTERM_BUFLEN
 #  define CONFIG_EXAMPLES_USBTERM_BUFLEN 256
+#endif
+
+#ifndef CONFIG_USBDEV_TRACE_INITIALIDSET
+#  define CONFIG_USBDEV_TRACE_INITIALIDSET 0
 #endif
 
 #ifdef CONFIG_EXAMPLES_USBTERM_TRACEINIT
@@ -97,26 +101,6 @@
 #  define USBTERM_DEVNAME "/dev/ttyUSB0"
 #endif
 
-/* Debug ********************************************************************/
-
-#ifdef CONFIG_CPP_HAVE_VARARGS
-#  ifdef CONFIG_DEBUG
-#    define message(...) syslog(__VA_ARGS__)
-#    define trmessage    syslog
-#  else
-#    define message(...) printf(__VA_ARGS__)
-#    define trmessage    printf
-#  endif
-#else
-#  ifdef CONFIG_DEBUG
-#    define message      lowsyslog
-#    define trmessage    lowsyslog
-#  else
-#    define message      printf
-#    define trmessage    printf
-#  endif
-#endif
-
 #define IOBUFFER_SIZE 256
 
 /****************************************************************************
@@ -142,7 +126,7 @@ struct usbterm_globals_s
 };
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /* USB terminal state data */

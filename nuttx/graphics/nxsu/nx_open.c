@@ -51,7 +51,7 @@
 #include "nxfe.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -78,7 +78,7 @@ const struct nx_callback_s g_bkgdcb =
 {
   nxsu_bkgdredraw,   /* redraw */
   NULL               /* position */
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
   , NULL             /* mousein */
 #endif
 #ifdef CONFIG_NX_KBD
@@ -101,7 +101,7 @@ static void nxsu_bkgdredraw(NXWINDOW hwnd,
   FAR struct nxbe_window_s *wnd = (FAR struct nxbe_window_s *)hwnd;
   FAR struct nxbe_state_s  *be  = wnd->be;
 
-  gvdbg("BG redraw rect={(%d,%d),(%d,%d)}\n",
+  ginfo("BG redraw rect={(%d,%d),(%d,%d)}\n",
         rect->pt1.x, rect->pt1.y, rect->pt2.x, rect->pt2.y);
   nxbe_fill(wnd, &wnd->bounds, be->bgcolor);
 }
@@ -120,16 +120,16 @@ static inline int nxsu_setup(FAR NX_DRIVERTYPE *dev,
   ret = nxbe_configure(dev, &fe->be);
   if (ret < 0)
     {
-      gdbg("nxbe_configure failed: %d\n", -ret);
+      gerr("ERROR: nxbe_configure failed: %d\n", -ret);
       errno = -ret;
       return ERROR;
     }
 
-#if CONFIG_FB_CMAP
+#ifdef CONFIG_FB_CMAP
   ret = nxbe_colormap(dev);
   if (ret < 0)
     {
-      gdbg("nxbe_colormap failed: %d\n", -ret);
+      gerr("ERROR: nxbe_colormap failed: %d\n", -ret);
       errno = -ret;
       return ERROR;
     }
@@ -151,9 +151,9 @@ static inline int nxsu_setup(FAR NX_DRIVERTYPE *dev,
 
   fe->be.topwnd = &fe->be.bkgd;
 
- /* Initialize the mouse position */
+  /* Initialize the mouse position */
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
   nxsu_mouseinit(fe->be.vinfo.xres, fe->be.vinfo.yres);
 #endif
   return OK;
@@ -187,7 +187,7 @@ NXHANDLE nx_open(FAR NX_DRIVERTYPE *dev)
 
   /* Sanity checking */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!dev)
     {
       errno = EINVAL;
@@ -199,7 +199,7 @@ NXHANDLE nx_open(FAR NX_DRIVERTYPE *dev)
    * (if available) for compatibility with the multi-user implementation.
    */
 
-  fe = (FAR struct nxfe_state_s *)kuzalloc(sizeof(struct nxfe_state_s));
+  fe = (FAR struct nxfe_state_s *)kumm_zalloc(sizeof(struct nxfe_state_s));
   if (!fe)
     {
       errno = ENOMEM;

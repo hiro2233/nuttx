@@ -47,10 +47,10 @@
 #include "sam_mpuinit.h"
 #include "sam_userspace.h"
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -87,8 +87,8 @@ void sam_userspace(void)
   DEBUGASSERT(USERSPACE->us_bssstart != 0 && USERSPACE->us_bssend != 0 &&
               USERSPACE->us_bssstart <= USERSPACE->us_bssend);
 
-  dest = (uint8_t*)USERSPACE->us_bssstart;
-  end  = (uint8_t*)USERSPACE->us_bssend;
+  dest = (uint8_t *)USERSPACE->us_bssstart;
+  end  = (uint8_t *)USERSPACE->us_bssend;
 
   while (dest != end)
     {
@@ -101,9 +101,9 @@ void sam_userspace(void)
               USERSPACE->us_datastart != 0 && USERSPACE->us_dataend != 0 &&
               USERSPACE->us_datastart <= USERSPACE->us_dataend);
 
-  src  = (uint8_t*)USERSPACE->us_datasource;
-  dest = (uint8_t*)USERSPACE->us_datastart;
-  end  = (uint8_t*)USERSPACE->us_dataend;
+  src  = (uint8_t *)USERSPACE->us_datasource;
+  dest = (uint8_t *)USERSPACE->us_datastart;
+  end  = (uint8_t *)USERSPACE->us_dataend;
 
   while (dest != end)
     {
@@ -115,5 +115,5 @@ void sam_userspace(void)
   sam_mpuinitialize();
 }
 
-#endif /* CONFIG_NUTTX_KERNEL */
+#endif /* CONFIG_BUILD_PROTECTED */
 

@@ -59,11 +59,10 @@
 #include "at32uc3_usart.h"
 #include "up_arch.h"
 #include "up_internal.h"
-#include "os_internal.h"
-#include "at32uc3_internal.h"
+#include "at32uc3.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Some sanity checks *******************************************************/
@@ -171,7 +170,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable);
 static bool up_txready(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -359,7 +358,7 @@ static inline void up_disableusartint(struct up_dev_s *priv, uint32_t *imr)
 static int up_setup(struct uart_dev_s *dev)
 {
 #ifndef CONFIG_SUPPRESS_UART_CONFIG
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Configure the USART as an RS-232 UART */
 
@@ -381,7 +380,7 @@ static int up_setup(struct uart_dev_s *dev)
 
 static void up_shutdown(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Reset, disable interrupts, and disable Rx and Tx */
 
@@ -405,7 +404,7 @@ static void up_shutdown(struct uart_dev_s *dev)
 
 static int up_attach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Attach the IRQ */
 
@@ -424,7 +423,7 @@ static int up_attach(struct uart_dev_s *dev)
 
 static void up_detach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_serialout(priv, AVR32_USART_IDR_OFFSET, 0xffffffff);
   irq_detach(priv->irq);
 }
@@ -473,7 +472,7 @@ static int up_interrupt(int irq, void *context)
     {
       PANIC();
     }
-  priv = (struct up_dev_s*)dev->priv;
+  priv = (struct up_dev_s *)dev->priv;
   DEBUGASSERT(priv);
 
   /* Loop until there are no characters to be transferred or,
@@ -492,25 +491,26 @@ static int up_interrupt(int irq, void *context)
 
       /* Handle incoming, receive bytes (with or without timeout) */
 
-      if ((csr & (USART_CSR_RXRDY|USART_CSR_TIMEOUT)) != 0)
+      if ((csr & (USART_CSR_RXRDY | USART_CSR_TIMEOUT)) != 0)
         {
-           /* Received data ready... process incoming bytes */
+          /* Received data ready... process incoming bytes */
 
-           uart_recvchars(dev);
-           handled = true;
+          uart_recvchars(dev);
+          handled = true;
         }
 
       /* Handle outgoing, transmit bytes */
 
       if ((csr & USART_CSR_TXRDY) != 0)
         {
-           /* Transmit data regiser empty ... process outgoing bytes */
+          /* Transmit data regiser empty ... process outgoing bytes */
 
-           uart_xmitchars(dev);
-           handled = true;
+          uart_xmitchars(dev);
+          handled = true;
         }
     }
-    return OK;
+
+  return OK;
 }
 
 /****************************************************************************
@@ -533,8 +533,8 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
   inode = filep->f_inode;
   dev   = inode->i_private;
 
-  DEBUGASSERT(dev, dev->priv)
-  priv = (struct up_dev_s*)dev->priv;
+  DEBUGASSERT(dev, dev->priv);
+  priv = (struct up_dev_s *)dev->priv;
 
   switch (cmd)
     {
@@ -564,7 +564,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
 static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint32_t rhr;
 
   /* Get the Rx byte.  The USART Rx interrupt flag is cleared by side effect
@@ -596,7 +596,7 @@ static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 
 static void up_rxint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   if (enable)
     {
@@ -607,19 +607,19 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
 #ifndef CONFIG_SUPPRESS_SERIAL_INTS
 #  ifdef CONFIG_USART_ERRINTS
         up_serialout(priv, AVR32_USART_IER_OFFSET,
-                     USART_INT_RXRDY|USART_INT_TIMEOUT|
-                     USART_INT_OVRE|USART_INT_FRAME|USART_INT_PARE);
+                     USART_INT_RXRDY | USART_INT_TIMEOUT | USART_INT_OVRE |
+                     USART_INT_FRAME | USART_INT_PARE);
 #  else
         up_serialout(priv, AVR32_USART_IER_OFFSET,
-                     USART_INT_RXRDY|USART_INT_TIMEOUT);
+                     USART_INT_RXRDY | USART_INT_TIMEOUT);
 #  endif
 #endif
     }
   else
     {
-        up_serialout(priv, AVR32_USART_IDR_OFFSET,
-                     USART_INT_RXRDY|USART_INT_TIMEOUT|
-                     USART_INT_OVRE|USART_INT_FRAME|USART_INT_PARE);
+      up_serialout(priv, AVR32_USART_IDR_OFFSET,
+                   USART_INT_RXRDY | USART_INT_TIMEOUT | USART_INT_OVRE |
+                   USART_INT_FRAME | USART_INT_PARE);
     }
 }
 
@@ -633,7 +633,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
 
 static bool up_rxavailable(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint32_t regval;
 
   /* Read the channel status register and check if character is available to
@@ -654,7 +654,7 @@ static bool up_rxavailable(struct uart_dev_s *dev)
 
 static void up_send(struct uart_dev_s *dev, int ch)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_serialout(priv, AVR32_USART_THR_OFFSET, (uint32_t)ch);
 }
 
@@ -668,10 +668,10 @@ static void up_send(struct uart_dev_s *dev, int ch)
 
 static void up_txint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable)
     {
       /* Set to receive an interrupt when the TX data register is empty */
@@ -692,7 +692,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
 
        up_serialout(priv, AVR32_USART_IDR_OFFSET, USART_INT_TXRDY);
     }
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -705,7 +705,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
 
 static bool up_txready(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint32_t regval;
 
   /* Read the channel status register and check if THR is ready to accept
@@ -791,7 +791,7 @@ void up_serialinit(void)
 int up_putc(int ch)
 {
 #ifdef HAVE_SERIAL_CONSOLE
-  struct up_dev_s *priv = (struct up_dev_s*)CONSOLE_DEV.priv;
+  struct up_dev_s *priv = (struct up_dev_s *)CONSOLE_DEV.priv;
   uint32_t imr;
 
   up_disableusartint(priv, &imr);

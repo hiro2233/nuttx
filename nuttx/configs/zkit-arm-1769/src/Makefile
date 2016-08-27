@@ -41,74 +41,30 @@
 -include $(TOPDIR)/Make.defs
 
 ASRCS =
-CSRCS = up_boot.c up_leds.c up_ssp.c up_buttons.c up_lcd.c
+CSRCS = lpc17_boot.c lpc17_leds.c lpc17_ssp.c lpc17_buttons.c lpc17_lcd.c
 
-ifeq ($(CONFIG_NSH_ARCHINIT),y)
-CSRCS += up_nsh.c
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+CSRCS += lpc17_appinit.c
 endif
 
 ifeq ($(CONFIG_USBMSC),y)
-CSRCS += up_usbmsc.c
+CSRCS += lpc17_usbmsc.c
 endif
 
 ifeq ($(CONFIG_ADC),y)
-CSRCS += up_adc.c
+CSRCS += lpc17_adc.c
 endif
 
 ifeq ($(CONFIG_DAC),y)
-CSRCS += up_dac.c
+CSRCS += lpc17_dac.c
 endif
 
 ifeq ($(CONFIG_CAN),y)
-CSRCS += up_can.c
+CSRCS += lpc17_can.c
 endif
 
 ifeq ($(CONFIG_LPC17_SPI),y)
-CSRCS += up_spi.c
+CSRCS += lpc17_spi.c
 endif
 
-AOBJS = $(ASRCS:.S=$(OBJEXT))
-COBJS = $(CSRCS:.c=$(OBJEXT))
-
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-ARCH_SRCDIR = $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(WINTOOL),y)
-  CFLAGS += -I "${shell cygpath -w $(TOPDIR)/sched}"
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}"
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/common}"
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/armv7-m}"
-else
-  CFLAGS += -I$(TOPDIR)/sched
-  CFLAGS += -I$(ARCH_SRCDIR)/chip
-  CFLAGS += -I$(ARCH_SRCDIR)/common
-  CFLAGS += -I$(ARCH_SRCDIR)/armv7-m
-endif
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

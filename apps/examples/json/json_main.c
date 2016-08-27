@@ -38,7 +38,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <apps/netutils/cJSON.h>
+#include "netutils/cJSON.h"
 
 /****************************************************************************
  * Private Types
@@ -236,7 +236,11 @@ static void create_objects(void)
  *
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int json_main(int argc, const char *argv[])
+#endif
 {
   /* a bunch of json: */
 

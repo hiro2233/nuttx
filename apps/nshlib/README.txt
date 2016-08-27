@@ -188,7 +188,7 @@ NSH to behave as follows at NSH startup time:
 
 - By default, the contents of rcS script are:
 
-    # Create a RAMDISK and mount it at XXXRDMOUNTPOUNTXXX
+    # Create a RAMDISK and mount it at XXXRDMOUNTPOINTXXX
 
     mkrd -m 1 -s 512 1024
     mkfatfs /dev/ram1
@@ -211,7 +211,7 @@ Modifying the ROMFS Image
 
 The contents of the /etc directory are retained in the file
 apps/nshlib/nsh_romfsimg.h (OR, if CONFIG_NSH_ARCHROMFS
-is defined, include/arch/board/rcs.template).  In order to modify
+is defined, include/arch/board/rcS.template).  In order to modify
 the start-up behavior, there are three things to study:
 
 1. Configuration Options.
@@ -297,9 +297,41 @@ o addroute <target> <netmask> <router>
 
     nsh> addroute 1.1.1.1 2.2.2.2 3.3.3.3
 
+o arp [-a <ipaddr>|-d <ipaddr>|-s <ipaddr> <hwaddr>]
+
+  Access the OS ARP table.
+
+  -a <ipaddr>
+     Will show the hardware address that the IP address <ipaddr> is mapped to.
+
+  -d <ipaddr>
+     Will delete the mapping for the IP address <ipaddr> from the ARP table.
+
+  -s <ipaddr> <hwaddr>
+     Will set (or replace) the mapping of the IP address <ipaddr> to the
+     hardware address <hwaddr>.
+
+  Example:
+
+    nsh> arp -a 10.0.0.1
+    nsh: arp: no such ARP entry: 10.0.0.1
+
+    nsh> arp -s 10.0.0.1 00:13:3b:12:73:e6
+    nsh> arp -a 10.0.0.1
+    HWAddr: 00:13:3b:12:73:e6
+
+    nsh> arp -d 10.0.0.1
+    nsh> arp -a 10.0.0.1
+    nsh: arp: no such ARP entry: 10.0.0.1
+
 o base64dec [-w] [-f] <string or filepath>
 
 o base64dec [-w] [-f] <string or filepath>
+
+o basename <path> [<suffix>]
+
+  Extract the final string from a <path> by removing the preceding path
+  segments and (optionally) removing any trailing <suffix>.
 
 o break
 
@@ -343,8 +375,7 @@ o cp <source-path> <dest-path>
 
 o date [-s "MMM DD HH:MM:SS YYYY"]
 
-  Show or set the current date and time.  This command is only supported
-  if the platform supported RTC hardware (CONFIG_RTC=y).
+  Show or set the current date and time.
 
   Only one format is used both on display and when setting the date/time:
   MMM DD HH:MM:SS YYYY.  For example,
@@ -413,6 +444,11 @@ o df
       64        6        6         0 /etc
      512      985        2       983 /tmp
   nsh>
+
+o dirname <path>
+
+  Extract the path string leading up to the full <path> by removing
+  the final directory or file name.
 
 o echo [<string|$name> [<string|$name>...]]
 
@@ -483,8 +519,14 @@ o ifconfig [nic_name [<ip-address>|dhcp]] [dr|gw|gateway <dr-address>] [netmask 
     eth0    HWaddr 00:18:11:80:10:06
             IPaddr:10.0.0.2 DRaddr:10.0.0.1 Mask:255.255.255.0
 
-  if uIP statistics are enabled (CONFIG_NET_STATISTICS), then
-  this command will also show the detailed state of uIP.
+  if networking statistics are enabled (CONFIG_NET_STATISTICS), then
+  this command will also show the detailed state of transfers by protocol.
+
+  NOTE: This commands depends upon having the rpocfs file system configured
+  into the system.   The procfs file system must also have been mounted
+  with a command like:
+
+    nsh> mount -t procfs /proc
 
 o ifdown <nic-name>
 
@@ -501,6 +543,34 @@ o ifup <nic-name>
   Example:
 
     ifup eth0
+
+o insmod <file-path> <module-name>
+
+  Install the loadable OS module at <file-path> as module <module-name>
+
+  Example:
+
+    nsh> ls -l /mnt/romfs
+    /mnt/romfs:
+     dr-xr-xr-x       0 .
+     -r-xr-xr-x    9153 chardev
+    nsh> ls -l /dev
+    /dev:
+     crw-rw-rw-       0 console
+     crw-rw-rw-       0 null
+     brw-rw-rw-       0 ram0
+     crw-rw-rw-       0 ttyS0
+    nsh> insmod /mnt/romfs/chardev mydriver
+    nsh> ls -l /dev
+    /dev:
+     crw-rw-rw-       0 chardev
+     crw-rw-rw-       0 console
+     crw-rw-rw-       0 null
+     brw-rw-rw-       0 ram0
+     crw-rw-rw-       0 ttyS0
+    nsh> lsmod
+    NAME                 INIT   UNINIT      ARG     TEXT     SIZE     DATA     SIZE
+    mydriver         20404659 20404625        0 20404580      552 204047a8        0
 
 o kill -<signal> <pid>
 
@@ -558,6 +628,25 @@ o ls [-lRs] <dir-path>
         listing
      -l Show size and mode information along with the filenames
         in the listing.
+
+o lsmod
+
+  Show information about the currently installed OS modules.  This information includes:
+
+  - The module name assigned to the module when it was installed (NAME, string).
+  - The address of the module initialization function (INIT, hexadecimal).
+  - The address of the module un-initialization function (UNINIT, hexadecimal).
+  - An argument that will be passed to the module un-initialization function (ARG, hexadecimal).
+  - The start of the .text memory region (TEXT, hexadecimal).
+  - The size of the .text memory region size (SIZE, decimal).
+  - The start of the .bss/.data memory region (DATA, hexadecimal).
+  - The size of the .bss/.data memory region size (SIZE, decimal).
+
+  Example:
+
+    nsh> lsmod
+    NAME                 INIT   UNINIT      ARG     TEXT     SIZE     DATA     SIZE
+    mydriver         20404659 20404625        0 20404580      552 204047a8        0
 
 o md5 [-f] <string or filepath>
 
@@ -692,10 +781,10 @@ o mkrd [-m <minor>] [-s <sector-size>] <nsectors>
     /tmp:
     nsh>
 
-o mount [-t <fstype> <block-device> <dir-path>]
+o mount [-t <fstype> [-o <options>] <block-device> <dir-path>]
 
   The mount command performs one of two different operations.  If no
-  paramters are provided on the command line after the mount command,
+  parameters are provided on the command line after the mount command,
   then the 'mount' command will enumerate all of the current
   mountpoints on the console.
 
@@ -763,19 +852,16 @@ o nfsmount <server-address> <mount-point> <remote-path>
   Mount the remote NFS server directory <remote-path> at <mount-point> on the target machine.
   <server-address> is the IP address of the remote server.
 
-o ps
+o nslookup <host-name>
 
-  Show the currently active threads and tasks.  For example,
+  Lookup and print the IP address associated with <host-name>
 
-    nsh> ps
-    PID   PRI SCHD TYPE   NP STATE    NAME
-        0   0 FIFO TASK      READY    Idle Task()
-        1 128 RR   TASK      RUNNING  init()
-        2 128 FIFO TASK      WAITSEM  nsh_telnetmain()
-        3 100 RR   PTHREAD   WAITSEM  <pthread>(21)
-    nsh>
+o passwd <username> <password>
+
+  Set the password for the existing user <username> to <password>
 
 o ping [-c <count>] [-i <interval>] <ip-address>
+  ping6 [-c <count>] [-i <interval>] <ip-address>
 
   Test the network communication with a remote peer.  Example,
 
@@ -793,6 +879,33 @@ o ping [-c <count>] [-i <interval>] <ip-address>
     56 bytes from 10.0.0.1: icmp_seq=10 time=0 ms
     10 packets transmitted, 10 received, 0% packet loss, time 10190 ms
     nsh>
+
+  ping6 differs from ping in that it uses IPv6 addressing.
+
+o poweroff
+
+  Shutdown and power off the system.  This command depends on hardware
+  support to power down or reset the system.
+
+  NOTE: Supporting both the poweroff and shutdown commands is redundant.
+
+o ps
+
+  Show the currently active threads and tasks.  For example,
+
+    nsh> ps
+    PID PRI POLICY   TYPE    NPX STATE    EVENT     SIGMASK  COMMAND
+      0   0 FIFO     Kthread --- Ready              00000000 Idle Task
+      1 128 RR       Task    --- Running            00000000 init
+      2 128 FIFO     Task    --- Waiting  Semaphore 00000000 nsh_telnetmain()
+      3 100 RR       pthread --- Waiting  Semaphore 00000000 <pthread>(21)
+    nsh>
+
+  NOTE: This commands depends upon having the rpocfs file system configured
+  into the system.   The procfs file system must also have been mounted
+  with a command like:
+
+    nsh> mount -t procfs /proc
 
 o put [-b|-n] [-f <remote-path>] -h <ip-address> <local-path>
 
@@ -820,6 +933,13 @@ o pwd
     nsh> echo $PWD
     /dev
     nsh>
+
+o reboot
+
+  Reset and reboot the system immediately.  This command depends on hardware
+  support to reset the system.
+
+  NOTE: Supporting both the reboot and shutdown commands is redundant.
 
 o rm <file-path>
 
@@ -865,6 +985,21 @@ o rmdir <dir-path>
      drw-rw-rw-       0 TESTDIR/
     nsh>
 
+o rmmod <module-name>
+
+  Remove the loadable OS module with the <module-name>.  NOTE: An OS module
+  can only be removed if it is not busy.
+
+  Example:
+
+    nsh> lsmod
+    NAME                 INIT   UNINIT      ARG     TEXT     SIZE     DATA     SIZE
+    mydriver         20404659 20404625        0 20404580      552 204047a8        0
+    nsh> rmmod mydriver
+    nsh> lsmod
+    NAME                 INIT   UNINIT      ARG     TEXT     SIZE     DATA     SIZE
+    nsh>
+
 o set <name> <value>
 
   Set the environment variable <name> to the sting <value>.
@@ -882,9 +1017,68 @@ o sh <script-path>
   Execute the sequence of NSH commands in the file referred
   to by <script-path>.
 
+o shutdown [--reboot]
+
+  Shutdown and power off the system or, optionally, reset and reboot the
+  system immediately.  This command depends on hardware support to power
+  down or reset the system; one, both, or neither behavior may be
+  supported.
+
+  NOTE: The shutdown command duplicates the behavior of the poweroff and
+  reboot commands.
+
 o sleep <sec>
 
   Pause execution (sleep) of <sec> seconds.
+
+o time "<command>"
+
+  Perform command timing.  This command will execute the following <command>
+  string and then show how much time was required to execute the command.
+  Time is shown with a resolution of 100 microseconds which may be beyond
+  the resolution of many configurations.  Note that the <command> must be
+  enclosed in quotation marks if it contains spaces or other
+  delimiters.
+
+  Example:
+
+    nsh> time "sleep 2"
+
+    2.0100 sec
+    nsh>
+
+  The additional 10 millseconds in this example is due to the way that the
+  sleep command works: It always waits one system clock tick longer than
+  requested and this test setup used a 10 millisecond periodic system
+  timer.  Sources of error could include various quantization errors,
+  competing CPU usage,  and the additional overhead of the time command
+  execution itself which is included in the total.
+
+  The reported time is the elapsed time from starting of the command to
+  completion of the command.  This elapsed time may not necessarily be
+  just the processing time for the command.  It may included interrupt
+  level processing, for example.  In a busy system, command processing could
+  be delayed if pre-empted by other, higher priority threads competing for
+  CPU time.  So the reported time includes all CPU processing from the start
+  of the command to its finish possibly including unrelated processing time
+  during that interval.
+
+  Notice that:
+
+    nsh> time "sleep 2 &"
+    sleep [3:100]
+
+    0.0000 sec
+    nsh>
+
+  Since the sleep command is executed in background, the sleep command
+  completes almost immediately.  As opposed to the following where the
+  time command is run in background with the sleep command:
+
+    nsh> time "sleep 2" &
+    time [3:100]
+    nsh>
+    2.0100 sec
 
 o unset <name>
 
@@ -898,9 +1092,37 @@ o unset <name>
 
     nsh>
 
- o urldecode [-f] <string or filepath>
+o urldecode [-f] <string or filepath>
 
- o urlencode [-f] <string or filepath>
+o urlencode [-f] <string or filepath>
+
+o uname [-a | -imnoprsv]
+
+  Print certain system information.  With no options, the output is the same as -s.
+
+    -a Print all information, in the following order, except omit -p and -i if unknown:
+
+    -s, -o, Print the operating system name (NuttX)
+
+    -n Print the network node hostname (only availabel if CONFIG_NET=y)
+
+    -r Print the kernel release
+
+    -v Print the kernel version
+
+    -m Print the machine hardware name
+
+    -i Print the machine platform name
+
+    -p Print "unknown"
+
+o useradd <username> <password>
+
+  Add a new user with <username> and <password>
+
+o userdel <username>
+
+  Delete the user with the name <username>
 
 o usleep <usec>
 
@@ -948,57 +1170,73 @@ Command Dependencies on Configuration Settings
   ---------- --------------------------
   [          !CONFIG_NSH_DISABLESCRIPT
   addroute   CONFIG_NET && CONFIG_NET_ROUTE
+  arp        CONFIG_NET && CONFIG_NET_ARP
   base64dec  CONFIG_NETUTILS_CODECS && CONFIG_CODECS_BASE64
   base64enc  CONFIG_NETUTILS_CODECS && CONFIG_CODECS_BASE64
+  basename   --
   break      !CONFIG_NSH_DISABLESCRIPT && !CONFIG_NSH_DISABLE_LOOPS
   cat        CONFIG_NFILE_DESCRIPTORS > 0
   cd         !CONFIG_DISABLE_ENVIRON && CONFIG_NFILE_DESCRIPTORS > 0
   cp         CONFIG_NFILE_DESCRIPTORS > 0
   dd         CONFIG_NFILE_DESCRIPTORS > 0
-  delrout    CONFIG_NET && CONFIG_NET_ROUTE
+  delroute   CONFIG_NET && CONFIG_NET_ROUTE
   df         !CONFIG_DISABLE_MOUNTPOINT && CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_FS_READABLE (see note 3)
+  dirname    --
   echo       --
   exec       --
   exit       --
   free       --
-  get        CONFIG_NET && CONFIG_NET_UDP && CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_NET_BUFSIZE >= 558  (see note 1)
+  get        CONFIG_NET && CONFIG_NET_UDP && CONFIG_NFILE_DESCRIPTORS > 0 && MTU >= 558  (see note 1)
   help       --
   hexdump    CONFIG_NFILE_DESCRIPTORS > 0
-  ifconfig   CONFIG_NET
-  ifdown     CONFIG_NET
-  ifup       CONFIG_NET
+  ifconfig   CONFIG_NET && CONFIG_FS_PROCFS && !CONFIG_FS_PROCFS_EXCLUDE_NET
+  ifdown     CONFIG_NET && CONFIG_FS_PROCFS && !CONFIG_FS_PROCFS_EXCLUDE_NET
+  ifup       CONFIG_NET && CONFIG_FS_PROCFS && !CONFIG_FS_PROCFS_EXCLUDE_NET
+  insmod     CONFIG_MODULE
   kill       !CONFIG_DISABLE_SIGNALS
-  losetup    !CONFIG_DISABLE_MOUNTPOINT && CONFIG_NFILE_DESCRIPTORS > 0
+  losetup    !CONFIG_DISABLE_MOUNTPOINT && CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_DEV_LOOP
   ls         CONFIG_NFILE_DESCRIPTORS > 0
+  lsmod      CONFIG_MODULE && CONFIG_FS_PROCFS && !CONFIG_FS_PROCFS_EXCLUDE_MODULE
   md5        CONFIG_NETUTILS_CODECS && CONFIG_CODECS_HASH_MD5
   mb,mh,mw   ---
   mkdir      (((!CONFIG_DISABLE_MOUNTPOINT && CONFIG_FS_WRITABLE) || !CONFIG_DISABLE_PSEUDOFS_OPERATIONS) && CONFIG_NFILE_DESCRIPTORS > 0)
   mkfatfs    !CONFIG_DISABLE_MOUNTPOINT && CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_FS_FAT
-  mkfifo     CONFIG_NFILE_DESCRIPTORS > 0
+  mkfifo     CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_PIPES && CONFIG_DEV_FIFO_SIZE > 0
   mkrd       !CONFIG_DISABLE_MOUNTPOINT && CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_FS_WRITABLE (see note 4)
   mount      !CONFIG_DISABLE_MOUNTPOINT && CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_FS_READABLE (see note 3)
   mv         (((!CONFIG_DISABLE_MOUNTPOINT && CONFIG_FS_WRITABLE) || !CONFIG_DISABLE_PSEUDOFS_OPERATIONS) && CONFIG_NFILE_DESCRIPTORS > 0) (see note 4)
   nfsmount   !CONFIG_DISABLE_MOUNTPOINT && CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_NET && CONFIG_NFS
-  ping       CONFIG_NET && CONFIG_NET_ICMP && CONFIG_NET_ICMP_PING  && !CONFIG_DISABLE_CLOCK && !CONFIG_DISABLE_SIGNALS
-  ps         --
-  put        CONFIG_NET && CONFIG_NET_UDP && CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_NET_BUFSIZE >= 558 (see note 1,2)
+  nslookup   CONFIG_LIBC_NETDB && CONFIG_NETDB_DNSCLIENT
+  password   !CONFIG_DISABLE_MOUNTPOINT && CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_FS_WRITABLE && CONFIG_NSH_LOGIN_PASSWD
+  ping       CONFIG_NET && CONFIG_NET_ICMP && CONFIG_NET_ICMP_PING && !CONFIG_DISABLE_SIGNALS
+  ping6      CONFIG_NET && CONFIG_NET_ICMPv6 && CONFIG_NET_ICMPv6_PING && !CONFIG_DISABLE_SIGNALS
+  poweroff   CONFIG_BOARDCTL_POWEROFF
+  ps         CONFIG_FS_PROCFS && !CONFIG_FS_PROCFS_EXCLUDE_PROC
+  put        CONFIG_NET && CONFIG_NET_UDP && CONFIG_NFILE_DESCRIPTORS > 0 && MTU >= 558 (see note 1,2)
   pwd        !CONFIG_DISABLE_ENVIRON && CONFIG_NFILE_DESCRIPTORS > 0
+  reboot     CONFIG_BOARDCTL_RESET
   rm         (((!CONFIG_DISABLE_MOUNTPOINT && CONFIG_FS_WRITABLE) || !CONFIG_DISABLE_PSEUDOFS_OPERATIONS) && CONFIG_NFILE_DESCRIPTORS > 0)
   rmdir      (((!CONFIG_DISABLE_MOUNTPOINT && CONFIG_FS_WRITABLE) || !CONFIG_DISABLE_PSEUDOFS_OPERATIONS) && CONFIG_NFILE_DESCRIPTORS > 0)
+  rmmod      CONFIG_MODULE
   set        !CONFIG_DISABLE_ENVIRON
   sh         CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_NFILE_STREAMS > 0 && !CONFIG_NSH_DISABLESCRIPT
+  shutdown   CONFIG_BOARDCTL_POWEROFF || CONFIG_BOARDCTL_RESET
   sleep      !CONFIG_DISABLE_SIGNALS
   test       !CONFIG_NSH_DISABLESCRIPT
+  time       ---
   umount     !CONFIG_DISABLE_MOUNTPOINT && CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_FS_READABLE
+  uname      !CONFIG_NSH_DISABLE_UNAME
   unset      !CONFIG_DISABLE_ENVIRON
   urldecode  CONFIG_NETUTILS_CODECS && CONFIG_CODECS_URLCODE
   urlencode  CONFIG_NETUTILS_CODECS && CONFIG_CODECS_URLCODE
+  useradd    !CONFIG_DISABLE_MOUNTPOINT && CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_FS_WRITABLE && CONFIG_NSH_LOGIN_PASSWD
+  userdel    !CONFIG_DISABLE_MOUNTPOINT && CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_FS_WRITABLE && CONFIG_NSH_LOGIN_PASSWD
   usleep     !CONFIG_DISABLE_SIGNALS
   get        CONFIG_NET && CONFIG_NET_TCP && CONFIG_NFILE_DESCRIPTORS > 0
   xd         ---
 
 * NOTES:
-  1. Because of hardware padding, the actual buffersize required for put and get
+  1. Because of hardware padding, the actual MTU required for put and get
      operations size may be larger.
   2. Special TFTP server start-up options will probably be required to permit
      creation of file for the correct operation of the put command.
@@ -1013,21 +1251,25 @@ settings.  All of these settings make the configuration of NSH potentially compl
 also allow it to squeeze into very small memory footprints.
 
   CONFIG_NSH_DISABLE_ADDROUTE,  CONFIG_NSH_DISABLE_BASE64DEC, CONFIG_NSH_DISABLE_BASE64ENC,
-  CONFIG_NSH_DISABLE_CAT,       CONFIG_NSH_DISABLE_CD,        CONFIG_NSH_DISABLE_CP,
-  CONFIG_NSH_DISABLE_DD,        CONFIG_NSH_DISABLE_DELROUTE,  CONFIG_NSH_DISABLE_DF,
-  CONFIG_NSH_DISABLE_ECHO,      CONFIG_NSH_DISABLE_EXEC,      CONFIG_NSH_DISABLE_EXIT,
-  CONFIG_NSH_DISABLE_FREE,      CONFIG_NSH_DISABLE_GET,       CONFIG_NSH_DISABLE_HELP,
-  CONFIG_NSH_DISABLE_HEXDUMP,   CONFIG_NSH_DISABLE_IFCONFIG,  CONFIG_NSH_DISABLE_IFUPDOWN,
-  CONFIG_NSH_DISABLE_KILL,      CONFIG_NSH_DISABLE_LOSETUP,   CONFIG_NSH_DISABLE_LS,
-  CONFIG_NSH_DISABLE_MD5        CONFIG_NSH_DISABLE_MB,        CONFIG_NSH_DISABLE_MKDIR,
-  CONFIG_NSH_DISABLE_MKFATFS,   CONFIG_NSH_DISABLE_MKFIFO,    CONFIG_NSH_DISABLE_MKRD,
-  CONFIG_NSH_DISABLE_MH,        CONFIG_NSH_DISABLE_MOUNT,     CONFIG_NSH_DISABLE_MW,
-  CONFIG_NSH_DISABLE_MV,        CONFIG_NSH_DISABLE_NFSMOUNT,  CONFIG_NSH_DISABLE_PS,
-  CONFIG_NSH_DISABLE_PING,      CONFIG_NSH_DISABLE_PUT,       CONFIG_NSH_DISABLE_PWD,
-  CONFIG_NSH_DISABLE_RM,        CONFIG_NSH_DISABLE_RMDIR,     CONFIG_NSH_DISABLE_SET,
-  CONFIG_NSH_DISABLE_SH,        CONFIG_NSH_DISABLE_SLEEP,     CONFIG_NSH_DISABLE_TEST,
-  CONFIG_NSH_DISABLE_UMOUNT,    CONFIG_NSH_DISABLE_UNSET,     CONFIG_NSH_DISABLE_URLDECODE,
-  CONFIG_NSH_DISABLE_URLENCODE, CONFIG_NSH_DISABLE_USLEEP,    CONFIG_NSH_DISABLE_WGET,
+  CONFIG_NSH_DISABLE_BASENAME,  CONFIG_NSH_DISABLE_CAT,       CONFIG_NSH_DISABLE_CD,
+  CONFIG_NSH_DISABLE_CP,        CONFIG_NSH_DISABLE_DD,        CONFIG_NSH_DISABLE_DELROUTE,
+  CONFIG_NSH_DISABLE_DF,        CONFIG_NSH_DISABLE_DIRNAME,   CONFIG_NSH_DISABLE_ECHO,
+  CONFIG_NSH_DISABLE_EXEC,      CONFIG_NSH_DISABLE_EXIT,      CONFIG_NSH_DISABLE_FREE,
+  CONFIG_NSH_DISABLE_GET,       CONFIG_NSH_DISABLE_HELP,      CONFIG_NSH_DISABLE_HEXDUMP,
+  CONFIG_NSH_DISABLE_IFCONFIG,  CONFIG_NSH_DISABLE_IFUPDOWN,  CONFIG_NSH_DISABLE_KILL,
+  CONFIG_NSH_DISABLE_LOSETUP,   CONFIG_NSH_DISABLE_LS,        CONFIG_NSH_DISABLE_MD5,
+  CONFIG_NSH_DISABLE_MB,        CONFIG_NSH_DISABLE_MKDIR,     CONFIG_NSH_DISABLE_MKFATFS,
+  CONFIG_NSH_DISABLE_MKFIFO,    CONFIG_NSH_DISABLE_MKRD,      CONFIG_NSH_DISABLE_MH,
+  CONFIG_NSH_DISABLE_MODCMDS,   CONFIG_NSH_DISABLE_MOUNT,     CONFIG_NSH_DISABLE_MW,
+  CONFIG_NSH_DISABLE_MV,        CONFIG_NSH_DISABLE_NFSMOUNT,  CONFIG_NSH_DISABLE_NSLOOKUP,
+  CONFIG_NSH_DISABLE_PASSWD,    CONFIG_NSH_DISABLE_PING,      CONFIG_NSH_DISABLE_PING6,
+  CONFIG_NSH_DISABLE_POWEROFF,  CONFIG_NSH_DISABLE_PS,        CONFIG_NSH_DISABLE_PUT,
+  CONFIG_NSH_DISABLE_PWD,       CONFIG_NSH_DISABLE_REBOOT,    CONFIG_NSH_DISABLE_RM,
+  CONFIG_NSH_DISABLE_RMDIR,     CONFIG_NSH_DISABLE_SET,       CONFIG_NSH_DISABLE_SH,
+  CONFIG_NSH_DISABLE_SHUTDOWN,  CONFIG_NSH_DISABLE_SLEEP,     CONFIG_NSH_DISABLE_TEST,
+  CONFIG_NSH_DIABLE_TIME,       CONFIG_NSH_DISABLE_UMOUNT,    CONFIG_NSH_DISABLE_UNSET,
+  CONFIG_NSH_DISABLE_URLDECODE, CONFIG_NSH_DISABLE_URLENCODE, CONFIG_NSH_DISABLE_USERADD,
+  CONFIG_NSH_DISABLE_USERDEL,   CONFIG_NSH_DISABLE_USLEEP,    CONFIG_NSH_DISABLE_WGET,
   CONFIG_NSH_DISABLE_XD
 
 Verbose help output can be suppressed by defining CONFIG_NSH_HELP_TERSE.  In that
@@ -1183,14 +1425,27 @@ NSH-Specific Configuration Settings
         If CONFIG_NSH_USBCONSOLE is set to 'y', then CONFIG_NSH_USBCONDEV
         must also be set to select the USB device used to support
         the NSH console.   This should be set to the quoted name of a
-        readable/write-able USB driver such as:
-        CONFIG_NSH_USBCONDEV="/dev/ttyACM0".
+        read-/write-able USB driver.  Default: "/dev/ttyACM0".
 
       If there are more than one USB devices, then a USB device
       minor number may also need to be provided:
 
       CONFIG_NSH_USBDEV_MINOR
         The minor device number of the USB device.  Default: 0
+
+      CONFIG_NSH_USBKBD
+        Normally NSH uses the same device for stdin, stdout, and stderr.  By
+        default, that device is /dev/console.  If this option is selected,
+        then NSH will use a USB HID keyboard for stdin.  In this case, the
+        keyboard is connected directly to the target (via a USB host
+        interface) and the data from the keyboard will drive NSH.  NSH
+        output (stdout and stderr) will still go to /dev/console.
+
+      CONFIG_NSH_USBKBD_DEVNAME
+        If NSH_USBKBD is set to 'y', then NSH_USBKBD_DEVNAME must also be
+        set to select the USB keyboard device used to support the NSH
+        console input.   This should be set to the quoted name of a read-
+        able keyboard driver. Default: "/dev/kbda".
 
       CONFIG_NSH_USBDEV_TRACE
         If USB tracing is enabled (CONFIG_USBDEV_TRACE), then NSH can
@@ -1241,9 +1496,9 @@ NSH-Specific Configuration Settings
 
   * CONFIG_NSH_ARCHINIT
       Set if your board provides architecture specific initialization
-      via the board-specific function nsh_archinitialize().  This
-      function will be called early in NSH initialization to allow
-      board logic to do such things as configure MMC/SD slots.
+      via the board-interface function boardctl().  This function will
+      be called early in NSH initialization to allow board logic to
+      do such things as configure MMC/SD slots.
 
   If Telnet is selected for the NSH console, then we must configure
   the resources used by the Telnet daemon and by the Telnet clients.
@@ -1318,9 +1573,11 @@ NSH-Specific Configuration Settings
   * CONFIG_NET_BROADCAST=y
       UDP broadcast support is needed.
 
-  * CONFIG_NET_BUFSIZE=650 (or larger)
+  * CONFIG_NET_ETH_MTU=650 (or larger)
       Per RFC2131 (p. 9), the DHCP client must be prepared to receive DHCP
       messages of up to 576 bytes (excluding Ethernet, IP, or UDP headers and FCS).
+      NOTE: Note that the actual MTU setting will depend upon the specific
+      link protocol.  Here Ethernet is indicated.
 
   If CONFIG_NSH_ROMFSETC is selected, then the following additional
   configuration setting apply:

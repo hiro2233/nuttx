@@ -49,7 +49,7 @@
 #include <nuttx/wqueue.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* SDIO events needed by the driver
@@ -63,7 +63,24 @@
 #define SDIOWAIT_TIMEOUT       (1 << 3) /* Bit 3: Timeout */
 #define SDIOWAIT_ERROR         (1 << 4) /* Bit 4: Some other error occurred */
 
-#define SDIOWAIT_ALLEVENTS     0x1f
+/* SDIOWAIT_WRCOMPLETE (optional) : Certain SDIO driver can use D0 busy
+ *   signalling to detect Write Complete.  Used of D0 busy signalling will
+ *   avoid potentially very long (600Ms+) busy waiting in the MMCSD driver.
+ *
+ *   To implement D0 Busy signalling, the underlying SDIO driver must be
+ *   capable of switching the the D0 GPIO to be a rising edge sensitive
+ *   interrupt pin. It must then, condition that pin to detect the rising
+ *   edge on receipt of SDWAIT_WRCOMPLETE in the SDIO_WAITENABLE call and
+ *   return it back to regular SDIO mode, when either the ISR fires or pin
+ *   is found to be high in the SDIO_EVENTWAIT call.
+ */
+
+#if defined(CONFIG_MMCSD_SDIOWAIT_WRCOMPLETE)
+#  define SDIOWAIT_WRCOMPLETE  (1 << 5) /* Bit 5: Hardware Write Completion */
+#  define SDIOWAIT_ALLEVENTS   0x3f
+#else
+#  define SDIOWAIT_ALLEVENTS   0x1f
+#endif
 
 /* Media events are used for enable/disable registered event callbacks */
 
@@ -889,7 +906,8 @@ struct sdio_dev_s
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

@@ -43,6 +43,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <ctype.h>
 #include <libgen.h>
 #include <errno.h>
 
@@ -50,7 +51,7 @@
 #include "nsh_console.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -314,7 +315,16 @@ int cmd_pwd(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 #ifndef CONFIG_NSH_DISABLE_SET
 int cmd_set(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 {
-  int ret = setenv(argv[1], argv[2], TRUE);
+  FAR char *value;
+  int ret;
+
+  /* Trim whitespace from the value */
+
+  value = nsh_trimspaces(argv[2]);
+
+  /* Set the environment variable */
+
+  ret = setenv(argv[1], value, TRUE);
   if (ret < 0)
     {
       nsh_output(vtbl, g_fmtcmdfailed, argv[0], "setenv", NSH_ERRNO);

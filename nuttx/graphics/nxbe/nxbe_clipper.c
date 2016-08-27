@@ -50,7 +50,7 @@
 #include "nxbe.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define NX_INITIAL_STACKSIZE (32)
@@ -91,10 +91,6 @@ static const uint8_t g_nxcliporder[4][4] =
 };
 
 /****************************************************************************
- * Public Data
- ****************************************************************************/
-
-/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
@@ -115,10 +111,11 @@ static inline void nxbe_pushrectangle(FAR struct nxbe_clipstack_s *stack,
       int mxrects = stack->mxrects ? 2 * stack->mxrects : NX_INITIAL_STACKSIZE;
       struct nxbe_cliprect_s *newstack;
 
-      newstack = krealloc(stack->stack, sizeof(struct nxbe_cliprect_s) * mxrects);
+      newstack = kmm_realloc(stack->stack,
+                             sizeof(struct nxbe_cliprect_s) * mxrects);
       if (!newstack)
         {
-          gdbg("Failed to reallocate stack\n");
+          gerr("ERROR: Failed to reallocate stack\n");
           return;
         }
 
@@ -261,7 +258,7 @@ void nxbe_clipper(FAR struct nxbe_window_s *wnd,
 
   if (stack.stack)
     {
-      kfree(stack.stack);
+      kmm_free(stack.stack);
     }
 }
 

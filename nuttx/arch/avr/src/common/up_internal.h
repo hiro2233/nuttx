@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/avr/src/common/up_internal.h
  *
- *   Copyright (C) 2010-2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010-2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,9 +47,9 @@
 #endif
 
 #ifdef CONFIG_ARCH_FAMILY_AVR32
-# include "avr32_internal.h"
+# include "avr32.h"
 #else
-# include "avr_internal.h"
+# include "avr.h"
 #endif
 
 /****************************************************************************
@@ -66,6 +66,10 @@
 #undef  CONFIG_SUPPRESS_SERIAL_INTS   /* DEFINED: Console will poll */
 #undef  CONFIG_SUPPRESS_UART_CONFIG   /* DEFINED: Do not reconfig UART */
 #undef  CONFIG_DUMP_ON_EXIT           /* DEFINED: Dump task state on exit */
+
+#ifndef CONFIG_DEBUG_SCHED_INFO
+#  undef CONFIG_DUMP_ON_EXIT          /* Needs CONFIG_DEBUG_SCHED_INFO */
+#endif
 
 /* Check if an interrupt stack size is configured */
 
@@ -90,7 +94,7 @@ typedef void (*up_vector_t)(void);
 #endif
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 #ifndef __ASSEMBLY__
@@ -134,7 +138,6 @@ extern uint32_t _ebss;            /* End+1 of .bss */
 
 /* Defined in files with the same name as the function */
 
-void up_boot(void);
 void up_irqinitialize(void);
 #ifdef CONFIG_ARCH_DMA
 void weak_function up_dmainitialize(void);
@@ -182,17 +185,7 @@ void lowconsole_init(void);
 
 /* Defined in chip/xxx_timerisr.c */
 
-extern void up_timerinit(void);
-
-/* Defined in configs/<board-name>/src/up_leds.c */
-
-#ifdef CONFIG_ARCH_LEDS
-void board_led_on(int led);
-void board_led_off(int led);
-#else
-# define board_led_on(led)
-# define board_led_off(led)
-#endif
+void up_timer_initialize(void);
 
 /* Defined in chip/xxx_ethernet.c */
 

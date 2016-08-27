@@ -1,7 +1,7 @@
 /****************************************************************************
  * libc/time/lib_gmtimer.c
  *
- *   Copyright (C) 2007, 2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@
 #include <nuttx/time.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define SEC_PER_MIN  ((time_t)60)
@@ -73,17 +73,17 @@ static void   clock_utc2julian(time_t jdn, int *year, int *month, int *day);
 #endif /* CONFIG_JULIAN_TIME */
 #endif /* CONFIG_GREGORIAN_TIME */
 
-/**************************************************************************
- * Public Constant Data
- **************************************************************************/
-
 /****************************************************************************
- * Public Variables
+ * Public Constant Data
  ****************************************************************************/
 
-/**************************************************************************
- * Private Variables
- **************************************************************************/
+/****************************************************************************
+ * Public Data
+ ****************************************************************************/
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -169,7 +169,8 @@ static void clock_utc2julian(time_t jd, int *year, int *month, int *day)
 
 /* Only handles dates since Jan 1, 1970 */
 
-static void clock_utc2calendar(time_t days, int *year, int *month, int *day)
+static void clock_utc2calendar(time_t days, FAR int *year, FAR int *month,
+                               FAR int *day)
 {
   int  value;
   int  min;
@@ -181,13 +182,13 @@ static void clock_utc2calendar(time_t days, int *year, int *month, int *day)
    * following:
    */
 
-  value   = days  / (4*365 + 1);  /* Number of 4-years periods since the epoch*/
-  days   -= value * (4*365 + 1);  /* Remaining days */
-  value <<= 2;                    /* Years since the epoch */
+  value   = days  / (4 * 365 + 1); /* Number of 4-years periods since the epoch */
+  days   -= value * (4 * 365 + 1); /* Remaining days */
+  value <<= 2;                     /* Years since the epoch */
 
   /* Then we will brute force the next 0-3 years */
 
-  for (;;)
+  for (; ; )
     {
       /* Is this year a leap year (we'll need this later too) */
 
@@ -231,7 +232,7 @@ static void clock_utc2calendar(time_t days, int *year, int *month, int *day)
 
       /* Get the number of days that occurred before the beginning of the month
        * following the midpoint.
-      */
+       */
 
       tmp = clock_daysbeforemonth(value + 1, leapyear);
 
@@ -316,7 +317,7 @@ FAR struct tm *gmtime_r(FAR const time_t *timer, FAR struct tm *result)
   /* Get the seconds since the EPOCH */
 
   epoch = *timer;
-  sdbg("timer=%d\n", (int)epoch);
+  linfo("timer=%d\n", (int)epoch);
 
   /* Convert to days, hours, minutes, and seconds since the EPOCH */
 
@@ -331,24 +332,30 @@ FAR struct tm *gmtime_r(FAR const time_t *timer, FAR struct tm *result)
 
   sec    = epoch;
 
-  sdbg("hour=%d min=%d sec=%d\n",
-       (int)hour, (int)min, (int)sec);
+  linfo("hour=%d min=%d sec=%d\n",
+        (int)hour, (int)min, (int)sec);
 
   /* Convert the days since the EPOCH to calendar day */
 
   clock_utc2calendar(jdn, &year, &month, &day);
 
-  sdbg("jdn=%d year=%d month=%d day=%d\n",
-       (int)jdn, (int)year, (int)month, (int)day);
+  linfo("jdn=%d year=%d month=%d day=%d\n",
+        (int)jdn, (int)year, (int)month, (int)day);
 
   /* Then return the struct tm contents */
 
-  result->tm_year = (int)year - 1900; /* Relative to 1900 */
-  result->tm_mon  = (int)month - 1;   /* zero-based */
-  result->tm_mday = (int)day;         /* one-based */
-  result->tm_hour = (int)hour;
-  result->tm_min  = (int)min;
-  result->tm_sec  = (int)sec;
+  result->tm_year  = (int)year - 1900; /* Relative to 1900 */
+  result->tm_mon   = (int)month - 1;   /* zero-based */
+  result->tm_mday  = (int)day;         /* one-based */
+  result->tm_hour  = (int)hour;
+  result->tm_min   = (int)min;
+  result->tm_sec   = (int)sec;
+
+#if defined(CONFIG_TIME_EXTENDED)
+  result->tm_wday  = clock_dayoftheweek(day, month, year);
+  result->tm_yday  = day + clock_daysbeforemonth(result->tm_mon, clock_isleapyear(year));
+  result->tm_isdst = 0;
+#endif
 
   return result;
 }

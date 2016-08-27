@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/dev_null.c
  *
- *   Copyright (C) 2007, 2008, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2008, 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,17 +44,21 @@
 #include <string.h>
 #include <poll.h>
 #include <errno.h>
+
 #include <nuttx/fs/fs.h>
+#include <nuttx/drivers/drivers.h>
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
-static ssize_t devnull_read(FAR struct file *, FAR char *, size_t);
-static ssize_t devnull_write(FAR struct file *, FAR const char *, size_t);
+static ssize_t devnull_read(FAR struct file *filep, FAR char *buffer,
+                 size_t buflen);
+static ssize_t devnull_write(FAR struct file *filep, FAR const char *buffer,
+                 size_t buflen);
 #ifndef CONFIG_DISABLE_POLL
 static int     devnull_poll(FAR struct file *filep, FAR struct pollfd *fds,
-                            bool setup);
+                 bool setup);
 #endif
 
 /****************************************************************************
@@ -63,14 +67,17 @@ static int     devnull_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
 static const struct file_operations devnull_fops =
 {
-  0,             /* open */
-  0,             /* close */
+  NULL,          /* open */
+  NULL,          /* close */
   devnull_read,  /* read */
   devnull_write, /* write */
-  0,             /* seek */
-  0              /* ioctl */
+  NULL,          /* seek */
+  NULL           /* ioctl */
 #ifndef CONFIG_DISABLE_POLL
   , devnull_poll /* poll */
+#endif
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+  , NULL         /* unlink */
 #endif
 };
 
@@ -106,7 +113,7 @@ static int devnull_poll(FAR struct file *filep, FAR struct pollfd *fds,
 {
   if (setup)
     {
-      fds->revents |= (fds->events & (POLLIN|POLLOUT));
+      fds->revents |= (fds->events & (POLLIN | POLLOUT));
       if (fds->revents != 0)
         {
           sem_post(fds->sem);

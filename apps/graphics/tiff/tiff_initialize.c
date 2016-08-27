@@ -47,7 +47,7 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <apps/tiff.h>
+#include "graphics/tiff.h"
 
 #include "tiff_internal.h"
 
@@ -203,12 +203,12 @@
 #define TIFF_RGB_STRIPBCOFFSET  248
 
 /* Debug *******************************************************************/
-/* CONFIG_DEBUG_TIFFOFFSETS may be defined (along with CONFIG_DEBUG and
+/* CONFIG_DEBUG_TIFFOFFSETS may be defined (along with CONFIG_DEBUG_FEATURES and
  * CONFIG_DEBUG_GRAPHICS) in order to verify the pre-determined TIFF file
  * offsets.
  */
 
-#if !defined(CONFIG_DEBUG) || !defined(CONFIG_DEBUG_GRAPHICS)
+#if !defined(CONFIG_DEBUG_FEATURES) || !defined(CONFIG_DEBUG_GRAPHICS)
 #  undef CONFIG_DEBUG_TIFFOFFSETS
 #endif
 
@@ -321,10 +321,10 @@ static inline int tiff_putheader(FAR struct tiff_info_s *info)
       return ret;
     }
 
- /* Two pad bytes following the header */
+  /* Two pad bytes following the header */
 
- ret = tiff_putint16(info->outfd, 0);
- return ret;
+  ret = tiff_putint16(info->outfd, 0);
+  return ret;
 }
 
 /****************************************************************************
@@ -415,7 +415,7 @@ static int tiff_datetime(FAR char *timbuf, unsigned int buflen)
   ret = clock_gettime(CLOCK_REALTIME, &ts);
   if (ret < 0)
     {
-      gdbg("clock_gettime failed: %d\n", errno);
+      gerr("ERROR: clock_gettime failed: %d\n", errno);
       return ERROR;
     }
 
@@ -450,7 +450,7 @@ static int tiff_datetime(FAR char *timbuf, unsigned int buflen)
 int tiff_initialize(FAR struct tiff_info_s *info)
 {
   uint16_t val16;
-#if CONFIG_DEBUG_TIFFOFFSETS
+#ifdef CONFIG_DEBUG_TIFFOFFSETS
   off_t offset = 0;
 #endif
   char timbuf[TIFF_DATETIME_STRLEN + 8];
@@ -463,21 +463,24 @@ int tiff_initialize(FAR struct tiff_info_s *info)
   info->outfd = open(info->outfile, O_RDWR|O_CREAT|O_TRUNC, 0666);
   if (info->outfd < 0)
     {
-      gdbg("Failed to open %s for reading/writing: %d\n", info->outfile, errno);
+      gerr("ERROR: Failed to open %s for reading/writing: %d\n",
+           info->outfile, errno);
       goto errout;
     }
 
   info->tmp1fd = open(info->tmpfile1, O_RDWR|O_CREAT|O_TRUNC, 0666);
   if (info->tmp1fd < 0)
     {
-      gdbg("Failed to open %s for reading/writing: %d\n", info->tmpfile1, errno);
+      gerr("ERROR: Failed to open %s for reading/writing: %d\n",
+           info->tmpfile1, errno);
       goto errout;
     }
 
   info->tmp2fd = open(info->tmpfile2, O_RDWR|O_CREAT|O_TRUNC, 0666);
   if (info->tmp2fd < 0)
     {
-      gdbg("Failed to open %s for reading/writing: %d\n", info->tmpfile2, errno);
+      gerr("ERROR: Failed to open %s for reading/writing: %d\n",
+           info->tmpfile2, errno);
       goto errout;
     }
 
@@ -519,7 +522,7 @@ int tiff_initialize(FAR struct tiff_info_s *info)
         break;
 
       default:
-        gdbg("Unsupported color format: %d\n", info->colorfmt);
+        gerr("ERROR: Unsupported color format: %d\n", info->colorfmt);
         return -EINVAL;
     }
 

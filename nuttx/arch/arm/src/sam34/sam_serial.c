@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sam34/sam_serial.c
  *
- *   Copyright (C) 2010, 2012-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2012-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,6 +48,10 @@
 #include <errno.h>
 #include <debug.h>
 
+#ifdef CONFIG_SERIAL_TERMIOS
+#  include <termios.h>
+#endif
+
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/serial/serial.h>
@@ -57,13 +61,12 @@
 
 #include "up_arch.h"
 #include "up_internal.h"
-#include "os_internal.h"
 
 #include "chip.h"
 
 #if defined(CONFIG_ARCH_CHIP_SAM3U) || defined(CONFIG_ARCH_CHIP_SAM3X) || \
-    defined(CONFIG_ARCH_CHIP_SAM3A) || defined(CONFIG_ARCH_CHIP_SAM4S) || \
-    defined(CONFIG_ARCH_CHIP_SAM4E)
+    defined(CONFIG_ARCH_CHIP_SAM3A) || defined(CONFIG_ARCH_CHIP_SAM4CM) || \
+    defined(CONFIG_ARCH_CHIP_SAM4S) || defined(CONFIG_ARCH_CHIP_SAM4E)
 #  include "chip/sam_uart.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM4L)
 #  include "chip/sam4l_usart.h"
@@ -72,7 +75,7 @@
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Some sanity checks *******************************************************/
@@ -81,16 +84,16 @@
  * for our purposes.
  */
 
-#ifndef CONFIG_USART0_ISUART
+#ifndef CONFIG_USART0_SERIALDRIVER
 #  undef CONFIG_SAM34_USART0
 #endif
-#ifndef CONFIG_USART1_ISUART
+#ifndef CONFIG_USART1_SERIALDRIVER
 #  undef CONFIG_SAM34_USART1
 #endif
-#ifndef CONFIG_USART2_ISUART
+#ifndef CONFIG_USART2_SERIALDRIVER
 #  undef CONFIG_SAM34_USART2
 #endif
-#ifndef CONFIG_USART3_ISUART
+#ifndef CONFIG_USART3_SERIALDRIVER
 #  undef CONFIG_SAM34_USART3
 #endif
 
@@ -105,6 +108,17 @@
 #if defined(CONFIG_SAM34_USART0) || defined(CONFIG_SAM34_USART1) ||\
     defined(CONFIG_SAM34_USART2) || defined(CONFIG_SAM34_USART3)
 #  define HAVE_USART
+#endif
+
+/* Hardware flow control requires using the PDC or DMAC channel for reception */
+
+#ifdef CONFIG_SERIAL_IFLOWCONTROL
+#  warning PDC or DMAC support is required for RTS hardware flow control
+#  undef CONFIG_SERIAL_IFLOWCONTROL
+#  undef CONFIG_USART0_IFLOWCONTROL
+#  undef CONFIG_USART1_IFLOWCONTROL
+#  undef CONFIG_USART2_IFLOWCONTROL
+#  undef CONFIG_USART3_IFLOWCONTROL
 #endif
 
 /* Is there a serial console?  It could be on UART0-1 or USART0-3 */
@@ -164,10 +178,6 @@
 #  undef CONFIG_USART3_SERIAL_CONSOLE
 #  undef HAVE_CONSOLE
 #endif
-
-/* If we are not using the serial driver for the console, then we still must
- * provide some minimal implementation of up_putc.
- */
 
 #ifdef USE_SERIALDRIVER
 
@@ -323,8 +333,8 @@
  */
 
 #if defined(CONFIG_ARCH_CHIP_SAM3U) || defined(CONFIG_ARCH_CHIP_SAM3X) || \
-    defined(CONFIG_ARCH_CHIP_SAM3A) || defined(CONFIG_ARCH_CHIP_SAM4S) || \
-    defined(CONFIG_ARCH_CHIP_SAM4E)
+    defined(CONFIG_ARCH_CHIP_SAM3A) || defined(CONFIG_ARCH_CHIP_SAM4CM) || \
+    defined(CONFIG_ARCH_CHIP_SAM4S) || defined(CONFIG_ARCH_CHIP_SAM4E)
 #  define SAM_MR_USCLKS    UART_MR_USCLKS_MCK   /* Source = Main clock */
 #  define SAM_USART_CLOCK  BOARD_MCK_FREQUENCY  /* Frequency of the main clock */
 #elif defined(CONFIG_ARCH_CHIP_SAM4L)
@@ -340,13 +350,16 @@
 
 struct up_dev_s
 {
-  uint32_t usartbase; /* Base address of USART registers */
-  uint32_t baud;      /* Configured baud */
-  uint32_t sr;        /* Saved status bits */
-  uint8_t  irq;       /* IRQ associated with this USART */
-  uint8_t  parity;    /* 0=none, 1=odd, 2=even */
-  uint8_t  bits;      /* Number of bits (7 or 8) */
-  bool     stopbits2; /* true: Configure with 2 stop bits instead of 1 */
+  const uint32_t usartbase;     /* Base address of USART registers */
+  uint32_t baud;                /* Configured baud */
+  uint32_t sr;                  /* Saved status bits */
+  uint8_t  irq;                 /* IRQ associated with this USART */
+  uint8_t  parity;              /* 0=none, 1=odd, 2=even */
+  uint8_t  bits;                /* Number of bits (5-9) */
+  bool     stopbits2;           /* true: Configure with 2 stop bits instead of 1 */
+#if defined(CONFIG_SERIAL_IFLOWCONTROL) || defined(CONFIG_SERIAL_OFLOWCONTROL)
+  bool     flowc;               /* input flow control (RTS) enabled */
+#endif
 };
 
 /****************************************************************************
@@ -368,7 +381,7 @@ static bool up_txready(struct uart_dev_s *dev);
 static bool up_txempty(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -488,6 +501,9 @@ static struct up_dev_s g_usart0priv =
   .parity         = CONFIG_USART0_PARITY,
   .bits           = CONFIG_USART0_BITS,
   .stopbits2      = CONFIG_USART0_2STOP,
+#if defined(CONFIG_USART0_OFLOWCONTROL) || defined(CONFIG_USART0_IFLOWCONTROL)
+  .flowc          = true,
+#endif
 };
 
 static uart_dev_t g_usart0port =
@@ -518,6 +534,9 @@ static struct up_dev_s g_usart1priv =
   .parity         = CONFIG_USART1_PARITY,
   .bits           = CONFIG_USART1_BITS,
   .stopbits2      = CONFIG_USART1_2STOP,
+#if defined(CONFIG_USART1_OFLOWCONTROL) || defined(CONFIG_USART1_IFLOWCONTROL)
+  .flowc          = true,
+#endif
 };
 
 static uart_dev_t g_usart1port =
@@ -548,6 +567,9 @@ static struct up_dev_s g_usart2priv =
   .parity         = CONFIG_USART2_PARITY,
   .bits           = CONFIG_USART2_BITS,
   .stopbits2      = CONFIG_USART2_2STOP,
+#if defined(CONFIG_USART2_OFLOWCONTROL) || defined(CONFIG_USART2_IFLOWCONTROL)
+  .flowc          = true,
+#endif
 };
 
 static uart_dev_t g_usart2port =
@@ -578,6 +600,9 @@ static struct up_dev_s g_usart3priv =
   .parity         = CONFIG_USART3_PARITY,
   .bits           = CONFIG_USART3_BITS,
   .stopbits2      = CONFIG_USART3_2STOP,
+#if defined(CONFIG_USART3_OFLOWCONTROL) || defined(CONFIG_USART3_IFLOWCONTROL)
+  .flowc          = true,
+#endif
 };
 
 static uart_dev_t g_usart3port =
@@ -625,9 +650,11 @@ static inline void up_serialout(struct up_dev_s *priv, int offset, uint32_t valu
 
 static inline void up_restoreusartint(struct up_dev_s *priv, uint32_t imr)
 {
-  /* Restore the previous interrupt state */
+  /* Re-enable previously disabled interrupts state (assuming all interrupts
+   * disabled)
+   */
 
-  up_serialout(priv, SAM_UART_IMR_OFFSET, imr);
+  up_serialout(priv, SAM_UART_IER_OFFSET, imr);
 }
 
 /****************************************************************************
@@ -640,7 +667,7 @@ static void up_disableallints(struct up_dev_s *priv, uint32_t *imr)
 
   /* The following must be atomic */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (imr)
     {
       /* Return the current interrupt mask */
@@ -651,7 +678,7 @@ static void up_disableallints(struct up_dev_s *priv, uint32_t *imr)
   /* Disable all interrupts */
 
   up_serialout(priv, SAM_UART_IDR_OFFSET, UART_INT_ALLINTS);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -665,9 +692,10 @@ static void up_disableallints(struct up_dev_s *priv, uint32_t *imr)
 
 static int up_setup(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
 #ifndef CONFIG_SUPPRESS_UART_CONFIG
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint32_t regval;
+  uint32_t imr;
 
   /* Note: The logic here depends on the fact that that the USART module
    * was enabled and the pins were configured in sam_lowsetup().
@@ -675,13 +703,35 @@ static int up_setup(struct uart_dev_s *dev)
 
   /* The shutdown method will put the UART in a known, disabled state */
 
+  up_disableallints(priv, &imr);
   up_shutdown(dev);
 
   /* Set up the mode register.  Start with normal UART mode and the MCK
    * as the timing source
    */
 
-  regval = (UART_MR_MODE_NORMAL | SAM_MR_USCLKS);
+#if defined(CONFIG_SERIAL_IFLOWCONTROL) || defined(CONFIG_SERIAL_OFLOWCONTROL)
+  /* "Setting the USART to operate with hardware handshaking is performed by
+   *  writing the USART_MODE field in the Mode Register (US_MR) to the value
+   *  0x2. ... Using this mode requires using the PDC or DMAC channel for
+   *  reception. The transmitter can handle hardware handshaking in any case."
+   */
+
+  if (priv->flowc)
+    {
+      /* Enable hardware flow control and MCK as the timing source */
+
+      regval = (UART_MR_MODE_HWHS | SAM_MR_USCLKS);
+    }
+  else
+#endif
+    {
+      /* Set up the mode register.  Start with normal UART mode and the MCK
+       * as the timing source
+       */
+
+      regval = (UART_MR_MODE_NORMAL | SAM_MR_USCLKS);
+    }
 
   /* OR in settings for the selected number of bits */
 
@@ -741,6 +791,15 @@ static int up_setup(struct uart_dev_s *dev)
       regval |= UART_MR_NBSTOP_1;
     }
 
+#ifdef CONFIG_SAM34_UART1_OPTICAL
+  if (priv == &g_uart1priv)
+    {
+      /* Enable optical mode. */
+
+      regval |= UART_MR_OPT_EN;
+    }
+#endif
+
   /* And save the new mode register value */
 
   up_serialout(priv, SAM_UART_MR_OFFSET, regval);
@@ -759,8 +818,11 @@ static int up_setup(struct uart_dev_s *dev)
 
   /* Enable receiver & transmitter */
 
-  up_serialout(priv, SAM_UART_CR_OFFSET, (UART_CR_RXEN|UART_CR_TXEN));
+  up_serialout(priv, SAM_UART_CR_OFFSET, (UART_CR_RXEN | UART_CR_TXEN));
+  up_restoreusartint(priv, imr);
+
 #endif
+
   return OK;
 }
 
@@ -775,12 +837,13 @@ static int up_setup(struct uart_dev_s *dev)
 
 static void up_shutdown(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Reset and disable receiver and transmitter */
 
   up_serialout(priv, SAM_UART_CR_OFFSET,
-               (UART_CR_RSTRX|UART_CR_RSTTX|UART_CR_RXDIS|UART_CR_TXDIS));
+               (UART_CR_RSTRX | UART_CR_RSTTX | UART_CR_RXDIS |
+                UART_CR_TXDIS));
 
   /* Disable all interrupts */
 
@@ -804,7 +867,7 @@ static void up_shutdown(struct uart_dev_s *dev)
 
 static int up_attach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   int ret;
 
   /* Attach and enable the IRQ */
@@ -812,11 +875,11 @@ static int up_attach(struct uart_dev_s *dev)
   ret = irq_attach(priv->irq, up_interrupt);
   if (ret == OK)
     {
-       /* Enable the interrupt (RX and TX interrupts are still disabled
-        * in the USART
-        */
+      /* Enable the interrupt (RX and TX interrupts are still disabled
+       * in the USART
+       */
 
-       up_enable_irq(priv->irq);
+      up_enable_irq(priv->irq);
     }
   return ret;
 }
@@ -833,7 +896,7 @@ static int up_attach(struct uart_dev_s *dev)
 
 static void up_detach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_disable_irq(priv->irq);
   irq_detach(priv->irq);
 }
@@ -905,7 +968,7 @@ static int up_interrupt(int irq, void *context)
       PANIC();
     }
 
-  priv = (struct up_dev_s*)dev->priv;
+  priv = (struct up_dev_s *)dev->priv;
 
   /* Loop until there are no characters to be transferred or, until we have
    * been looping for a long time.
@@ -928,10 +991,10 @@ static int up_interrupt(int irq, void *context)
 
       if ((pending & UART_INT_RXRDY) != 0)
         {
-           /* Received data ready... process incoming bytes */
+          /* Received data ready... process incoming bytes */
 
-           uart_recvchars(dev);
-           handled = true;
+          uart_recvchars(dev);
+          handled = true;
         }
 
       /* Handle outgoing, transmit bytes. TXRDY: There is no character in the
@@ -940,10 +1003,10 @@ static int up_interrupt(int irq, void *context)
 
       if ((pending & UART_INT_TXRDY) != 0)
         {
-           /* Transmit data register empty ... process outgoing bytes */
+          /* Transmit data register empty ... process outgoing bytes */
 
-           uart_xmitchars(dev);
-           handled = true;
+          uart_xmitchars(dev);
+          handled = true;
         }
     }
 
@@ -960,7 +1023,7 @@ static int up_interrupt(int irq, void *context)
 
 static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 {
-#ifdef CONFIG_SERIAL_TIOCSERGSTRUCT
+#if defined(CONFIG_SERIAL_TERMIOS) || defined(CONFIG_SERIAL_TIOCSERGSTRUCT)
   struct inode      *inode = filep->f_inode;
   struct uart_dev_s *dev   = inode->i_private;
 #endif
@@ -971,7 +1034,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 #ifdef CONFIG_SERIAL_TIOCSERGSTRUCT
     case TIOCSERGSTRUCT:
       {
-         struct up_dev_s *user = (struct up_dev_s*)arg;
+         struct up_dev_s *user = (struct up_dev_s *)arg;
          if (!user)
            {
              ret = -EINVAL;
@@ -983,6 +1046,165 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
        }
        break;
 #endif
+
+#ifdef CONFIG_SERIAL_TERMIOS
+    case TCGETS:
+      {
+        struct termios  *termiosp = (struct termios *)arg;
+        struct up_dev_s *priv     = (struct up_dev_s *)dev->priv;
+
+        if (!termiosp)
+          {
+            ret = -EINVAL;
+            break;
+          }
+
+        /* Return baud */
+
+        cfsetispeed(termiosp, priv->baud);
+
+        /* Return parity */
+
+        termiosp->c_cflag = ((priv->parity != 0) ? PARENB : 0) |
+                            ((priv->parity == 1) ? PARODD : 0);
+
+        /* Return stop bits */
+
+        termiosp->c_cflag |= (priv->stopbits2) ? CSTOPB : 0;
+
+        /* Return flow control */
+
+#if defined(CONFIG_SERIAL_IFLOWCONTROL) || defined(CONFIG_SERIAL_OFLOWCONTROL)
+        termiosp->c_cflag |= (priv->flowc) ? (CCTS_OFLOW | CRTS_IFLOW): 0;
+#endif
+        /* Return number of bits */
+
+        switch (priv->bits)
+          {
+          case 5:
+            termiosp->c_cflag |= CS5;
+            break;
+
+          case 6:
+            termiosp->c_cflag |= CS6;
+            break;
+
+          case 7:
+            termiosp->c_cflag |= CS7;
+            break;
+
+          default:
+          case 8:
+            termiosp->c_cflag |= CS8;
+            break;
+
+          case 9:
+            termiosp->c_cflag |= CS8 /* CS9 */;
+            break;
+          }
+      }
+      break;
+
+    case TCSETS:
+      {
+        struct termios  *termiosp = (struct termios *)arg;
+        struct up_dev_s *priv     = (struct up_dev_s *)dev->priv;
+        uint32_t baud;
+        uint32_t imr;
+        uint8_t parity;
+        uint8_t nbits;
+        bool stop2;
+#if defined(CONFIG_SERIAL_IFLOWCONTROL) || defined(CONFIG_SERIAL_OFLOWCONTROL)
+        bool flowc;
+#endif
+
+        if (!termiosp)
+          {
+            ret = -EINVAL;
+            break;
+          }
+
+        /* Decode baud. */
+
+        ret = OK;
+        baud = cfgetispeed(termiosp);
+
+        /* Decode number of bits */
+
+        switch (termiosp->c_cflag & CSIZE)
+          {
+          case CS5:
+            nbits = 5;
+            break;
+
+          case CS6:
+            nbits = 6;
+            break;
+
+          case CS7:
+            nbits = 7;
+            break;
+
+          case CS8:
+            nbits = 8;
+            break;
+#if 0
+          case CS9:
+            nbits = 9;
+            break;
+#endif
+          default:
+            ret = -EINVAL;
+            break;
+          }
+
+        /* Decode parity */
+
+        if ((termiosp->c_cflag & PARENB) != 0)
+          {
+            parity = (termiosp->c_cflag & PARODD) ? 1 : 2;
+          }
+        else
+          {
+            parity = 0;
+          }
+
+        /* Decode stop bits */
+
+        stop2 = (termiosp->c_cflag & CSTOPB) != 0;
+
+        /* Decode flow control */
+
+#if defined(CONFIG_SERIAL_IFLOWCONTROL) || defined(CONFIG_SERIAL_OFLOWCONTROL)
+        flowc = (termiosp->c_cflag & (CCTS_OFLOW | CRTS_IFLOW)) != 0;
+#endif
+        /* Verify that all settings are valid before committing */
+
+        if (ret == OK)
+          {
+            /* Commit */
+
+            priv->baud      = baud;
+            priv->parity    = parity;
+            priv->bits      = nbits;
+            priv->stopbits2 = stop2;
+#if defined(CONFIG_SERIAL_IFLOWCONTROL) || defined(CONFIG_SERIAL_OFLOWCONTROL)
+            priv->flowc     = flowc;
+#endif
+            /* effect the changes immediately - note that we do not
+             * implement TCSADRAIN / TCSAFLUSH
+             */
+
+            up_disableallints(priv, &imr);
+            ret = up_setup(dev);
+
+            /* Restore the interrupt state */
+
+            up_restoreusartint(priv, imr);
+          }
+      }
+      break;
+#endif /* CONFIG_SERIAL_TERMIOS */
 
     default:
       ret = -ENOTTY;
@@ -1004,7 +1226,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
 static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Return the error information in the saved status */
 
@@ -1026,7 +1248,7 @@ static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 
 static void up_rxint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   if (enable)
     {
@@ -1054,7 +1276,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
 
 static bool up_rxavailable(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   return ((up_serialin(priv, SAM_UART_SR_OFFSET) & UART_INT_RXRDY) != 0);
 }
 
@@ -1068,7 +1290,7 @@ static bool up_rxavailable(struct uart_dev_s *dev)
 
 static void up_send(struct uart_dev_s *dev, int ch)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_serialout(priv, SAM_UART_THR_OFFSET, (uint32_t)ch);
 }
 
@@ -1082,10 +1304,10 @@ static void up_send(struct uart_dev_s *dev, int ch)
 
 static void up_txint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable)
     {
       /* Set to receive an interrupt when the TX holding register register
@@ -1110,7 +1332,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
       up_serialout(priv, SAM_UART_IDR_OFFSET, UART_INT_TXRDY);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -1123,9 +1345,9 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
 
 static bool up_txready(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   return ((up_serialin(priv, SAM_UART_SR_OFFSET) & UART_INT_TXRDY) != 0);
- }
+}
 
 /****************************************************************************
  * Name: up_txempty
@@ -1137,7 +1359,7 @@ static bool up_txready(struct uart_dev_s *dev)
 
 static bool up_txempty(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   return ((up_serialin(priv, SAM_UART_SR_OFFSET) & UART_INT_TXEMPTY) != 0);
 }
 
@@ -1155,6 +1377,7 @@ static bool up_txempty(struct uart_dev_s *dev)
  *
  ****************************************************************************/
 
+#ifdef USE_EARLYSERIALINIT
 void up_earlyserialinit(void)
 {
   /* NOTE:  All GPIO configuration for the USARTs was performed in
@@ -1187,6 +1410,7 @@ void up_earlyserialinit(void)
   up_setup(&CONSOLE_DEV);
 #endif
 }
+#endif
 
 /****************************************************************************
  * Name: up_serialinit

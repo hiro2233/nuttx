@@ -46,23 +46,21 @@
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip.h>
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/ip.h>
+#include <nuttx/net/igmp.h>
 
-#include "uip/uip_internal.h"
+#include "devif/devif.h"
+#include "igmp/igmp.h"
 
 #ifdef CONFIG_NET_IGMP
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name:  uip_mcastmac
+ * Name:  igmp_mcastmac
  *
  * Description:
  *   Given an IP address (in network order), create a IGMP multicast MAC
@@ -70,7 +68,7 @@
  *
  ****************************************************************************/
 
-static void uip_mcastmac(uip_ipaddr_t *ip, FAR uint8_t *mac)
+static void igmp_mcastmac(in_addr_t *ip, FAR uint8_t *mac)
 {
   /* This mapping is from the IETF IN RFC 1700 */
 
@@ -81,7 +79,7 @@ static void uip_mcastmac(uip_ipaddr_t *ip, FAR uint8_t *mac)
   mac[4] = ip4_addr3(*ip);
   mac[5] = ip4_addr4(*ip);
 
-  nvdbg("IP: %08x -> MAC: %02x%02x%02x%02x%02x%02x\n",
+  ninfo("IP: %08x -> MAC: %02x%02x%02x%02x%02x%02x\n",
         *ip, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
@@ -90,41 +88,41 @@ static void uip_mcastmac(uip_ipaddr_t *ip, FAR uint8_t *mac)
  ****************************************************************************/
 
 /****************************************************************************
- * Name:  uip_addmcastmac
+ * Name:  igmp_addmcastmac
  *
  * Description:
  *   Add an IGMP MAC address to the device's MAC filter table.
  *
  ****************************************************************************/
 
-void uip_addmcastmac(FAR struct uip_driver_s *dev, FAR uip_ipaddr_t *ip)
+void igmp_addmcastmac(FAR struct net_driver_s *dev, FAR in_addr_t *ip)
 {
   uint8_t mcastmac[6];
 
-  nvdbg("Adding: IP %08x\n", *ip);
+  ninfo("Adding: IP %08x\n", *ip);
   if (dev->d_addmac)
     {
-      uip_mcastmac(ip, mcastmac);
+      igmp_mcastmac(ip, mcastmac);
       dev->d_addmac(dev, mcastmac);
     }
 }
 
 /****************************************************************************
- * Name:  uip_removemcastmac
+ * Name:  igmp_removemcastmac
  *
  * Description:
  *   Remove an IGMP MAC address from the device's MAC filter table.
  *
  ****************************************************************************/
 
-void uip_removemcastmac(FAR struct uip_driver_s *dev, FAR uip_ipaddr_t *ip)
+void igmp_removemcastmac(FAR struct net_driver_s *dev, FAR in_addr_t *ip)
 {
   uint8_t mcastmac[6];
 
-  nvdbg("Removing: IP %08x\n", *ip);
+  ninfo("Removing: IP %08x\n", *ip);
   if (dev->d_rmmac)
     {
-      uip_mcastmac(ip, mcastmac);
+      igmp_mcastmac(ip, mcastmac);
       dev->d_rmmac(dev, mcastmac);
     }
 }

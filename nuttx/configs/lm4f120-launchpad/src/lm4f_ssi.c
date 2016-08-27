@@ -54,80 +54,66 @@
 
 /* The LM4F LaunchPad microSD CS is on SSI0 */
 
-#if !defined(CONFIG_SSI0_DISABLE) || !defined(CONFIG_SSI1_DISABLE)
+#if defined(CONFIG_TIVA_SSI0) || defined(CONFIG_TIVA_SSI1)
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
-/* CONFIG_DEBUG_SPI enables debug output from this file (needs CONFIG_DEBUG too) */
+/* CONFIG_DEBUG_SPI enables debug output from this file */
 
 #ifdef CONFIG_DEBUG_SPI
-#  define ssidbg lldbg
-#else
-#  define ssidbg(x...)
-#endif
-
-/* Dump GPIO registers */
-
-#if defined(CONFIG_DEBUG_SPI) && defined(CONFIG_DEBUG_VERBOSE)
-#  define ssivdbg lldbg
 #  define ssi_dumpgpio(m) tiva_dumpgpio(SDCCS_GPIO, m)
 #else
-#  define ssivdbg(x...)
 #  define ssi_dumpgpio(m)
 #endif
-
-/************************************************************************************
- * Private Functions
- ************************************************************************************/
 
 /************************************************************************************
  * Public Functions
  ************************************************************************************/
 
 /************************************************************************************
- * Name: lm4f_ssiinitialize
+ * Name: lm4f_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the LM4F LaunchPad.
  *
  ************************************************************************************/
 
-void weak_function lm4f_ssiinitialize(void)
+void weak_function lm4f_spidev_initialize(void)
 {
 }
 
 /****************************************************************************
- * The external functions, tiva_spiselect and tiva_spistatus must be provided
+ * The external functions, tiva_ssiselect and tiva_ssistatus must be provided
  * by board-specific logic.  The are implementations of the select and status
  * methods SPI interface defined by struct spi_ops_s (see include/nuttx/spi/spi.h).
- * All othermethods (including tiva_spiinitialize()) are provided by common
+ * All othermethods (including tiva_ssibus_initialize()) are provided by common
  * logic.  To use this common SPI logic on your board:
  *
- *   1. Provide tiva_spiselect() and tiva_spistatus() functions in your
+ *   1. Provide tiva_ssiselect() and tiva_ssistatus() functions in your
  *      board-specific logic.  This function will perform chip selection and
  *      status operations using GPIOs in the way your board is configured.
- *   2. Add a call to tiva_spiinitialize() in your low level initialization
+ *   2. Add a call to tiva_ssibus_initialize() in your low level initialization
  *      logic
- *   3. The handle returned by tiva_spiinitialize() may then be used to bind the
+ *   3. The handle returned by tiva_ssibus_initialize() may then be used to bind the
  *      SPI driver to higher level logic (e.g., calling
  *      mmcsd_spislotinitialize(), for example, will bind the SPI driver to
  *      the SPI MMC/SD driver).
  *
  ****************************************************************************/
 
-void tiva_spiselect(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
+void tiva_ssiselect(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  ssidbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
-  ssi_dumpgpio("tiva_spiselect() Entry");
-  ssi_dumpgpio("tiva_spiselect() Exit");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  ssi_dumpgpio("tiva_ssiselect() Entry");
+  ssi_dumpgpio("tiva_ssiselect() Exit");
 }
 
-uint8_t tiva_spistatus(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
+uint8_t tiva_ssistatus(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
-  ssidbg("Returning SPI_STATUS_PRESENT\n");
+  spiinfo("Returning SPI_STATUS_PRESENT\n");
   return SPI_STATUS_PRESENT;
 }
 
-#endif /* !CONFIG_SSI0_DISABLE || !CONFIG_SSI1_DISABLE */
+#endif /* CONFIG_TIVA_SSI0 || CONFIG_TIVA_SSI1 */

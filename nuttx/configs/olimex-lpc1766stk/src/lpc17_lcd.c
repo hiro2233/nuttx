@@ -44,6 +44,7 @@
 #include <errno.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/lcd/lcd.h>
 #include <nuttx/lcd/nokia6100.h>
@@ -52,12 +53,14 @@
 #include "chip/lpc17_syscon.h"
 #include "chip/lpc17_pwm.h"
 #include "lpc17_gpio.h"
+#include "lpc17_ssp.h"
+
 #include "lpc1766stk.h"
 
 #if defined(CONFIG_NX_LCDDRIVER) && defined(CONFIG_LCD_NOKIA6100) && defined(CONFIG_LPC17_SSP0)
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Check power setting */
@@ -72,24 +75,15 @@
 
 /* Define the CONFIG_LCD_NOKIADBG to enable detailed debug output (stuff you
  * would never want to see unless you are debugging this file).
- *
- * Verbose debug must also be enabled
  */
 
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_VERBOSE
-#  undef CONFIG_DEBUG_GRAPHICS
-#endif
-
-#ifndef CONFIG_DEBUG_VERBOSE
+#ifndef CONFIG_DEBUG_INFO
 #  undef CONFIG_LCD_NOKIADBG
 #endif
 
 #ifdef CONFIG_LCD_NOKIADBG
-#  define lcddbg(format, ...) vdbg(format, ##__VA_ARGS__)
 #  define lcd_dumpgpio(m)     lpc17_dumpgpio(LPC1766STK_LCD_RST, m)
 #else
-#  define lcddbg(x...)
 #  define lcd_dumpgpio(m)
 #endif
 
@@ -176,24 +170,24 @@ void nokia_blinitialize(void)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_nxdrvinit
+ * Name: board_graphics_setup
  *
  * Description:
  *   Called NX initialization logic to configure the LCD.
  *
  ****************************************************************************/
 
-FAR struct lcd_dev_s *up_nxdrvinit(unsigned int devno)
+FAR struct lcd_dev_s *board_graphics_setup(unsigned int devno)
 {
   FAR struct spi_dev_s *spi;
   FAR struct lcd_dev_s *dev;
 
   /* Configure the LCD GPIOs */
 
-  lcd_dumpgpio("up_nxdrvinit: On entry");
+  lcd_dumpgpio("board_graphics_setup: On entry");
   lpc17_configgpio(LPC1766STK_LCD_RST);
   lpc17_configgpio(LPC1766STK_LCD_BL);
-  lcd_dumpgpio("up_nxdrvinit: After GPIO setup");
+  lcd_dumpgpio("board_graphics_setup: After GPIO setup");
 
   /* Reset the LCD */
 
@@ -208,10 +202,10 @@ FAR struct lcd_dev_s *up_nxdrvinit(unsigned int devno)
 
   /* Get the SSP0 port (configure as a Freescale SPI port) */
 
-  spi = lpc17_sspinitialize(0);
+  spi = lpc17_sspbus_initialize(0);
   if (!spi)
     {
-      glldbg("Failed to initialize SSP port 0\n");
+      gerr("ERROR: Failed to initialize SSP port 0\n");
     }
   else
     {
@@ -220,11 +214,11 @@ FAR struct lcd_dev_s *up_nxdrvinit(unsigned int devno)
       dev = nokia_lcdinitialize(spi, devno);
       if (!dev)
         {
-          glldbg("Failed to bind SSP port 0 to LCD %d: %d\n", devno);
+          gerr("ERROR: Failed to bind SSP port 0 to LCD %d: %d\n", devno);
         }
      else
         {
-          gllvdbg("Bound SSP port 0 to LCD %d\n", devno);
+          ginfo("Bound SSP port 0 to LCD %d\n", devno);
 
           /* And turn the LCD on (CONFIG_LCD_MAXPOWER should be 1) */
 

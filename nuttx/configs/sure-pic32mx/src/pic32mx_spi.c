@@ -48,13 +48,13 @@
 
 #include "up_arch.h"
 #include "chip.h"
-#include "pic32mx-internal.h"
+#include "pic32mx.h"
 #include "sure-pic32mx.h"
 
 #if defined(CONFIG_PIC32MX_SPI2)
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 #ifdef CONFIG_ARCH_DBDP11215
@@ -105,9 +105,8 @@
 
 #  undef PIC32_HAVE_SD
 
- /* The Sure DB-DP11212 PIC32 General Purpose Demo Board has an SOIC (Flash or
+/* The Sure DB-DP11212 PIC32 General Purpose Demo Board has an SOIC (Flash or
  * EEPROM) connected on SPI2:
- *
  *
  *  TMS/AN10/PMA13/RB10   UTIL_WP FLASH (U4) WP
  *  TDO/AN11/PMA12/RB11   UTIL_CS FLASH (U4) CS
@@ -119,46 +118,19 @@
 #  define GPIO_SOIC_CS (GPIO_OUTPUT|GPIO_VALUE_ONE|GPIO_PORTB|GPIO_PIN11)
 #endif
 
-/* The following enable debug output from this file.
- *
- * CONFIG_DEBUG_SPI && CONFIG_DEBUG - Define to enable basic SPI debug
- * CONFIG_DEBUG_VERBOSE - Define to enable verbose SPI debug
- */
-
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_SPI
-#  undef CONFIG_DEBUG_VERBOSE
-#endif
-
-#ifdef CONFIG_DEBUG_SPI
-#  define spidbg  lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define spivdbg lldbg
-#  else
-#    define spivdbg(x...)
-#  endif
-#else
-#  define spidbg(x...)
-#  define spivdbg(x...)
-#endif
-
-/************************************************************************************
- * Private Functions
- ************************************************************************************/
-
 /************************************************************************************
  * Public Functions
  ************************************************************************************/
 
 /************************************************************************************
- * Name: pic32mx_spiinitialize
+ * Name: pic32mx_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the Sure PIC32MX board.
  *
  ************************************************************************************/
 
-void weak_function pic32mx_spiinitialize(void)
+void weak_function pic32mx_spidev_initialize(void)
 {
   /* Configure the SPI2 chip select (CS) GPIO output, and the card detect (CD) and
    * write protect (WP) inputs.
@@ -183,7 +155,7 @@ void weak_function pic32mx_spiinitialize(void)
  *   The external functions, pic32mx_spi2select and pic32mx_spi2status
  *   must be provided by board-specific logic.  They are implementations of the select
  *   and status methods of the SPI interface defined by struct spi_ops_s (see
- *   include/nuttx/spi/spi.h). All other methods (including up_spiinitialize())
+ *   include/nuttx/spi/spi.h). All other methods (including pic32mx_spibus_initialize())
  *   are provided by common PIC32MX logic.  To use this common SPI logic on your
  *   board:
  *
@@ -192,9 +164,9 @@ void weak_function pic32mx_spiinitialize(void)
  *   2. Provide pic32mx_spi2select() and pic32mx_spi2status() functions
  *      in your board-specific logic.  These functions will perform chip selection
  *      and status operations using GPIOs in the way your board is configured.
- *   3. Add a calls to up_spiinitialize() in your low level application
+ *   3. Add a calls to pic32mx_spibus_initialize() in your low level application
  *      initialization logic
- *   4. The handle returned by up_spiinitialize() may then be used to bind the
+ *   4. The handle returned by pic32mx_spibus_initialize() may then be used to bind the
  *      SPI driver to higher level logic (e.g., calling
  *      mmcsd_spislotinitialize(), for example, will bind the SPI driver to
  *      the SPI MMC/SD driver).
@@ -204,7 +176,7 @@ void weak_function pic32mx_spiinitialize(void)
 #ifdef CONFIG_PIC32MX_SPI2
 void pic32mx_spi2select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  spivdbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
 
   /* The SD card chip select is pulled high and active low */
 
@@ -264,7 +236,7 @@ uint8_t pic32mx_spi2status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
     }
 #endif
 
-  spivdbg("Returning %d\n", ret);
+  spiinfo("Returning %d\n", ret);
   return ret;
 }
 #endif

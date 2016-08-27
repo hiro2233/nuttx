@@ -35,54 +35,15 @@
 
 -include $(TOPDIR)/Make.defs
 
-ARCH_SRCDIR	= $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(WINTOOL),y)
-  CFLAGS	+= -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/arm}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/sched}"
-else
-  CFLAGS	+= -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/arm -I$(TOPDIR)/sched
-endif
-
-ASRCS		=
-AOBJS		= $(ASRCS:.S=$(OBJEXT))
-CSRCS		=
+ASRCS =
+CSRCS =
 
 ifeq ($(CONFIG_LCD_UG2864AMBAG01),y)
-CSRCS += up_ug2864ambag01.c up_spi1.c
+CSRCS += lpc2148_ug2864ambag01.c lpc2148_spi1.c
 endif
 
-COBJS		= $(CSRCS:.c=$(OBJEXT))
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+CSRCS += lpc2148_appinit.c
+endif
 
-SRCS		= $(ASRCS) $(CSRCS)
-OBJS		= $(AOBJS) $(COBJS)
-
-CFLAGS		+= -I $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

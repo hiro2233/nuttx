@@ -138,7 +138,7 @@ int nx_eventhandler(NXHANDLE handle)
   FAR struct nxfe_conn_s *conn = (FAR struct nxfe_conn_s *)handle;
   struct nxsvrmsg_s      *msg;
   struct nxbe_window_s   *wnd;
-  uint8_t                 buffer[NX_MXCLIMSGLEN];
+  char                    buffer[NX_MXCLIMSGLEN];
   int                     nbytes;
 
   /* Get the next message from our incoming message queue */
@@ -164,7 +164,7 @@ int nx_eventhandler(NXHANDLE handle)
                 }
               else
                 {
-                  gdbg("mq_receive failed: %d\n", errno);
+                  gerr("ERROR: mq_receive failed: %d\n", errno);
                   return ERROR;
                 }
             }
@@ -177,7 +177,7 @@ int nx_eventhandler(NXHANDLE handle)
   /* Dispatch the message appropriately */
 
   msg = (struct nxsvrmsg_s *)buffer;
-  gvdbg("Received msgid=%d\n", msg->msgid);
+  ginfo("Received msgid=%d\n", msg->msgid);
   switch (msg->msgid)
     {
     case NX_CLIMSG_CONNECTED:
@@ -213,7 +213,7 @@ int nx_eventhandler(NXHANDLE handle)
       }
       break;
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
     case NX_CLIMSG_MOUSEIN:
       {
         FAR struct nxclimsg_mousein_s *mouse = (FAR struct nxclimsg_mousein_s *)buffer;
@@ -254,7 +254,8 @@ int nx_eventhandler(NXHANDLE handle)
       break;
 
     default:
-      gdbg("Unrecognized message opcode: %d\n", ((FAR struct nxsvrmsg_s *)buffer)->msgid);
+      gerr("ERROR: Unrecognized message opcode: %d\n",
+           ((FAR struct nxsvrmsg_s *)buffer)->msgid);
       break;
     }
 

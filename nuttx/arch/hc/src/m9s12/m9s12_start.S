@@ -1,6 +1,5 @@
 /****************************************************************************
  * arch/hc/src/m9s12/m9s12_start.S
- * arch/hc/src/chip/m9s12_start.S
  *
  *	 Copyright (C) 2009, 2011 Gregory Nutt. All rights reserved.
  *	 Author: Gregory Nutt <gnutt@nuttx.org>
@@ -42,13 +41,13 @@
 
 #include <arch/board/board.h>
 
-#include "m9s12_internal.h"
+#include "m9s12.h"
 #include "m9s12_mmc.h"
 #include "m9s12_crg.h"
 #include "m9s12_flash.h"
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #ifdef CONFIG_HCS12_NONBANKED
@@ -64,7 +63,7 @@
 #define INITEE_EE  (MMC_INITEE_EE(HCS12_EEPROM_BASE)|MMC_INITEE_EEON)
 
 /****************************************************************************
- * Global Symbols
+ * Public Symbols
  ****************************************************************************/
 
 	.file		"m9s12_start.S"
@@ -82,7 +81,7 @@
  */
 
 	.macro	showprogress, code
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 	ldab	\code
 #ifdef CONFIG_HCS12_SERIALMON
 	jsr		#PutChar

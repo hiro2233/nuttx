@@ -1,8 +1,7 @@
 /************************************************************************************
  * configs/stm32f3discovery/include/board.h
- * include/arch/board/board.h
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,7 +50,7 @@
 #include "stm32.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
@@ -92,13 +91,14 @@
 
 #define STM32_RCC_CFGR_PPRE2    RCC_CFGR_PPRE2_HCLK
 #define STM32_PCLK2_FREQUENCY   STM32_HCLK_FREQUENCY
-#define STM32_APB2_CLKIN        (STM32_PCLK2_FREQUENCY)   /* Timers 2-7, 12-14 */
+#define STM32_APB2_CLKIN        (STM32_PCLK2_FREQUENCY)   /* Timers 1 and 8, 15-17 */
 
-/* APB2 timers 1 and 8 will receive PCLK2. */
+/* APB2 timers 1 and 8, 15-17 will receive PCLK2. */
+
+/* Timers driven from APB2 will be PCLK2 */
 
 #define STM32_APB2_TIM1_CLKIN   (STM32_PCLK2_FREQUENCY)
 #define STM32_APB2_TIM8_CLKIN   (STM32_PCLK2_FREQUENCY)
-
 #define STM32_APB1_TIM15_CLKIN  (STM32_PCLK2_FREQUENCY)
 #define STM32_APB1_TIM16_CLKIN  (STM32_PCLK2_FREQUENCY)
 #define STM32_APB1_TIM17_CLKIN  (STM32_PCLK2_FREQUENCY)
@@ -108,50 +108,32 @@
 #define STM32_RCC_CFGR_PPRE1    RCC_CFGR_PPRE1_HCLKd2
 #define STM32_PCLK1_FREQUENCY   (STM32_HCLK_FREQUENCY/2)
 
-/* APB1 timers 2-4 will be twice PCLK1 (REVISIT) */
+/* APB1 timers 2-7 will be twice PCLK1 */
 
 #define STM32_APB1_TIM2_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 #define STM32_APB1_TIM3_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 #define STM32_APB1_TIM4_CLKIN   (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM6_CLKIN   (STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM7_CLKIN   (STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM6_CLKIN   (2*STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM7_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 
 /* USB divider -- Divide PLL clock by 1.5 */
 
 #define STM32_CFGR_USBPRE       0
 
-/* Timers driven from APB1 will be twice PCLK1 */
-
-#define STM32_APB1_TIM2_CLKIN   (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM3_CLKIN   (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM4_CLKIN   (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM5_CLKIN   (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM6_CLKIN   (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM7_CLKIN   (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM12_CLKIN  (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM13_CLKIN  (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM14_CLKIN  (2*STM32_PCLK1_FREQUENCY)
-
-/* APB2 clock (PCLK2) is HCLK/2 (84MHz) */
-
-#define STM32_RCC_CFGR_PPRE2    RCC_CFGR_PPRE2_HCLKd2     /* PCLK2 = HCLK / 2 */
-#define STM32_PCLK2_FREQUENCY   (STM32_HCLK_FREQUENCY/2)
-
-/* Timers driven from APB2 will be twice PCLK2 */
-
-#define STM32_APB2_TIM1_CLKIN   (2*STM32_PCLK2_FREQUENCY)
-#define STM32_APB2_TIM8_CLKIN   (2*STM32_PCLK2_FREQUENCY)
-#define STM32_APB2_TIM9_CLKIN   (2*STM32_PCLK2_FREQUENCY)
-#define STM32_APB2_TIM10_CLKIN  (2*STM32_PCLK2_FREQUENCY)
-#define STM32_APB2_TIM11_CLKIN  (2*STM32_PCLK2_FREQUENCY)
 
 /* Timer Frequencies, if APBx is set to 1, frequency is same to APBx
  * otherwise frequency is 2xAPBx.
  * Note: TIM1,8 are on APB2, others on APB1
  */
 
-#define STM32_TIM18_FREQUENCY   STM32_HCLK_FREQUENCY
-#define STM32_TIM27_FREQUENCY   (STM32_HCLK_FREQUENCY/2)
+#define BOARD_TIM1_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM2_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM3_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM4_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM5_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM6_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM7_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM8_FREQUENCY    STM32_HCLK_FREQUENCY
 
 /* LED definitions ******************************************************************/
 /* The STM32F3Discovery board has ten LEDs.  Two of these are controlled by logic on
@@ -176,7 +158,7 @@
  * way.  The following definitions are used to access individual LEDs.
  */
 
-/* LED index values for use with stm32_setled() */
+/* LED index values for use with board_userled() */
 
 #define BOARD_LED1        0 /* User LD3 */
 #define BOARD_LED2        1 /* User LD4 */
@@ -188,7 +170,7 @@
 #define BOARD_LED8        7 /* User LD10 */
 #define BOARD_NLEDS       8
 
-/* LED bits for use with stm32_setleds() */
+/* LED bits for use with board_userled_all() */
 
 #define BOARD_LED1_BIT    (1 << BOARD_LED1)
 #define BOARD_LED2_BIT    (1 << BOARD_LED2)
@@ -241,21 +223,54 @@
 
 /* Alternate function pin selections ************************************************/
 
-/* UART2:
- *
- * The STM32F3Discovery has no on-board serial devices, but the console is
- * brought out to PA2 (TX) and PA3 (RX) for connection to an external serial device.
- * (See the README.txt file for other options)
+/* USART
+ * 
+ *  USART1: Hardwired to embedded STLinkV2 hardware debugger
+ *    RX (PC5)
+ *    TX (PC4)
+ * 
+ *  USART2: Connect to an external UART<->RS232 transceiver for use as console.
+ *    RX (PA3)
+ *    TX (PA2)
  */
 
 #define GPIO_USART2_RX GPIO_USART2_RX_2
 #define GPIO_USART2_TX GPIO_USART2_TX_2
 
-/* SPI - There is a ST MEMS L3GD20 device on SPI1 using these pins: */
+/* SPI 
+ * 
+ *  SPI1: Hardwired to ST L3GD20 MEMS device 
+ *    MISO (PA6)
+ *    MSOI (PA7)
+ *    SCK (PA5) 
+ */ 
 
 #define GPIO_SPI1_MISO GPIO_SPI1_MISO_1
 #define GPIO_SPI1_MOSI GPIO_SPI1_MOSI_1
 #define GPIO_SPI1_SCK  GPIO_SPI1_SCK_1
+
+/* I2C
+ * 
+ * I2C1: Accessible via expansion headers
+ *   SCL (PA15)
+ *   SDA (PA14)
+ *   SMBA (PB5) 
+ * 
+ * I2C2: Accessible via expansion headers 
+ *   SCL (PA9)
+ *   SDA (PA10)
+ *   SMBA (PB12)
+ */ 
+
+#ifdef CONFIG_STM32_I2C1
+#define GPIO_I2C1_SCL  GPIO_I2C1_SCL_1
+#define GPIO_I2C1_SDA  GPIO_I2C1_SDA_1
+#endif
+
+#ifdef CONFIG_STM32_I2C2
+#define GPIO_I2C2_SCL  GPIO_I2C2_SCL_1
+#define GPIO_I2C2_SDA  GPIO_I2C2_SDA_1
+#endif
 
 /************************************************************************************
  * Public Data
@@ -266,7 +281,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -274,6 +290,7 @@ extern "C" {
 /************************************************************************************
  * Public Function Prototypes
  ************************************************************************************/
+
 /************************************************************************************
  * Name: stm32_boardinitialize
  *
@@ -284,23 +301,7 @@ extern "C" {
  *
  ************************************************************************************/
 
-EXTERN void stm32_boardinitialize(void);
-
-/************************************************************************************
- * Name:  stm32_ledinit, stm32_setled, and stm32_setleds
- *
- * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board LEDs.  If
- *   CONFIG_ARCH_LEDS is not defined, then the following interfacesare available to
- *   control the LEDs from user applications.
- *
- ************************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-EXTERN void stm32_ledinit(void);
-EXTERN void stm32_setled(int led, bool ledon);
-EXTERN void stm32_setleds(uint8_t ledset);
-#endif
+void stm32_boardinitialize(void);
 
 #undef EXTERN
 #if defined(__cplusplus)

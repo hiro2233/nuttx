@@ -41,6 +41,8 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
+
 #include "pcduino_a10.h"
 
 /************************************************************************************
@@ -93,8 +95,8 @@ void board_initialize(void)
    * but the initialization function must run in kernel space.
    */
 
-#if defined(CONFIG_NSH_LIBRARY) && !defined(CONFIG_NSH_ARCHINIT)
-  (void)nsh_archinitialize();
+#if defined(CONFIG_NSH_LIBRARY) && !defined(CONFIG_LIB_BOARDCTL)
+  (void)board_app_initialize(0);
 #endif
 }
 #endif /* CONFIG_BOARD_INITIALIZE */

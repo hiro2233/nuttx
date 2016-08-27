@@ -1,7 +1,7 @@
 /************************************************************************************
  * arch/arm/src/lpc43xx/lpc43_spi.h
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -60,8 +60,8 @@
  *    lpc43_spicmddata() functions in your board-specific logic.  This
  *    function will perform cmd/data selection operations using GPIOs in the
  *    way your board is configured.
- * 4. Your low level board initialization logic should call lpc43_sspiinitialize.
- * 5. The handle returned by lpc43_spiinitialize() may then be used to bind the
+ * 4. Your low level board initialization logic should call lpc43_spibus_initialize.
+ * 5. The handle returned by lpc43_spibus_initialize() may then be used to bind the
  *    SPI driver to higher level logic (e.g., calling  mmcsd_spislotinitialize(),
  *    for example, will bind the SPI driver to the SPI MMC/SD driver).
  */
@@ -79,7 +79,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -88,21 +89,24 @@ extern "C" {
  * Public Functions
  ************************************************************************************/
 
-/************************************************************************************
- * Name: lpc43_spiinitialize
+/****************************************************************************
+ * Name: lpc43_spibus_initialize
  *
  * Description:
- *   Initialize the SPI port
+ *   Initialize the selected SPI port
+ *   0 - SPI
+ *   1 - SSP0
+ *   2 - SSP1
  *
  * Input Parameter:
- *   port Port number (must be zero)
+ *   Port number (for hardware that has multiple SPI interfaces)
  *
  * Returned Value:
- *   Valid SPI device structure reference on succcess; a NULL on failure
+ *   Valid SPI device structure reference on success; a NULL on failure
  *
- ************************************************************************************/
+ ****************************************************************************/
 
-EXTERN FAR struct spi_dev_s *lpc43_spiinitialize(int port);
+FAR struct spi_dev_s *lpc43_spibus_initialize(int port);
 
 /************************************************************************************
  * Name:  lpc43_spiselect, lpc43_spistatus, and lpc43_spicmddata
@@ -118,22 +122,19 @@ EXTERN FAR struct spi_dev_s *lpc43_spiinitialize(int port);
  *
  ************************************************************************************/
 
-EXTERN void  lpc43_spiselect(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
-                             bool selected);
-EXTERN uint8_t lpc43_spistatus(FAR struct spi_dev_s *dev, enum spi_dev_e devid);
+void  lpc43_spiselect(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected);
+uint8_t lpc43_spistatus(FAR struct spi_dev_s *dev, enum spi_dev_e devid);
 
 #ifdef CONFIG_SPI_CMDDATA
-EXTERN int lpc43_spicmddata(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
-                            bool cmd);
+int lpc43_spicmddata(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool cmd);
 #endif
 
-/****************************************************************************
+/************************************************************************************
  * Name: spi_flush
  *
  * Description:
- *   Flush and discard any words left in the RX fifo.  This can be called
- *   from spiselect after a device is deselected (if you worry about such
- *   things).
+ *   Flush and discard any words left in the RX fifo.  This can be called from
+ *   spiselect after a device is deselected (if you worry about such things).
  *
  * Input Parameters:
  *   dev - Device-specific state data
@@ -141,33 +142,32 @@ EXTERN int lpc43_spicmddata(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
  * Returned Value:
  *   None
  *
- ****************************************************************************/
+ ************************************************************************************/
 
-EXTERN void spi_flush(FAR struct spi_dev_s *dev);
+void spi_flush(FAR struct spi_dev_s *dev);
 
-/****************************************************************************
+/************************************************************************************
  * Name: lpc43_spi/spiregister
  *
  * Description:
- *   If the board supports a card detect callback to inform the SPI-based
- *   MMC/SD drvier when an SD card is inserted or removed, then
- *   CONFIG_SPI_CALLBACK should be defined and the following function(s) must
- *   must be implemented.  These functiosn implements the registercallback
- *   method of the SPI interface (see include/nuttx/spi/spi.h for details)
+ *   If the board supports a card detect callback to inform the SPI-based MMC/SD
+ *   driver when an SD card is inserted or removed, then CONFIG_SPI_CALLBACK should
+ *   be defined and the following function(s) must must be implemented.  These
+ *   functions implements the registercallback method of the SPI interface (see
+ *   include/nuttx/spi/spi.h for details)
  *
  * Input Parameters:
  *   dev -      Device-specific state data
- *   callback - The funtion to call on the media change
+ *   callback - The function to call on the media change
  *   arg -      A caller provided value to return with the callback
  *
  * Returned Value:
  *   0 on success; negated errno on failure.
  *
- ****************************************************************************/
+ ************************************************************************************/
 
 #ifdef CONFIG_SPI_CALLBACK
-EXTERN int lpc43_spiregister(FAR struct spi_dev_s *dev,
-                             spi_mediachange_t callback, void *arg);
+int lpc43_spiregister(FAR struct spi_dev_s *dev, spi_mediachange_t callback, void *arg);
 #endif
 
 #undef EXTERN

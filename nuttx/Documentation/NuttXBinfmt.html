@@ -8,7 +8,7 @@
   <tr align="center" bgcolor="#e4e4e4">
     <td>
       <h1><big><font color="#3c34ec"><i>NuttX Binary Loader</i></font></big></h1>
-      <p>Last Updated: January 16, 2013</p>
+      <p>Last Updated: August 22, 2014</p>
     </td>
   </tr>
 </table>
@@ -108,7 +108,7 @@
 <h2>2.1 <a name="binfmthdr">Binary Loader Header Files</a></h2>
 <p>
   The interface to the binary loader is described in the header file
-  <a href="http://sourceforge.net/p/nuttx/git/ci/master/tree/nuttx/include/nuttx/binfmt/binfmt.h">
+  <a href="https://bitbucket.org/nuttx/nuttx/src/master/include/nuttx/binfmt/binfmt.h" target="_blank">
   <code>include/nuttx/binfmt/binfmt.h</code></a>.
   A brief summary of the data structurs and interfaces prototyped in that header file are listed below.
 </p>
@@ -169,8 +169,8 @@ struct binary_s
    *   used to manage the tasks address space.
    */
 
-#ifdef CONFIG_ADDRENV
-  task_addrenv_t addrenv;              /* Task address environment */
+#ifdef CONFIG_ARCH_ADDRENV
+  group_addrenv_t addrenv;             /* Task group address environment */
 #endif
 
   size_t mapsize;                      /* Size of the mapped address region (needed for munmap) */
@@ -410,7 +410,7 @@ FAR char *exepath_next(EXEPATH_HANDLE handle, FAR const char *relpath);
   </p>
   <p>
     NOTE: The string pointer return in the success case points to allocated memory.
-    This memory must be freed by the called by calling <code>kfree()</code>.
+    This memory must be freed by the called by calling <code>kmm_free()</code>.
   </p>
   <p>
     <code>NULL</code is returned if no path is found to any file with the provided <code>relpath</colde> from any absolute path in the <code>PATH</code> variable.
@@ -458,7 +458,7 @@ void exepath_release(EXEPATH_HANDLE handle);
 <h2>3.1 <a name="symtabhdr">Symbol Table Header Files</a></h2>
 <p>
   The interface to the symbol table logic is described in the header file
-  <a href="http://sourceforge.net/p/nuttx/git/ci/master/tree/nuttx/include/nuttx/binfmt/symtab.h">
+  <a href="https://bitbucket.org/nuttx/nuttx/src/master/include/nuttx/binfmt/symtab.h" target="_blank">
   <code>include/nuttx/binfmt/symtab.h</code></a>.
   A brief summary of the data structurs and interfaces prototyped in that header file are listed below.
 </p>

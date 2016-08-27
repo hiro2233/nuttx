@@ -131,7 +131,7 @@ Configurations
     change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -163,7 +163,6 @@ Configurations
 
        Drivers
         CONFIG_I2C=y
-        CONFIG_I2C_TRANSFER=y
 
        Applications -> System Add-Ons
          CONFIG_SYSTEM_I2CTOOL=y
@@ -214,7 +213,6 @@ Configurations
 
        Drivers
         CONFIG_I2C=y
-        CONFIG_I2C_TRANSFER=y
 
        Applications -> System Add-Ons
          CONFIG_SYSTEM_I2CTOOL=y

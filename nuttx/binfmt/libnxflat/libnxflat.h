@@ -59,11 +59,9 @@
  * Name: nxflat_addrenv_alloc
  *
  * Description:
- *   Allocate memory for the ELF image (elfalloc). If CONFIG_ADDRENV=n,
- *   elfalloc will be allocated using kzalloc().  If CONFIG_ADDRENV-y, then
- *   elfalloc will be allocated using up_addrenv_create().  In either case,
- *   there will be a unique instance of elfalloc (and stack) for each
- *   instance of a process.
+ *   Allocate data memory for the NXFLAT image. If CONFIG_ARCH_ADDRENV=n,
+ *   memory will be allocated using kmm_zalloc().  If CONFIG_ARCH_ADDRENV-y,
+ *   then memory will be allocated using up_addrenv_create().
  *
  * Input Parameters:
  *   loadinfo - Load state information
@@ -91,8 +89,8 @@ int nxflat_addrenv_alloc(FAR struct nxflat_loadinfo_s *loadinfo, size_t envsize)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_ADDRENV
-#  define nxflat_addrenv_select(l) up_addrenv_select((l)->addrenv, &(l)->oldenv)
+#ifdef CONFIG_ARCH_ADDRENV
+#  define nxflat_addrenv_select(l) up_addrenv_select(&(l)->addrenv, &(l)->oldenv)
 #endif
 
 /****************************************************************************
@@ -109,8 +107,8 @@ int nxflat_addrenv_alloc(FAR struct nxflat_loadinfo_s *loadinfo, size_t envsize)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_ADDRENV
-#  define nxflat_addrenv_restore(l) up_addrenv_restore((l)->oldenv)
+#ifdef CONFIG_ARCH_ADDRENV
+#  define nxflat_addrenv_restore(l) up_addrenv_restore(&(l)->oldenv)
 #endif
 
 /****************************************************************************
@@ -118,7 +116,7 @@ int nxflat_addrenv_alloc(FAR struct nxflat_loadinfo_s *loadinfo, size_t envsize)
  *
  * Description:
  *   Release the address environment previously created by
- *   nxflat_addrenv_create().  This function  is called only under certain
+ *   nxflat_addrenv_alloc().  This function  is called only under certain
  *   error conditions after the module has been loaded but not yet
  *   started. After the module has been started, the address environment
  *   will automatically be freed when the module exits.

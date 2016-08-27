@@ -35,96 +35,57 @@
 
 -include $(TOPDIR)/Make.defs
 
-CFLAGS		+= -I$(TOPDIR)/sched
-
-ASRCS		=
-AOBJS		= $(ASRCS:.S=$(OBJEXT))
-
-CSRCS		= up_boot.c up_leds.c up_buttons.c up_spi.c up_usbdev.c
+ASRCS =
+CSRCS = stm32_boot.c stm32_leds.c stm32_spi.c stm32_usbdev.c
 
 ifeq ($(CONFIG_STM32_FSMC),y)
-CSRCS		+= up_lcd.c up_extcontext.c up_extmem.c up_selectnor.c \
-			  up_deselectnor.c up_selectsram.c up_deselectsram.c \
-			  up_selectlcd.c up_deselectlcd.c
+CSRCS += stm32_lcd.c stm32_extcontext.c stm32_extmem.c stm32_selectnor.c
+CSRCS += stm32_deselectnor.c stm32_selectsram.c stm32_deselectsram.c
+CSRCS += stm32_selectlcd.c stm32_deselectlcd.c
 endif
 
-ifeq ($(CONFIG_NSH_ARCHINIT),y)
-CSRCS		+= up_nsh.c
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+CSRCS += stm32_appinit.c
 endif
 
 ifeq ($(CONFIG_ADC),y)
-CSRCS		+= up_adc.c
+CSRCS += stm32_adc.c
 endif
 
 ifeq ($(CONFIG_USBMSC),y)
-CSRCS		+= up_usbmsc.c
+CSRCS += stm32_usbmsc.c
 endif
 
 ifeq ($(CONFIG_USBDEV_COMPOSITE),y)
-CSRCS		+= up_composite.c
+CSRCS += stm32_composite.c
 endif
 
 ifeq ($(CONFIG_I2C_LM75),y)
-CSRCS		+= up_lm75.c
+CSRCS += stm32_lm75.c
 endif
 
 ifeq ($(CONFIG_CAN),y)
-CSRCS		+= up_can.c
-endif
-
-ifeq ($(CONFIG_WATCHDOG),y)
-CSRCS		+= up_watchdog.c
+CSRCS += stm32_can.c
 endif
 
 ifeq ($(CONFIG_ARCH_CUSTOM_PMINIT),y)
-CSRCS		+= up_pm.c
+CSRCS += stm32_pm.c
 endif
 
+ifeq ($(CONFIG_ARCH_BUTTONS),y)
+CSRCS += stm32_buttons.c
+
 ifeq ($(CONFIG_PM_BUTTONS),y)
-CSRCS		+= up_pmbuttons.c
+CSRCS += stm32_pmbuttons.c
+endif
+endif
+
+ifeq ($(CONFIG_DJOYSTICK),y)
+CSRCS += stm32_djoystick.c
 endif
 
 ifeq ($(CONFIG_ARCH_IDLE_CUSTOM),y)
-CSRCS		+= up_idle.c
+CSRCS += stm32_idle.c
 endif
 
-COBJS		= $(CSRCS:.c=$(OBJEXT))
-
-SRCS		= $(ASRCS) $(CSRCS)
-OBJS		= $(AOBJS) $(COBJS)
-
-ARCH_SRCDIR	= $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(WINTOOL),y)
-  CFLAGS	+= -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/armv7-m}"
-else
-  CFLAGS	+= -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/armv7-m
-endif
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

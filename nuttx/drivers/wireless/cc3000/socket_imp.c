@@ -1,6 +1,7 @@
 /****************************************************************************
- * drivers/wireless/socket_imp.c  - CC3000 Host Driver Implementation.
- *  Copyright (C) 2011 Texas Instruments Incorporated - http://www.ti.com/
+ * drivers/wireless/cc3000/socket_imp.c  - CC3000 Host Driver Implementation.
+ *
+ *   Copyright (C) 2011 Texas Instruments Incorporated - http://www.ti.com/
  *
  *   Port to nuttx:
  *      David Sidrane <david_s5@nscdg.com>
@@ -33,25 +34,27 @@
  *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
-/*****************************************************************************
+/****************************************************************************
  * Included Files
- *****************************************************************************/
+ ****************************************************************************/
 
+#include <sys/time.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <debug.h>
 #include <stdlib.h>
+
 #include <nuttx/wireless/cc3000/hci.h>
 #include "cc3000_socket.h"
 #include <nuttx/wireless/cc3000/evnt_handler.h>
 #include <nuttx/wireless/cc3000/netapp.h>
 
-/*****************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- *****************************************************************************/
+ ****************************************************************************/
 
 /* Enable this flag if and only if you must comply with BSD socket close()
  * function
@@ -99,10 +102,10 @@
 
 #define MDNS_DEVICE_SERVICE_MAX_LENGTH    (32)
 
-/*****************************************************************************
+/****************************************************************************
  * Public Functions
- *****************************************************************************/
-/*****************************************************************************
+ ****************************************************************************/
+/****************************************************************************
  * Name: HostFlowControlConsumeBuff
  *
  * Input Parameters:
@@ -119,7 +122,7 @@
  *   becomes available, else return immediately  with correct status
  *   regarding the buffers available.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 int HostFlowControlConsumeBuff(int sd)
 {
@@ -195,7 +198,7 @@ int HostFlowControlConsumeBuff(int sd)
 #endif
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: socket
  *
  * Decription:
@@ -216,7 +219,7 @@ int HostFlowControlConsumeBuff(int sd)
  *   On success, socket handle that is used for consequent socket
  *    operations. On error, -1 is returned.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 int cc3000_socket_impl(long domain, long type, long protocol)
 {
@@ -248,7 +251,7 @@ int cc3000_socket_impl(long domain, long type, long protocol)
   return ret;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: closesocket
  *
  * Decription:
@@ -260,7 +263,7 @@ int cc3000_socket_impl(long domain, long type, long protocol)
  * Returned Value:
  *   On success, zero is returned. On error, -1 is returned.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 long cc3000_closesocket_impl(long sd)
 {
@@ -294,7 +297,7 @@ long cc3000_closesocket_impl(long sd)
   return ret;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: accept
  *
  * Decription:
@@ -337,7 +340,7 @@ long cc3000_closesocket_impl(long sd)
  *   - On connection pending, SOC_IN_PROGRESS (-2)
  *   - On failure, SOC_ERROR  (-1)
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 long cc3000_accept_impl(long sd, struct sockaddr *addr, socklen_t *addrlen)
 {
@@ -383,7 +386,7 @@ long cc3000_accept_impl(long sd, struct sockaddr *addr, socklen_t *addrlen)
   return ret;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: bind
  *
  * Decription:
@@ -404,7 +407,7 @@ long cc3000_accept_impl(long sd, struct sockaddr *addr, socklen_t *addrlen)
  * Returned Value:
  *   On success, zero is returned. On error, -1 is returned.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 long cc3000_bind_impl(long sd, const struct sockaddr *addr, socklen_t addrlen)
 {
@@ -437,7 +440,7 @@ long cc3000_bind_impl(long sd, const struct sockaddr *addr, socklen_t addrlen)
   return ret;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: listen
  *
  * Decription:
@@ -459,7 +462,7 @@ long cc3000_bind_impl(long sd, const struct sockaddr *addr, socklen_t addrlen)
  * Returned Value:
  *   On success, zero is returned. On error, -1 is returned.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 long cc3000_listen_impl(long sd, long backlog)
 {
@@ -488,7 +491,7 @@ long cc3000_listen_impl(long sd, long backlog)
   return ret;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: gethostbyname
  *
  * Decription:
@@ -509,10 +512,11 @@ long cc3000_listen_impl(long sd, long backlog)
  * Returned Value:
  *   On success, positive is returned. On error, negative is returned
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 #ifndef CC3000_TINY_DRIVER
-int cc3000_gethostbyname_impl(char * hostname, uint16_t usNameLen, unsigned long* out_ip_addr)
+int cc3000_gethostbyname_impl(char *hostname, uint16_t usNameLen,
+                              unsigned long *out_ip_addr)
 {
   tBsdGethostbynameParams ret;
   uint8_t *ptr, *args;
@@ -544,13 +548,13 @@ int cc3000_gethostbyname_impl(char * hostname, uint16_t usNameLen, unsigned long
 
   set_errno(ret.retVal);
 
-  (*((long*)out_ip_addr)) = ret.outputAddress;
+  (*((FAR long *)out_ip_addr)) = ret.outputAddress;
 
   return ret.retVal;
 }
 #endif
 
-/*****************************************************************************
+/****************************************************************************
  * Name: connect
  *
  * Decription:
@@ -578,7 +582,7 @@ int cc3000_gethostbyname_impl(char * hostname, uint16_t usNameLen, unsigned long
  * Returned Value:
  *   On success, zero is returned. On error, -1 is returned
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 long cc3000_connect_impl(long sd, const struct sockaddr *addr, socklen_t addrlen)
 {
@@ -610,7 +614,7 @@ long cc3000_connect_impl(long sd, const struct sockaddr *addr, socklen_t addrlen
   return (long)ret;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: select
  *
  * Decription:
@@ -647,7 +651,7 @@ long cc3000_connect_impl(long sd, const struct sockaddr *addr, socklen_t addrlen
  *     will return without delay.
  *   *exceptsds - return the sockets which closed recently.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 int cc3000_select_impl(long nfds, TICC3000fd_set *readsds, TICC3000fd_set *writesds,
            TICC3000fd_set *exceptsds, struct timeval *timeout)
@@ -678,9 +682,9 @@ int cc3000_select_impl(long nfds, TICC3000fd_set *readsds, TICC3000fd_set *write
   args = UINT32_TO_STREAM(args, 0x00000014);
   args = UINT32_TO_STREAM(args, 0x00000014);
   args = UINT32_TO_STREAM(args, is_blocking);
-  args = UINT32_TO_STREAM(args, ((readsds) ? *(unsigned long*)readsds : 0));
-  args = UINT32_TO_STREAM(args, ((writesds) ? *(unsigned long*)writesds : 0));
-  args = UINT32_TO_STREAM(args, ((exceptsds) ? *(unsigned long*)exceptsds : 0));
+  args = UINT32_TO_STREAM(args, ((readsds) ? *(FAR unsigned long *)readsds : 0));
+  args = UINT32_TO_STREAM(args, ((writesds) ? *(FAR unsigned long *)writesds : 0));
+  args = UINT32_TO_STREAM(args, ((exceptsds) ? *(FAR unsigned long *)exceptsds : 0));
 
   if (timeout)
     {
@@ -730,7 +734,7 @@ int cc3000_select_impl(long nfds, TICC3000fd_set *readsds, TICC3000fd_set *write
     }
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: setsockopt
  *
  * Decription:
@@ -776,7 +780,7 @@ int cc3000_select_impl(long nfds, TICC3000fd_set *readsds, TICC3000fd_set *write
  * Returned Value:
  *   On success, zero is returned. On error, -1 is returned
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 #ifndef CC3000_TINY_DRIVER
 int cc3000_setsockopt_impl(long sd, long level, long optname, const void *optval, socklen_t optlen)
@@ -817,7 +821,7 @@ int cc3000_setsockopt_impl(long sd, long level, long optname, const void *optval
 }
 #endif
 
-/*****************************************************************************
+/****************************************************************************
  * Name: getsockopt
  *
  * Decription:
@@ -863,7 +867,7 @@ int cc3000_setsockopt_impl(long sd, long level, long optname, const void *optval
  * Returned Value:
  *   On success, zero is returned. On error, -1 is returned
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 int cc3000_getsockopt_impl(long sd, long level, long optname, void *optval, socklen_t *optlen)
 {
@@ -901,7 +905,7 @@ int cc3000_getsockopt_impl(long sd, long level, long optname, void *optval, sock
     }
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: simple_link_recv
  *
  * Input Parameters:
@@ -923,7 +927,7 @@ int cc3000_getsockopt_impl(long sd, long level, long optname, void *optval, sock
  *     excess bytes may be discarded depending on the type of
  *     socket the message is received from
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 int simple_link_recv(long sd, void *buf, long len, long flags, struct sockaddr *from,
                      socklen_t *fromlen, long opcode)
@@ -963,7 +967,7 @@ int simple_link_recv(long sd, void *buf, long len, long flags, struct sockaddr *
   return tSocketReadEvent.iNumberOfBytes;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: recv
  *
  * Decription:
@@ -983,14 +987,14 @@ int simple_link_recv(long sd, void *buf, long len, long flags, struct sockaddr *
  *     Return the number of bytes received, or -1 if an error
  *     occurred
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 int cc3000_recv_impl(long sd, void *buf, long len, long flags)
 {
   return(simple_link_recv(sd, buf, len, flags, NULL, NULL, HCI_CMND_RECV));
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: recvfrom
  *
  * Decription:
@@ -1017,7 +1021,7 @@ int cc3000_recv_impl(long sd, void *buf, long len, long flags)
  *     Return the number of bytes received, or -1 if an error
  *     occurred
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 int cc3000_recvfrom_impl(long sd, void *buf, long len, long flags, struct sockaddr *from,
              socklen_t *fromlen)
@@ -1026,7 +1030,7 @@ int cc3000_recvfrom_impl(long sd, void *buf, long len, long flags, struct sockad
                           HCI_CMND_RECVFROM));
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: simple_link_send
  *
  * Input Parameters:
@@ -1047,7 +1051,7 @@ int cc3000_recvfrom_impl(long sd, void *buf, long len, long flags, struct sockad
  *     This function is used to transmit a message to another
  *     socket
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 int simple_link_send(long sd, const void *buf, long len, long flags,
                      const struct sockaddr *to, long tolen, long opcode)
@@ -1076,7 +1080,7 @@ int simple_link_send(long sd, const void *buf, long len, long flags,
 
   /* Update the offset of data and parameters according to the command */
 
-  switch(opcode)
+  switch (opcode)
     {
     case HCI_CMND_SENDTO:
       {
@@ -1117,18 +1121,18 @@ int simple_link_send(long sd, const void *buf, long len, long flags,
 
   /* Copy the data received from user into the TX Buffer */
 
-  ARRAY_TO_STREAM(pDataPtr, ((uint8_t *)buf), len);
+  ARRAY_TO_STREAM(pDataPtr, ((FAR uint8_t *)buf), len);
 
   /* In case we are using SendTo, copy the to parameters */
 
   if (opcode == HCI_CMND_SENDTO)
     {
-      ARRAY_TO_STREAM(pDataPtr, ((uint8_t *)to), tolen);
+      ARRAY_TO_STREAM(pDataPtr, ((FAR uint8_t *)to), tolen);
     }
 
   /* Initiate a HCI command */
 
-  hci_data_send(opcode, ptr, uArgSize, len,(uint8_t*)to, tolen);
+  hci_data_send(opcode, ptr, uArgSize, len, (FAR uint8_t *)to, tolen);
 
   if (opcode == HCI_CMND_SENDTO)
     {
@@ -1142,7 +1146,7 @@ int simple_link_send(long sd, const void *buf, long len, long flags,
   return len;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: send
  *
  * Decription:
@@ -1162,14 +1166,14 @@ int simple_link_send(long sd, const void *buf, long len, long flags,
  *     Return the number of bytes transmitted, or -1 if an
  *     error occurred
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 int cc3000_send_impl(long sd, const void *buf, long len, long flags)
 {
   return(simple_link_send(sd, buf, len, flags, NULL, 0, HCI_CMND_SEND));
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: sendto
  *
  * Decription:
@@ -1193,7 +1197,7 @@ int cc3000_send_impl(long sd, const void *buf, long len, long flags)
  *     Return the number of bytes transmitted, or -1 if an
  *     error occurred
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 int cc3000_sendto_impl(long sd, const void *buf, long len, long flags, const struct sockaddr *to,
            socklen_t tolen)
@@ -1201,7 +1205,7 @@ int cc3000_sendto_impl(long sd, const void *buf, long len, long flags, const str
   return(simple_link_send(sd, buf, len, flags, to, tolen, HCI_CMND_SENDTO));
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: mdnsAdvertiser
  *
  * Decription:
@@ -1217,7 +1221,7 @@ int cc3000_sendto_impl(long sd, const void *buf, long len, long flags, const str
  *   On success, zero is returned, return SOC_ERROR if socket was not
  *   opened successfully, or if an error occurred.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 int cc3000_mdnsadvertiser_impl(uint16_t mdnsEnabled, char * deviceServiceName,
                    uint16_t deviceServiceNameLength)

@@ -108,6 +108,7 @@
 #  define SAM_USART0_BASE      0x400a0000 /* 0x400a0000-0x400a3fff:   USART0 */
 #  define SAM_USART1_BASE      0x400a4000 /* 0x400a4000-0x400abfff:   USART1 */
 #define SAM_TWI_BASE           0x400a8000 /* 0x400a8000-0x400affff: Two-Wire Interface */
+#  define SAM_TWIN_BASE(n)     (SAM_TWI_BASE + ((n) << 14))
 #  define SAM_TWI0_BASE        0x400a8000 /* 0x400a8000-0x400abfff:   Two-Wire Interface 0 */
 #  define SAM_TWI1_BASE        0x400ac000 /* 0x400ac000-0x400affff:   Two-Wire Interface 1 */
 #define SAM_AFEC_BASE          0x400b0000 /* 0x400b0000-0x400b7fff: Analog Front End */
@@ -152,7 +153,7 @@
 /* External RAM memory region */
 
 #define SAM_EXTCS_BASE         0x60000000 /* 0x60000000-0x63ffffff: Chip selects */
-#  define SAM_EXTCSN_BASE(n)   (0x60000000*((n)<<24))
+#  define SAM_EXTCSN_BASE(n)   (0x60000000 + ((n) << 24))
 #  define SAM_EXTCS0_BASE      0x60000000 /* 0x60000000-0x60ffffff:   Chip select 0 */
 #  define SAM_EXTCS1_BASE      0x61000000 /* 0x61000000-0x601fffff:   Chip select 1 */
 #  define SAM_EXTCS2_BASE      0x62000000 /* 0x62000000-0x62ffffff:   Chip select 2 */

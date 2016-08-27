@@ -1,7 +1,7 @@
 /****************************************************************************
  * netutils/ntpclient/ntpclient.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
 #include <nuttx/config.h>
 
 #include <sys/socket.h>
+#include <sys/time.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,13 +50,31 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <apps/netutils/ntpclient.h>
+#include <netinet/in.h>
+
+#ifdef CONFIG_LIBC_NETDB
+#  include <netdb.h>
+#  include <arpa/inet.h>
+#endif
+
+#include "netutils/ntpclient.h"
 
 #include "ntpv3.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
+/* Configuration ************************************************************/
+
+#if defined(CONFIG_LIBC_NETDB) && !defined(CONFIG_NETUTILS_NTPCLIENT_SERVER)
+#  error CONFIG_NETUTILS_NTPCLIENT_SERVER my be provided
+#endif
+
+#if !defined(CONFIG_LIBC_NETDB) && !defined(CONFIG_NETUTILS_NTPCLIENT_SERVERIP)
+#  error CONFIG_NETUTILS_NTPCLIENT_SERVERIP my be provided
+#endif
+
 /* NTP Time is seconds since 1900. Convert to Unix time which is seconds
  * since 1970
  */
@@ -66,6 +85,7 @@
 /****************************************************************************
  * Private Types
  ****************************************************************************/
+
 /* This enumeration describes the state of the NTP daemon */
 
 enum ntpc_daemon_e
@@ -77,7 +97,7 @@ enum ntpc_daemon_e
   NTP_STOPPED
 };
 
-/* This type describes the state of the NTP client daemon.  Only once
+/* This type describes the state of the NTP client daemon.  Only one
  * instance of the NTP daemon is permitted in this implementation.
  */
 
@@ -102,6 +122,7 @@ static struct ntpc_daemon_s g_ntpc_daemon;
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
+
 /****************************************************************************
  * Name: ntpc_getuint32
  *
@@ -268,7 +289,7 @@ static void ntpc_settime(FAR uint8_t *timestamp)
   tp.tv_nsec = nsec;
   clock_settime(CLOCK_REALTIME, &tp);
 
-  svdbg("Set time to %lu seconds: %d\n", (unsigned long)tp.tv_sec, ret);
+  sinfo("Set time to %lu seconds: %d\n", (unsigned long)tp.tv_sec, ret);
 }
 
 /****************************************************************************
@@ -287,11 +308,18 @@ static int ntpc_daemon(int argc, char **argv)
   struct ntp_datagram_s xmit;
   struct ntp_datagram_s recv;
   struct timeval tv;
+
+#ifdef CONFIG_LIBC_NETDB
+  struct hostent *he;
+  struct in_addr **addr_list;
+#endif
+
   socklen_t socklen;
   ssize_t nbytes;
   int exitcode = EXIT_SUCCESS;
-  int ret;
+  int retry = 0;
   int sd;
+  int ret;
 
   /* Indicate that we have started */
 
@@ -303,7 +331,7 @@ static int ntpc_daemon(int argc, char **argv)
   sd = socket(AF_INET, SOCK_DGRAM, 0);
   if (sd < 0)
     {
-      ndbg("ERROR: socket failed: %d\n", errno);
+      nerr("ERROR: socket failed: %d\n", errno);
 
       g_ntpc_daemon.state = NTP_STOPPED;
       sem_post(&g_ntpc_daemon.interlock);
@@ -318,7 +346,7 @@ static int ntpc_daemon(int argc, char **argv)
   ret = setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(struct timeval));
   if (ret < 0)
     {
-      ndbg("ERROR: setsockopt failed: %d\n", errno);
+      nerr("ERROR: setsockopt failed: %d\n", errno);
 
       g_ntpc_daemon.state = NTP_STOPPED;
       sem_post(&g_ntpc_daemon.interlock);
@@ -332,7 +360,25 @@ static int ntpc_daemon(int argc, char **argv)
   memset(&server, 0, sizeof(struct sockaddr_in));
   server.sin_family      = AF_INET;
   server.sin_port        = htons(CONFIG_NETUTILS_NTPCLIENT_PORTNO);
+
+#ifndef CONFIG_LIBC_NETDB
   server.sin_addr.s_addr = htonl(CONFIG_NETUTILS_NTPCLIENT_SERVERIP);
+#else
+  he = gethostbyname(CONFIG_NETUTILS_NTPCLIENT_SERVER);
+  if (he != NULL && he->h_addrtype == AF_INET)
+    {
+      addr_list = (struct in_addr **)he->h_addr_list;
+      server.sin_addr.s_addr = addr_list[0]->s_addr;
+      ninfo("INFO: '%s' resolved to: %s\n",
+            CONFIG_NETUTILS_NTPCLIENT_SERVER,
+            inet_ntoa(server.sin_addr));
+    }
+  else
+    {
+      nerr("ERROR: Failed to resolve '%s'\n", CONFIG_NETUTILS_NTPCLIENT_SERVER);
+      return EXIT_FAILURE;
+    }
+#endif
 
   /* Here we do the communication with the NTP server.  This is a very simple
    * client architecture.  A request is sent and then a NTP packet is received
@@ -366,7 +412,7 @@ static int ntpc_daemon(int argc, char **argv)
       memset(&xmit, 0, sizeof(xmit));
       xmit.lvm = MKLVM(0, 3, NTP_VERSION);
 
-      svdbg("Sending a NTP packet\n");
+      sinfo("Sending a NTP packet\n");
 
       ret = sendto(sd, &xmit, sizeof(struct ntp_datagram_s),
                    0, (FAR struct sockaddr *)&server,
@@ -381,7 +427,7 @@ static int ntpc_daemon(int argc, char **argv)
           int errval = errno;
           if (errval != EINTR)
             {
-              ndbg("ERROR: sendto() failed: %d\n", errval);
+              nerr("ERROR: sendto() failed: %d\n", errval);
               exitcode = EXIT_FAILURE;
               break;
             }
@@ -408,8 +454,9 @@ static int ntpc_daemon(int argc, char **argv)
 
       if (nbytes >= (ssize_t)NTP_DATAGRAM_MINSIZE)
         {
-          svdbg("Setting time\n");
+          sinfo("Setting time\n");
           ntpc_settime(recv.recvtimestamp);
+          retry = 0;
         }
 
       /* Check for errors.  Note that properly received, short datagrams
@@ -425,7 +472,16 @@ static int ntpc_daemon(int argc, char **argv)
           int errval = errno;
           if (errval != EINTR)
             {
-              ndbg("ERROR: recvfrom() failed: %d\n", errval);
+              /* Allow up to three retries */
+
+              if (++retry < 3)
+                {
+                  continue;
+                }
+
+              /* Then declare the failure */
+
+              nerr("ERROR: recvfrom() failed: %d\n", errval);
               exitcode = EXIT_FAILURE;
               break;
             }
@@ -437,7 +493,7 @@ static int ntpc_daemon(int argc, char **argv)
 
       if (g_ntpc_daemon.state == NTP_RUNNING)
         {
-          svdbg("Waiting for %d seconds\n",
+          sinfo("Waiting for %d seconds\n",
                 CONFIG_NETUTILS_NTPCLIENT_POLLDELAYSEC);
 
           (void)sleep(CONFIG_NETUTILS_NTPCLIENT_POLLDELAYSEC);
@@ -489,7 +545,7 @@ int ntpc_start(void)
 
       g_ntpc_daemon.state = NTP_STARTED;
       g_ntpc_daemon.pid =
-        TASK_CREATE("NTP daemon", CONFIG_NETUTILS_NTPCLIENT_SERVERPRIO,
+        task_create("NTP daemon", CONFIG_NETUTILS_NTPCLIENT_SERVERPRIO,
                     CONFIG_NETUTILS_NTPCLIENT_STACKSIZE, ntpc_daemon,
                     NULL);
 
@@ -501,7 +557,8 @@ int ntpc_start(void)
           DEBUGASSERT(errval > 0);
 
           g_ntpc_daemon.state = NTP_STOPPED;
-          ndbg("ERROR: Failed to start the NTP daemon\n", errval);
+          nerr("ERROR: Failed to start the NTP daemon\n", errval);
+          sched_unlock();
           return -errval;
         }
 
@@ -556,7 +613,7 @@ int ntpc_stop(void)
 
           if (ret < 0)
             {
-              ndbg("ERROR: kill pid %d failed: %d\n",
+              nerr("ERROR: kill pid %d failed: %d\n",
                    g_ntpc_daemon.pid, errno);
               break;
             }

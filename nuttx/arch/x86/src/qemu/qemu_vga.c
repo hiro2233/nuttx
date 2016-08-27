@@ -368,10 +368,11 @@ static int vga_getvideoinfo(FAR struct lcd_dev_s *dev,
 static int vga_getplaneinfo(FAR struct lcd_dev_s *dev, unsigned int planeno,
                             FAR struct lcd_planeinfo_s *pinfo)
 {
-  pinfo->putrun = vga_putrun;       /* Put a run into LCD memory */
-  pinfo->getrun = vga_getrun;       /* Get a run from LCD memory */
-  pinfo->buffer = g_runbuffer;      /* Run scratch buffer */
-  pinfo->bpp    = VGA_BPP;          /* Bits-per-pixel */
+  pinfo->putrun  = vga_putrun;      /* Put a run into LCD memory */
+  pinfo->getrun  = vga_getrun;      /* Get a run from LCD memory */
+  pinfo->buffer  = g_runbuffer;     /* Run scratch buffer */
+  pinfo->display = 0;
+  pinfo->bpp     = VGA_BPP;         /* Bits-per-pixel */
   return OK;
 }
 
@@ -497,7 +498,7 @@ FAR struct lcd_dev_s *qemu_vga_initialize(void)
   int ret = init_graph_vga(VGA_XRES, VGA_YRES, 1);
   if (ret < 0)
     {
-      gdbg("ERROR: init_graph_vga returned %d\n",ret);
+      gerr("ERROR: init_graph_vga returned %d\n",ret);
     }
 
   memset(g_pscreen, 0, VGA_XRES * VGA_YRES);
@@ -509,7 +510,7 @@ void qemu_vga(void)
   int ret = init_graph_vga(VGA_XRES, VGA_YRES, 1);
   if (ret < 0)
     {
-      gdbg("ERROR: init_graph_vga returned %d\n",ret);
+      gerr("ERROR: init_graph_vga returned %d\n",ret);
     }
 
   memset(g_pscreen, g_bg_color, VGA_XRES * VGA_YRES);

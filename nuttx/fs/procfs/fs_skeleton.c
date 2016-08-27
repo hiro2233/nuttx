@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/procfs/fs_skeleton.c
  *
- *   Copyright (C) 2013 Ken Pettit. All rights reserved.
+ *   Copyright (C) 2015 Ken Pettit. All rights reserved.
  *   Author: Ken Pettit <pettitkd@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -110,7 +110,8 @@ static ssize_t skel_read(FAR struct file *filep, FAR char *buffer,
 static int     skel_dup(FAR const struct file *oldp,
                  FAR struct file *newp);
 
-static int     skel_opendir(const char *relpath, FAR struct fs_dirent_s *dir);
+static int     skel_opendir(FAR const char *relpath,
+                 FAR struct fs_dirent_s *dir);
 static int     skel_closedir(FAR struct fs_dirent_s *dir);
 static int     skel_readdir(FAR struct fs_dirent_s *dir);
 static int     skel_rewinddir(FAR struct fs_dirent_s *dir);
@@ -118,11 +119,11 @@ static int     skel_rewinddir(FAR struct fs_dirent_s *dir);
 static int     skel_stat(FAR const char *relpath, FAR struct stat *buf);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /* See include/nutts/fs/procfs.h
@@ -158,11 +159,11 @@ const struct procfs_operations skel_procfsoperations =
  ****************************************************************************/
 
 static int skel_open(FAR struct file *filep, FAR const char *relpath,
-                      int oflags, mode_t mode)
+                     int oflags, mode_t mode)
 {
   FAR struct skel_file_s *priv;
 
-  fvdbg("Open '%s'\n", relpath);
+  finfo("Open '%s'\n", relpath);
 
   /* PROCFS is read-only.  Any attempt to open with any kind of write
    * access is not permitted.
@@ -173,23 +174,25 @@ static int skel_open(FAR struct file *filep, FAR const char *relpath,
   if (((oflags & O_WRONLY) != 0 || (oflags & O_RDONLY) == 0) &&
       (skel_procfsoperations.write == NULL))
     {
-      fdbg("ERROR: Only O_RDONLY supported\n");
+      ferr("ERROR: Only O_RDONLY supported\n");
       return -EACCES;
     }
 
-  /* Allocate a container to hold the task and attribute selection */
+  /* Allocate the open file structure */
 
-  priv = (FAR struct skel_file_s *)kzalloc(sizeof(struct skel_file_s));
+  priv = (FAR struct skel_file_s *)kmm_zalloc(sizeof(struct skel_file_s));
   if (!priv)
     {
-      fdbg("ERROR: Failed to allocate file attributes\n");
+      ferr("ERROR: Failed to allocate file attributes\n");
       return -ENOMEM;
     }
 
   /* TODO: Initialize the context specific data here */
 
 
-  /* Save the index as the open-specific state in filep->f_priv */
+  /* Save the open file structure as the open-specific state in
+   * filep->f_priv.
+   */
 
   filep->f_priv = (FAR void *)priv;
   return OK;
@@ -210,7 +213,7 @@ static int skel_close(FAR struct file *filep)
 
   /* Release the file attributes structure */
 
-  kfree(priv);
+  kmm_free(priv);
   filep->f_priv = NULL;
   return OK;
 }
@@ -220,12 +223,12 @@ static int skel_close(FAR struct file *filep)
  ****************************************************************************/
 
 static ssize_t skel_read(FAR struct file *filep, FAR char *buffer,
-                           size_t buflen)
+                         size_t buflen)
 {
   FAR struct skel_file_s *priv;
   ssize_t ret;
 
-  fvdbg("buffer=%p buflen=%d\n", buffer, (int)buflen);
+  finfo("buffer=%p buflen=%d\n", buffer, (int)buflen);
 
   /* Recover our private data from the struct file instance */
 
@@ -259,7 +262,7 @@ static int skel_dup(FAR const struct file *oldp, FAR struct file *newp)
   FAR struct skel_file_s *oldpriv;
   FAR struct skel_file_s *newpriv;
 
-  fvdbg("Dup %p->%p\n", oldp, newp);
+  finfo("Dup %p->%p\n", oldp, newp);
 
   /* Recover our private data from the old struct file instance */
 
@@ -268,10 +271,10 @@ static int skel_dup(FAR const struct file *oldp, FAR struct file *newp)
 
   /* Allocate a new container to hold the task and attribute selection */
 
-  newpriv = (FAR struct skel_file_s *)kzalloc(sizeof(struct skel_file_s));
+  newpriv = (FAR struct skel_file_s *)kmm_zalloc(sizeof(struct skel_file_s));
   if (!newpriv)
     {
-      fdbg("ERROR: Failed to allocate file attributes\n");
+      ferr("ERROR: Failed to allocate file attributes\n");
       return -ENOMEM;
     }
 
@@ -297,7 +300,7 @@ static int skel_opendir(FAR const char *relpath, FAR struct fs_dirent_s *dir)
 {
   FAR struct skel_level1_s *level1;
 
-  fvdbg("relpath: \"%s\"\n", relpath ? relpath : "NULL");
+  finfo("relpath: \"%s\"\n", relpath ? relpath : "NULL");
   DEBUGASSERT(relpath && dir && !dir->u.procfs);
 
   /* The path refers to the 1st level sbdirectory.  Allocate the level1
@@ -305,11 +308,11 @@ static int skel_opendir(FAR const char *relpath, FAR struct fs_dirent_s *dir)
    */
 
   level1 = (FAR struct skel_level1_s *)
-     kzalloc(sizeof(struct skel_level1_s));
+     kmm_zalloc(sizeof(struct skel_level1_s));
 
   if (!level1)
     {
-      fdbg("ERROR: Failed to allocate the level1 directory structure\n");
+      ferr("ERROR: Failed to allocate the level1 directory structure\n");
       return -ENOMEM;
     }
 
@@ -342,7 +345,7 @@ static int skel_closedir(FAR struct fs_dirent_s *dir)
 
   if (priv)
     {
-      kfree(priv);
+      kmm_free(priv);
     }
 
   dir->u.procfs = NULL;
@@ -356,11 +359,12 @@ static int skel_closedir(FAR struct fs_dirent_s *dir)
  *
  ****************************************************************************/
 
-static int skel_readdir(struct fs_dirent_s *dir)
+static int skel_readdir(FAR struct fs_dirent_s *dir)
 {
   FAR struct skel_level1_s *level1;
   char  filename[16];
-  int ret, index;
+  int index;
+  int ret;
 
   DEBUGASSERT(dir && dir->u.procfs);
   level1 = dir->u.procfs;
@@ -379,7 +383,7 @@ static int skel_readdir(struct fs_dirent_s *dir)
        * error -ENOENT
        */
 
-      fvdbg("Entry %d: End of directory\n", index);
+      finfo("Entry %d: End of directory\n", index);
       ret = -ENOENT;
     }
 
@@ -396,12 +400,13 @@ static int skel_readdir(struct fs_dirent_s *dir)
       /* TODO:  Specify the type of entry */
 
       dir->fd_dir.d_type = DTYPE_FILE;
-      strncpy(dir->fd_dir.d_name, filename, NAME_MAX+1);
+      strncpy(dir->fd_dir.d_name, filename, NAME_MAX + 1);
 
       /* Set up the next directory entry offset.  NOTE that we could use the
        * standard f_pos instead of our own private index.
        */
 
+      level1->base.index = index + 1;
       ret = OK;
     }
 
@@ -415,7 +420,7 @@ static int skel_readdir(struct fs_dirent_s *dir)
  *
  ****************************************************************************/
 
-static int skel_rewinddir(struct fs_dirent_s *dir)
+static int skel_rewinddir(FAR struct fs_dirent_s *dir)
 {
   FAR struct skel_level1_s *priv;
 
@@ -433,7 +438,7 @@ static int skel_rewinddir(struct fs_dirent_s *dir)
  *
  ****************************************************************************/
 
-static int skel_stat(const char *relpath, struct stat *buf)
+static int skel_stat(FAR const char *relpath, FAR truct stat *buf)
 {
   int ret = -ENOENT;
 
@@ -441,7 +446,7 @@ static int skel_stat(const char *relpath, struct stat *buf)
    *        or a directory and set it's permissions.
    */
 
-  buf->st_mode = S_IFDIR|S_IROTH|S_IRGRP|S_IRUSR;
+  buf->st_mode = S_IFDIR | S_IROTH | S_IRGRP | S_IRUSR;
   ret = OK;
 
   /* File/directory size, access block size */

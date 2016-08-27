@@ -114,7 +114,8 @@ struct nsh_vtbl_s
   void (*addref)(FAR struct nsh_vtbl_s *vtbl);
   void (*release)(FAR struct nsh_vtbl_s *vtbl);
 #endif
-  ssize_t (*write)(FAR struct nsh_vtbl_s *vtbl, FAR const void *buffer, size_t nbytes);
+  ssize_t (*write)(FAR struct nsh_vtbl_s *vtbl, FAR const void *buffer,
+                   size_t nbytes);
   int (*output)(FAR struct nsh_vtbl_s *vtbl, FAR const char *fmt, ...);
   FAR char *(*linebuffer)(FAR struct nsh_vtbl_s *vtbl);
 #if CONFIG_NFILE_DESCRIPTORS > 0
@@ -122,6 +123,12 @@ struct nsh_vtbl_s
   void (*undirect)(FAR struct nsh_vtbl_s *vtbl, FAR uint8_t *save);
 #endif
   void (*exit)(FAR struct nsh_vtbl_s *vtbl, int exitstatus) noreturn_function;
+
+#ifdef NSH_HAVE_IOBUFFER
+/* Common buffer for file I/O. */
+
+  char iobuffer[IOBUFFERSIZE];
+#endif
 
   /* Parser state data */
 

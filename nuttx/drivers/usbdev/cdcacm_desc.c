@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/usbdev/cdcacm_desc.c
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -472,6 +472,11 @@ int cdcacm_mkstrdesc(uint8_t id, struct usb_strdesc_s *strdesc)
     */
 
    len = strlen(str);
+   if (len > (CDCACM_MAXSTRLEN / 2))
+     {
+       len = (CDCACM_MAXSTRLEN / 2);
+     }
+
    for (i = 0, ndata = 0; i < len; i++, ndata += 2)
      {
        strdesc->data[ndata]   = str[i];
@@ -597,7 +602,7 @@ int16_t cdcacm_mkcfgdesc(FAR uint8_t *buf)
         {
           cdcacm_cpepdesc((FAR const struct usb_epdesc_s *)group->desc,
                           group->hsepsize,
-                          (FAR struct usb_epdesc_s*)dest);
+                          (FAR struct usb_epdesc_s *)dest);
         }
       else
 #endif

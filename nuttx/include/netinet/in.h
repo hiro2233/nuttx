@@ -33,8 +33,8 @@
  *
  ****************************************************************************/
 
-#ifndef __INCLUDE_NETINET_IP_H
-#define __INCLUDE_NETINET_IP_H
+#ifndef __INCLUDE_NETINET_IN_H
+#define __INCLUDE_NETINET_IN_H
 
 /****************************************************************************
  * Included Files
@@ -87,6 +87,11 @@
 #define MCAST_EXCLUDE         0
 #define MCAST_INCLUDE         1
 
+/* Test if an IPv4 address is a multicast address */
+
+#define IN_CLASSD(i)          (((uint32_t)(i) & 0xf0000000) == 0xe0000000)
+#define IN_MULTICAST(i)       IN_CLASSD(i)
+
 /* Special values of in_addr_t */
 
 #define INADDR_ANY            ((in_addr_t)0x00000000) /* Address to accept any incoming messages */
@@ -105,6 +110,28 @@
 #define s6_addr16             in6_u.u6_addr16
 #define s6_addr32             in6_u.u6_addr32
 
+/* Checks for special IPv6 addresses */
+
+#define IN6_IS_ADDR_MULTICAST(a) \
+  ((a)->s6_addr[0] == 0xff)
+
+#define IN6_IS_ADDR_LOOPBACK(a) \
+  ((a)->s6_addr32[0] == 0 && \
+   (a)->s6_addr32[1] == 0 && \
+   (a)->s6_addr32[2] == 0 && \
+   (a)->s6_addr32[3] == HTONL(1))
+
+#define IN6_IS_ADDR_UNSPECIFIED(a) \
+  ((a)->s6_addr32[0] == 0 && \
+   (a)->s6_addr32[1] == 0 && \
+   (a)->s6_addr32[2] == 0 && \
+   (a)->s6_addr32[3] == 0)
+
+#define IN6_IS_ADDR_V4MAPPED(a) \
+  ((a)->s6_addr32[0] == 0 && \
+   (a)->s6_addr32[1] == 0 && \
+   (a)->s6_addr32[2] == HTONL(0xffff))
+
 /****************************************************************************
  * Public Type Definitions
  ****************************************************************************/
@@ -112,6 +139,8 @@
 /****************************************************************************
  * Public Type Definitions
  ****************************************************************************/
+
+typedef uint16_t in_port_t;
 
 /* IPv4 Internet address */
 
@@ -143,13 +172,35 @@ struct in6_addr
 
 struct sockaddr_in6
 {
-  sa_family_t     sin_family;  /* Address family: AF_INET */
-  uint16_t        sin_port;    /* Port in network byte order */
+  sa_family_t     sin6_family; /* Address family: AF_INET */
+  uint16_t        sin6_port;   /* Port in network byte order */
   struct in6_addr sin6_addr;   /* IPv6 internet address */
 };
+
+/****************************************************************************
+ * Public Data
+ ****************************************************************************/
+
+#undef EXTERN
+#if defined(__cplusplus)
+#define EXTERN extern "C"
+extern "C"
+{
+#else
+#define EXTERN extern
+#endif
+
+/* Global IPv6 in6addr_any */
+
+EXTERN const struct in6_addr in6addr_any;
 
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
-#endif /* __INCLUDE_NETINET_IP_H */
+#undef EXTERN
+#if defined(__cplusplus)
+}
+#endif
+
+#endif /* __INCLUDE_NETINET_IN_H */

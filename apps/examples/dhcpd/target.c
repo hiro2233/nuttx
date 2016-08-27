@@ -44,8 +44,8 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 
-#include <apps/netutils/uiplib.h>
-#include <apps/netutils/dhcpd.h>
+#include "netutils/netlib.h"
+#include "netutils/dhcpd.h"
 
 /****************************************************************************
  * Preprocessor Definitions
@@ -89,7 +89,11 @@
  * Name: dhcpd_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int dhcpd_main(int argc, char *argv[])
+#endif
 {
   struct in_addr addr;
 #if defined(CONFIG_EXAMPLES_DHCPD_NOMAC)
@@ -105,23 +109,23 @@ int dhcpd_main(int argc, char *argv[])
   mac[3] = 0xad;
   mac[4] = 0xbe;
   mac[5] = 0xef;
-  uip_setmacaddr("eth0", mac);
+  netlib_setmacaddr("eth0", mac);
 #endif
 
   /* Set up our host address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_DHCPD_IPADDR);
-  uip_sethostaddr("eth0", &addr);
+  netlib_set_ipv4addr("eth0", &addr);
 
   /* Set up the default router address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_DHCPD_DRIPADDR);
-  uip_setdraddr("eth0", &addr);
+  netlib_set_dripv4addr("eth0", &addr);
 
   /* Setup the subnet mask */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_DHCPD_NETMASK);
-  uip_setnetmask("eth0", &addr);
+  netlib_set_ipv4netmask("eth0", &addr);
 
   /* Then start the server */
 

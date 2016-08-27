@@ -46,7 +46,7 @@
 #include "nxfe.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -88,7 +88,7 @@
 int nx_move(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect,
             FAR const struct nxgl_point_s *offset)
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!hwnd)
     {
       errno = EINVAL;

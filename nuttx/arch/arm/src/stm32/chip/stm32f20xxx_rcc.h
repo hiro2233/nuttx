@@ -1,7 +1,7 @@
 /****************************************************************************************************
  * arch/arm/src/stm32/chip/stm32f20xxx_rcc.h
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -60,7 +60,7 @@
 #define STM32_RCC_AH2BLPENR_OFFSET  0x0054  /* RCC AHB2 low power modeperipheral clock enable register */
 #define STM32_RCC_AH3BLPENR_OFFSET  0x0058  /* RCC AHB3 low power modeperipheral clock enable register */
 #define STM32_RCC_APB1LPENR_OFFSET  0x0060  /* RCC APB1 low power modeperipheral clock enable register */
-#define STM32_RCC_APB2LPENR_OFFSET  0x0060  /* RCC APB2 low power modeperipheral clock enable register */
+#define STM32_RCC_APB2LPENR_OFFSET  0x0064  /* RCC APB2 low power modeperipheral clock enable register */
 #define STM32_RCC_BDCR_OFFSET       0x0070  /* Backup domain control register */
 #define STM32_RCC_CSR_OFFSET        0x0074  /* Control/status register */
 #define STM32_RCC_SSCGR_OFFSET      0x0080  /* Spread spectrum clock generation register */
@@ -176,8 +176,8 @@
 #  define RCC_CFGR_PPRE2_HCLKd8     (6 << RCC_CFGR_PPRE2_SHIFT) /* 110: HCLK divided by 8 */
 #  define RCC_CFGR_PPRE2_HCLKd16    (7 << RCC_CFGR_PPRE2_SHIFT) /* 111: HCLK divided by 16 */
 #define RCC_CFGR_RTCPRE_SHIFT       (16)      /* Bits 16-20: APB High speed prescaler (APB2) */
-#define RCC_CFGR_RTCPRE_MASK        (31 << RCC_CFGR_RTCPRE)
-#  define RCC_CFGR_RTCPRE(n)        ((n) << RCC_CFGR_RTCPRE) /* HSE/n, n=1..31 */
+#define RCC_CFGR_RTCPRE_MASK        (31 << RCC_CFGR_RTCPRE_SHIFT)
+#  define RCC_CFGR_RTCPRE(n)        ((n) << RCC_CFGR_RTCPRE_SHIFT) /* HSE/n, n=1..31 */
 #define RCC_CFGR_MCO1_SHIFT         (21)      /* Bits 21-22: Microcontroller Clock Output */
 #define RCC_CFGR_MCO1_MASK          (3 << RCC_CFGR_MCO1_SHIFT)
 #  define RCC_CFGR_MCO1_HSI         (0 << RCC_CFGR_MCO1_SHIFT) /* 00: HSI clock selected */
@@ -357,6 +357,8 @@
 #define RCC_APB1ENR_CAN2EN           (1 << 26) /* Bit 26: CAN 2 clock enable */
 #define RCC_APB1ENR_PWREN            (1 << 28) /* Bit 28: Power interface clock enable */
 #define RCC_APB1ENR_DACEN            (1 << 29) /* Bit 29: DAC interface clock enable */
+#define RCC_APB1ENR_UART7EN          (1 << 30) /* Bit 30: UART7 clock enable */
+#define RCC_APB1ENR_UART8EN          (1 << 31) /* Bit 31: UART8 clock enable */
 
 /* APB2 Peripheral Clock enable register */
 

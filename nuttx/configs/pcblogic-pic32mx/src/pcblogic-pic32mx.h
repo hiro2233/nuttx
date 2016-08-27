@@ -1,5 +1,5 @@
 /****************************************************************************
- * configs/pcblogic-pic32mx/src/pcblogic-internal.h
+ * configs/pcblogic-pic32mx/src/pcblogic.h
  *
  *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -43,7 +43,7 @@
 #include <nuttx/config.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 
@@ -69,7 +69,7 @@ extern "C" {
 #endif
 
 /************************************************************************************
- * Name: pic32mx_spiinitialize
+ * Name: pic32mx_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the PCB Logic board.
@@ -77,11 +77,11 @@ extern "C" {
  ************************************************************************************/
 
 #if defined(CONFIG_PIC32MX_SPI1) || defined(CONFIG_PIC32MX_SPI2)
-EXTERN void weak_function pic32mx_spiinitialize(void);
+EXTERN void weak_function pic32mx_spidev_initialize(void);
 #endif
 
 /************************************************************************************
- * Name: pic32mx_ledinit
+ * Name: pic32mx_led_initialize
  *
  * Description:
  *   Configure on-board LEDs if LED support has been selected.
@@ -89,7 +89,7 @@ EXTERN void weak_function pic32mx_spiinitialize(void);
  ************************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-EXTERN void pic32mx_ledinit(void);
+EXTERN void pic32mx_led_initialize(void);
 #endif
 
 #undef EXTERN

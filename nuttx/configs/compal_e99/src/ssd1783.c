@@ -40,6 +40,10 @@
  *
  ************************************************************************************/
 
+/************************************************************************************
+ * Included Files
+ ************************************************************************************/
+
 #include <nuttx/config.h>
 #include <nuttx/video/fb.h>
 
@@ -50,29 +54,29 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <nuttx/board.h>
 #include <arch/calypso/uwire.h>
 #include <arch/calypso/clock.h>
 
 #include "up_arch.h"
 #include "ssd1783.h"
 
+/************************************************************************************
+ * Pre-processor Definitions
+ ************************************************************************************/
+
 /* Color depth and format */
+
 #define LCD_BPP          16
 #define LCD_COLORFMT     FB_FMT_RGB16_555
 
 /* Display Resolution */
-#  define LCD_XRES       98
-#  define LCD_YRES       67
 
-/* Debug ******************************************************************************/
+#define LCD_XRES         98
+#define LCD_YRES         67
 
-#ifdef CONFIG_DEBUG_LCD
-# define lcddbg(format, ...)  vdbg(format, ##__VA_ARGS__)
-#else
-# define lcddbg(x...)
-#endif
+/* This should be put elsewhere */
 
-/** This should be put elsewhere */
 #ifdef __CC_ARM               /* ARM Compiler        */
 #define lcd_inline            static __inline
 #elif defined (__ICCARM__)    /* for IAR Compiler */
@@ -137,7 +141,8 @@ static uint16_t g_runbuffer[LCD_XRES];
 /* This structure describes the overall LCD video controller */
 
 static const struct fb_videoinfo_s g_videoinfo =
-{ .fmt = LCD_COLORFMT, /* Color format: RGB16-565: RRRR RGGG GGGB BBBB */
+{
+  .fmt = LCD_COLORFMT, /* Color format: RGB16-565: RRRR RGGG GGGB BBBB */
   .xres = LCD_XRES, /* Horizontal resolution in pixel columns */
   .yres = LCD_YRES, /* Vertical resolutiSend a command list to the LCD panelon in pixel rows */
   .nplanes = 1, /* Number of color planes supported */
@@ -146,7 +151,8 @@ static const struct fb_videoinfo_s g_videoinfo =
 /* This is the standard, NuttX Plane information object */
 
 static const struct lcd_planeinfo_s g_planeinfo =
-{ .putrun = lcd_putrun, /* Put a run into LCD memory */
+{
+  .putrun = lcd_putrun, /* Put a run into LCD memory */
 //  .getrun = lcd_getrun, /* Get a run from LCD memory */
   .buffer = (uint8_t*) g_runbuffer, /* Run scratch buffer */
   .bpp = LCD_BPP, /* Bits-per-pixel */
@@ -155,7 +161,8 @@ static const struct lcd_planeinfo_s g_planeinfo =
 /* This is the standard, NuttX LCD driver object */
 
 static struct ssd1783_dev_s g_lcddev =
-{ .dev =
+{
+  .dev =
   {
     /* LCD Configuration */
 
@@ -175,7 +182,9 @@ static struct ssd1783_dev_s g_lcddev =
 };
 
 /* we trust gcc to move this expensive bitshifting out of
-   the loops in the drawing funtcions */
+ * the loops in the drawing funtcions
+ */
+
 static uint8_t rgb_to_pixel(uint16_t color)
 {
   uint8_t ret;
@@ -188,8 +197,11 @@ static uint8_t rgb_to_pixel(uint16_t color)
 }
 
 /* somehow the palette is messed up, RRR seems to have the
-   bits reversed!  R0 R1 R2 G G G B B ---> R2 R1 R0 G G G B B */
-uint8_t fix_rrr(uint8_t v){
+ * bits reversed!  R0 R1 R2 G G G B B ---> R2 R1 R0 G G G B B 
+ */
+
+uint8_t fix_rrr(uint8_t v)
+{
   return (v & 0x5f) | (v & 0x80) >> 2 | (v & 0x20) << 2;
 }
 
@@ -231,7 +243,8 @@ static void lcd_write_prepare(unsigned int x1, unsigned int x2, unsigned int y1,
     { CMD,  0x5c },                  /* enter write display ram mode */
     { END,  0x00 }
   };
-  dbg("x1:%d, x2:%d, y1:%d, y2:%d\n",x1, x2,y1, y2);
+
+  _info("x1:%d, x2:%d, y1:%d, y2:%d\n",x1, x2,y1, y2);
   fb_ssd1783_send_cmdlist(prepare_disp_write_cmds);
 }
 
@@ -288,7 +301,7 @@ int lcd_putrun(fb_coord_t row, fb_coord_t col, FAR const uint8_t *buffer,
 int lcd_getrun(fb_coord_t row, fb_coord_t col, FAR uint8_t *buffer,
     size_t npixels)
 {
-  gvdbg("Not implemented\n");
+  ginfo("Not implemented\n");
   return -ENOSYS;
 }
 
@@ -303,7 +316,7 @@ int lcd_getrun(fb_coord_t row, fb_coord_t col, FAR uint8_t *buffer,
 static int lcd_getvideoinfo(FAR struct lcd_dev_s *dev,
     FAR struct fb_videoinfo_s *vinfo)
 {
-  DEBUGASSERT(dev && vinfo);gvdbg("fmt: %d xres: %d yres: %d nplanes: %d\n",
+  DEBUGASSERT(dev && vinfo);ginfo("fmt: %d xres: %d yres: %d nplanes: %d\n",
       g_videoinfo.fmt, g_videoinfo.xres, g_videoinfo.yres, g_videoinfo.nplanes);
   memcpy(vinfo, &g_videoinfo, sizeof(struct fb_videoinfo_s));
   return OK;
@@ -320,7 +333,7 @@ static int lcd_getvideoinfo(FAR struct lcd_dev_s *dev,
 static int lcd_getplaneinfo(FAR struct lcd_dev_s *dev, unsigned int planeno,
     FAR struct lcd_planeinfo_s *pinfo)
 {
-  DEBUGASSERT(dev && pinfo && planeno == 0);gvdbg("planeno: %d bpp: %d\n", planeno, g_planeinfo.bpp);
+  DEBUGASSERT(dev && pinfo && planeno == 0);ginfo("planeno: %d bpp: %d\n", planeno, g_planeinfo.bpp);
   memcpy(pinfo, &g_planeinfo, sizeof(struct lcd_planeinfo_s));
   return OK;
 }
@@ -336,7 +349,7 @@ static int lcd_getplaneinfo(FAR struct lcd_dev_s *dev, unsigned int planeno,
 
 static int lcd_getpower(struct lcd_dev_s *dev)
 {
-  gvdbg("power: %d\n", 0);
+  ginfo("power: %d\n", 0);
   return g_lcddev.power;
 }
 
@@ -357,7 +370,7 @@ static int lcd_setpower(struct lcd_dev_s *dev, int power)
     return OK;
   }
 
-  gvdbg("power: %d\n", power);
+  ginfo("power: %d\n", power);
   DEBUGASSERT(power <= CONFIG_LCD_MAXPOWER);
 
   /* Set new power level */
@@ -386,7 +399,7 @@ static int lcd_setpower(struct lcd_dev_s *dev, int power)
     }
     else
     {
-      gvdbg("powering LCD off...\n");
+      ginfo("powering LCD off...\n");
       /* Switch pin from PWL to LT */
       reg &= ~ASCONF_PWL_ENA;
       putreg8(reg, ASIC_CONF_REG);
@@ -407,7 +420,7 @@ static int lcd_setpower(struct lcd_dev_s *dev, int power)
 
 static int lcd_getcontrast(struct lcd_dev_s *dev)
 {
-  gvdbg("Not implemented\n");
+  ginfo("Not implemented\n");
   return -ENOSYS;
 }
 
@@ -421,7 +434,7 @@ static int lcd_getcontrast(struct lcd_dev_s *dev)
 
 static int lcd_setcontrast(struct lcd_dev_s *dev, unsigned int contrast)
 {
-  gvdbg("Not implemented\n");
+  ginfo("Not implemented\n");
   return -ENOSYS;
 }
 
@@ -434,7 +447,7 @@ static int lcd_setcontrast(struct lcd_dev_s *dev, unsigned int contrast)
  **************************************************************************************/
 static inline void lcd_initialize(void)
 {
-  gvdbg("%s: initializing LCD.\n",__FUNCTION__);
+  ginfo("%s: initializing LCD.\n",__FUNCTION__);
   calypso_reset_set(RESET_EXT, 0);
   usleep(5000);
   uwire_init();
@@ -448,7 +461,7 @@ static inline void lcd_initialize(void)
 
 
 /**************************************************************************************
- * Name:  up_lcdinitialize
+ * Name:  board_lcd_initialize
  *
  * Description:
  *   Initialize the LCD video hardware.  The initial state of the LCD is fully
@@ -457,9 +470,9 @@ static inline void lcd_initialize(void)
  *
  **************************************************************************************/
 
-int up_lcdinitialize(void)
+int board_lcd_initialize(void)
 {
-  gvdbg("Initializing\n");
+  ginfo("Initializing\n");
 
   lcd_initialize();
 
@@ -470,7 +483,7 @@ int up_lcdinitialize(void)
 }
 
 /**************************************************************************************
- * Name:  up_lcdgetdev
+ * Name:  board_lcd_getdev
  *
  * Description:
  *   Return a a reference to the LCD object for the specified LCD.  This allows support
@@ -478,7 +491,7 @@ int up_lcdinitialize(void)
  *
  **************************************************************************************/
 
-FAR struct lcd_dev_s *up_lcdgetdev(int lcddev)
+FAR struct lcd_dev_s *board_lcd_getdev(int lcddev)
 {
   DEBUGASSERT(lcddev == 0);
   return &g_lcddev.dev;
@@ -486,14 +499,14 @@ FAR struct lcd_dev_s *up_lcdgetdev(int lcddev)
 
 
 /**************************************************************************************
- * Name:  up_lcduninitialize
+ * Name:  board_lcd_uninitialize
  *
  * Description:
  *   Un-initialize the LCD support
  *
  **************************************************************************************/
 
-void up_lcduninitialize(void)
+void board_lcd_uninitialize(void)
 {
   lcd_setpower(&g_lcddev.dev, 0);
 }
@@ -508,7 +521,8 @@ void up_lcduninitialize(void)
 
 void lcd_clear()
 {
-  struct ssd1783_cmdlist prepare_disp_write_cmds[] = {
+  struct ssd1783_cmdlist prepare_disp_write_cmds[] =
+  {
     { CMD,  0x8E },
     { DATA, 0x00 },
     { DATA, 0x00 },
@@ -517,11 +531,12 @@ void lcd_clear()
     { END,  0x00 }
   };
 
-  struct ssd1783_cmdlist nop[] = {
+  struct ssd1783_cmdlist nop_command[] =
+  {
     { CMD, 0x25 }, // NOP command
     { END, 0x00 }
   };
 
   fb_ssd1783_send_cmdlist(prepare_disp_write_cmds);
-  fb_ssd1783_send_cmdlist(nop);
+  fb_ssd1783_send_cmdlist(nop_command);
 }

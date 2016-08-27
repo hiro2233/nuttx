@@ -1,6 +1,5 @@
 /****************************************************************************
  * arch/mips/src/pic32mx/pic32mx-irq.c
- * arch/mips/src/chip/pic32mx-irq.c
  *
  *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -51,14 +50,13 @@
 #include <arch/pic32mx/cp0.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 #include "pic32mx-int.h"
-#include "pic32mx-internal.h"
+#include "pic32mx.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 
@@ -70,7 +68,7 @@
  * Public Data
  ****************************************************************************/
 
-volatile uint32_t *current_regs;
+volatile uint32_t *g_current_regs;
 
 /****************************************************************************
  * Private Data
@@ -150,7 +148,7 @@ void up_irqinitialize(void)
 
   /* Initialize GPIO change notification handling */
 
-#ifdef CONFIG_GPIO_IRQ
+#ifdef CONFIG_PIC32MX_GPIOIRQ
   pic32mx_gpioirqinitialize();
 #endif
 
@@ -161,7 +159,7 @@ void up_irqinitialize(void)
 
   /* currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  g_current_regs = NULL;
 
   /* And finally, enable interrupts */
 
@@ -173,11 +171,11 @@ void up_irqinitialize(void)
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
   /* Then enable all interrupt levels */
 
-  irqrestore(CP0_STATUS_IM_ALL);
+  up_irq_restore(CP0_STATUS_IM_ALL);
 #else
   /* Enable only software interrupts */
 
-  irqrestore(CP0_STATUS_IM_SWINTS);
+  up_irq_restore(CP0_STATUS_IM_SWINTS);
 #endif
 }
 
@@ -196,7 +194,7 @@ void up_disable_irq(int irq)
 
   /* Disable the interrupt by clearing the associated bit in the IEC register */
 
-  DEBUGASSERT(irq >= PIC32MX_IRQSRC_FIRST && irq <= PIC32MX_IRQSRC_LAST)
+  DEBUGASSERT(irq >= PIC32MX_IRQSRC_FIRST && irq <= PIC32MX_IRQSRC_LAST);
   if (irq >= PIC32MX_IRQSRC_FIRST)
     {
       if (irq <= PIC32MX_IRQSRC0_LAST)
@@ -250,7 +248,7 @@ void up_enable_irq(int irq)
 
   /* Enable the interrupt by setting the associated bit in the IEC register */
 
-  DEBUGASSERT(irq >= PIC32MX_IRQSRC_FIRST && irq <= PIC32MX_IRQSRC_LAST)
+  DEBUGASSERT(irq >= PIC32MX_IRQSRC_FIRST && irq <= PIC32MX_IRQSRC_LAST);
   if (irq >= PIC32MX_IRQSRC_FIRST)
     {
       if (irq <= PIC32MX_IRQSRC0_LAST)
@@ -304,13 +302,12 @@ bool up_pending_irq(int irq)
   uint32_t regval;
   int bitno;
 
-  /* Disable the interrupt by clearing the associated bit in the IEC and then
-   * acknowledge the interrupt by clearing the associated bit in the IFS
-   * register.  It is necessary to do this BEFORE lowering the interrupt
-   * priority level otherwise recursive interrupts would occur.
+  /* Test if the interrupt is pending by reading both the IEC and IFS
+   * register. Return true if the bit associated with the irq is both pending
+   * the IFs and enabled in the IEC.
    */
 
-  DEBUGASSERT(irq >= PIC32MX_IRQSRC_FIRST && irq <= PIC32MX_IRQSRC_LAST)
+  DEBUGASSERT(irq >= PIC32MX_IRQSRC_FIRST && irq <= PIC32MX_IRQSRC_LAST);
   if (irq >= PIC32MX_IRQSRC_FIRST)
     {
       if (irq <= PIC32MX_IRQSRC0_LAST)
@@ -375,7 +372,7 @@ void up_clrpend_irq(int irq)
    * priority level otherwise recursive interrupts would occur.
    */
 
-  DEBUGASSERT(irq >= PIC32MX_IRQSRC_FIRST && irq <= PIC32MX_IRQSRC_LAST)
+  DEBUGASSERT(irq >= PIC32MX_IRQSRC_FIRST && irq <= PIC32MX_IRQSRC_LAST);
   if (irq >= PIC32MX_IRQSRC_FIRST)
     {
       if (irq <= PIC32MX_IRQSRC0_LAST)
@@ -408,7 +405,7 @@ void up_clrpend_irq(int irq)
           return;
         }
 
-      /* Disable then acknowledge interrupt */
+      /* Acknowledge the interrupt */
 
       putreg32((1 << bitno), regaddr);
     }

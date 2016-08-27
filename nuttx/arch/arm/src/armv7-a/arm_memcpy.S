@@ -54,13 +54,12 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Global Symbols
+ * Public Symbols
  ************************************************************************************/
 
 	.global		memcpy
 
 	.syntax		unified
-	.thumb
 
 	.file		"arm_memcpy.S"
 
@@ -143,11 +142,24 @@ MEM_LongCopyTable:
  * Input Parameters:
  *   r0 = destination, r1 = source, r2 = length
  *
+ * Returned Value:
+ *   r0 = destination r1-r3 burned
+ *
  ************************************************************************************/
 
-	.thumb_func
+	.align 4
+
 memcpy:
 	push	{r14}
+	push    {r0}
+	bl      _do_memcpy
+	pop     {r0}
+	pop     {pc}
+
+	.align 4
+
+_do_memcpy:
+	push    {r14}
 
 	/* This allows the inner workings to "assume" a minimum amount of bytes */
 	/* Quickly check for very short copies */

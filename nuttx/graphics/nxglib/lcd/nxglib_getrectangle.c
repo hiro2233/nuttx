@@ -47,7 +47,7 @@
 #include "nxglib_bitblit.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -79,7 +79,7 @@
  *
  ****************************************************************************/
 
-void NXGL_FUNCNAME(nxgl_getrectangle,NXGLIB_SUFFIX)
+void NXGL_FUNCNAME(nxgl_getrectangle, NXGLIB_SUFFIX)
 (FAR struct lcd_planeinfo_s *pinfo, FAR const struct nxgl_rect_s *rect,
  FAR void *dest, unsigned int deststride)
 {

@@ -12,16 +12,10 @@ README.txt
 
   This file!
 
-astyle.sh
----------
-
-  A C formatting tool from Lorenz Meier.  This is based on astyle and gets
-  very close to the NuttX coding style.
-
 Config.mk
 ---------
 
-  This file contains common definitions used by many configureation files.
+  This file contains common definitions used by many configuration files.
   This file (along with <nuttx>/.config) must be included at the top of
   each configuration-specific Make.defs file like:
 
@@ -48,7 +42,7 @@ configure.c, cfgparser.c, and cfgparser.h
 
   configure.bat is a small Windows batch file that can be used as a replacement
   for configure.sh in a Windows native environment.  configure.bat is actually
-  just a thin layer that execuates configure.exe if it is available. If
+  just a thin layer that executes configure.exe if it is available. If
   configure.exe is not available, then configure.bat will attempt to build it
   first.
 
@@ -94,7 +88,7 @@ kconfig2html.c
   This is a C file that can be used build a utility for converting the
   NuttX configuration in the Kconfig files to an HTML document.  This
   auto-generated documentation will, eventually, replace the manually
-  updated configuratin documentation that is fallling woefully behind.
+  updated configuration documentation that is fallling woefully behind.
 
   $ tools/kconfig2html.exe -h
   USAGE: tools/kconfig2html [-d] [-a <apps directory>] {-o <out file>] [<Kconfig root>]
@@ -110,11 +104,21 @@ kconfig2html.c
     <Kconfig root> is the directory containing the root Kconfig file.
          Default <Kconfig directory>: .
 
+  NOTE: In order to use this tool, some configuration must be in-place will
+  all necessary symbolic links.  You can establish the configured symbolic
+  links with:
+
+    make context
+
+  or more quickly with:
+
+    make dirlinks
+
 mkconfigvars.sh
 ---------------
 
   The HTML documentation expects to have a copy of the auto-generated
-  configuration variabled documentation Documentation/NuttXConfigVariables.html.
+  configuration variable documentation Documentation/NuttXConfigVariables.html.
   The script mkconfigvars.sh is a simple script that can be used to
   re-generated that file as needed.
 
@@ -140,6 +144,12 @@ mkexport.sh and Makefile.export
   startup object into an export-able, binary NuttX distribution.  The
   Makefile.export is used only by the mkexport.sh script to parse out
   options from the top-level Make.defs file.
+
+  USAGE: tools/mkexport.sh [-d] [-z] [-u] [-w|wy|wn] -t <top-dir> [-x <lib-ext>] -l "lib1 [lib2 [lib3 ...]]"
+
+  Thais script also depends on the environment variable MAKE which is set
+  in the top-level Makefile before starting mkexport.sh.  If MAKE is not
+  defined, the script will set it to `which make`.
 
 mkfsdata.pl
 -----------
@@ -207,7 +217,7 @@ mksymtab.c, cvsparser.c, and cvsparser.h
   Example:
 
     cd nuttx/tools
-    cat ../syscall/syscall.csv ../lib/lib.csv | sort >tmp.csv
+    cat ../syscall/syscall.csv ../lib/libc.csv | sort >tmp.csv
     ./mksymtab.exe tmp.csv tmp.c
 
 mkctags.sh
@@ -215,6 +225,30 @@ mkctags.sh
 
   A script for creating ctags from Ken Pettit.  See http://en.wikipedia.org/wiki/Ctags
   and http://ctags.sourceforge.net/
+
+nxstyle.c
+---------
+
+  I am embarassed that this is here.  This program is a complete hack
+  but, unfortunately, it has become so useful to me that I need to keep
+  it here.
+
+  A little background:  I have tinkered with pretty printers for some
+  time and have not been happy with the results.  An alternative that
+  occurred to me would be just a standard checker that examines a C
+  file that gives warnings for violations of the coding standard.
+
+  This turns out to be more difficult that you might think. A pretty
+  printer understands C syntax:  They break the file up into its C
+  components then reassembles the output in the format. But parsing the
+  C loses the original file layout and so it not useful in this case.
+
+  This program instead, uses a collection of heuristics (i.e., hacks and
+  bandaids) to examine the C file for obvious violations of the coding
+  standard.  This program is completely ignorant of C syntax; it simply
+  performs crude pattern matching to check the file.
+
+  Usage: nxstyle <path-to-file-to-check>
 
 pic32mx
 -------
@@ -234,7 +268,7 @@ bdf-convert.c
     1. Locate a font in BDF format,
     2. Use the bdf-converter program to convert the BDF font to the NuttX
        font format.  This will result in a C header file containing
-       defintions.  That header file should be installed at, for example,
+       definitions.  That header file should be installed at, for example,
        graphics/nxfonts/nxfonts_myfont.h.
 
   Create a new NuttX configuration variable.  For example, suppose
@@ -274,7 +308,7 @@ bdf-convert.c
 
   New Add the font to the NX build system.  There are several files that
   you have to modify to to this.  Look how the build system uses the
-  font CONFIG_NXFONT_SANS23X27 for examaples:
+  font CONFIG_NXFONT_SANS23X27 for examples:
 
     5. nuttx/graphics/Makefile.  This file needs logic to auto-generate
        a C source file from the header file that you generated with the
@@ -305,7 +339,7 @@ bdf-convert.c
        in step 5 that will actually generate the font C file.  So, given
        your NXFONTS_FONTID=2, it needs to determine a prefix to use for
        auto-generated variable and function names and (again) the name of
-       the autogenerated file to create (this must be the same name that
+       the auto-generated file to create (this must be the same name that
        was used in nuttx/graphics/nxfonts/Make.defs):
 
        ifeq ($(NXFONTS_FONTID),1)
@@ -375,18 +409,20 @@ mkromfsimg.sh
   image.  It accepts an rcS script "template" and generates and image that
   may be mounted under /etc in the NuttX pseudo file system.
 
-mkdeps.sh
-mkdeps.bat
+  TIP: Edit the resulting header file and mark the generated data values
+  as 'const' so that they will be stored in FLASH.
+
 mkdeps.c
+cnvwindeps.c
+mkwindeps.sh
 mknulldeps.sh
 -------------
 
   NuttX uses the GCC compilers capabilities to create Makefile dependencies.
-  The bash script mkdeps.sh is used to run GCC in order to create the
-  dependencies.  If a NuttX configuration uses the GCC toolchain, its Make.defs
-  file (see configs/README.txt) will include a line like:
+  The program  mkdeps is used to run GCC in order to create the dependencies.
+  If a NuttX configuration uses the GCC toolchain, its Make.defs file (see
+  configs/README.txt) will include a line like:
 
-    MKDEP = $(TOPDIR)/tools/mkdeps.sh, or
     MKDEP = $(TOPDIR)/tools/mkdeps[.exe] (See NOTE below)
 
   If the NuttX configuration does not use a GCC compatible toolchain, then
@@ -396,22 +432,12 @@ mknulldeps.sh
 
   The mknulldeps.sh is a stub script that does essentially nothing.
 
-  NOTE:  The mk*deps.* files are undergoing change.  mkdeps.sh is a bash
-  script that produces dependencies well for POSIX style hosts (e..g.,
-  Linux and Cygwin).  It does not work well for mixed environments with
-  a Windows toolchain running in a POSIX style environemnt (hence, the
-  mknulldeps.sh script).  And, of course, cannot be used in a Windows
-  nativ environment.
-
-  [mkdeps.sh does have an option, --winpath, that purports to convert
-  the dependencies generated by a Windows toolchain to POSIX format.
-  However, that is not being used and mostly likely does not cover
-  all of the conversion cases.]
-
-  mkdeps.bat is a simple port of the bash script to run in a Windows
-  command shell.  However, it does not work well either because some
-  of the common CFLAGS use characters like '=' which are transformed
-  by the CMD.exe shell.
+  mkwindeps.sh is a version that creates dependencies using the Windows
+  native toolchain.  That generates Windows native paths in the dependency
+  file.  But the mkwindeps.sh uses cnvwindeps.c to convert the Windows
+  paths to POSIX paths.  This adds some time to the Windows dependency
+  generation but is generally th best option available for that mixed
+  environment of Cygwin with a native Windows GCC toolchain.
 
   mkdeps.c generates mkdeps (on Linux) or mkdeps.exe (on Windows).
   However, this verison is still under-development.  It works well in
@@ -419,7 +445,7 @@ mknulldeps.sh
   does not work well in mixed POSIX environment with a Windows toolchain.
   In that case, there are still issues with the conversion of things like
   'c:\Program Files' to 'c:program files' by bash.  Those issues may,
-  eventually be solvable but for now continue to use mknulldeps.sh in
+  eventually be solvable but for now continue to use mkwindeps.sh in
   that mixed environment.
 
 define.sh
@@ -433,6 +459,13 @@ define.bat
 
   The define.bat script is a counterpart for use in the native Windows
   build.
+
+ide_exporter.py
+---------------
+
+  This Python script will help to create nuttx project in the IAR and
+  uVision IDEs.  These are few simple the steps to export the IDE
+  workspaces.  See for example configs/stm3220g-eval/README.txt.
 
 incdir.sh
 incdir.bat
@@ -534,11 +567,179 @@ indent.sh
   to my coding NuttX coding style.  It doesn't do a really good job,
   however (see the comments at the top of the indent.sh file).
 
-  See astyle.sh above.  I suspect that it will do a better job.
+  USAGE:
+    ./indent.sh [-d] -o <out-file> <in-file>
+    ./indent.sh [-d] <in-file-list>
+    ./indent.sh [-d] -h
+
+  Where:
+    -<in-file>
+      A single, unformatted input file
+    -<in-file-list>
+      A list of unformatted input files that will be reformatted in place.
+    -o <out-file>
+      Write the single, reformatted <in-file> to <out-file>.  <in-file>
+      will not be modified.
+    -d
+      Enable script debug
+    -h
+      Show this help message and exit
+
+sethost.sh
+----------
+
+  Saved configurations may run on Linux, Cygwin (32- or 64-bit), or other
+  platforms.  The platform characteristics can be changed use 'make
+  menuconfig'.  Sometimes this can be confusing due to the differences
+  between the platforms.  Enter sethost.sh
+
+  sethost.sh is a simple script that changes a configuration to your
+  host platform.  This can greatly simplify life if you use many different
+  configurations.  For example, if you are running on Linux and you
+  configure like this:
+
+    $ cd tools
+    $ ./configure.sh board/configuration
+    $ cd ..
+
+  The you can use the following command to both (1) make sure that the
+  configuration is up to date, AND (2) the configuration is set up
+  correctly for Linux:
+
+    $ tools/sethost.sh -l
+
+  Or, if you are on a Windows/Cygwin 64-bit platform:
+
+    $ tools/sethost.sh -w
+
+  Other options are available:
+
+    $ tools/sethost.sh -h
+
+    USAGE: tools/sethost.sh [-w|l] [-c|n] [-32|64] [<config>]
+           tools/sethost.sh -h
+
+    Where:
+      -w|l selects Windows (w) or Linux (l).  Default: Linux
+      -c|n selects Windows native (n) or Cygwin (c).  Default Cygwin
+      -32|64 selects 32- or 64-bit host (Only for Cygwin).  Default 64
+      -h will show this help test and terminate
+
+refresh.sh
+----------
+
+  This is a bash script that automatics refreshing of board default
+  configuration (defconfig) files.  It does not do anything special
+  that you cannot do manually, but is useful for me when I have to
+  update dozens of confuration files.
+
+  Configuration files have to be updated because over time, the
+  configuration settings change:  New configurations are added and
+  new dependencies are added.  So an old configuration file may
+  not be usable anymore until it is refreshed.
+
+  Help is also available:
+
+    $ tools/refresh.sh --help
+    tools/refresh.sh is a tool for refreshing board configurations
+
+    USAGE: tools/refresh.sh [--debug|--help] <board>/<config>
+
+    Where:
+      --debug
+         Enable script debug
+      --silent
+         Update board configuration without interaction
+      --help
+         Show this help message and exit
+      <board>
+         The board directory under nuttx/configs
+      <config>
+         The board configuration directory under nuttx/configs/<board>
+
+  The steps to refresh the file taken by refresh.sh are:
+
+  1. Make tools/cmpconfig if it is not already built.
+  2. Copy the the defconfig file to the top-level NuttX
+     directory as .config (being careful to save any previous
+     .config file that you might want to keep!).
+  3. Execute 'make oldconfig' to update the configuration.
+     'make oldconfig' will prompt you for each change in the
+     configuration that requires that you make some decision.
+     With the --silent option, the script will use 'make
+     oldefconfig' instead and you won't have to answer any
+     questions;  the refresh will simply accept the default
+     value for any new configuration settings.
+  4. Then it runs tools/cmpconfig to show the real differences
+     between the configuration files.  Configuration files are
+     complex and things can move around so a simple 'diff' between
+     two configuration files is often not useful.  But tools/cmpconfig
+     will show only the meaningful differences between the two
+     configuration files.
+  4. It will edit the .config file to comment out the setting
+     of the CONFIG_APPS_DIR= setting.  This setting should not
+     be in checked-in defconfig files because the actually must
+     be determined at the next time that the configuration is
+     installed.
+  5. Finally, the refreshed defconfig file is copied back in
+     place where it can be committed with the next set of
+     difference to the command line.  If you select the --silent
+     option, this file copy will occur autiomatically.  Otherwise,
+     refresh.sh will prompt you first to avoid overwriting the
+     defconfig file with changes that you may not want.
+
+testbuild.sh
+------------
+
+  This script automates building of a set of configurations.  The intent is
+  simply to assure that the set of configurations build correctly.  The -h
+  option shows the usage:
+
+    $ ./testbuild.sh -h
+
+    USAGE: ./testbuild.sh [-w|l] [-c|n] [-s] <testlist-file>
+    USAGE: ./testbuild.sh -h
+
+    where
+      -w|l selects Windows (w) or Linux (l).  Default: Linux
+      -c|n selects Windows native (n) or Cygwin (c).  Default Cygwin
+      -s Use C++ long size_t in new operator. Default unsigned long
+      -h will show this help test and terminate
+      <testlist-file> selects the list of configurations to test.  No default
+
+    Your PATH variable must include the path to both the build tools and the
+    kconfig-frontends tools
+
+  These script needs two pieces of information.
+
+    a. A description of the platform that you are testing on.  This
+       description is provided by the optional -w, -l, -c, and -n options.
+    b. A list of configurations to build.  That list is provided by a test
+       list file.  The final, non-optional parameter, <testlist-file>,
+       provides the path to that file.
+
+  The test list file is a sequence of build descriptons, one per line.  One
+  build descriptions consists of two comma separated values.  For example:
+
+    stm32f429i-disco/nsh,CONFIG_ARMV7M_TOOLCHAIN_GNU_EABIL
+
+  The first value is the usual configuration description of the form
+  form <board-name>/<configuration-name> and must correspond to a
+  configuration in the nuttx/configs directory.
+
+  The second value is valid name for a toolchain configuration to use
+  when building the configuration.  The set of valid toolchain
+  configuration names depends on the underlying architecture of the
+  configured board.
+
+  NOTE: The environment variable APPSDIR should be set to the relative
+  path to the application directory when running this script like:
+
+    $ export APPSDIR=../apps
 
 zipme.sh
 --------
 
   I use this script to create the nuttx-xx.yy.tar.gz tarballs for
-  release on SourceForge.  It is handy because it also does the
+  release on Bitbucket.org.  It is handy because it also does the
   kind of clean that you need to do to make a clean code release.

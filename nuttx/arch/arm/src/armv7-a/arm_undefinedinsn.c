@@ -1,7 +1,7 @@
 /****************************************************************************
- * arch/arm/src/armv7/arm_undefinedinsn.c
+ * arch/arm/src/armv7-a/arm_undefinedinsn.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,32 +38,14 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+
 #include <stdint.h>
+#include <assert.h>
 #include <debug.h>
 
-#include "os_internal.h"
+#include <arch/irq.h>
+
 #include "up_internal.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/* Output debug info if stack dump is selected -- even if
- * debug is not selected.
- */
-
-#ifdef CONFIG_ARCH_STACKDUMP
-# undef  lldbg
-# define lldbg lowsyslog
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -75,8 +57,8 @@
 
 uint32_t *arm_undefinedinsn(uint32_t *regs)
 {
-  lldbg("Undefined instruction at 0x%x\n", regs[REG_PC]);
-  current_regs = regs;
+  _alert("Undefined instruction at 0x%x\n", regs[REG_PC]);
+  CURRENT_REGS = regs;
   PANIC();
   return regs; /* To keep the compiler happy */
 }

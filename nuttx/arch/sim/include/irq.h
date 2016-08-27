@@ -1,5 +1,5 @@
-/************************************************************
- * irq.h
+/****************************************************************************
+ * arch/sim/include/irq.h
  *
  *   Copyright (C) 2007, 2009 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -31,68 +31,98 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************/
+ ****************************************************************************/
 
 /* This file should never be included directed but, rather,
  * only indirectly through nuttx/irq.h
  */
 
-#ifndef __ARCH_IRQ_H
-#define __ARCH_IRQ_H
+#ifndef __ARCH_SIM_INCLUDE_IRQ_H
+#define __ARCH_SIM_INCLUDE_IRQ_H
 
-/************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************/
+ ****************************************************************************/
 
-/************************************************************
- * Definitions
- ************************************************************/
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+/* No interrupts */
 
 #define NR_IRQS 0
 
-/************************************************************
+/* Number of registers saved in context switch */
+
+#if defined(CONFIG_HOST_X86_64) && !defined(CONFIG_SIM_M32)
+   /* Storage order: %rbx, %rsp, %rbp, %r12, %r13, %r14, %r15, %rip */
+
+#  define XCPTCONTEXT_REGS    8
+#else
+   /* Storage order: %ebx, %esi, %edi, %ebp, sp, and return PC */
+
+#  define XCPTCONTEXT_REGS    6
+#endif
+
+/****************************************************************************
  * Public Types
- ************************************************************/
+ ****************************************************************************/
+
+#ifndef __ASSEMBLY__
+/* Number of registers saved in context switch */
+
+#if defined(CONFIG_HOST_X86_64) && !defined(CONFIG_SIM_M32)
+typedef unsigned long xcpt_reg_t;
+#else
+typedef int xcpt_reg_t;
+#endif
 
 /* This struct defines the way the registers are stored */
 
-#ifndef __ASSEMBLY__
 struct xcptcontext
 {
    void *sigdeliver; /* Actual type is sig_deliver_t */
 
-   /* Storage order: %ebx, $esi, %edi, %ebp, sp, and return PC */
-
-   int regs[6];
+   xcpt_reg_t regs[XCPTCONTEXT_REGS];
 };
 #endif
 
-/************************************************************
+/****************************************************************************
  * Inline functions
- ************************************************************/
+ ****************************************************************************/
 
 #ifndef __ASSEMBLY__
-static inline irqstate_t irqsave(void)
+
+/* Name: up_irq_save, up_irq_restore, and friends.
+ *
+ * NOTE: This function should never be called from application code and,
+ * as a general rule unless you really know what you are doing, this
+ * function should not be called directly from operation system code either:
+ * Typically, the wrapper functions, enter_critical_section() and
+ * leave_critical section(), are probably what you really want.
+ */
+
+static inline irqstate_t up_irq_save(void)
 {
   return 0;
 }
 
-static inline void irqrestore(irqstate_t flags)
+static inline void up_irq_restore(irqstate_t flags)
 {
 }
 #endif
 
-/************************************************************
- * Public Variables
- ************************************************************/
+/****************************************************************************
+ * Public Data
+ ****************************************************************************/
 
-/************************************************************
+/****************************************************************************
  * Public Function Prototypes
- ************************************************************/
+ ****************************************************************************/
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -102,5 +132,5 @@ extern "C" {
 }
 #endif
 
-#endif /* __ARCH_IRQ_H */
+#endif /* __ARCH_SIM_INCLUDE_IRQ_H */
 

@@ -43,6 +43,7 @@
 #include <stdbool.h>
 #include <debug.h>
 
+#include <nuttx/arch.h>
 #include <nuttx/spi/spi.h>
 #ifdef CONFIG_SPI_CALLBACK
 #include <nuttx/irq.h>
@@ -59,39 +60,23 @@
 #if defined(CONFIG_LPC17_SSP0) || defined(CONFIG_LPC17_SSP1)
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* Configuration ************************************************************/
 
+#undef HAVE_SPI_CALLBACK
 #ifdef CONFIG_SPI_CALLBACK
-#  ifndef CONFIG_GPIO_IRQ
-#    warning "CONFIG_GPIO_IRQ is required to support CONFIG_SPI_CALLBACK"
+#  ifndef CONFIG_LPC17_GPIOIRQ
+#    warning "CONFIG_LPC17_GPIOIRQ is required to support CONFIG_SPI_CALLBACK"
+#  else
+#    define HAVE_SPI_CALLBACK 1
 #  endif
 #endif
 
 /* Debug ********************************************************************/
-/* The following enable debug output from this file (needs CONFIG_DEBUG too).
- *
- * CONFIG_SSP_DEBUG - Define to enable basic SSP debug
- * CONFIG_SSP_VERBOSE - Define to enable verbose SSP debug
- */
-
-#ifdef CONFIG_SSP_DEBUG
-#  define sspdbg  lldbg
-#  ifdef CONFIG_SSP_VERBOSE
-#    define sspvdbg lldbg
-#  else
-#    define sspvdbg(x...)
-#  endif
-#else
-#  undef CONFIG_SSP_VERBOSE
-#  define sspdbg(x...)
-#  define sspvdbg(x...)
-#endif
-
 /* Dump GPIO registers */
 
-#ifdef CONFIG_SSP_VERBOSE
+#ifdef CONFIG_DEBUG_GPIO_INFO
 #  define ssp_dumpssp0gpio(m) lpc17_dumpgpio(LPC1766STK_LCD_CS, m)
 #  define ssp_dumpssp1gpio(m) lpc17_dumpgpio(LPC1766STK_MMC_CS, m)
 #else
@@ -105,7 +90,7 @@
 
 /* This structure describes on media change callback */
 
-#ifdef CONFIG_SPI_CALLBACK
+#ifdef HAVE_SPI_CALLBACK
 struct lpc17_mediachange_s
 {
   spi_mediachange_t callback; /* The media change callback */
@@ -119,7 +104,7 @@ struct lpc17_mediachange_s
 
 /* Registered media change callback */
 
-#ifdef CONFIG_SPI_CALLBACK
+#ifdef HAVE_SPI_CALLBACK
 #ifdef CONFIG_LPC17_SSP0
 static struct lpc17_mediachange_s g_ssp0callback;
 #endif
@@ -140,14 +125,14 @@ static struct lpc17_mediachange_s g_ssp1callback;
  *
  ************************************************************************************/
 
-#ifdef CONFIG_SPI_CALLBACK
+#if 0 /* #ifdef HAVE_SPI_CALLBACK */
 static void ssp_cdirqsetup(int irq, xcpt_t irqhandler)
 {
   irqstate_t flags;
 
   /* Disable interrupts until we are done */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Configure the interrupt.  Either attach and enable the new
    * interrupt or disable and detach the old interrupt handler.
@@ -167,6 +152,8 @@ static void ssp_cdirqsetup(int irq, xcpt_t irqhandler)
       up_disable_irq(irq);
       (void)irq_detach(irq);
     }
+
+  leave_critical_section(flags);
 }
 #endif
 
@@ -178,7 +165,7 @@ static void ssp_cdirqsetup(int irq, xcpt_t irqhandler)
  *
  ************************************************************************************/
 
-#ifdef CONFIG_SPI_CALLBACK
+#if 0 /* ifdef HAVE_SPI_CALLBACK */
 #ifdef CONFIG_LPC17_SSP0
 static int ssp0_cdinterrupt(int irq, FAR void *context)
 {
@@ -211,14 +198,14 @@ static int ssp1_cdinterrupt(int irq, FAR void *context)
  ************************************************************************************/
 
 /************************************************************************************
- * Name: lpc1766stk_sspinitialize
+ * Name: lpc1766stk_sspdev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the LPC1766-STK.
  *
  ************************************************************************************/
 
-void weak_function lpc1766stk_sspinitialize(void)
+void weak_function lpc1766stk_sspdev_initialize(void)
 {
   /* Configure the SSP0 chip select GPIOs.  Only the Nokia LCD is connected to SSP0 */
 
@@ -243,7 +230,7 @@ void weak_function lpc1766stk_sspinitialize(void)
   ssp_dumpssp0gpio("AFTER SSP1 Initialization");
 #endif
 
-#ifdef CONFIG_SPI_CALLBACK
+#ifdef HAVE_SPI_CALLBACK
   /* If there were any CD detect pins for the LPC1766-STK, this is where
    * they would be configured.
    */
@@ -257,7 +244,7 @@ void weak_function lpc1766stk_sspinitialize(void)
  *   The external functions, lpc17_ssp0/ssp1select and lpc17_ssp0/ssp1status
  *   must be provided by board-specific logic.  They are implementations of the select
  *   and status methods of the SPI interface defined by struct spi_ops_s (see
- *   include/nuttx/spi/spi.h). All other methods (including lpc17_sspinitialize())
+ *   include/nuttx/spi/spi.h). All other methods (including lpc17_sspbus_initialize())
  *   are provided by common LPC17xx logic.  To use this common SPI logic on your
  *   board:
  *
@@ -266,9 +253,9 @@ void weak_function lpc1766stk_sspinitialize(void)
  *   2. Provide lpc17_ssp0/ssp1select() and lpc17_ssp0/ssp1status() functions
  *      in your board-specific logic.  These functions will perform chip selection
  *      and status operations using GPIOs in the way your board is configured.
- *   3. Add a calls to lpc17_sspinitialize() in your low level application
+ *   3. Add a calls to lpc17_sspbus_initialize() in your low level application
  *      initialization logic
- *   4. The handle returned by lpc17_sspinitialize() may then be used to bind the
+ *   4. The handle returned by lpc17_sspbus_initialize() may then be used to bind the
  *      SPI driver to higher level logic (e.g., calling
  *      mmcsd_spislotinitialize(), for example, will bind the SPI driver to
  *      the SPI MMC/SD driver).
@@ -278,7 +265,7 @@ void weak_function lpc1766stk_sspinitialize(void)
 #ifdef CONFIG_LPC17_SSP0
 void  lpc17_ssp0select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  sspdbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
   if (devid == SPIDEV_DISPLAY)
     {
       /* Assert/de-assert the CS pin to the card */
@@ -291,7 +278,7 @@ void  lpc17_ssp0select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool sel
 
 uint8_t lpc17_ssp0status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
-  sspdbg("Returning nothing\n");
+  spiinfo("Returning nothing\n");
   return 0;
 }
 #endif
@@ -299,7 +286,7 @@ uint8_t lpc17_ssp0status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 #ifdef CONFIG_LPC17_SSP1
 void  lpc17_ssp1select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  sspdbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
   if (devid == SPIDEV_MMCSD)
     {
       /* Assert/de-assert the CS pin to the card */
@@ -312,7 +299,7 @@ void  lpc17_ssp1select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool sel
 
 uint8_t lpc17_ssp1status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
-  sspdbg("Returning SPI_STATUS_PRESENT\n");
+  spiinfo("Returning SPI_STATUS_PRESENT\n");
   return SPI_STATUS_PRESENT;
 }
 #endif

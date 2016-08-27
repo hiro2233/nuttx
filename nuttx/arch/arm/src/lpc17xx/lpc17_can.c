@@ -55,8 +55,9 @@
 #include <debug.h>
 
 #include <arch/board/board.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
-#include <nuttx/can.h>
+#include <nuttx/drivers/can.h>
 
 #include "up_internal.h"
 #include "up_arch.h"
@@ -159,25 +160,8 @@
 /* Debug ********************************************************************/
 /* Non-standard debug that may be enabled just for testing CAN */
 
-#if !defined(CONFIG_DEBUG) || !defined(CONFIG_DEBUG_CAN)
-#  undef CONFIG_CAN_REGDEBUG
-#endif
-
-#ifdef CONFIG_DEBUG_CAN
-#  ifdef CONFIG_CAN_REGDEBUG
-#    define candbg  lldbg
-#    define canvdbg llvdbg
-#  else
-#    define candbg  dbg
-#    define canvdbg vdbg
-#  endif
-#  define canlldbg  lldbg
-#  define canllvdbg llvdbg
-#else
-#  define candbg(x...)
-#  define canvdbg(x...)
-#  define canlldbg(x...)
-#  define canllvdbg(x...)
+#ifndef CONFIG_DEBUG_CAN_INFO
+#  undef CONFIG_LPC17_CAN_REGDEBUG
 #endif
 
 /* Timing *******************************************************************/
@@ -202,14 +186,14 @@ struct up_dev_s
  ****************************************************************************/
 /* CAN Register access */
 
-#ifdef CONFIG_CAN_REGDEBUG
+#ifdef CONFIG_LPC17_CAN_REGDEBUG
 static void can_printreg(uint32_t addr, uint32_t value);
 #endif
 
 static uint32_t can_getreg(struct up_dev_s *priv, int offset);
 static void can_putreg(struct up_dev_s *priv, int offset, uint32_t value);
 
-#ifdef CONFIG_CAN_REGDEBUG
+#ifdef CONFIG_LPC17_CAN_REGDEBUG
 static uint32_t can_getcommon(uint32_t addr);
 static void can_putcommon(uint32_t addr, uint32_t value);
 #else
@@ -307,7 +291,7 @@ static struct can_dev_s g_can2dev =
  *
  ****************************************************************************/
 
-#ifdef CONFIG_CAN_REGDEBUG
+#ifdef CONFIG_LPC17_CAN_REGDEBUG
 static void can_printreg(uint32_t addr, uint32_t value)
 {
   static uint32_t prevaddr = 0;
@@ -322,10 +306,11 @@ static void can_printreg(uint32_t addr, uint32_t value)
     {
       if (count == 0xffffffff || ++count > 3)
         {
-           if (count == 4)
-             {
-               lldbg("...\n");
-             }
+          if (count == 4)
+            {
+              caninfo("...\n");
+            }
+
           return;
         }
     }
@@ -334,25 +319,25 @@ static void can_printreg(uint32_t addr, uint32_t value)
 
   else
     {
-       /* Did we print "..." for the previous value? */
+      /* Did we print "..." for the previous value? */
 
-       if (count > 3)
-         {
-           /* Yes.. then show how many times the value repeated */
+      if (count > 3)
+        {
+          /* Yes.. then show how many times the value repeated */
 
-           lldbg("[repeats %d more times]\n", count-3);
-         }
+          caninfo("[repeats %d more times]\n", count-3);
+        }
 
-       /* Save the new address, value, and count */
+      /* Save the new address, value, and count */
 
-       prevaddr = addr;
-       preval   = value;
-       count    = 1;
+      prevaddr = addr;
+      preval   = value;
+      count    = 1;
     }
 
   /* Show the register value read */
 
-  lldbg("%08x->%08x\n", addr, value);
+  caninfo("%08x->%08x\n", addr, value);
 }
 #endif
 
@@ -370,7 +355,7 @@ static void can_printreg(uint32_t addr, uint32_t value)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_CAN_REGDEBUG
+#ifdef CONFIG_LPC17_CAN_REGDEBUG
 static uint32_t can_getreg(struct up_dev_s *priv, int offset)
 {
   uint32_t addr;
@@ -406,14 +391,14 @@ static uint32_t can_getreg(struct up_dev_s *priv, int offset)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_CAN_REGDEBUG
+#ifdef CONFIG_LPC17_CAN_REGDEBUG
 static void can_putreg(struct up_dev_s *priv, int offset, uint32_t value)
 {
   uint32_t addr = priv->base + offset;
 
   /* Show the register value being written */
 
-  lldbg("%08x<-%08x\n", addr, value);
+  caninfo("%08x<-%08x\n", addr, value);
 
   /* Write the value */
 
@@ -440,7 +425,7 @@ static void can_putreg(struct up_dev_s *priv, int offset, uint32_t value)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_CAN_REGDEBUG
+#ifdef CONFIG_LPC17_CAN_REGDEBUG
 static uint32_t can_getcommon(uint32_t addr)
 {
   uint32_t value;
@@ -468,12 +453,12 @@ static uint32_t can_getcommon(uint32_t addr)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_CAN_REGDEBUG
+#ifdef CONFIG_LPC17_CAN_REGDEBUG
 static void can_putcommon(uint32_t addr, uint32_t value)
 {
   /* Show the register value being written */
 
-  lldbg("%08x<-%08x\n", addr, value);
+  caninfo("%08x<-%08x\n", addr, value);
 
   /* Write the value */
 
@@ -502,9 +487,9 @@ static void can_reset(FAR struct can_dev_s *dev)
   irqstate_t flags;
   int ret;
 
-  canvdbg("CAN%d\n", priv->port);
+  caninfo("CAN%d\n", priv->port);
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Disable the CAN and stop ongong transmissions */
 
@@ -518,7 +503,7 @@ static void can_reset(FAR struct can_dev_s *dev)
   ret = can_bittiming(priv);
   if (ret != OK)
     {
-      candbg("ERROR: Failed to set bit timing: %d\n", ret);
+      canerr("ERROR: Failed to set bit timing: %d\n", ret);
     }
 
   /* Restart the CAN */
@@ -529,7 +514,7 @@ static void can_reset(FAR struct can_dev_s *dev)
   can_putreg(priv, LPC17_CAN_MOD_OFFSET, 0);           /* Leave Reset Mode */
 #endif
   can_putcommon(LPC17_CANAF_AFMR, CANAF_AFMR_ACCBP);   /* All RX messages accepted */
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -551,18 +536,19 @@ static void can_reset(FAR struct can_dev_s *dev)
 
 static int can_setup(FAR struct can_dev_s *dev)
 {
-#ifdef CONFIG_DEBUG_CAN
+#ifdef CONFIG_DEBUG_CAN_INFO
   FAR struct up_dev_s *priv = (FAR struct up_dev_s *)dev->cd_priv;
 #endif
   int ret;
 
-  canvdbg("CAN%d\n", priv->port);
+  caninfo("CAN%d\n", priv->port);
 
   ret = irq_attach(LPC17_IRQ_CAN, can12_interrupt);
   if (ret == OK)
     {
       up_enable_irq(LPC17_IRQ_CAN);
     }
+
   return ret;
 }
 
@@ -583,10 +569,10 @@ static int can_setup(FAR struct can_dev_s *dev)
 
 static void can_shutdown(FAR struct can_dev_s *dev)
 {
-#ifdef CONFIG_DEBUG_CAN
+#ifdef CONFIG_DEBUG_CAN_INFO
   FAR struct up_dev_s *priv = (FAR struct up_dev_s *)dev->cd_priv;
 
-  canvdbg("CAN%d\n", priv->port);
+  caninfo("CAN%d\n", priv->port);
 #endif
 
   up_disable_irq(LPC17_IRQ_CAN);
@@ -613,13 +599,13 @@ static void can_rxint(FAR struct can_dev_s *dev, bool enable)
   uint32_t regval;
   irqstate_t flags;
 
-  canvdbg("CAN%d enable: %d\n", priv->port, enable);
+  caninfo("CAN%d enable: %d\n", priv->port, enable);
 
-   /* The EIR register is also modifed from the interrupt handler, so we have
-    * to protect this code section.
-    */
+  /* The EIR register is also modifed from the interrupt handler, so we have
+   * to protect this code section.
+   */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   regval = can_getreg(priv, LPC17_CAN_IER_OFFSET);
   if (enable)
     {
@@ -629,8 +615,9 @@ static void can_rxint(FAR struct can_dev_s *dev, bool enable)
     {
       regval &= ~CAN_IER_RIE;
     }
+
   can_putreg(priv, LPC17_CAN_IER_OFFSET, regval);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -653,7 +640,7 @@ static void can_txint(FAR struct can_dev_s *dev, bool enable)
   uint32_t regval;
   irqstate_t flags;
 
-  canvdbg("CAN%d enable: %d\n", priv->port, enable);
+  caninfo("CAN%d enable: %d\n", priv->port, enable);
 
   /* Only disabling of the TX interrupt is supported here.  The TX interrupt
    * is automatically enabled just before a message is sent in order to avoid
@@ -666,14 +653,14 @@ static void can_txint(FAR struct can_dev_s *dev, bool enable)
        * to protect this code section.
        */
 
-      flags = irqsave();
+      flags = enter_critical_section();
 
       /* Disable all TX interrupts */
 
       regval = can_getreg(priv, LPC17_CAN_IER_OFFSET);
       regval &= ~(CAN_IER_TIE1 | CAN_IER_TIE2 | CAN_IER_TIE3);
       can_putreg(priv, LPC17_CAN_IER_OFFSET, regval);
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 
 }
@@ -694,7 +681,7 @@ static void can_txint(FAR struct can_dev_s *dev, bool enable)
 
 static int can_ioctl(FAR struct can_dev_s *dev, int cmd, unsigned long arg)
 {
-  dbg("Fix me:Not Implemented\n");
+  canerr("ERROR: Fix me -- Not Implemented\n");
   return 0;
 }
 
@@ -714,7 +701,7 @@ static int can_ioctl(FAR struct can_dev_s *dev, int cmd, unsigned long arg)
 
 static int can_remoterequest(FAR struct can_dev_s *dev, uint16_t id)
 {
-  dbg("Fix me:Not Implemented\n");
+  canerr("ERROR: Fix me -- Not Implemented\n");
   return 0;
 }
 
@@ -750,7 +737,8 @@ static int can_send(FAR struct can_dev_s *dev, FAR struct can_msg_s *msg)
   irqstate_t flags;
   int ret = OK;
 
-  canvdbg("CAN%d ID: %d DLC: %d\n", priv->port, msg->cm_hdr.ch_id, msg->cm_hdr.ch_dlc);
+  caninfo("CAN%d ID: %d DLC: %d\n",
+          priv->port, msg->cm_hdr.ch_id, msg->cm_hdr.ch_dlc);
 
   if (msg->cm_hdr.ch_rtr)
     {
@@ -777,7 +765,7 @@ static int can_send(FAR struct can_dev_s *dev, FAR struct can_msg_s *msg)
       DEBUGASSERT((tid & ~CAN_TID_ID11_MASK) == 0);
     }
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Pick a transmit buffer */
 
@@ -827,7 +815,7 @@ static int can_send(FAR struct can_dev_s *dev, FAR struct can_msg_s *msg)
       regval |= CAN_IER_TIE2;
       can_putreg(priv, LPC17_CAN_IER_OFFSET, regval);
 
-    /* Set up the transfer */
+      /* Set up the transfer */
 
       can_putreg(priv, LPC17_CAN_TFI2_OFFSET, tfi);
       can_putreg(priv, LPC17_CAN_TID2_OFFSET, tid);
@@ -874,11 +862,11 @@ static int can_send(FAR struct can_dev_s *dev, FAR struct can_msg_s *msg)
     }
   else
     {
-      candbg("No available transmission buffer, SR: %08x\n", regval);
+      canerr("ERROR: No available transmission buffer, SR: %08x\n", regval);
       ret = -EBUSY;
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return ret;
 }
 
@@ -954,7 +942,7 @@ static void can_interrupt(FAR struct can_dev_s *dev)
   /* Read the interrupt and capture register (also clearing most status bits) */
 
   regval = can_getreg(priv, LPC17_CAN_ICR_OFFSET);
-  canllvdbg("CAN%d ICR: %08x\n",  priv->port, regval);
+  caninfo("CAN%d ICR: %08x\n",  priv->port, regval);
 
   /* Check for a receive interrupt */
 
@@ -971,15 +959,20 @@ static void can_interrupt(FAR struct can_dev_s *dev)
 
       /* Construct the CAN header */
 
-      hdr.ch_id    = rid;
-      hdr.ch_rtr   = ((rfs & CAN_RFS_RTR) != 0);
-      hdr.ch_dlc   = (rfs & CAN_RFS_DLC_MASK) >> CAN_RFS_DLC_SHIFT;
+      hdr.ch_id     = rid;
+      hdr.ch_rtr    = ((rfs & CAN_RFS_RTR) != 0);
+      hdr.ch_dlc    = (rfs & CAN_RFS_DLC_MASK) >> CAN_RFS_DLC_SHIFT;
+#ifdef CONFIG_CAN_ERRORS
+      hdr.ch_error  = 0; /* Error reporting not supported */
+#endif
 #ifdef CONFIG_CAN_EXTID
-      hdr.ch_extid = ((rfs & CAN_RFS_FF) != 0);
+      hdr.ch_extid  = ((rfs & CAN_RFS_FF) != 0);
 #else
+      hdr.ch_unused = 0;
+
       if ((rfs & CAN_RFS_FF) != 0)
         {
-          canlldbg("ERROR: Received message with extended identifier.  Dropped\n");
+          canerr("ERROR: Received message with extended identifier.  Dropped\n");
         }
       else
 #endif
@@ -1056,7 +1049,7 @@ static int can12_interrupt(int irq, void *context)
 {
   /* Handle CAN1/2 interrupts */
 
-  canllvdbg("irq: %d\n",  irq);
+  caninfo("irq: %d\n",  irq);
 
 #ifdef CONFIG_LPC17_CAN1
   can_interrupt(&g_can1dev);
@@ -1133,8 +1126,8 @@ static int can_bittiming(struct up_dev_s *priv)
   uint32_t ts2;
   uint32_t sjw;
 
-  canllvdbg("CAN%d PCLK: %d baud: %d\n", priv->port,
-            CAN_CLOCK_FREQUENCY(priv->divisor), priv->baud);
+  caninfo("CAN%d PCLK: %d baud: %d\n", priv->port,
+          CAN_CLOCK_FREQUENCY(priv->divisor), priv->baud);
 
   /* Try to get CAN_BIT_QUANTA quanta in one bit_time.
    *
@@ -1180,15 +1173,15 @@ static int can_bittiming(struct up_dev_s *priv)
     {
       ts1 = CONFIG_CAN_TSEG1;
       ts2 = CONFIG_CAN_TSEG2;
-      brp = (nclks + (CAN_BIT_QUANTA/2)) / CAN_BIT_QUANTA;
+      brp = (nclks + (CAN_BIT_QUANTA / 2)) / CAN_BIT_QUANTA;
       DEBUGASSERT(brp >=1 && brp <= CAN_BTR_BRP_MAX);
     }
 
   sjw = 1;
 
-  canllvdbg("TS1: %d TS2: %d BRP: %d SJW= %d\n", ts1, ts2, brp, sjw);
+  caninfo("TS1: %d TS2: %d BRP: %d SJW= %d\n", ts1, ts2, brp, sjw);
 
- /* Configure bit timing */
+  /* Configure bit timing */
 
   btr = (((brp - 1) << CAN_BTR_BRP_SHIFT)   |
          ((ts1 - 1) << CAN_BTR_TSEG1_SHIFT) |
@@ -1203,7 +1196,7 @@ static int can_bittiming(struct up_dev_s *priv)
   btr |= CAN_BTR_SAM;
 #endif
 
-  canllvdbg("Setting CANxBTR= 0x%08x\n", btr);
+  caninfo("Setting CANxBTR= 0x%08x\n", btr);
   can_putreg(priv, LPC17_CAN_BTR_OFFSET, btr);        /* Set bit timing */
   return OK;
 }
@@ -1231,9 +1224,9 @@ FAR struct can_dev_s *lpc17_caninitialize(int port)
   irqstate_t flags;
   uint32_t regval;
 
-  canllvdbg("CAN%d\n",  port);
+  caninfo("CAN%d\n",  port);
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
 #ifdef CONFIG_LPC17_CAN1
   if (port == 1)
@@ -1286,20 +1279,19 @@ FAR struct can_dev_s *lpc17_caninitialize(int port)
       lpc17_configgpio(GPIO_CAN2_TD);
 
       candev = &g_can2dev;
-   }
- else
+    }
+  else
 #endif
-  {
-    candbg("Unsupported port: %d\n", port);
-    irqrestore(flags);
-    return NULL;
-  }
+    {
+      canerr("ERROR: Unsupported port: %d\n", port);
+      leave_critical_section(flags);
+      return NULL;
+    }
 
   /* Then just perform a CAN reset operation */
 
   can_reset(candev);
-  irqrestore(flags);
+  leave_critical_section(flags);
   return candev;
 }
 #endif
-

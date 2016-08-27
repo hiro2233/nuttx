@@ -1,7 +1,7 @@
 /****************************************************************************
- * common/up_sigdeliver.c
+ * arch/z16/src/common/up_sigdeliver.c
  *
- *   Copyright (C) 2008-2010 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2010, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,24 +45,13 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 
 #ifndef CONFIG_DISABLE_SIGNALS
-
-/****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -81,7 +70,7 @@
 void up_sigdeliver(void)
 {
 #ifndef CONFIG_DISABLE_SIGNALS
-  FAR struct tcb_s *rtcb = (struct tcb_s*)g_readytorun.head;
+  FAR struct tcb_s *rtcb = this_task();
   chipreg_t regs[XCPTCONTEXT_REGS];
   FAR uint32_t *regs32 = (FAR uint32_t*)regs;
   sig_deliver_t sigdeliver;
@@ -93,9 +82,9 @@ void up_sigdeliver(void)
 
   int saved_errno = rtcb->pterrno;
 
-  board_led_on(LED_SIGNAL);
+  board_autoled_on(LED_SIGNAL);
 
-  sdbg("rtcb=%p sigdeliver=%p sigpendactionq.head=%p\n",
+  sinfo("rtcb=%p sigdeliver=%p sigpendactionq.head=%p\n",
         rtcb, rtcb->xcp.sigdeliver, rtcb->sigpendactionq.head);
   ASSERT(rtcb->xcp.sigdeliver != NULL);
 
@@ -130,13 +119,13 @@ void up_sigdeliver(void)
    * errno that is needed by the user logic (it is probably EINTR).
    */
 
-  sdbg("Resuming\n");
-  (void)irqsave();
+  sinfo("Resuming\n");
+  (void)up_irq_save();
   rtcb->pterrno = saved_errno;
 
   /* Then restore the correct state for this thread of execution. */
 
-  board_led_off(LED_SIGNAL);
+  board_autoled_off(LED_SIGNAL);
   SIGNAL_RETURN(regs);
 #endif
 }

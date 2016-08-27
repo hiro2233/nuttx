@@ -46,7 +46,7 @@
 #endif
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* EMACC Registers  *****************************************************************/
@@ -270,7 +270,8 @@ struct ez80emac_desc_s
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif /* __cplusplus */

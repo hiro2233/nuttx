@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lpc17xx/lpc17_allocateheap.c
  *
- *   Copyright (C) 2010-2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010-2011, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/kmalloc.h>
 #include <arch/board/board.h>
 
@@ -57,7 +58,7 @@
 #include "lpc17_mpuinit.h"
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Configuration ************************************************************/
@@ -154,15 +155,23 @@
 
 /* Sanity checking */
 
+#if !defined(CONFIG_LPC17_EXTDRAMHEAP) && !defined(CONFIG_LPC17_EXTSRAM0HEAP)
+#  define LPC17_EXT_MM_REGIONS 0
+#elif defined(CONFIG_LPC17_EXTDRAMHEAP) && defined(CONFIG_LPC17_EXTSRAM0HEAP)
+#  define LPC17_EXT_MM_REGIONS 2
+#else
+#  define LPC17_EXT_MM_REGIONS 1
+#endif
+
 #ifdef LPC17_AHB_HEAPBASE
-#  if CONFIG_MM_REGIONS < 2
+#  if CONFIG_MM_REGIONS < 2 + LPC17_EXT_MM_REGIONS
 #    warning "CONFIG_MM_REGIONS < 2: Available AHB SRAM Bank(s) not included in HEAP"
 #  endif
-#  if CONFIG_MM_REGIONS > 2
+#  if (CONFIG_MM_REGIONS > 2 + LPC17_EXT_MM_REGIONS)
 #    warning "CONFIG_MM_REGIONS > 2: Are additional regions handled by application?"
 #  endif
 #else
-#  if CONFIG_MM_REGIONS > 1
+#  if CONFIG_MM_REGIONS > 1 + LPC17_EXT_MM_REGIONS
 #    warning "CONFIG_MM_REGIONS > 1: This configuration has no available AHB SRAM Bank0/1"
 #    warning "CONFIG_MM_REGIONS > 1: Are additional regions handled by application?"
 #  endif
@@ -186,7 +195,7 @@
  * Description:
  *   This function will be called to dynamically set aside the heap region.
  *
- *   For the kernel build (CONFIG_NUTTX_KERNEL=y) with both kernel- and
+ *   For the kernel build (CONFIG_BUILD_PROTECTED=y) with both kernel- and
  *   user-space heaps (CONFIG_MM_KERNEL_HEAP=y), this function provides the
  *   size of the unprotected, user-space heap.
  *
@@ -215,7 +224,7 @@
 
 void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 {
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#if defined(CONFIG_BUILD_PROTECTED) && defined(CONFIG_MM_KERNEL_HEAP)
   /* Get the unaligned size and position of the user-space heap.
    * This heap begins after the user-space .bss section at an offset
    * of CONFIG_MM_KERNEL_HEAPSIZE (subject to alignment).
@@ -240,8 +249,8 @@ void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 
   /* Return the user-space heap settings */
 
-  board_led_on(LED_HEAPALLOCATE);
-  *heap_start = (FAR void*)ubase;
+  board_autoled_on(LED_HEAPALLOCATE);
+  *heap_start = (FAR void *)ubase;
   *heap_size  = usize;
 
   /* Allow user-mode access to the user heap memory */
@@ -251,8 +260,8 @@ void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 
   /* Return the heap settings */
 
-  board_led_on(LED_HEAPALLOCATE);
-  *heap_start = (FAR void*)g_idle_topstack;
+  board_autoled_on(LED_HEAPALLOCATE);
+  *heap_start = (FAR void *)g_idle_topstack;
   *heap_size  = CONFIG_RAM_END - g_idle_topstack;
 #endif
 }
@@ -261,13 +270,13 @@ void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
  * Name: up_allocate_kheap
  *
  * Description:
- *   For the kernel build (CONFIG_NUTTX_KERNEL=y) with both kernel- and
+ *   For the kernel build (CONFIG_BUILD_PROTECTED=y) with both kernel- and
  *   user-space heaps (CONFIG_MM_KERNEL_HEAP=y), this function allocates
  *   (and protects) the kernel-space heap.
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#if defined(CONFIG_BUILD_PROTECTED) && defined(CONFIG_MM_KERNEL_HEAP)
 void up_allocate_kheap(FAR void **heap_start, size_t *heap_size)
 {
   /* Get the unaligned size and position of the user-space heap.
@@ -296,19 +305,19 @@ void up_allocate_kheap(FAR void **heap_start, size_t *heap_size)
    * that was not dedicated to the user heap).
    */
 
-  *heap_start = (FAR void*)USERSPACE->us_bssend;
+  *heap_start = (FAR void *)USERSPACE->us_bssend;
   *heap_size  = ubase - (uintptr_t)USERSPACE->us_bssend;
 }
 #endif
 
-/************************************************************************
+/****************************************************************************
  * Name: up_addregion
  *
  * Description:
  *   Memory may be added in non-contiguous chunks.  Additional chunks are
  *   added by calling this function.
  *
- ************************************************************************/
+ ****************************************************************************/
 
 #if CONFIG_MM_REGIONS > 1
 void up_addregion(void)
@@ -326,7 +335,7 @@ void up_addregion(void)
    */
 
 #ifdef LPC17_AHB_HEAPBASE
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#if defined(CONFIG_BUILD_PROTECTED) && defined(CONFIG_MM_KERNEL_HEAP)
 
   /* Yes.. allow user-mode access to the AHB SRAM user heap memory */
 
@@ -336,8 +345,19 @@ void up_addregion(void)
 
   /* Add the AHB SRAM user heap region. */
 
-   kumm_addregion((FAR void*)LPC17_AHB_HEAPBASE, LPC17_AHB_HEAPSIZE);
+   kumm_addregion((FAR void *)LPC17_AHB_HEAPBASE, LPC17_AHB_HEAPSIZE);
 
+#endif
+
+#if CONFIG_MM_REGIONS >= 3
+#if defined(CONFIG_LPC17_EXTDRAM) && defined(CONFIG_LPC17_EXTDRAMHEAP)
+  kmm_addregion((FAR void *)LPC17_EXTDRAM_CS0, CONFIG_LPC17_EXTDRAMSIZE);
+#endif
+#if !defined(CONFIG_LPC17_EXTDRAMHEAP) || (CONFIG_MM_REGIONS >= 4)
+#if defined(CONFIG_LPC17_EXTSRAM0) && defined(CONFIG_LPC17_EXTSRAM0HEAP)
+  kmm_addregion((FAR void *)LPC17_EXTSRAM_CS0, CONFIG_LPC17_EXTSRAM0SIZE);
+#endif
+#endif
 #endif
 }
 #endif

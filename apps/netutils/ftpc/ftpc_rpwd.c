@@ -43,7 +43,7 @@
 #include <string.h>
 #include <debug.h>
 
-#include <apps/ftpc.h>
+#include "netutils/ftpc.h"
 
 #include "ftpc_internal.h"
 
@@ -87,11 +87,10 @@ FAR char *ftpc_rpwd(SESSION handle)
   FAR char *pwd;
   FAR char *ptr;
   int len;
-  int ret;
 
   /* Send the PWD command */
 
-  ret = ftpc_cmd(session, "PWD");
+  (void)ftpc_cmd(session, "PWD");
 
   /* Response is like: 257 "/home/gnutt" (from vsftpd).
    *
@@ -101,7 +100,7 @@ FAR char *ftpc_rpwd(SESSION handle)
   start = strchr(session->reply, '\"');
   if (!start)
     {
-      ndbg("Opening quote not found\n");
+      nwarn("WARNING: Opening quote not found\n");
       return NULL;
     }
   start++;
@@ -109,7 +108,7 @@ FAR char *ftpc_rpwd(SESSION handle)
   end = strchr(start, '\"');
   if (!end)
     {
-      ndbg("Closing quote not found\n");
+      nwarn("WARNING: Closing quote not found\n");
       return NULL;
     }
 
@@ -125,7 +124,7 @@ FAR char *ftpc_rpwd(SESSION handle)
   pwd = (char *)malloc(len + 1);
   if (!pwd)
     {
-      ndbg("Failed to allocate string\n");
+      nerr("ERROR: Failed to allocate string\n");
       return NULL;
     }
 
@@ -147,5 +146,6 @@ FAR char *ftpc_rpwd(SESSION handle)
           *ptr = '/';
         }
     }
+
   return pwd;
 }

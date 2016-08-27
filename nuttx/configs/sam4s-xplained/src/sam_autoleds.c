@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/sam4s-xplained/src/sam_autoleds.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,7 @@
 #include <stdbool.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -51,9 +52,6 @@
 
 #ifdef CONFIG_ARCH_LEDS
 
-/****************************************************************************
- * Definitions
- ****************************************************************************/
 /* If CONFIG_ARCH_LEDs is defined, then NuttX will control the two LEDs on
  * board the SAM4S Xplained.  The following definitions describe how NuttX
  * controls the LEDs:
@@ -72,35 +70,15 @@
  *   LED_IDLE             MCU is is sleep mode         Not used
  */
 
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg  lldbg
-#  define ledvdbg llvdbg
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_led_initialize
+ * Name: board_autoled_initialize
  ****************************************************************************/
 
-void board_led_initialize(void)
+void board_autoled_initialize(void)
 {
   /* Configure LED1-2 GPIOs for output */
 
@@ -109,10 +87,10 @@ void board_led_initialize(void)
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  ****************************************************************************/
 
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   bool led1on = false;
   bool led2on = false;
@@ -140,10 +118,10 @@ void board_led_on(int led)
 }
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  ****************************************************************************/
 
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   if (led != 2)
     {

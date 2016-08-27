@@ -58,11 +58,10 @@
 
 #include "up_arch.h"
 #include "up_internal.h"
-#include "os_internal.h"
-#include "at90usb_internal.h"
+#include "at90usb.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Some sanity checks *******************************************************/
@@ -103,11 +102,11 @@ static bool usart1_txready(struct uart_dev_s *dev);
 static bool usart1_txempty(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 struct uart_ops_s g_uart1_ops =
-{O
+{
   .setup          = usart1_setup,
   .shutdown       = usart1_shutdown,
   .attach         = usart1_attach,
@@ -248,7 +247,7 @@ static int usart1_attach(struct uart_dev_s *dev)
 
   (void)irq_attach(AT90USB_IRQ_U1RX, usart1_rxinterrupt);
   (void)irq_attach(AT90USB_IRQ_U1DRE, usart1_txinterrupt);
-//  (void)irq_attach(AT90USB_IRQ_U1TX, usart1_txinterrupt);
+//(void)irq_attach(AT90USB_IRQ_U1TX, usart1_txinterrupt);
   return OK;
 }
 
@@ -272,7 +271,7 @@ static void usart1_detach(struct uart_dev_s *dev)
 
   (void)irq_detach(AT90USB_IRQ_U1RX);
   (void)irq_detach(AT90USB_IRQ_U1DRE);
-//  (void)irq_detach(AT90USB_IRQ_U1TX);
+//(void)irq_detach(AT90USB_IRQ_U1TX);
 }
 
 /****************************************************************************
@@ -293,9 +292,9 @@ static int usart1_rxinterrupt(int irq, void *context)
 
   if ((ucsr1a & (1 << RXC1)) != 0)
     {
-       /* Received data ready... process incoming bytes */
+      /* Received data ready... process incoming bytes */
 
-       uart_recvchars(&g_usart1port);
+      uart_recvchars(&g_usart1port);
     }
 
   return OK;
@@ -321,9 +320,9 @@ static int usart1_txinterrupt(int irq, void *context)
 
   if ((ucsr1a & (1 << UDRE1)) != 0)
     {
-       /* Transmit data regiser empty ... process outgoing bytes */
+      /* Transmit data regiser empty ... process outgoing bytes */
 
-       uart_xmitchars(&g_usart1port);
+      uart_xmitchars(&g_usart1port);
     }
 
   return OK;
@@ -374,7 +373,7 @@ static int usart1_receive(struct uart_dev_s *dev, FAR unsigned int *status)
 
   if (status)
     {
-	  *status = (FAR unsigned int)UCSR1A;
+      *status = (FAR unsigned int)UCSR1A;
     }
 
   /* Then return the actual received byte */
@@ -458,7 +457,7 @@ static void usart1_txint(struct uart_dev_s *dev, bool enable)
    *      written.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable)
     {
       /* Set to receive an interrupt when the TX data register is empty */
@@ -481,7 +480,7 @@ static void usart1_txint(struct uart_dev_s *dev, bool enable)
       UCSR1B &= ~((1 << UDRIE1) | (1 << TXCIE1));
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************

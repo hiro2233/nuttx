@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/unistd.h
  *
- *   Copyright (C) 2007-2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2013-2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* The number of functions that may be registerd to be called
+/* The number of functions that may be registered to be called
  * at program exit.
  */
 
@@ -68,42 +68,59 @@
 
 /* POSIX feature set macros */
 
-#define  POSIX_VERSION
-#undef  _POSIX_SAVED_IDS
-#undef  _POSIX_JOB_CONTROL
-#define _POSIX_REALTIME_SIGNALS 1
-#define _POSIX_MESSAGE_PASSING 1
-#undef  _POSIX_MAPPED_FILES
-#undef  _POSIX_SHARED_MEMORY_OBJECTS
-#define _POSIX_PRIORITY_SCHEDULING 1
-#define _POSIX_TIMERS
-#undef  _POSIX_MEMLOCK
-#undef  _POSIX_MEMLOCK_RANGE
-#undef  _POSIX_FSYNC
-#define _POSIX_SYNCHRONIZED_IO
-#undef  _POSIX_ASYNCHRONOUS_IO
-#undef  _POSIX_PRIORITIZED_IO
+#define    POSIX_VERSION
+#undef    _POSIX_SAVED_IDS
+#undef    _POSIX_JOB_CONTROL
+#define   _POSIX_REALTIME_SIGNALS 1
+#define   _POSIX_MESSAGE_PASSING 1
+#undef    _POSIX_MAPPED_FILES
+#undef    _POSIX_SHARED_MEMORY_OBJECTS
+#define   _POSIX_PRIORITY_SCHEDULING 1
+#define   _POSIX_TIMERS 1
+#undef    _POSIX_MEMLOCK
+#undef    _POSIX_MEMLOCK_RANGE
+#undef    _POSIX_FSYNC
+#define   _POSIX_SYNCHRONIZED_IO 1
+
+#ifdef CONFIG_FS_AIO
+#  define _POSIX_ASYNCHRONOUS_IO 1
+#else
+#  undef  _POSIX_ASYNCHRONOUS_IO
+#endif
+
+#undef    _POSIX_PRIORITIZED_IO
+
+#ifdef CONFIG_SCHED_SPORADIC
+#  define _POSIX_SPORADIC_SERVER 1
+#  define _POSIX_THREAD_SPORADIC_SERVER 1
+#else
+#  undef  _POSIX_SPORADIC_SERVER
+#  undef  _POSIX_THREAD_SPORADIC_SERVER
+#endif
 
 /* Execution time constants (not supported) */
 
-#undef  _POSIX_CHOWN_RESTRICTED
-#undef  _POSIX_NO_TRUNC
-#undef  _POSIX_VDISABLE
+#undef    _POSIX_CHOWN_RESTRICTED
+#undef    _POSIX_NO_TRUNC
+#undef    _POSIX_VDISABLE
 
-#define _POSIX_SYNC_IO
-#undef  _POSIX_ASYNC_IO
-#undef  _POSIX_PRIO_IO
+#define   _POSIX_SYNC_IO 1
+#undef    _POSIX_ASYNC_IO
+#undef    _POSIX_PRIO_IO
 
 #define fdatasync(f) fsync(f)
 
+#define HOST_NAME_MAX 32
+
 /****************************************************************************
- * Global Variables
+ * Public Data
  ****************************************************************************/
 
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -116,15 +133,15 @@ extern "C" {
 #ifndef __NXFLAT__
 EXTERN FAR char *optarg; /* Optional argument following option */
 EXTERN int       optind; /* Index into argv */
-EXTERN int       optopt; /* unrecognized option character */
+EXTERN int       optopt; /* Unrecognized option character */
 #else
 #  define optarg  (*(getoptargp()))
-#  define optind  (*(getopindgp()))
+#  define optind  (*(getoptindp()))
 #  define optopt  (*(getoptoptp()))
 #endif
 
 /****************************************************************************
- * Global Function Prototypes
+ * Public Function Prototypes
  ****************************************************************************/
 
 /* Task Control Interfaces */
@@ -145,6 +162,19 @@ int     fsync(int fd);
 off_t   lseek(int fd, off_t offset, int whence);
 ssize_t read(int fd, FAR void *buf, size_t nbytes);
 ssize_t write(int fd, FAR const void *buf, size_t nbytes);
+ssize_t pread(int fd, FAR void *buf, size_t nbytes, off_t offset);
+ssize_t pwrite(int fd, FAR const void *buf, size_t nbytes, off_t offset);
+
+/* Check if a file descriptor corresponds to a terminal I/O file */
+
+int     isatty(int fd);
+
+/* Memory management */
+
+#if defined(CONFIG_ARCH_ADDRENV) && defined(CONFIG_MM_PGALLOC) && \
+    defined(CONFIG_ARCH_USE_MMU)
+FAR void *sbrk(intptr_t incr);
+#endif
 
 /* Special devices */
 
@@ -157,20 +187,15 @@ FAR char *getcwd(FAR char *buf, size_t size);
 
 /* File path operations */
 
-int     unlink(FAR const char *pathname);
+int     access(FAR const char *path, int amode);
 int     rmdir(FAR const char *pathname);
+int     unlink(FAR const char *pathname);
 
 /* Execution of programs from files */
 
 #ifdef CONFIG_LIBC_EXECFUNCS
 int     execl(FAR const char *path, ...);
 int     execv(FAR const char *path, FAR char *const argv[]);
-
-/* Non-standard functions to manage symbol tables */
-
-struct symtab_s; /* See include/nuttx/binfmt/symtab.h */
-void exec_getsymtab(FAR const struct symtab_s **symtab, FAR int *nsymbols);
-void exec_setsymtab(FAR const struct symtab_s *symtab, int nsymbols);
 #endif
 
 /* Other */
@@ -183,8 +208,13 @@ int     getopt(int argc, FAR char *const argv[], FAR const char *optstring);
  */
 
 FAR char **getoptargp(void); /* Optional argument following option */
-int       *getopindgp(void); /* Index into argv */
-int       *getoptoptp(void); /* unrecognized option character */
+int       *getoptindp(void); /* Index into argv */
+int       *getoptoptp(void); /* Unrecognized option character */
+
+#ifdef CONFIG_NET
+int     gethostname(FAR char *name, size_t size);
+int     sethostname(FAR const char *name, size_t size);
+#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

@@ -158,21 +158,13 @@ struct nrf24l01_dev_s
  ****************************************************************************/
 /* Low-level SPI helpers */
 
-#ifdef CONFIG_SPI_OWNBUS
 static inline void nrf24l01_configspi(FAR struct spi_dev_s *spi);
-#  define nrf24l01_lock(spi)
-#  define nrf24l01_unlock(spi)
-#else
-#  define nrf24l01_configspi(spi);
 static void nrf24l01_lock(FAR struct spi_dev_s *spi);
 static void nrf24l01_unlock(FAR struct spi_dev_s *spi);
-#endif
 
 static uint8_t nrf24l01_access(FAR struct nrf24l01_dev_s *dev,
     nrf24l01_access_mode_t mode, uint8_t cmd, uint8_t *buf, int length);
-
 static uint8_t nrf24l01_flush_rx(FAR struct nrf24l01_dev_s *dev);
-
 static uint8_t nrf24l01_flush_tx(FAR struct nrf24l01_dev_s *dev);
 
 /* Read register from nrf24 */
@@ -234,14 +226,17 @@ static FAR struct nrf24l01_dev_s *g_nrf24l01dev;
 
 static const struct file_operations nrf24l01_fops =
 {
-  .open = nrf24l01_open,    /* open */
-  .close = nrf24l01_close,  /* close */
-  .read = nrf24l01_read,    /* read */
-  .write = nrf24l01_write,  /* write */
-  .seek = NULL,             /* seek */
-  .ioctl = nrf24l01_ioctl,  /* ioctl */
+  nrf24l01_open,    /* open */
+  nrf24l01_close,   /* close */
+  nrf24l01_read,    /* read */
+  nrf24l01_write,   /* write */
+  NULL,             /* seek */
+  nrf24l01_ioctl,   /* ioctl */
 #ifndef CONFIG_DISABLE_POLL
-  .poll = nrf24l01_poll     /* poll */
+  nrf24l01_poll,    /* poll */
+#endif
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+  NULL              /* unlink */
 #endif
 };
 
@@ -249,7 +244,6 @@ static const struct file_operations nrf24l01_fops =
  * Private Functions
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static void nrf24l01_lock(FAR struct spi_dev_s *spi)
 {
   /* Lock the SPI bus because there are multiple devices competing for the
@@ -266,18 +260,17 @@ static void nrf24l01_lock(FAR struct spi_dev_s *spi)
   SPI_SELECT(spi, SPIDEV_WIRELESS, true);
   SPI_SETMODE(spi, SPIDEV_MODE0);
   SPI_SETBITS(spi, 8);
-  SPI_SETFREQUENCY(spi, NRF24L01_SPIFREQ);
+  (void)SPI_HWFEATURES(spi, 0);
+  (void)SPI_SETFREQUENCY(spi, NRF24L01_SPIFREQ);
   SPI_SELECT(spi, SPIDEV_WIRELESS, false);
 }
-#endif
 
 /****************************************************************************
  * Function: nrf24l01_unlock
  *
  * Description:
- *   If we are sharing the SPI bus with other devices (CONFIG_SPI_OWNBUS
- *   undefined) then we need to un-lock the SPI bus for each transfer,
- *   possibly losing the current configuration.
+ *   Un-lock the SPI bus after each transfer, possibly losing the current
+ *   configuration if we are sharing the SPI bus with other devices.
  *
  * Parameters:
  *   spi  - Reference to the SPI driver structure
@@ -289,23 +282,18 @@ static void nrf24l01_lock(FAR struct spi_dev_s *spi)
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static void nrf24l01_unlock(FAR struct spi_dev_s *spi)
 {
   /* Relinquish the SPI bus. */
 
   (void)SPI_LOCK(spi, false);
 }
-#endif
 
 /****************************************************************************
  * Function: nrf24l01_configspi
  *
  * Description:
- *   Configure the SPI for use with the NRF24L01.  This function should be
- *   called once during touchscreen initialization to configure the SPI
- *   bus.  Note that if CONFIG_SPI_OWNBUS is not defined, then this function
- *   does nothing.
+ *   Configure the SPI for use with the NRF24L01.
  *
  * Parameters:
  *   spi  - Reference to the SPI driver structure
@@ -317,20 +305,17 @@ static void nrf24l01_unlock(FAR struct spi_dev_s *spi)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SPI_OWNBUS
 static inline void nrf24l01_configspi(FAR struct spi_dev_s *spi)
 {
-  /* Configure SPI for the NRF24L01 module.
-   * As we own the SPI bus this method is called just once.
-   */
+  /* Configure SPI for the NRF24L01 module. */
 
-  SPI_SELECT(spi, SPIDEV_WIRELESS, true);  // Useful ?
+  SPI_SELECT(spi, SPIDEV_WIRELESS, true);  /* Useful ? */
   SPI_SETMODE(spi, SPIDEV_MODE0);
   SPI_SETBITS(spi, 8);
-  SPI_SETFREQUENCY(spi, NRF24L01_SPIFREQ);
+  (void)SPI_HWFEATURES(spi, 0);
+  (void)SPI_SETFREQUENCY(spi, NRF24L01_SPIFREQ);
   SPI_SELECT(spi, SPIDEV_WIRELESS, false);
 }
-#endif
 
 static inline void nrf24l01_select(struct nrf24l01_dev_s * dev)
 {
@@ -510,7 +495,7 @@ static int nrf24l01_irqhandler(int irq, FAR void *context)
 {
   FAR struct nrf24l01_dev_s *dev = g_nrf24l01dev;
 
-  wllvdbg("*IRQ*");
+  winfo("*IRQ*");
 
 #ifdef CONFIG_WL_NRF24L01_RXSUPPORT
 
@@ -566,7 +551,7 @@ static void nrf24l01_worker(FAR void *arg)
 
       bool ce = nrf24l01_chipenable(dev, false);
 
-      wdbg("RX_DR is set!\n");
+      winfo("RX_DR is set!\n");
 
       /* Read and store all received payloads */
 
@@ -601,8 +586,8 @@ static void nrf24l01_worker(FAR void *arg)
 
           status = nrf24l01_readreg(dev, NRF24L01_FIFO_STATUS, &fifo_status, 1);
 
-          wdbg("FIFO_STATUS=%02x\n", fifo_status);
-          wdbg("STATUS=%02x\n", status);
+          winfo("FIFO_STATUS=%02x\n", fifo_status);
+          winfo("STATUS=%02x\n", status);
         }
       while (!(fifo_status | NRF24L01_RX_EMPTY));
 
@@ -619,7 +604,7 @@ static void nrf24l01_worker(FAR void *arg)
         {
           dev->pfd->revents |= POLLIN;  /* Data available for input */
 
-          wvdbg("Wake up polled fd");
+          winfo("Wake up polled fd");
           sem_post(dev->pfd->sem);
         }
 #endif
@@ -662,7 +647,7 @@ static void nrf24l01_tostate(struct nrf24l01_dev_s *dev, nrf24l01_state_t state)
 
   /* Entering new state */
 
-  switch(state)
+  switch (state)
     {
     case ST_UNKNOWN:
       /* Power down the module here... */
@@ -735,11 +720,11 @@ static int dosend(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data, size_
       dev->lastxmitcount = (obsvalue & NRF24L01_ARC_CNT_MASK)
           >> NRF24L01_ARC_CNT_SHIFT;
 
-      wvdbg("Transmission OK (lastxmitcount=%d)\n", dev->lastxmitcount);
+      winfo("Transmission OK (lastxmitcount=%d)\n", dev->lastxmitcount);
     }
   else if (status & NRF24L01_MAX_RT)
     {
-      wvdbg("MAX_RT!\n", dev->lastxmitcount);
+      winfo("MAX_RT!\n", dev->lastxmitcount);
       result = -ECOMM;
       dev->lastxmitcount = NRF24L01_XMIT_MAXRT;
 
@@ -751,7 +736,7 @@ static int dosend(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data, size_
     {
       /* Unexpected... */
 
-      wdbg("No TX_DS nor MAX_RT bit set in STATUS reg!\n");
+      werr("ERROR: No TX_DS nor MAX_RT bit set in STATUS reg!\n");
       result = -EIO;
     }
 
@@ -773,7 +758,7 @@ static int nrf24l01_open(FAR struct file *filep)
   FAR struct nrf24l01_dev_s *dev;
   int result;
 
-  wvdbg("Opening nRF24L01 dev\n");
+  winfo("Opening nRF24L01 dev\n");
 
   DEBUGASSERT(filep);
   inode = filep->f_inode;
@@ -815,7 +800,7 @@ static int nrf24l01_close(FAR struct file *filep)
   FAR struct inode *inode;
   FAR struct nrf24l01_dev_s *dev;
 
-  wvdbg("Closing nRF24L01 dev\n");
+  winfo("Closing nRF24L01 dev\n");
   DEBUGASSERT(filep);
   inode = filep->f_inode;
 
@@ -900,7 +885,7 @@ static int nrf24l01_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   FAR struct nrf24l01_dev_s *dev;
   int result = OK;
 
-  wvdbg("cmd: %d arg: %ld\n", cmd, arg);
+  winfo("cmd: %d arg: %ld\n", cmd, arg);
   DEBUGASSERT(filep);
   inode = filep->f_inode;
 
@@ -979,7 +964,7 @@ static int nrf24l01_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         break;
 
       case NRF24L01IOC_GETRETRCFG:  /* Get retransmit params. arg: Pointer to nrf24l01_retrcfg_t */
-        result = -ENOSYS;  /* TODO !*/
+        result = -ENOSYS;  /* TODO */
         break;
 
       case NRF24L01IOC_SETPIPESCFG:
@@ -1052,7 +1037,7 @@ static int nrf24l01_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         }
 
       case NRF24L01IOC_GETDATARATE:
-        result = -ENOSYS;  /* TODO !*/
+        result = -ENOSYS;  /* TODO */
         break;
 
       case NRF24L01IOC_SETADDRWIDTH:
@@ -1132,7 +1117,7 @@ static int nrf24l01_poll(FAR struct file *filep, FAR struct pollfd *fds,
   FAR struct nrf24l01_dev_s *dev;
   int result = OK;
 
-  wvdbg("setup: %d\n", (int)setup);
+  winfo("setup: %d\n", (int)setup);
   DEBUGASSERT(filep && fds);
   inode = filep->f_inode;
 
@@ -1198,9 +1183,9 @@ static int nrf24l01_unregister(FAR struct nrf24l01_dev_s *dev)
 
   /* Free memory */
 #ifdef CONFIG_WL_NRF24L01_RXSUPPORT
-  kfree(dev->rx_fifo);
+  kmm_free(dev->rx_fifo);
 #endif
-  kfree(dev);
+  kmm_free(dev);
 
   return OK;
 }
@@ -1220,7 +1205,7 @@ int nrf24l01_register(FAR struct spi_dev_s *spi, FAR struct nrf24l01_config_s *c
 
   ASSERT((spi != NULL) & (cfg != NULL));
 
-  if ((dev = kmalloc(sizeof(struct nrf24l01_dev_s))) == NULL)
+  if ((dev = kmm_malloc(sizeof(struct nrf24l01_dev_s))) == NULL)
     {
       return -ENOMEM;
     }
@@ -1242,9 +1227,9 @@ int nrf24l01_register(FAR struct spi_dev_s *spi, FAR struct nrf24l01_config_s *c
   sem_init(&(dev->sem_tx), 0, 0);
 
 #ifdef CONFIG_WL_NRF24L01_RXSUPPORT
-  if ((rx_fifo = kmalloc(CONFIG_WL_NRF24L01_RXFIFO_LEN)) == NULL)
+  if ((rx_fifo = kmm_malloc(CONFIG_WL_NRF24L01_RXFIFO_LEN)) == NULL)
     {
-      kfree(dev);
+      kmm_free(dev);
       return -ENOMEM;
     }
 
@@ -1267,12 +1252,12 @@ int nrf24l01_register(FAR struct spi_dev_s *spi, FAR struct nrf24l01_config_s *c
 
   /* Register the device as an input device */
 
-  ivdbg("Registering " DEV_NAME "\n");
+  iinfo("Registering " DEV_NAME "\n");
 
   result = register_driver(DEV_NAME, &nrf24l01_fops, 0666, dev);
   if (result < 0)
     {
-      wdbg("register_driver() failed: %d\n", result);
+      werr("ERROR: register_driver() failed: %d\n", result);
       nrf24l01_unregister(dev);
     }
 
@@ -1294,7 +1279,7 @@ int nrf24l01_init(FAR struct nrf24l01_dev_s *dev)
   CHECK_ARGS(dev);
   nrf24l01_lock(dev->spi);
 
-  /* Configure the SPI parameters now  (if we own the bus) */
+  /* Configure the SPI parameters before communicating */
 
   nrf24l01_configspi(dev->spi);
 
@@ -1350,7 +1335,8 @@ int nrf24l01_init(FAR struct nrf24l01_dev_s *dev)
 
   /* Clear interrupt sources (useful ?) */
 
-  nrf24l01_writeregbyte(dev, NRF24L01_STATUS, NRF24L01_RX_DR|NRF24L01_TX_DS|NRF24L01_MAX_RT);
+  nrf24l01_writeregbyte(dev, NRF24L01_STATUS,
+                        NRF24L01_RX_DR | NRF24L01_TX_DS | NRF24L01_MAX_RT);
 
 out:
   nrf24l01_unlock(dev->spi);
@@ -1522,7 +1508,7 @@ int nrf24l01_settxpower(FAR struct nrf24l01_dev_s *dev, int outpower)
    * '11' – 0dBm
    */
 
-  switch(outpower)
+  switch (outpower)
     {
     case 0:
       hwpow = 3 << NRF24L01_RF_PWR_SHIFT;
@@ -1604,7 +1590,7 @@ int nrf24l01_setradiofreq(FAR struct nrf24l01_dev_s *dev, uint32_t freq)
 
   CHECK_ARGS(dev && freq >= NRF24L01_MIN_FREQ && freq <= NRF24L01_MAX_FREQ);
 
-  value = NRF24L01_MIN_FREQ - freq;
+  value = freq - NRF24L01_MIN_FREQ;
   nrf24l01_lock(dev->spi);
   nrf24l01_writeregbyte(dev, NRF24L01_RF_CH, value);
   nrf24l01_unlock(dev->spi);
@@ -1672,7 +1658,7 @@ int nrf24l01_sendto(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data,
 
   if ((dev->en_aa & 1) && (memcmp(destaddr, dev->pipe0addr, dev->addrlen)))
     {
-      wdbg("Change pipe #0 addr to dest addr\n");
+      winfo("Change pipe #0 addr to dest addr\n");
       nrf24l01_writereg(dev, NRF24L01_RX_ADDR_P0, destaddr, NRF24L01_MAX_ADDR_LEN);
       pipeaddrchg = true;
     }
@@ -1684,7 +1670,7 @@ int nrf24l01_sendto(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data,
       /* Restore pipe #0 addr */
 
       nrf24l01_writereg(dev, NRF24L01_RX_ADDR_P0, dev->pipe0addr, NRF24L01_MAX_ADDR_LEN);
-      wdbg("Pipe #0 default addr restored\n");
+      winfo("Pipe #0 default addr restored\n");
     }
 
   nrf24l01_unlock(dev->spi);
@@ -1733,39 +1719,59 @@ void nrf24l01_dumpregs(struct nrf24l01_dev_s *dev)
   uint8_t addr[NRF24L01_MAX_ADDR_LEN];
   char addrstr[NRF24L01_MAX_ADDR_LEN * 2 +1];
 
-  syslog("CONFIG:    %02x\n", nrf24l01_readregbyte(dev, NRF24L01_CONFIG));
-  syslog("EN_AA:     %02x\n", nrf24l01_readregbyte(dev, NRF24L01_EN_AA));
-  syslog("EN_RXADDR: %02x\n", nrf24l01_readregbyte(dev, NRF24L01_EN_RXADDR));
-  syslog("SETUP_AW:  %02x\n", nrf24l01_readregbyte(dev, NRF24L01_SETUP_AW));
+  syslog(LOG_INFO, "CONFIG:    %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_CONFIG));
+  syslog(LOG_INFO, "EN_AA:     %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_EN_AA));
+  syslog(LOG_INFO, "EN_RXADDR: %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_EN_RXADDR));
+  syslog(LOG_INFO, "SETUP_AW:  %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_SETUP_AW));
 
-  syslog("SETUP_RETR:%02x\n", nrf24l01_readregbyte(dev, NRF24L01_SETUP_RETR));
-  syslog("RF_CH:     %02x\n", nrf24l01_readregbyte(dev, NRF24L01_RF_CH));
-  syslog("RF_SETUP:  %02x\n", nrf24l01_readregbyte(dev, NRF24L01_RF_SETUP));
-  syslog("STATUS:    %02x\n", nrf24l01_readregbyte(dev, NRF24L01_STATUS));
-  syslog("OBS_TX:    %02x\n", nrf24l01_readregbyte(dev, NRF24L01_OBSERVE_TX));
+  syslog(LOG_INFO, "SETUP_RETR:%02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_SETUP_RETR));
+  syslog(LOG_INFO, "RF_CH:     %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_RF_CH));
+  syslog(LOG_INFO, "RF_SETUP:  %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_RF_SETUP));
+  syslog(LOG_INFO, "STATUS:    %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_STATUS));
+  syslog(LOG_INFO, "OBS_TX:    %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_OBSERVE_TX));
 
   nrf24l01_readreg(dev, NRF24L01_TX_ADDR, addr, dev->addrlen);
   binarycvt(addrstr, addr, dev->addrlen);
-  syslog("TX_ADDR:   %s\n", addrstr);
+  syslog(LOG_INFO, "TX_ADDR:   %s\n", addrstr);
 
-  syslog("CD:        %02x\n", nrf24l01_readregbyte(dev, NRF24L01_CD));
-  syslog("RX_PW_P0:  %02x\n", nrf24l01_readregbyte(dev, NRF24L01_RX_PW_P0));
-  syslog("RX_PW_P1:  %02x\n", nrf24l01_readregbyte(dev, NRF24L01_RX_PW_P1));
-  syslog("RX_PW_P2:  %02x\n", nrf24l01_readregbyte(dev, NRF24L01_RX_PW_P2));
-  syslog("RX_PW_P3:  %02x\n", nrf24l01_readregbyte(dev, NRF24L01_RX_PW_P3));
-  syslog("RX_PW_P4:  %02x\n", nrf24l01_readregbyte(dev, NRF24L01_RX_PW_P4));
-  syslog("RX_PW_P5:  %02x\n", nrf24l01_readregbyte(dev, NRF24L01_RX_PW_P5));
+  syslog(LOG_INFO, "CD:        %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_CD));
+  syslog(LOG_INFO, "RX_PW_P0:  %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_RX_PW_P0));
+  syslog(LOG_INFO, "RX_PW_P1:  %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_RX_PW_P1));
+  syslog(LOG_INFO, "RX_PW_P2:  %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_RX_PW_P2));
+  syslog(LOG_INFO, "RX_PW_P3:  %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_RX_PW_P3));
+  syslog(LOG_INFO, "RX_PW_P4:  %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_RX_PW_P4));
+  syslog(LOG_INFO, "RX_PW_P5:  %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_RX_PW_P5));
 
-  syslog("FIFO_STAT: %02x\n", nrf24l01_readregbyte(dev, NRF24L01_FIFO_STATUS));
-  syslog("DYNPD:     %02x\n", nrf24l01_readregbyte(dev, NRF24L01_DYNPD));
-  syslog("FEATURE:   %02x\n", nrf24l01_readregbyte(dev, NRF24L01_FEATURE));
+  syslog(LOG_INFO, "FIFO_STAT: %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_FIFO_STATUS));
+  syslog(LOG_INFO, "DYNPD:     %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_DYNPD));
+  syslog(LOG_INFO, "FEATURE:   %02x\n",
+         nrf24l01_readregbyte(dev, NRF24L01_FEATURE));
 }
 
 #ifdef CONFIG_WL_NRF24L01_RXSUPPORT
 void nrf24l01_dumprxfifo(struct nrf24l01_dev_s *dev)
 {
-  syslog("bytes count: %d\n", dev->fifo_len);
-  syslog("next read:   %d,  next write: %d\n", dev->nxt_read, dev-> nxt_write);
+  syslog(LOG_INFO, "bytes count: %d\n", dev->fifo_len);
+  syslog(LOG_INFO, "next read:   %d,  next write: %d\n",
+         dev->nxt_read, dev-> nxt_write);
 }
 #endif
 

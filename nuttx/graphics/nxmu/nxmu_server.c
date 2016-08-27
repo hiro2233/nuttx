@@ -52,7 +52,7 @@
 #include "nxfe.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -87,7 +87,7 @@ static inline void nxmu_disconnect(FAR struct nxfe_conn_s *conn)
   ret = nxmu_sendclient(conn, &outmsg, sizeof(struct nxclimsg_disconnected_s));
   if (ret < 0)
     {
-      gdbg("nxmu_sendclient failed: %d\n", errno);
+      gerr("ERROR: nxmu_sendclient failed: %d\n", errno);
     }
 
   /* Close the outgoing client message queue */
@@ -114,7 +114,7 @@ static inline void nxmu_connect(FAR struct nxfe_conn_s *conn)
   conn->swrmq  = mq_open(mqname, O_WRONLY);
   if (conn->swrmq == (mqd_t)-1)
     {
-      gdbg("mq_open(%s) failed: %d\n", mqname, errno);
+      gerr("ERROR: mq_open(%s) failed: %d\n", mqname, errno);
       outmsg.msgid = NX_CLIMSG_DISCONNECTED;
     }
 
@@ -124,7 +124,7 @@ static inline void nxmu_connect(FAR struct nxfe_conn_s *conn)
   ret = nxmu_sendclient(conn, &outmsg, sizeof(struct nxclimsg_connected_s));
   if (ret < 0)
     {
-      gdbg("nxmu_sendclient failed: %d\n", errno);
+      gerr("ERROR: nxmu_sendclient failed: %d\n", errno);
     }
 }
 
@@ -166,7 +166,7 @@ static inline void nxmu_blocked(FAR struct nxbe_window_s *wnd, FAR void *arg)
   ret = nxmu_sendclient(wnd->conn, &outmsg, sizeof(struct nxclimsg_blocked_s));
   if (ret < 0)
     {
-      gdbg("nxmu_sendclient failed: %d\n", errno);
+      gerr("ERROR: nxmu_sendclient failed: %d\n", errno);
     }
 }
 
@@ -187,16 +187,16 @@ static inline int nxmu_setup(FAR const char *mqname, FAR NX_DRIVERTYPE *dev,
   ret = nxbe_configure(dev, &fe->be);
   if (ret < 0)
     {
-      gdbg("nxbe_configure failed: %d\n", -ret);
+      gerr("ERROR: nxbe_configure failed: %d\n", -ret);
       errno = -ret;
       return ERROR;
     }
 
-#if CONFIG_FB_CMAP
+#ifdef CONFIG_FB_CMAP
   ret = nxbe_colormap(dev);
   if (ret < 0)
     {
-      gdbg("nxbe_colormap failed: %d\n", -ret);
+      gerr("ERROR: nxbe_colormap failed: %d\n", -ret);
       errno = -ret;
       return ERROR;
     }
@@ -214,10 +214,10 @@ static inline int nxmu_setup(FAR const char *mqname, FAR NX_DRIVERTYPE *dev,
   attr.mq_msgsize = NX_MXSVRMSGLEN;
   attr.mq_flags   = 0;
 
-  fe->conn.crdmq = mq_open(mqname, O_RDONLY|O_CREAT, 0666, &attr);
+  fe->conn.crdmq = mq_open(mqname, O_RDONLY | O_CREAT, 0666, &attr);
   if (fe->conn.crdmq == (mqd_t)-1)
     {
-      gdbg("mq_open(%s) failed: %d\n", mqname, errno);
+      gerr("ERROR: mq_open(%s) failed: %d\n", mqname, errno);
       return ERROR; /* mq_open sets errno */
     }
 
@@ -233,7 +233,7 @@ static inline int nxmu_setup(FAR const char *mqname, FAR NX_DRIVERTYPE *dev,
   fe->conn.swrmq = mq_open(mqname, O_WRONLY);
   if (fe->conn.swrmq == (mqd_t)-1)
     {
-      gdbg("mq_open(%s) failed: %d\n", mqname, errno);
+      gerr("ERROR: mq_open(%s) failed: %d\n", mqname, errno);
       mq_close(fe->conn.crdmq);
       return ERROR; /* mq_open sets errno */
     }
@@ -245,7 +245,7 @@ static inline int nxmu_setup(FAR const char *mqname, FAR NX_DRIVERTYPE *dev,
   /* Initialize the non-NULL elements of the background window */
 
   fe->be.bkgd.conn = &fe->conn;
-  fe->be.bkgd.be   = (FAR struct nxbe_state_s*)fe;
+  fe->be.bkgd.be   = (FAR struct nxbe_state_s *)fe;
 
   fe->be.bkgd.bounds.pt2.x = fe->be.vinfo.xres - 1;
   fe->be.bkgd.bounds.pt2.y = fe->be.vinfo.yres - 1;
@@ -259,7 +259,7 @@ static inline int nxmu_setup(FAR const char *mqname, FAR NX_DRIVERTYPE *dev,
 
   /* Initialize the mouse position */
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
   nxmu_mouseinit(fe->be.vinfo.xres, fe->be.vinfo.yres);
 #endif
   return OK;
@@ -291,9 +291,9 @@ static inline int nxmu_setup(FAR const char *mqname, FAR NX_DRIVERTYPE *dev,
 
 int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
 {
-  struct nxfe_state_s     fe;
+  struct nxfe_state_s    fe;
   FAR struct nxsvrmsg_s *msg;
-  uint8_t                buffer[NX_MXSVRMSGLEN];
+  char                   buffer[NX_MXSVRMSGLEN];
   int                    nbytes;
   int                    ret;
 
@@ -301,7 +301,7 @@ int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
 
   /* Sanity checking */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!mqname || !dev)
     {
       errno = EINVAL;
@@ -325,7 +325,7 @@ int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
 
   /* Then loop forever processing incoming messages */
 
-  for (;;)
+  for (; ; )
     {
        /* Receive the next server message */
 
@@ -334,7 +334,7 @@ int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
          {
            if (errno != EINTR)
              {
-               gdbg("mq_receive failed: %d\n", errno);
+               gerr("ERROR: mq_receive failed: %d\n", errno);
                goto errout; /* mq_receive sets errno */
              }
            continue;
@@ -345,7 +345,7 @@ int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
        DEBUGASSERT(nbytes >= sizeof(struct nxsvrmsg_s));
        msg = (FAR struct nxsvrmsg_s *)buffer;
 
-       gvdbg("Received opcode=%d nbytes=%d\n", msg->msgid, nbytes);
+       ginfo("Received opcode=%d nbytes=%d\n", msg->msgid, nbytes);
        switch (msg->msgid)
          {
          /* Messages sent from clients to the NX server *********************/
@@ -486,13 +486,22 @@ int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
 
          case NX_SVRMSG_SETBGCOLOR: /* Set the color of the background */
            {
-             FAR struct nxsvrmsg_setbgcolor_s *bgcolormsg = (FAR struct nxsvrmsg_setbgcolor_s *)buffer;
-             nxgl_colorcopy(fe.be.bgcolor, bgcolormsg->color);
-             nxbe_fill(&fe.be.bkgd, &fe.be.bkgd.bounds, bgcolormsg->color);
+             FAR struct nxsvrmsg_setbgcolor_s *bgcolormsg =
+               (FAR struct nxsvrmsg_setbgcolor_s *)buffer;
+
+             /* Has the background color changed? */
+
+             if (!nxgl_colorcmp(fe.be.bgcolor, bgcolormsg->color))
+               {
+                 /* Yes.. fill the background */
+
+                 nxgl_colorcopy(fe.be.bgcolor, bgcolormsg->color);
+                 nxbe_fill(&fe.be.bkgd, &fe.be.bkgd.bounds, bgcolormsg->color);
+               }
            }
            break;
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
          case NX_SVRMSG_MOUSEIN: /* New mouse report from mouse client */
            {
              FAR struct nxsvrmsg_mousein_s *mousemsg = (FAR struct nxsvrmsg_mousein_s *)buffer;
@@ -522,7 +531,7 @@ int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
             {
               FAR struct nxclimsg_redraw_s *redraw = (FAR struct nxclimsg_redraw_s *)buffer;
               DEBUGASSERT(redraw->wnd == &fe.be.bkgd);
-              gvdbg("Re-draw background rect={(%d,%d),(%d,%d)}\n",
+              ginfo("Re-draw background rect={(%d,%d),(%d,%d)}\n",
                     redraw->rect.pt1.x, redraw->rect.pt1.y,
                     redraw->rect.pt2.x, redraw->rect.pt2.y);
               nxbe_fill(&fe.be.bkgd, &redraw->rect, fe.be.bgcolor);
@@ -536,7 +545,7 @@ int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
          case NX_CLIMSG_CONNECTED:    /* Shouldn't happen */
          case NX_CLIMSG_DISCONNECTED:
          default:
-           gdbg("Unrecognized command: %d\n", msg->msgid);
+           gerr("ERROR: Unrecognized command: %d\n", msg->msgid);
            break;
          }
     }

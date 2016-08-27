@@ -46,7 +46,7 @@
 #endif
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Bits in the Z80 FLAGS register ***************************************************/
@@ -77,7 +77,8 @@
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -88,7 +89,7 @@ EXTERN uint32_t ez80_systemclock;
  * Public Function Prototypes
  ************************************************************************************/
 
- #undef EXTERN
+#undef EXTERN
 #ifdef __cplusplus
 }
 #endif

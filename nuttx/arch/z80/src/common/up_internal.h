@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z80/src/common/up_internal.h
  *
- *   Copyright (C) 2007-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,6 +51,10 @@
 #undef  CONFIG_SUPPRESS_UART_CONFIG   /* Do not reconfig UART */
 #undef  CONFIG_DUMP_ON_EXIT           /* Dump task state on exit */
 
+#ifndef CONFIG_DEBUG_SCHED_INFO
+#  undef CONFIG_DUMP_ON_EXIT          /* Needs CONFIG_DEBUG_SCHED_INFO */
+#endif
+
 /****************************************************************************
  * Included Files
  ****************************************************************************/
@@ -63,7 +67,7 @@
 #include "chip/switch.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Determine which (if any) console driver to use.  If a console is enabled
@@ -88,6 +92,9 @@
 #  if defined(CONFIG_RAMLOG_CONSOLE)
 #    undef  USE_SERIALDRIVER
 #    undef  CONFIG_DEV_LOWCONSOLE
+#  elif defined(CONFIG_CONSOLE_SYSLOG)
+#    undef  USE_SERIALDRIVER
+#    undef  CONFIG_DEV_LOWCONSOLE
 #  elif defined(CONFIG_DEV_LOWCONSOLE)
 #    undef  USE_SERIALDRIVER
 #  else
@@ -110,7 +117,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -142,7 +149,7 @@ void up_sigdeliver(void);
 
 /* Defined in CPU-specific logic (only for Z180) */
 
-#if CONFIG_ADDRENV
+#ifdef CONFIG_ARCH_ADDRENV
 int up_mmuinit(void);
 #endif
 
@@ -168,33 +175,29 @@ void lowconsole_init(void);
 # define lowconsole_init()
 #endif
 
+/* Defined in drivers/syslog_console.c */
+
+#ifdef CONFIG_CONSOLE_SYSLOG
+void syslog_console_init();
+#else
+# define syslog_console_init()
+#endif
+
 /* Defined in drivers/ramlog.c */
 
 #ifdef CONFIG_RAMLOG_CONSOLE
-extern void ramlog_consoleinit(void);
+void ramlog_consoleinit(void);
 #else
 # define ramlog_consoleinit()
 #endif
 
 /* Low level string output */
 
-extern void up_puts(const char *str);
+void up_puts(const char *str);
 
 /* Defined in up_timerisr.c */
 
-void up_timerinit(void);
-
-/* Defined in board/up_leds.c */
-
-#ifdef CONFIG_ARCH_LEDS
-void board_led_initialize(void);
-void board_led_on(int led);
-void board_led_off(int led);
-#else
-# define board_led_initialize()
-# define board_led_on(led)
-# define board_led_off(led)
-#endif
+void up_timer_initialize(void);
 
 /* Architecture specific hook into the timer interrupt handler */
 
@@ -208,7 +211,7 @@ void up_timerhook(void);
 int  up_netinitialize(void);
 void up_netuninitialize(void);
 # ifdef CONFIG_ARCH_MCFILTER
-int up_multicastfilter(FAR struct uip_driver_s *dev, FAR uint8_t *mac, bool enable);
+int up_multicastfilter(FAR struct net_driver_s *dev, FAR uint8_t *mac, bool enable);
 # else
 #   define up_multicastfilter(dev, mac, enable)
 # endif

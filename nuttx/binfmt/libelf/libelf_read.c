@@ -1,7 +1,7 @@
 /****************************************************************************
  * binfmt/libelf/libelf_read.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,12 +50,10 @@
 #include <nuttx/binfmt/elf.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #undef ELF_DUMP_READDATA       /* Define to dump all file data read */
-#define DUMPER syslog          /* If ELF_DUMP_READDATA is defined, this
-                                * is the API used to dump data */
 
 /****************************************************************************
  * Private Constant Data
@@ -70,20 +68,21 @@
  ****************************************************************************/
 
 #if defined(ELF_DUMP_READDATA)
-static inline void elf_dumpreaddata(char *buffer, int buflen)
+static inline void elf_dumpreaddata(FAR char *buffer, int buflen)
 {
-  uint32_t *buf32 = (uint32_t*)buffer;
+  FAR uint32_t *buf32 = (FAR uint32_t *)buffer;
   int i;
   int j;
 
   for (i = 0; i < buflen; i += 32)
     {
-      DUMPER("%04x:", i);
+      syslog(LOG_DEBUG, "%04x:", i);
       for (j = 0; j < 32; j += sizeof(uint32_t))
         {
-          DUMPER("  %08x", *buf32++);
+          syslog(LOG_DEBUG, "  %08x", *buf32++);
         }
-      DUMPER("\n");
+
+      syslog(LOG_DEBUG, "\n");
     }
 }
 #else
@@ -102,7 +101,7 @@ static inline void elf_dumpreaddata(char *buffer, int buflen)
  *   read into 'buffer.' If 'buffer' is part of the ELF address environment,
  *   then the caller is responsibile for assuring that that address
  *   environment is in place before calling this function (i.e., that
- *   elf_addrenv_select() has been called if CONFIG_ADDRENV=y).
+ *   elf_addrenv_select() has been called if CONFIG_ARCH_ADDRENV=y).
  *
  * Returned Value:
  *   0 (OK) is returned on success and a negated errno is returned on
@@ -116,7 +115,7 @@ int elf_read(FAR struct elf_loadinfo_s *loadinfo, FAR uint8_t *buffer,
   ssize_t nbytes;      /* Number of bytes read */
   off_t   rpos;        /* Position returned by lseek */
 
-  bvdbg("Read %ld bytes from offset %ld\n", (long)readsize, (long)offset);
+  binfo("Read %ld bytes from offset %ld\n", (long)readsize, (long)offset);
 
   /* Loop until all of the requested data has been read. */
 
@@ -128,7 +127,8 @@ int elf_read(FAR struct elf_loadinfo_s *loadinfo, FAR uint8_t *buffer,
       if (rpos != offset)
         {
           int errval = errno;
-          bdbg("Failed to seek to position %ld: %d\n", (long)offset, errval);
+          berr("Failed to seek to position %lu: %d\n",
+               (unsigned long)offset, errval);
           return -errval;
         }
 
@@ -143,13 +143,14 @@ int elf_read(FAR struct elf_loadinfo_s *loadinfo, FAR uint8_t *buffer,
 
            if (errval != EINTR)
              {
-               bdbg("Read of .data failed: %d\n", errval);
+               berr("Read from offset %lu failed: %d\n",
+                    (unsigned long)offset, errval);
                return -errval;
              }
          }
        else if (nbytes == 0)
          {
-           bdbg("Unexpected end of file\n");
+           berr("Unexpected end of file\n");
            return -ENODATA;
          }
        else

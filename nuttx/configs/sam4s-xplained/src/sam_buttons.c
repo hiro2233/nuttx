@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/sam4s-xplained/src/sam_buttons.c
  *
- *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,9 +42,10 @@
 #include <stdint.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/irq.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <arch/board/board.h>
 
 #include "sam_gpio.h"
@@ -53,14 +54,16 @@
 #ifdef CONFIG_ARCH_BUTTONS
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
+#if defined(CONFIG_SAM34_GPIOA_IRQ) && defined(CONFIG_ARCH_IRQBUTTONS)
 static xcpt_t g_irqbp2;
+#endif
 
 /****************************************************************************
  * Private Functions
@@ -74,10 +77,10 @@ static xcpt_t g_irqbp2;
  * Name: board_button_initialize
  *
  * Description:
- *   board_button_initialize() must be called to initialize button resources.  After
- *   that, board_buttons() may be called to collect the current state of all
- *   buttons or board_button_irq() may be called to register button interrupt
- *   handlers.
+ *   board_button_initialize() must be called to initialize button resources.
+ *   After that, board_buttons() may be called to collect the current state
+ *   of all buttons or board_button_irq() may be called to register button
+ *   interrupt handlers.
  *
  ****************************************************************************/
 
@@ -86,16 +89,16 @@ void board_button_initialize(void)
   (void)sam_configgpio(GPIO_BP2);
 }
 
-/************************************************************************************
+/****************************************************************************
  * Name: board_buttons
  *
  * Description:
- *   After board_button_initialize() has been called, board_buttons() may be called to collect
- *   the state of all buttons.  board_buttons() returns an 8-bit bit set with each bit
- *   associated with a button.  See the BUTTON* definitions above for the meaning of
- *   each bit in the returned value.
+ *   After board_button_initialize() has been called, board_buttons() may be
+ *   called to collect the state of all buttons.  board_buttons() returns an
+ *   8-bit bit set with each bit associated with a button.  See the BUTTON*
+ *   definitions above for the meaning of each bit in the returned value.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
 uint8_t board_buttons(void)
 {
@@ -109,7 +112,7 @@ uint8_t board_buttons(void)
  *   This function may be called to register an interrupt handler that will
  *   be called when a button is depressed or released.  The ID value is one
  *   of the BUTTON* definitions provided above. The previous interrupt
- *   handler address isreturned (so that it may restored, if so desired).
+ *   handler address is returned (so that it may restored, if so desired).
  *
  * Configuration Notes:
  *   Configuration CONFIG_AVR32_GPIOIRQ must be selected to enable the
@@ -133,19 +136,32 @@ xcpt_t board_button_irq(int id, xcpt_t irqhandler)
        * following operations are atomic.
        */
 
-      flags = irqsave();
+      flags = enter_critical_section();
 
       /* Get the old button interrupt handler and save the new one */
 
       oldhandler = *g_irqbp2;
       *g_irqbp2 = irqhandler;
 
-      /* Configure the interrupt */
+      /* Are we attaching or detaching? */
 
-      sam_gpioirq(IRQ_BP2);
-      (void)irq_attach(IRQ_BP2, irqhandler);
-      sam_gpioirqenable(IRQ_BP2);
-      irqrestore(flags);
+      if (irqhandler != NULL)
+        {
+          /* Configure the interrupt */
+
+          sam_gpioirq(GPIO_BP2);
+          (void)irq_attach(IRQ_BP2, irqhandler);
+          sam_gpioirqenable(IRQ_BP2);
+        }
+      else
+        {
+          /* Detach and disable the interrupt */
+
+          (void)irq_detach(IRQ_BP2);
+          sam_gpioirqdisable(IRQ_BP2);
+        }
+
+      leave_critical_section(flags);
     }
 
   /* Return the old button handler (so that it can be restored) */

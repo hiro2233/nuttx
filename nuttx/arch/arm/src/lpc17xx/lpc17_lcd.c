@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src//lpc17xx/lpc17_lcd.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,7 +53,7 @@
 #include "lpc17_lcd.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define LPC17_LCD_CLK_PER_LINE \
@@ -153,6 +153,7 @@ static const struct fb_planeinfo_s g_planeinfo =
   .fbmem    = (FAR void *)CONFIG_LPC17_LCD_VRAMBASE,
   .fblen    = LPC17_FBSIZE,
   .stride   = LPC17_STRIDE,
+  .display  = 0,
   .bpp      = LPC17_BPP,
 };
 
@@ -201,14 +202,14 @@ struct fb_vtable_s g_fbobject =
 static int lpc17_getvideoinfo(FAR struct fb_vtable_s *vtable,
                               FAR struct fb_videoinfo_s *vinfo)
 {
-  gvdbg("vtable=%p vinfo=%p\n", vtable, vinfo);
+  lcdinfo("vtable=%p vinfo=%p\n", vtable, vinfo);
   if (vtable && vinfo)
     {
       memcpy(vinfo, &g_videoinfo, sizeof(struct fb_videoinfo_s));
       return OK;
     }
 
-  gdbg("Returning EINVAL\n");
+  lcderr("ERROR: Returning EINVAL\n");
   return -EINVAL;
 }
 
@@ -219,14 +220,14 @@ static int lpc17_getvideoinfo(FAR struct fb_vtable_s *vtable,
 static int lpc17_getplaneinfo(FAR struct fb_vtable_s *vtable, int planeno,
                               FAR struct fb_planeinfo_s *pinfo)
 {
-  gvdbg("vtable=%p planeno=%d pinfo=%p\n", vtable, planeno, pinfo);
+  lcdinfo("vtable=%p planeno=%d pinfo=%p\n", vtable, planeno, pinfo);
   if (vtable && planeno == 0 && pinfo)
     {
       memcpy(pinfo, &g_planeinfo, sizeof(struct fb_planeinfo_s));
       return OK;
     }
 
-  gdbg("Returning EINVAL\n");
+  lcderr("ERROR: Returning EINVAL\n");
   return -EINVAL;
 }
 
@@ -243,8 +244,8 @@ static int lpc17_getcmap(FAR struct fb_vtable_s *vtable,
   int last;
   int i;
 
-  gvdbg("vtable=%p cmap=%p first=%d len=%d\n",
-        vtable, cmap, cmap->first, cmap->len);
+  lcdinfo("vtable=%p cmap=%p first=%d len=%d\n",
+          vtable, cmap, cmap->first, cmap->len);
 
   DEBUGASSERT(vtable && cmap &&
               cmap->first < 256 && (cmap->first + cmap->len) < 256);
@@ -318,8 +319,8 @@ static int lpc17_putcmap(FAR struct fb_vtable_s *vtable,
   int last;
   int i;
 
-  gvdbg("vtable=%p cmap=%p first=%d len=%d\n",
-        vtable, cmap, cmap->first, cmap->len);
+  lcdinfo("vtable=%p cmap=%p first=%d len=%d\n",
+          vtable, cmap, cmap->first, cmap->len);
 
   DEBUGASSERT(vtable && cmap);
 
@@ -382,27 +383,27 @@ static int lpc17_putcmap(FAR struct fb_vtable_s *vtable,
 static int lpc17_getcursor(FAR struct fb_vtable_s *vtable,
                         FAR struct fb_cursorattrib_s *attrib)
 {
-  gvdbg("vtable=%p attrib=%p\n", vtable, attrib);
+  lcdinfo("vtable=%p attrib=%p\n", vtable, attrib);
   if (vtable && attrib)
     {
 #ifdef CONFIG_FB_HWCURSORIMAGE
       attrib->fmt = LPC17_COLOR_FMT;
 #endif
 
-      gvdbg("pos: (x=%d, y=%d)\n", g_cpos.x, g_cpos.y);
+      lcdinfo("pos: (x=%d, y=%d)\n", g_cpos.x, g_cpos.y);
       attrib->pos = g_cpos;
 
 #ifdef CONFIG_FB_HWCURSORSIZE
       attrib->mxsize.h = CONFIG_LPC17_LCD_VHEIGHT;
       attrib->mxsize.w = CONFIG_LPC17_LCD_HWIDTH;
 
-      gvdbg("size: (h=%d, w=%d)\n", g_csize.h, g_csize.w);
+      lcdinfo("size: (h=%d, w=%d)\n", g_csize.h, g_csize.w);
       attrib->size = g_csize;
 #endif
       return OK;
     }
 
-  gdbg("Returning EINVAL\n");
+  lcderr("ERROR: Returning EINVAL\n");
   return -EINVAL;
 }
 #endif
@@ -415,34 +416,34 @@ static int lpc17_getcursor(FAR struct fb_vtable_s *vtable,
 static int lpc17_setcursor(FAR struct fb_vtable_s *vtable,
                        FAR struct fb_setcursor_s *setttings)
 {
-  gvdbg("vtable=%p setttings=%p\n", vtable, setttings);
+  lcdinfo("vtable=%p setttings=%p\n", vtable, setttings);
   if (vtable && setttings)
     {
-      gvdbg("flags: %02x\n", settings->flags);
+      lcdinfo("flags: %02x\n", settings->flags);
       if ((flags & FB_CUR_SETPOSITION) != 0)
         {
           g_cpos = settings->pos;
-          gvdbg("pos: (h:%d, w:%d)\n", g_cpos.x, g_cpos.y);
+          lcdinfo("pos: (h:%d, w:%d)\n", g_cpos.x, g_cpos.y);
         }
 #ifdef CONFIG_FB_HWCURSORSIZE
       if ((flags & FB_CUR_SETSIZE) != 0)
         {
           g_csize = settings->size;
-          gvdbg("size: (h:%d, w:%d)\n", g_csize.h, g_csize.w);
+          lcdinfo("size: (h:%d, w:%d)\n", g_csize.h, g_csize.w);
         }
 #endif
 #ifdef CONFIG_FB_HWCURSORIMAGE
       if ((flags & FB_CUR_SETIMAGE) != 0)
         {
-          gvdbg("image: (h:%d, w:%d) @ %p\n",
-                settings->img.height, settings->img.width,
-                settings->img.image);
+          lcdinfo("image: (h:%d, w:%d) @ %p\n",
+                  settings->img.height, settings->img.width,
+                  settings->img.image);
         }
 #endif
       return OK;
     }
 
-  gdbg("Returning EINVAL\n");
+  lcderr("ERROR: Returning EINVAL\n");
   return -EINVAL;
 }
 #endif
@@ -455,16 +456,24 @@ static int lpc17_setcursor(FAR struct fb_vtable_s *vtable,
  * Name: up_fbinitialize
  *
  * Description:
- *   Initialize the framebuffer video hardware
+ *   Initialize the framebuffer video hardware associated with the display.
+ *
+ * Input parameters:
+ *   display - In the case of hardware with multiple displays, this
+ *     specifies the display.  Normally this is zero.
+ *
+ * Returned Value:
+ *   Zero is returned on success; a negated errno value is returned on any
+ *   failure.
  *
  ****************************************************************************/
 
-int up_fbinitialize(void)
+int up_fbinitialize(int display)
 {
   uint32_t regval;
   int i;
 
-  gvdbg("Entry\n");
+  lcdinfo("Entry\n");
 
   /* Give LCD bus priority */
 
@@ -476,7 +485,7 @@ int up_fbinitialize(void)
   /* Configure pins */
   /* Video data */
 
-  gvdbg("Configuring pins\n");
+  lcdinfo("Configuring pins\n");
 
   lpc17_configgpio(GPIO_LCD_VD0);
   lpc17_configgpio(GPIO_LCD_VD1);
@@ -519,7 +528,7 @@ int up_fbinitialize(void)
 
   modifyreg32(LPC17_SYSCON_PCONP, 0, SYSCON_PCONP_PCLCD);
 
-  gvdbg("Configuring the LCD controller\n");
+  lcdinfo("Configuring the LCD controller\n");
 
   /* Disable the cursor */
 
@@ -565,7 +574,7 @@ int up_fbinitialize(void)
 
   /* TFT panel */
 
-#if CONFIG_LPC17_LCD_TFTPANEL
+#ifdef CONFIG_LPC17_LCD_TFTPANEL
   regval |= LCD_CTRL_LCDTFT;
 #endif
 
@@ -677,7 +686,7 @@ int up_fbinitialize(void)
 #endif
 
   putreg32(0, LPC17_LCD_INTMSK);
-  gvdbg("Enabling the display\n");
+  lcdinfo("Enabling the display\n");
 
   for (i = LPC17_LCD_PWREN_DELAY; i; i--);
 
@@ -699,23 +708,26 @@ int up_fbinitialize(void)
 }
 
 /****************************************************************************
- * Name: lpc17_fbgetvplane
+ * Name: up_fbgetvplane
  *
  * Description:
  *   Return a a reference to the framebuffer object for the specified video
- *   plane.
+ *   plane of the specified plane.  Many OSDs support multiple planes of video.
  *
  * Input parameters:
- *   None
+ *   display - In the case of hardware with multiple displays, this
+ *     specifies the display.  Normally this is zero.
+ *   vplane - Identifies the plane being queried.
  *
- * Returned value:
- *   Reference to the framebuffer object (NULL on failure)
+ * Returned Value:
+ *   A non-NULL pointer to the frame buffer access structure is returned on
+ *   success; NULL is returned on any failure.
  *
- ***************************************************************************/
+ ****************************************************************************/
 
-FAR struct fb_vtable_s *up_fbgetvplane(int vplane)
+FAR struct fb_vtable_s *up_fbgetvplane(int display, int vplane)
 {
-  gvdbg("vplane: %d\n", vplane);
+  lcdinfo("vplane: %d\n", vplane);
   if (vplane == 0)
     {
       return &g_fbobject;
@@ -727,14 +739,21 @@ FAR struct fb_vtable_s *up_fbgetvplane(int vplane)
 }
 
 /****************************************************************************
- * Name: fb_uninitialize
+ * Name: up_fbuninitialize
  *
  * Description:
- *   Unitialize the framebuffer support
+ *   Uninitialize the framebuffer support for the specified display.
+ *
+ * Input Parameters:
+ *   display - In the case of hardware with multiple displays, this
+ *     specifies the display.  Normally this is zero.
+ *
+ * Returned Value:
+ *   None
  *
  ****************************************************************************/
 
-void fb_uninitialize(void)
+void up_fbuninitialize(int display)
 {
   uint32_t regval;
   int i;
@@ -763,7 +782,6 @@ void fb_uninitialize(void)
   /* Turn off clocking to the LCD. modifyreg32() can do this atomically. */
 
   modifyreg32(LPC17_SYSCON_PCONP, SYSCON_PCONP_PCLCD, 0);
-  return OK;
 }
 
 /************************************************************************************
@@ -781,18 +799,18 @@ void lpc17_lcdclear(nxgl_mxpixel_t color)
 {
   int i;
 #if LPC17_BPP > 16
-  uint32_t *dest = (uint32_t*)CONFIG_LPC17_LCD_VRAMBASE;
+  uint32_t *dest = (uint32_t *)CONFIG_LPC17_LCD_VRAMBASE;
 
-  gvdbg("Clearing display: color=%08x VRAM=%08x size=%d\n",
-        color, CONFIG_LPC17_LCD_VRAMBASE,
-        CONFIG_LPC17_LCD_HWIDTH * CONFIG_LPC17_LCD_VHEIGHT * sizeof(uint32_t));
+  lcdinfo("Clearing display: color=%08x VRAM=%08x size=%d\n",
+          color, CONFIG_LPC17_LCD_VRAMBASE,
+          CONFIG_LPC17_LCD_HWIDTH * CONFIG_LPC17_LCD_VHEIGHT * sizeof(uint32_t));
 
 #else
-  uint16_t *dest = (uint16_t*)CONFIG_LPC17_LCD_VRAMBASE;
+  uint16_t *dest = (uint16_t *)CONFIG_LPC17_LCD_VRAMBASE;
 
-  gvdbg("Clearing display: color=%08x VRAM=%08x size=%d\n",
-        color, CONFIG_LPC17_LCD_VRAMBASE,
-        CONFIG_LPC17_LCD_HWIDTH * CONFIG_LPC17_LCD_VHEIGHT * sizeof(uint16_t));
+  lcdinfo("Clearing display: color=%08x VRAM=%08x size=%d\n",
+          color, CONFIG_LPC17_LCD_VRAMBASE,
+          CONFIG_LPC17_LCD_HWIDTH * CONFIG_LPC17_LCD_VHEIGHT * sizeof(uint16_t));
 #endif
 
   for (i = 0; i < (CONFIG_LPC17_LCD_HWIDTH * CONFIG_LPC17_LCD_VHEIGHT); i++)

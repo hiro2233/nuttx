@@ -51,7 +51,7 @@
 #endif
 
 /****************************************************************************
- * Pro-processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* This is the value used as the argument to the SVC instruction.  It is not
@@ -242,7 +242,7 @@ static inline uintptr_t sys_call6(unsigned int nbr, uintptr_t parm1,
 }
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -251,7 +251,8 @@ static inline uintptr_t sys_call6(unsigned int nbr, uintptr_t parm1,
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

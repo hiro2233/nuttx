@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/hc/src/common/up_internal.h
  *
- *   Copyright (C) 2009, 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011-2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,7 +48,7 @@
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Bring-up debug configurations.  These are here (vs defconfig)
@@ -61,6 +61,10 @@
 #undef  CONFIG_SUPPRESS_SERIAL_INTS   /* DEFINED: Console will poll */
 #undef  CONFIG_SUPPRESS_UART_CONFIG   /* DEFINED: Do not reconfig UART */
 #undef  CONFIG_DUMP_ON_EXIT           /* DEFINED: Dump task state on exit */
+
+#ifndef CONFIG_DEBUG_SCHED_INFO
+#  undef CONFIG_DUMP_ON_EXIT          /* Needs CONFIG_DEBUG_SCHED_INFO */
+#endif
 
 /* Determine which (if any) console driver to use.  If a console is enabled
  * and no other console device is specified, then a serial console is
@@ -96,13 +100,6 @@
 #    define USE_SERIALDRIVER 1
 #endif
 
-/* Determine which device to use as the system logging device */
-
-#ifndef CONFIG_SYSLOG
-#  undef CONFIG_SYSLOG_CHAR
-#  undef CONFIG_RAMLOG_SYSLOG
-#endif
-
 /* Check if an interrupt stack size is configured */
 
 #ifndef CONFIG_ARCH_INTERRUPTSTACK
@@ -114,8 +111,8 @@
  * a referenced is passed to get the state from the TCB.
  */
 
-#define up_savestate(regs)    up_copystate(regs, (uint8_t*)current_regs)
-#define up_restorestate(regs) (current_regs = regs)
+#define up_savestate(regs)    up_copystate(regs, (uint8_t*)g_current_regs)
+#define up_restorestate(regs) (g_current_regs = regs)
 
 /****************************************************************************
  * Public Types
@@ -126,7 +123,7 @@ typedef void (*up_vector_t)(void);
 #endif
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 #ifndef __ASSEMBLY__
@@ -134,7 +131,7 @@ typedef void (*up_vector_t)(void);
  * structure.  If is non-NULL only during interrupt processing.
  */
 
-extern volatile uint8_t *current_regs;
+extern volatile uint8_t *g_current_regs;
 
 /* This is the beginning of heap as provided from processor-specific logic.
  * This is the first address in RAM after the loaded program+bss+idle stack.
@@ -157,52 +154,47 @@ extern uint32_t g_intstackbase;
  * Public Functions
  ****************************************************************************/
 
-/* Start-up functions */
-
-extern void up_boot(void);
-
 /* Context switching functions */
 
-extern void up_copystate(uint8_t *dest, uint8_t *src);
-extern void up_decodeirq(uint8_t *regs);
-extern void up_irqinitialize(void);
-extern int  up_saveusercontext(uint8_t *saveregs);
-extern void up_fullcontextrestore(uint8_t *restoreregs) noreturn_function;
-extern void up_switchcontext(uint8_t *saveregs, uint8_t *restoreregs);
+void up_copystate(uint8_t *dest, uint8_t *src);
+void up_decodeirq(uint8_t *regs);
+void up_irqinitialize(void);
+int  up_saveusercontext(uint8_t *saveregs);
+void up_fullcontextrestore(uint8_t *restoreregs) noreturn_function;
+void up_switchcontext(uint8_t *saveregs, uint8_t *restoreregs);
 
 /* Interrupt handling */
 
-extern uint8_t *up_doirq(int irq, uint8_t *regs);
-extern void up_maskack_irq(int irq);
+uint8_t *up_doirq(int irq, uint8_t *regs);
 
 /* Signal handling */
 
-extern void up_sigdeliver(void);
+void up_sigdeliver(void);
 
 /* System timer initialization */
 
-extern void up_timerinit(void);
-extern int  up_timerisr(int irq, uint32_t *regs);
+void up_timer_initialize(void);
+int  up_timerisr(int irq, uint32_t *regs);
 
 /* Debug output */
 
 #if CONFIG_NFILE_DESCRIPTORS > 0
-extern void up_earlyserialinit(void);
-extern void up_serialinit(void);
+void up_earlyserialinit(void);
+void up_serialinit(void);
 #else
 # define up_earlyserialinit()
 # define up_serialinit()
 #endif
 
 #ifdef CONFIG_DEV_LOWCONSOLE
-extern void lowconsole_init(void);
+void lowconsole_init(void);
 #else
 # define lowconsole_init()
 #endif
 
-extern void up_lowputc(char ch);
-extern void up_puts(const char *str);
-extern void up_lowputs(const char *str);
+void up_lowputc(char ch);
+void up_puts(const char *str);
+void up_lowputs(const char *str);
 
 /* Memory configuration */
 
@@ -215,35 +207,23 @@ void up_addregion(void);
 /* Sub-system/driver initialization */
 
 #ifdef CONFIG_ARCH_DMA
-extern void weak_function up_dmainitialize(void);
+void weak_function up_dmainitialize(void);
 #endif
 
-extern void up_wdtinit(void);
+void up_wdtinit(void);
 
 #ifdef CONFIG_NET
-extern void up_netinitialize(void);
+void up_netinitialize(void);
 #else
 # define up_netinitialize()
 #endif
 
 #ifdef CONFIG_USBDEV
-extern void up_usbinitialize(void);
-extern void up_usbuninitialize(void);
+void up_usbinitialize(void);
+void up_usbuninitialize(void);
 #else
 # define up_usbinitialize()
 # define up_usbuninitialize()
-#endif
-
-/* Board-specific functions */
-
-#ifdef CONFIG_ARCH_LEDS
-extern void board_led_initialize(void);
-extern void board_led_on(int led);
-extern void board_led_off(int led);
-#else
-# define board_led_initialize()
-# define board_led_on(led)
-# define board_led_off(led)
 #endif
 
 #endif /* __ASSEMBLY__ */

@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/elf/tests/signal/signal.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,13 +47,22 @@
 #include <errno.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
-#define USEC_PER_MSEC 1000
-#define MSEC_PER_SEC  1000
-#define USEC_PER_SEC  (USEC_PER_MSEC * MSEC_PER_SEC)
-#define SHORT_DELAY   (USEC_PER_SEC / 3)
+#ifndef USEC_PER_MSEC
+#  define USEC_PER_MSEC 1000L
+#endif
+
+#ifndef MSEC_PER_SEC
+#  define MSEC_PER_SEC  1000L
+#endif
+
+#ifndef USEC_PER_SEC
+#  define USEC_PER_SEC  (USEC_PER_MSEC * MSEC_PER_SEC)
+#endif
+
+#define SHORT_DELAY     (USEC_PER_SEC / 3)
 
 /****************************************************************************
  * Private Data
@@ -68,7 +77,7 @@ static int sigusr2_rcvd = 0;
 
 /****************************************************************************
  * Name: siguser_action
- ***************************************************************************/
+ ****************************************************************************/
 
 /* NOTE: it is necessary for functions that are referred to by function pointers
  *  pointer to be declared with global scope (at least for ARM).  Otherwise,
@@ -100,6 +109,7 @@ void siguser_action(int signo, siginfo_t *siginfo, void *arg)
       printf("siginfo:\n");
       printf("  si_signo  = %d\n",  siginfo->si_signo);
       printf("  si_code   = %d\n",  siginfo->si_code);
+      printf("  si_errno  = %d\n",  siginfo->si_errno);
       printf("  si_value  = %d\n",  siginfo->si_value.sival_int);
     }
 }

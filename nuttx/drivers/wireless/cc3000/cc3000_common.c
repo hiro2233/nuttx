@@ -1,6 +1,7 @@
-/*****************************************************************************
- *  cc3000_common.c.c  - CC3000 Host Driver Implementation.
- *  Copyright (C) 2011 Texas Instruments Incorporated - http://www.ti.com/
+/****************************************************************************
+ *  drivers/wireless/cc3000/cc3000_common.c.c  - CC3000 Host Driver Implementation.
+ *
+ *    Copyright (C) 2011 Texas Instruments Incorporated - http://www.ti.com/
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions
@@ -30,15 +31,15 @@
  *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *****************************************************************************/
-/******************************************************************************
+ ****************************************************************************/
+/****************************************************************************
  * Included files
- *****************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <stdint.h>
 
-/*****************************************************************************
+/****************************************************************************
  * Name:__error__
  *
  * Description:
@@ -51,9 +52,9 @@
  * Returned Value:
  *   None
  *
- *****************************************************************************/
+ ****************************************************************************/
 
-/*****************************************************************************
+/****************************************************************************
  * Name: UINT32_TO_STREAM_f
  *
  * Description:
@@ -67,7 +68,7 @@
  * Returned Value:
  *   Pointer to the new stream
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 uint8_t *UINT32_TO_STREAM_f(uint8_t *p, unsigned long u32)
 {
@@ -78,7 +79,7 @@ uint8_t *UINT32_TO_STREAM_f(uint8_t *p, unsigned long u32)
   return p;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: UINT16_TO_STREAM_f
  *
  * Description:
@@ -92,7 +93,7 @@ uint8_t *UINT32_TO_STREAM_f(uint8_t *p, unsigned long u32)
  * Returned Value:
  *   Pointer to the new stream
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 uint8_t *UINT16_TO_STREAM_f(uint8_t *p, uint16_t u16)
 {
@@ -101,7 +102,7 @@ uint8_t *UINT16_TO_STREAM_f(uint8_t *p, uint16_t u16)
   return p;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: STREAM_TO_UINT16_f
  *
  * Description:
@@ -115,15 +116,15 @@ uint8_t *UINT16_TO_STREAM_f(uint8_t *p, uint16_t u16)
  * Returned Value:
  *   Pointer to the new 16 bit
  *
- *****************************************************************************/
+ ****************************************************************************/
 
-uint16_t STREAM_TO_UINT16_f(char* p, uint16_t offset)
+uint16_t STREAM_TO_UINT16_f(FAR char *p, uint16_t offset)
 {
   return (uint16_t)((uint16_t)((uint16_t)
          (*(p + offset + 1)) << 8) + (uint16_t)(*(p + offset)));
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: STREAM_TO_UINT32_f
  *
  * Description:
@@ -137,9 +138,9 @@ uint16_t STREAM_TO_UINT16_f(char* p, uint16_t offset)
  * Returned Value:
  *   Pointer to the new 32 bit
  *
- *****************************************************************************/
+ ****************************************************************************/
 
-unsigned long STREAM_TO_UINT32_f(char* p, uint16_t offset)
+unsigned long STREAM_TO_UINT32_f(FAR char *p, uint16_t offset)
 {
   return (unsigned long)((unsigned long)((unsigned long)
          (*(p + offset + 3)) << 24) + (unsigned long)((unsigned long)

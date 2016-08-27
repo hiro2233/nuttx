@@ -1,7 +1,7 @@
 /********************************************************************************
  * include/signal.h
  *
- *   Copyright (C) 2007-2009, 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011, 2013-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +45,10 @@
 
 #include <stdint.h>
 #include <time.h>
+
+#ifdef CONFIG_SIG_EVTHREAD
+#  include <pthread.h>  /* Needed for pthread_attr_t, includes this file */
+#endif
 
 /********************************************************************************
  * Pre-processor Definitions
@@ -101,6 +105,14 @@
 #  endif
 #endif
 
+#ifdef CONFIG_FS_AIO
+#  ifndef CONFIG_SIG_POLL
+#    define SIGPOLL     5  /* Sent when an asynchronous I/O event occurs */
+#  else
+#    define SIGPOLL     CONFIG_SIG_POLL
+#  endif
+#endif
+
 /* The following are non-standard signal definitions */
 
 #ifndef CONFIG_DISABLE_PTHREAD
@@ -154,22 +166,39 @@
 
 /* Values for the sigev_notify field of struct sigevent */
 
-#define SIGEV_NONE      0 /* No notification desired */
-#define SIGEV_SIGNAL    1 /* Notify via signal */
+#define SIGEV_NONE      0 /* No asynchronous notification is delivered */
+#define SIGEV_SIGNAL    1 /* Notify via signal,with an application-defined value */
+#ifdef CONFIG_SIG_EVTHREAD
+#  define SIGEV_THREAD  3 /* A notification function is called */
+#endif
 
-/* Special values of sigaction (all treated like NULL) */
+/* Special values of of sa_handler used by sigaction and sigset.  They are all
+ * treated like NULL for now.  This is okay for SIG_DFL and SIG_IGN because
+ * in NuttX, the default action for all signals is to ignore them.
+ */
 
-#define SIG_ERR         ((CODE void*)-1)
-#define SIG_DFL         ((CODE void*)0)
-#define SIG_IGN         ((CODE void*)0)
+#define SIG_ERR         ((_sa_handler_t)-1)  /* And error occurred */
+#define SIG_DFL         ((_sa_handler_t)0)   /* Default is SIG_IGN for all signals */
+#define SIG_IGN         ((_sa_handler_t)0)   /* Ignore the signal */
+#define SIG_HOLD        ((_sa_handler_t)1)   /* Used only with sigset() */
 
 /********************************************************************************
- * Global Type Declarations
+ * Public Type Definitions
  ********************************************************************************/
 
-/* This defines a set of 32 signals (numbered 0 through 31). */
+/* This defines a set of 32 signals (numbered 0 through 31).
+ * REVISIT: Signal 0 is, however, not generally usable since that value has
+ * special meaning in some circumstances (e.g., kill()).
+ */
 
 typedef uint32_t sigset_t;   /* Bit set of 32 signals */
+#define __SIGSET_T_DEFINED 1
+
+/* Possibly volatile-qualified integer type of an object that can be accessed
+ * as an atomic entity, even in the presence of asynchronous interrupts.
+ */
+
+typedef volatile int sig_atomic_t;
 
 /* This defines the type of the siginfo si_value field */
 
@@ -184,11 +213,22 @@ union sigval
  * available on a queue
  */
 
+#ifdef CONFIG_CAN_PASS_STRUCTS
+typedef CODE void (*sigev_notify_function_t)(union sigval value);
+#else
+typedef CODE void (*sigev_notify_function_t)(FAR void *sival_ptr);
+#endif
+
 struct sigevent
 {
-  uint8_t      sigev_notify; /* Notification method: SIGEV_SIGNAL or SIGEV_NONE */
+  uint8_t      sigev_notify; /* Notification method: SIGEV_SIGNAL, SIGEV_NONE, or SIGEV_THREAD */
   uint8_t      sigev_signo;  /* Notification signal */
   union sigval sigev_value;  /* Data passed with notification */
+
+#ifdef CONFIG_SIG_EVTHREAD
+  sigev_notify_function_t sigev_notify_function; /* Notification function */
+  FAR pthread_attr_t *sigev_notify_attributes;   /* Notification attributes (not used) */
+#endif
 };
 
 /* The following types is used to pass parameters to/from signal handlers */
@@ -197,6 +237,7 @@ struct siginfo
 {
   uint8_t      si_signo;     /* Identifies signal */
   uint8_t      si_code;      /* Source: SI_USER, SI_QUEUE, SI_TIMER, SI_ASYNCIO, or SI_MESGQ */
+  uint8_t      si_errno;     /* Zero or errno value associated with signal */
   union sigval si_value;     /* Data passed with signal */
 #ifdef CONFIG_SCHED_HAVE_PARENT
   pid_t        si_pid;       /* Sending task ID */
@@ -205,13 +246,15 @@ struct siginfo
 };
 
 typedef struct siginfo siginfo_t;
+#define __SIGINFO_T_DEFINED 1
 
 /* Non-standard convenience definition of signal handling function types.
  * These should be used only internally within the NuttX signal logic.
  */
 
-typedef CODE void (*_sa_handler_t)(int);
-typedef CODE void (*_sa_sigaction_t)(int, FAR siginfo_t *, FAR void *);
+typedef CODE void (*_sa_handler_t)(int signo);
+typedef CODE void (*_sa_sigaction_t)(int signo, FAR siginfo_t *siginfo,
+                                     FAR void *context);
 
 /* The following structure defines the action to take for given signal */
 
@@ -232,44 +275,70 @@ struct sigaction
 #define sa_sigaction sa_u._sa_sigaction
 
 /********************************************************************************
- * Global Variables
- ********************************************************************************/
-
-/********************************************************************************
- * Global Function Prototypes
+ * Public Function Prototypes
  ********************************************************************************/
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
 
-int kill(pid_t, int);
-int sigemptyset(FAR sigset_t *set);
-int sigfillset(FAR sigset_t *set);
+int kill(pid_t pid, int signo);
+int raise(int signo);
+int sigaction(int signo, FAR const struct sigaction *act,
+              FAR struct sigaction *oact);
 int sigaddset(FAR sigset_t *set, int signo);
 int sigdelset(FAR sigset_t *set, int signo);
+int sigemptyset(FAR sigset_t *set);
+int sigfillset(FAR sigset_t *set);
+int sighold(int signo);
 int sigismember(FAR const sigset_t *set, int signo);
-int sigaction(int sig, FAR const struct sigaction *act,
-              FAR struct sigaction *oact);
-int sigprocmask(int how, FAR const sigset_t *set, FAR sigset_t *oset);
+int sigignore(int signo);
+CODE void (*signal(int signo, CODE void (*func)(int signo)))(int signo);
+int sigpause(int signo);
 int sigpending(FAR sigset_t *set);
-int sigsuspend(FAR const sigset_t *sigmask);
-int sigwaitinfo(FAR const sigset_t *set, FAR struct siginfo *value);
-int sigtimedwait(FAR const sigset_t *set, FAR struct siginfo *value,
-                 FAR const struct timespec *timeout);
+int sigprocmask(int how, FAR const sigset_t *set, FAR sigset_t *oset);
 #ifdef CONFIG_CAN_PASS_STRUCTS
 int sigqueue(int pid, int signo, union sigval value);
 #else
 int sigqueue(int pid, int signo, FAR void *sival_ptr);
 #endif
+int sigrelse(int signo);
+CODE void (*sigset(int signo, CODE void (*func)(int signo)))(int signo);
+int sigtimedwait(FAR const sigset_t *set, FAR struct siginfo *value,
+                 FAR const struct timespec *timeout);
+int sigsuspend(FAR const sigset_t *sigmask);
+int sigwaitinfo(FAR const sigset_t *set, FAR struct siginfo *value);
 
 #undef EXTERN
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __INCLUDE_SIGNAL_H */
+/********************************************************************************
+ * Minimal Type Definitions
+ ********************************************************************************/
 
+#else /* __INCLUDE_SIGNAL_H */
+
+#include <stdint.h>
+
+/* Avoid circular dependencies by assuring that simple type definitions are
+ * available in any inclusion ordering.
+ */
+
+#ifndef __SIGSET_T_DEFINED
+typedef uint32_t sigset_t;
+#  define __SIGSET_T_DEFINED 1
+#endif
+
+#ifndef __SIGINFO_T_DEFINED
+struct siginfo;
+typedef struct siginfo siginfo_t;
+#  define __SIGINFO_T_DEFINED 1
+#endif
+
+#endif /* __INCLUDE_SIGNAL_H */

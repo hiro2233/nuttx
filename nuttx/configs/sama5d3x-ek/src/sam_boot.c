@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/sama5d3x-ek/src/sam_boot.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,9 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
+
+#include "sam_sckc.h"
 #include "sama5d3x-ek.h"
 
 /************************************************************************************
@@ -60,21 +63,27 @@
  *
  * Description:
  *   All SAMA5 architectures must provide the following entry point.  This entry
- *   point is called early in the intitialization -- after all memory has been
+ *   point is called early in the initialization -- after all memory has been
  *   configured and mapped but before any devices have been initialized.
  *
  ************************************************************************************/
 
 void sam_boardinitialize(void)
 {
+#ifdef CONFIG_SAMA5D3xEK_SLOWCLOCK
+  /* Enable the external slow clock */
+
+  sam_sckc_enable(true);
+#endif
+
   /* Configure SPI chip selects if 1) SPI is enable, and 2) the weak function
-   * sam_spiinitialize() has been brought into the link.
+   * sam_spidev_initialize() has been brought into the link.
    */
 
 #if defined(CONFIG_SAMA5_SPI0) || defined(CONFIG_SAMA5_SPI1)
-  if (sam_spiinitialize)
+  if (sam_spidev_initialize)
     {
-      sam_spiinitialize();
+      sam_spidev_initialize();
     }
 #endif
 
@@ -118,7 +127,7 @@ void sam_boardinitialize(void)
 #ifdef CONFIG_ARCH_LEDS
   /* Configure on-board LEDs if LED support has been selected. */
 
-  board_led_initialize();
+  board_autoled_initialize();
 #endif
 }
 
@@ -143,8 +152,8 @@ void board_initialize(void)
    * but the initialization function must run in kernel space.
    */
 
-#if defined(CONFIG_NSH_LIBRARY) && !defined(CONFIG_NSH_ARCHINIT)
-  (void)nsh_archinitialize();
+#if defined(CONFIG_NSH_LIBRARY) && !defined(CONFIG_LIB_BOARDCTL)
+  (void)board_app_initialize(0);
 #endif
 }
 #endif /* CONFIG_BOARD_INITIALIZE */

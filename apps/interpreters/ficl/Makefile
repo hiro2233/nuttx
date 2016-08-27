@@ -1,7 +1,7 @@
 ############################################################################
 # apps/interpreters/ficl/Makefile
 #
-#   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2011-2012, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -39,10 +39,6 @@ BUILDDIR := ${shell pwd | sed -e 's/ /\\ /g'}
 include $(APPDIR)/Make.defs
 
 # Tools
-
-ifeq ($(WINTOOL),y)
-INCDIROPT = -w
-endif
 
 # Include paths
 
@@ -99,6 +95,8 @@ debug:
 	$(call ARCHIVE, $(BIN), $(OBJS))
 	$(Q) touch .built
 
+install:
+
 context:
 
 .depend: debug Makefile $(SRCS)
@@ -116,3 +114,5 @@ distclean: clean
 	$(call DELFILE, .depend)
 
 -include Make.dep
+.PHONY: preconfig
+preconfig:

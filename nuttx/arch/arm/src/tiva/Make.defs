@@ -1,7 +1,7 @@
 ############################################################################
 # arch/arm/src/tiva/Make.defs
 #
-#   Copyright (C) 2009-2011, 2013 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2009-2011, 2013-2014 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -36,15 +36,16 @@
 HEAD_ASRC  = tiva_vectors.S
 
 CMN_ASRCS  = up_saveusercontext.S up_fullcontextrestore.S up_switchcontext.S
-CMN_ASRCS += vfork.S
+CMN_ASRCS += up_testset.S  vfork.S
 
 CMN_CSRCS  = up_assert.c up_blocktask.c up_copyfullstate.c up_createstack.c
 CMN_CSRCS += up_mdelay.c up_udelay.c up_exit.c up_idle.c up_initialize.c
 CMN_CSRCS += up_initialstate.c up_interruptcontext.c up_memfault.c
 CMN_CSRCS += up_modifyreg8.c up_modifyreg16.c up_modifyreg32.c
 CMN_CSRCS += up_releasepending.c up_releasestack.c up_reprioritizertr.c
-CMN_CSRCS += up_schedulesigaction.c up_sigdeliver.c up_unblocktask.c
-CMN_CSRCS += up_usestack.c up_doirq.c up_hardfault.c up_svcall.c up_vfork.c
+CMN_CSRCS += up_schedulesigaction.c up_sigdeliver.c up_stackframe.c
+CMN_CSRCS += up_unblocktask.c up_usestack.c up_doirq.c up_hardfault.c
+CMN_CSRCS += up_svcall.c up_vfork.c
 
 ifeq ($(CONFIG_ARCH_RAMVECTORS),y)
 CMN_CSRCS += up_ramvec_initialize.c up_ramvec_attach.c
@@ -54,12 +55,12 @@ ifeq ($(CONFIG_ARCH_MEMCPY),y)
 CMN_ASRCS += up_memcpy.S
 endif
 
-ifeq ($(CONFIG_DEBUG_STACK),y)
+ifeq ($(CONFIG_STACK_COLORATION),y)
 CMN_CSRCS += up_checkstack.c
 endif
 
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
-CMN_CSRCS += up_mpu.c up_task_start.c up_pthread_start.c up_stackframe.c
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
+CMN_CSRCS += up_mpu.c up_task_start.c up_pthread_start.c
 ifneq ($(CONFIG_DISABLE_SIGNALS),y)
 CMN_CSRCS += up_signal_dispatch.c
 CMN_UASRCS += up_signal_handler.S
@@ -70,21 +71,61 @@ endif
 
 ifeq ($(CONFIG_ELF),y)
 CMN_CSRCS += up_elf.c
+else ifeq ($(CONFIG_MODULE),y)
+CMN_CSRCS += up_elf.c
 endif
 
 CHIP_ASRCS  =
-CHIP_CSRCS  = tiva_allocateheap.c tiva_start.c tiva_syscontrol.c tiva_irq.c
-CHIP_CSRCS += tiva_gpio.c tiva_gpioirq.c tiva_timerisr.c tiva_lowputc.c
-CHIP_CSRCS += tiva_serial.c tiva_ssi.c tiva_dumpgpio.c
+CHIP_CSRCS  = tiva_allocateheap.c tiva_start.c tiva_irq.c tiva_gpio.c
+CHIP_CSRCS += tiva_gpioirq.c tiva_lowputc.c tiva_serial.c tiva_ssi.c
 
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
+ifeq ($(CONFIG_DEBUG_GPIO_INFO),y)
+CHIP_CSRCS += tiva_dumpgpio.c
+endif
+
+ifeq ($(CONFIG_ARCH_CHIP_TM4C129),y)
+CHIP_CSRCS += tm4c129_syscontrol.c
+else
+CHIP_CSRCS += tiva_syscontrol.c
+endif
+
+ifneq ($(CONFIG_SCHED_TICKLESS),y)
+CHIP_CSRCS += tiva_timerisr.c
+endif
+
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
 CHIP_CSRCS += tiva_userspace.c tiva_mpuinit.c
 endif
 
-ifdef CONFIG_NET
-CHIP_CSRCS += tiva_ethernet.c
+ifeq ($(CONFIG_TIVA_I2C),y)
+CHIP_CSRCS += tiva_i2c.c
 endif
 
-ifdef CONFIG_TIVA_FLASH
+ifeq ($(CONFIG_TIVA_PWM),y)
+CHIP_CSRCS += tiva_pwm.c
+endif
+
+ifeq ($(CONFIG_TIVA_TIMER),y)
+CHIP_CSRCS += tiva_timerlib.c
+ifeq ($(CONFIG_TIVA_TIMER32_PERIODIC),y)
+CHIP_CSRCS += tiva_timerlow32.c
+endif
+endif
+
+ifeq ($(CONFIG_TIVA_ADC),y)
+CHIP_CSRCS += tiva_adclow.c
+CHIP_CSRCS += tiva_adclib.c
+endif
+
+ifeq ($(CONFIG_TIVA_ETHERNET),y)
+ifeq ($(CONFIG_ARCH_CHIP_LM3S),y)
+CHIP_CSRCS += lm3s_ethernet.c
+endif
+ifeq ($(CONFIG_ARCH_CHIP_TM4C),y)
+CHIP_CSRCS += tm4c_ethernet.c
+endif
+endif
+
+ifeq ($(CONFIG_TIVA_FLASH),y)
 CHIP_CSRCS += tiva_flash.c
 endif

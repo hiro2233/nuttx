@@ -1,4 +1,4 @@
-/***********************************************************************
+/****************************************************************************
  * mutex.c
  *
  *   Copyright (C) 2007, 2008 Gregory Nutt. All rights reserved.
@@ -31,7 +31,7 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ***********************************************************************/
+ ****************************************************************************/
 
 #include <stdio.h>
 #include <pthread.h>
@@ -48,9 +48,9 @@ static volatile int my_mutex = 0;
 static unsigned long nloops[2] = {0, 0};
 static unsigned long nerrors[2] = {0, 0};
 
-static void *thread_func(void *parameter)
+static void *thread_func(FAR void *parameter)
 {
-  int id  = (int)parameter;
+  int id  = (int)((intptr_t)parameter);
   int ndx = id - 1;
   int i;
 
@@ -137,6 +137,6 @@ void mutex_test(void)
 #endif
 
   printf("\t\tThread1\tThread2\n");
-  printf("\tLoops\t%ld\t%ld\n", nloops[0], nloops[1]);
-  printf("\tErrors\t%ld\t%ld\n", nerrors[0], nerrors[1]);
+  printf("\tLoops\t%lu\t%lu\n", nloops[0], nloops[1]);
+  printf("\tErrors\t%lu\t%lu\n", nerrors[0], nerrors[1]);
 }

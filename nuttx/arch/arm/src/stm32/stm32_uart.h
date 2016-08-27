@@ -1,7 +1,7 @@
 /************************************************************************************
  * arch/arm/src/stm32/stm32_uart.h
  *
- *   Copyright (C) 2009, 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2012-2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,7 +50,7 @@
 #  include "chip/stm32f10xxx_uart.h"
 #elif defined(CONFIG_STM32_STM32F20XX)
 #  include "chip/stm32f20xxx_uart.h"
-#elif defined(CONFIG_STM32_STM32F30XX)
+#elif defined(CONFIG_STM32_STM32F30XX) || defined(CONFIG_STM32_STM32F37XX)
 #  include "chip/stm32f30xxx_uart.h"
 #elif defined(CONFIG_STM32_STM32F40XX)
 #  include "chip/stm32f40xxx_uart.h"
@@ -61,30 +61,26 @@
 /************************************************************************************
  * Pre-processor Definitions
  ************************************************************************************/
-/* Make sure that we have not enabled more U[S]ARTs than are support by
- * the device.
- *
- * REVISIT:  These should be replaced with the CONFIG_STM32_HAVE_USARTn now generated
- * by the Kconfig file.  The following logic is not valid for the STM32F401 which
- * supports 3 USARTS:  USART1, USART2, and USART6.
+/* Make sure that we have not enabled more U[S]ARTs than are supported by the
+ * device.
  */
 
-#if STM32_NUSART < 8
+#if STM32_NUSART < 8 || !defined(CONFIG_STM32_HAVE_UART8)
 #  undef CONFIG_STM32_UART8
 #endif
-#if STM32_NUSART < 7
+#if STM32_NUSART < 7 || !defined(CONFIG_STM32_HAVE_UART7)
 #  undef CONFIG_STM32_UART7
 #endif
-#if STM32_NUSART < 6
+#if STM32_NUSART < 6 || !defined(CONFIG_STM32_HAVE_USART6)
 #  undef CONFIG_STM32_USART6
 #endif
-#if STM32_NUSART < 5
+#if STM32_NUSART < 5 || !defined(CONFIG_STM32_HAVE_UART5)
 #  undef CONFIG_STM32_UART5
 #endif
-#if STM32_NUSART < 4
+#if STM32_NUSART < 4 || !defined(CONFIG_STM32_HAVE_UART4)
 #  undef CONFIG_STM32_UART4
 #endif
-#if STM32_NUSART < 3
+#if STM32_NUSART < 3 || !defined(CONFIG_STM32_HAVE_USART3)
 #  undef CONFIG_STM32_USART3
 #endif
 #if STM32_NUSART < 2
@@ -94,18 +90,97 @@
 #  undef CONFIG_STM32_USART1
 #endif
 
-/* Is there a USART enabled? */
+/* Sanity checks */
 
-#if defined(CONFIG_STM32_USART1) || defined(CONFIG_STM32_USART2) || \
-    defined(CONFIG_STM32_USART3) || defined(CONFIG_STM32_UART4)  || \
-    defined(CONFIG_STM32_UART5)  || defined(CONFIG_STM32_USART6) || \
-    defined(CONFIG_STM32_UART7)  || defined(CONFIG_STM32_UART8)
-#  define HAVE_UART 1
+#if !defined(CONFIG_STM32_USART1)
+#  undef CONFIG_STM32_USART1_SERIALDRIVER
+#  undef CONFIG_STM32_USART1_1WIREDRIVER
+#endif
+#if !defined(CONFIG_STM32_USART2)
+#  undef CONFIG_STM32_USART2_SERIALDRIVER
+#  undef CONFIG_STM32_USART2_1WIREDRIVER
+#endif
+#if !defined(CONFIG_STM32_USART3)
+#  undef CONFIG_STM32_USART3_SERIALDRIVER
+#  undef CONFIG_STM32_USART3_1WIREDRIVER
+#endif
+#if !defined(CONFIG_STM32_UART4)
+#  undef CONFIG_STM32_UART4_SERIALDRIVER
+#  undef CONFIG_STM32_UART4_1WIREDRIVER
+#endif
+#if !defined(CONFIG_STM32_UART5)
+#  undef CONFIG_STM32_UART5_SERIALDRIVER
+#  undef CONFIG_STM32_UART5_1WIREDRIVER
+#endif
+#if !defined(CONFIG_STM32_USART6)
+#  undef CONFIG_STM32_USART6_SERIALDRIVER
+#  undef CONFIG_STM32_USART6_1WIREDRIVER
+#endif
+#if !defined(CONFIG_STM32_UART7)
+#  undef CONFIG_STM32_UART7_SERIALDRIVER
+#  undef CONFIG_STM32_UART7_1WIREDRIVER
+#endif
+#if !defined(CONFIG_STM32_UART8)
+#  undef CONFIG_STM32_UART8_SERIALDRIVER
+#  undef CONFIG_STM32_UART8_1WIREDRIVER
+#endif
+
+/* Check 1-Wire and U(S)ART conflicts */
+
+#if defined(CONFIG_STM32_USART1_1WIREDRIVER) && defined(CONFIG_STM32_USART1_SERIALDRIVER)
+#  error Both CONFIG_STM32_USART1_1WIREDRIVER and CONFIG_STM32_USART1_SERIALDRIVER defined
+#  undef CONFIG_STM32_USART1_1WIREDRIVER
+#endif
+#if defined(CONFIG_STM32_USART2_1WIREDRIVER) && defined(CONFIG_STM32_USART2_SERIALDRIVER)
+#  error Both CONFIG_STM32_USART2_1WIREDRIVER and CONFIG_STM32_USART2_SERIALDRIVER defined
+#  undef CONFIG_STM32_USART2_1WIREDRIVER
+#endif
+#if defined(CONFIG_STM32_USART3_1WIREDRIVER) && defined(CONFIG_STM32_USART3_SERIALDRIVER)
+#  error Both CONFIG_STM32_USART3_1WIREDRIVER and CONFIG_STM32_USART3_SERIALDRIVER defined
+#  undef CONFIG_STM32_USART3_1WIREDRIVER
+#endif
+#if defined(CONFIG_STM32_UART4_1WIREDRIVER) && defined(CONFIG_STM32_UART4_SERIALDRIVER)
+#  error Both CONFIG_STM32_UART4_1WIREDRIVER and CONFIG_STM32_UART4_SERIALDRIVER defined
+#  undef CONFIG_STM32_UART4_1WIREDRIVER
+#endif
+#if defined(CONFIG_STM32_UART5_1WIREDRIVER) && defined(CONFIG_STM32_UART5_SERIALDRIVER)
+#  error Both CONFIG_STM32_UART5_1WIREDRIVER and CONFIG_STM32_UART5_SERIALDRIVER defined
+#  undef CONFIG_STM32_UART5_1WIREDRIVER
+#endif
+#if defined(CONFIG_STM32_USART6_1WIREDRIVER) && defined(CONFIG_STM32_USART6_SERIALDRIVER)
+#  error Both CONFIG_STM32_USART6_1WIREDRIVER and CONFIG_STM32_USART6_SERIALDRIVER defined
+#  undef CONFIG_STM32_USART6_1WIREDRIVER
+#endif
+#if defined(CONFIG_STM32_UART7_1WIREDRIVER) && defined(CONFIG_STM32_UART7_SERIALDRIVER)
+#  error Both CONFIG_STM32_UART7_1WIREDRIVER and CONFIG_STM32_UART7_SERIALDRIVER defined
+#  undef CONFIG_STM32_UART7_1WIREDRIVER
+#endif
+#if defined(CONFIG_STM32_UART8_1WIREDRIVER) && defined(CONFIG_STM32_UART8_SERIALDRIVER)
+#  error Both CONFIG_STM32_UART8_1WIREDRIVER and CONFIG_STM32_UART8_SERIALDRIVER defined
+#  undef CONFIG_STM32_UART8_1WIREDRIVER
+#endif
+
+/* Is the serial driver enabled? */
+
+#if defined(CONFIG_STM32_USART1_SERIALDRIVER) || defined(CONFIG_STM32_USART2_SERIALDRIVER) || \
+    defined(CONFIG_STM32_USART3_SERIALDRIVER) || defined(CONFIG_STM32_UART4_SERIALDRIVER)  || \
+    defined(CONFIG_STM32_UART5_SERIALDRIVER)  || defined(CONFIG_STM32_USART6_SERIALDRIVER) || \
+    defined(CONFIG_STM32_UART7_SERIALDRIVER)  || defined(CONFIG_STM32_UART8_SERIALDRIVER)
+#  define HAVE_SERIALDRIVER 1
+#endif
+
+/* Is the 1-Wire driver? */
+
+#if defined(CONFIG_STM32_USART1_1WIREDRIVER) || defined(CONFIG_STM32_USART2_1WIREDRIVER) || \
+    defined(CONFIG_STM32_USART3_1WIREDRIVER) || defined(CONFIG_STM32_UART4_1WIREDRIVER) || \
+    defined(CONFIG_STM32_UART5_1WIREDRIVER) || defined(CONFIG_STM32_USART6_1WIREDRIVER) || \
+    defined(CONFIG_STM32_UART7_1WIREDRIVER) || defined(CONFIG_STM32_UART8_1WIREDRIVER)
+#  define HAVE_1WIREDRIVER 1
 #endif
 
 /* Is there a serial console? */
 
-#if defined(CONFIG_USART1_SERIAL_CONSOLE) && defined(CONFIG_STM32_USART1)
+#if defined(CONFIG_USART1_SERIAL_CONSOLE) && defined(CONFIG_STM32_USART1_SERIALDRIVER)
 #  undef CONFIG_USART2_SERIAL_CONSOLE
 #  undef CONFIG_USART3_SERIAL_CONSOLE
 #  undef CONFIG_UART4_SERIAL_CONSOLE
@@ -115,7 +190,7 @@
 #  undef CONFIG_UART8_SERIAL_CONSOLE
 #  define CONSOLE_UART 1
 #  define HAVE_CONSOLE 1
-#elif defined(CONFIG_USART2_SERIAL_CONSOLE) && defined(CONFIG_STM32_USART2)
+#elif defined(CONFIG_USART2_SERIAL_CONSOLE) && defined(CONFIG_STM32_USART2_SERIALDRIVER)
 #  undef CONFIG_USART1_SERIAL_CONSOLE
 #  undef CONFIG_USART3_SERIAL_CONSOLE
 #  undef CONFIG_UART4_SERIAL_CONSOLE
@@ -125,7 +200,7 @@
 #  undef CONFIG_UART8_SERIAL_CONSOLE
 #  define CONSOLE_UART 2
 #  define HAVE_CONSOLE 1
-#elif defined(CONFIG_USART3_SERIAL_CONSOLE) && defined(CONFIG_STM32_USART3)
+#elif defined(CONFIG_USART3_SERIAL_CONSOLE) && defined(CONFIG_STM32_USART3_SERIALDRIVER)
 #  undef CONFIG_USART1_SERIAL_CONSOLE
 #  undef CONFIG_USART2_SERIAL_CONSOLE
 #  undef CONFIG_UART4_SERIAL_CONSOLE
@@ -135,7 +210,7 @@
 #  undef CONFIG_UART8_SERIAL_CONSOLE
 #  define CONSOLE_UART 3
 #  define HAVE_CONSOLE 1
-#elif defined(CONFIG_UART4_SERIAL_CONSOLE) && defined(CONFIG_STM32_UART4)
+#elif defined(CONFIG_UART4_SERIAL_CONSOLE) && defined(CONFIG_STM32_UART4_SERIALDRIVER)
 #  undef CONFIG_USART1_SERIAL_CONSOLE
 #  undef CONFIG_USART2_SERIAL_CONSOLE
 #  undef CONFIG_USART3_SERIAL_CONSOLE
@@ -145,7 +220,7 @@
 #  undef CONFIG_UART8_SERIAL_CONSOLE
 #  define CONSOLE_UART 4
 #  define HAVE_CONSOLE 1
-#elif defined(CONFIG_UART5_SERIAL_CONSOLE) && defined(CONFIG_STM32_UART5)
+#elif defined(CONFIG_UART5_SERIAL_CONSOLE) && defined(CONFIG_STM32_UART5_SERIALDRIVER)
 #  undef CONFIG_USART1_SERIAL_CONSOLE
 #  undef CONFIG_USART2_SERIAL_CONSOLE
 #  undef CONFIG_USART3_SERIAL_CONSOLE
@@ -155,7 +230,7 @@
 #  undef CONFIG_UART8_SERIAL_CONSOLE
 #  define CONSOLE_UART 5
 #  define HAVE_CONSOLE 1
-#elif defined(CONFIG_USART6_SERIAL_CONSOLE) && defined(CONFIG_STM32_USART6)
+#elif defined(CONFIG_USART6_SERIAL_CONSOLE) && defined(CONFIG_STM32_USART6_SERIALDRIVER)
 #  undef CONFIG_USART1_SERIAL_CONSOLE
 #  undef CONFIG_USART2_SERIAL_CONSOLE
 #  undef CONFIG_USART3_SERIAL_CONSOLE
@@ -165,7 +240,7 @@
 #  undef CONFIG_UART8_SERIAL_CONSOLE
 #  define CONSOLE_UART 6
 #  define HAVE_CONSOLE 1
-#elif defined(CONFIG_UART7_SERIAL_CONSOLE) && defined(CONFIG_STM32_UART7)
+#elif defined(CONFIG_UART7_SERIAL_CONSOLE) && defined(CONFIG_STM32_UART7_SERIALDRIVER)
 #  undef CONFIG_USART1_SERIAL_CONSOLE
 #  undef CONFIG_USART2_SERIAL_CONSOLE
 #  undef CONFIG_USART3_SERIAL_CONSOLE
@@ -176,7 +251,7 @@
 #  undef CONFIG_UART8_SERIAL_CONSOLE
 #  define CONSOLE_UART 7
 #  define HAVE_CONSOLE 1
-#elif defined(CONFIG_UART8_SERIAL_CONSOLE) && defined(CONFIG_STM32_UART8)
+#elif defined(CONFIG_UART8_SERIAL_CONSOLE) && defined(CONFIG_STM32_UART8_SERIALDRIVER)
 #  undef CONFIG_USART1_SERIAL_CONSOLE
 #  undef CONFIG_USART2_SERIAL_CONSOLE
 #  undef CONFIG_USART3_SERIAL_CONSOLE
@@ -201,7 +276,7 @@
 
 /* DMA support is only provided if CONFIG_ARCH_DMA is in the NuttX configuration */
 
-#if !defined(HAVE_UART) || !defined(CONFIG_ARCH_DMA)
+#if !defined(HAVE_SERIALDRIVER) || !defined(CONFIG_ARCH_DMA)
 #  undef CONFIG_USART1_RXDMA
 #  undef CONFIG_USART2_RXDMA
 #  undef CONFIG_USART3_RXDMA
@@ -214,35 +289,35 @@
 
 /* Disable the DMA configuration on all unused USARTs */
 
-#ifndef CONFIG_STM32_USART1
+#ifndef CONFIG_STM32_USART1_SERIALDRIVER
 #  undef CONFIG_USART1_RXDMA
 #endif
 
-#ifndef CONFIG_STM32_USART2
+#ifndef CONFIG_STM32_USART2_SERIALDRIVER
 #  undef CONFIG_USART2_RXDMA
 #endif
 
-#ifndef CONFIG_STM32_USART3
+#ifndef CONFIG_STM32_USART3_SERIALDRIVER
 #  undef CONFIG_USART3_RXDMA
 #endif
 
-#ifndef CONFIG_STM32_UART4
+#ifndef CONFIG_STM32_UART4_SERIALDRIVER
 #  undef CONFIG_UART4_RXDMA
 #endif
 
-#ifndef CONFIG_STM32_UART5
+#ifndef CONFIG_STM32_UART5_SERIALDRIVER
 #  undef CONFIG_UART5_RXDMA
 #endif
 
-#ifndef CONFIG_STM32_USART6
+#ifndef CONFIG_STM32_USART6_SERIALDRIVER
 #  undef CONFIG_USART6_RXDMA
 #endif
 
-#ifndef CONFIG_STM32_UART7
+#ifndef CONFIG_STM32_UART7_SERIALDRIVER
 #  undef CONFIG_UART7_RXDMA
 #endif
 
-#ifndef CONFIG_STM32_UART8
+#ifndef CONFIG_STM32_UART8_SERIALDRIVER
 #  undef CONFIG_UART8_RXDMA
 #endif
 
@@ -280,21 +355,21 @@
 /* Is DMA used on all (enabled) USARTs */
 
 #define SERIAL_HAVE_ONLY_DMA 1
-#if defined(CONFIG_STM32_USART1) && !defined(CONFIG_USART1_RXDMA)
+#if defined(CONFIG_STM32_USART1_SERIALDRIVER) && !defined(CONFIG_USART1_RXDMA)
 #  undef SERIAL_HAVE_ONLY_DMA
-#elif defined(CONFIG_STM32_USART2) && !defined(CONFIG_USART2_RXDMA)
+#elif defined(CONFIG_STM32_USART2_SERIALDRIVER) && !defined(CONFIG_USART2_RXDMA)
 #  undef SERIAL_HAVE_ONLY_DMA
-#elif defined(CONFIG_STM32_USART3) && !defined(CONFIG_USART3_RXDMA)
+#elif defined(CONFIG_STM32_USART3_SERIALDRIVER) && !defined(CONFIG_USART3_RXDMA)
 #  undef SERIAL_HAVE_ONLY_DMA
-#elif defined(CONFIG_STM32_UART4) && !defined(CONFIG_UART4_RXDMA)
+#elif defined(CONFIG_STM32_UART4_SERIALDRIVER) && !defined(CONFIG_UART4_RXDMA)
 #  undef SERIAL_HAVE_ONLY_DMA
-#elif defined(CONFIG_STM32_UART5) && !defined(CONFIG_UART5_RXDMA)
+#elif defined(CONFIG_STM32_UART5_SERIALDRIVER) && !defined(CONFIG_UART5_RXDMA)
 #  undef SERIAL_HAVE_ONLY_DMA
-#elif defined(CONFIG_STM32_USART6) && !defined(CONFIG_USART6_RXDMA)
+#elif defined(CONFIG_STM32_USART6_SERIALDRIVER) && !defined(CONFIG_USART6_RXDMA)
 #  undef SERIAL_HAVE_ONLY_DMA
-#elif defined(CONFIG_STM32_UART7) && !defined(CONFIG_UART7_RXDMA)
+#elif defined(CONFIG_STM32_UART7_SERIALDRIVER) && !defined(CONFIG_UART7_RXDMA)
 #  undef SERIAL_HAVE_ONLY_DMA
-#elif defined(CONFIG_STM32_UART8) && !defined(CONFIG_UART8_RXDMA)
+#elif defined(CONFIG_STM32_UART8_SERIALDRIVER) && !defined(CONFIG_UART8_RXDMA)
 #  undef SERIAL_HAVE_ONLY_DMA
 #endif
 
@@ -326,7 +401,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -335,21 +411,21 @@ extern "C" {
  * Public Functions
  ************************************************************************************/
 
-/****************************************************************************
+/************************************************************************************
  * Name: stm32_serial_dma_poll
  *
  * Description:
- *   Must be called periodically if any STM32 UART is configured for DMA.
- *   The DMA callback is triggered for each fifo size/2 bytes, but this can
- *   result in some bytes being transferred but not collected if the incoming
- *   data is not a whole multiple of half the FIFO size.
+ *   Must be called periodically if any STM32 UART is configured for DMA.  The DMA
+ *   callback is triggered for each fifo size/2 bytes, but this can result in some
+ *   bytes being transferred but not collected if the incoming data is not a whole
+ *   multiple of half the FIFO size.
  *
  *   May be safely called from either interrupt or thread context.
  *
- ****************************************************************************/
+ ************************************************************************************/
 
 #ifdef SERIAL_HAVE_DMA
-EXTERN void stm32_serial_dma_poll(void);
+void stm32_serial_dma_poll(void);
 #endif
 
 #undef EXTERN

@@ -53,11 +53,18 @@ Version 5.1.1
   on a different platform, you will need to change the path in the ZDS binaries
   in those same files.
 
+Version 5.2.1
+
+  On January 31, 2016, I tried ZDS-II version 5.2.1.  I believe that I have
+  all of the changes in place to support that version.  At compile time,
+  however, I encountered compiler internal errors.  I did not pursue that
+  build any further.
+
 Other Versions
-  If you use any version of ZDS-II other than 5.1.1 or if you install ZDS-II
-  at any location other than the default location, you will have to modify
-  two files:  (1) configs/ez80f910200kitg/*/setenv.sh and (2)
-  configs/ez80f910200kitg/*/Make.defs.
+  If you use any version of ZDS-II other than 5.1.1 or 5.2.1 or if you install
+  ZDS-II at any location other than the default location, you will have to
+  modify one or more of three files:  (1) configs/ez80f910200zco/*/setenv.sh,
+  (2) configs/ez80f910200zco/*/Make.defs, and arch/z80/src/ez80/Toolchain.defs.
 
 Configurations
 ^^^^^^^^^^^^^^
@@ -90,7 +97,7 @@ Common Configuration Notes
      change this configurations using that tool, you should:
 
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-        and misc/tools/
+        see additional README.txt files in the NuttX tools repository.
 
      b. Execute 'make menuconfig' in nuttx/ in order to start the
         reconfiguration process.
@@ -104,7 +111,7 @@ Configuration Subdirectories
     about the dhcpd example.
 
   httpd:
-    This builds the uIP web server example using the examples/uip application
+    This builds the uIP web server example using the examples/webserver application
     (for execution from FLASH). See apps/examples/README.txt for information
     about httpd.
 

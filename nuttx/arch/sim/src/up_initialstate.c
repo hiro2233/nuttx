@@ -1,5 +1,5 @@
 /****************************************************************************
- * up_initialstate.c
+ * arch/sim/src/up_initialstate.c
  *
  *   Copyright (C) 2007-2009 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -47,18 +47,6 @@
 #include "up_internal.h"
 
 /****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -79,6 +67,6 @@
 void up_initial_state(struct tcb_s *tcb)
 {
   memset(&tcb->xcp, 0, sizeof(struct xcptcontext));
-  tcb->xcp.regs[JB_SP] = (uint32_t)tcb->adj_stack_ptr;
-  tcb->xcp.regs[JB_PC] = (uint32_t)tcb->start;
+  tcb->xcp.regs[JB_SP] = (xcpt_reg_t)tcb->adj_stack_ptr;
+  tcb->xcp.regs[JB_PC] = (xcpt_reg_t)tcb->start;
 }

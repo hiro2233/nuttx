@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/hc/src/m9s12/m9s12_serial.c
  *
- *   Copyright (C) 2009, 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011-2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,12 +38,13 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/irq.h>
 
 #include "up_internal.h"
 #include "m9s12_serial.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Configuration ************************************************************/
@@ -133,7 +134,7 @@ static bool up_txready(struct uart_dev_s *dev);
 static bool up_txempty(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 struct uart_ops_s g_sci_ops =
@@ -672,7 +673,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
   struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable)
     {
       /* Set to receive an interrupt when the TX data register is empty */
@@ -693,7 +694,8 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
       priv->im &= ~SCI_CR2_TIE;
       up_setsciint(priv);
     }
-  irqrestore(flags);
+
+  leave_critical_section(flags);
 }
 
 /****************************************************************************

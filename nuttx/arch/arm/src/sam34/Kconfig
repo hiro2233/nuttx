@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 comment "AT91SAM3/4 Configuration Options"
@@ -77,6 +77,11 @@ config ARCH_CHIP_ATSAM3A4C
 	bool "ATSAM3A4C"
 	select ARCH_CORTEXM3
 	select ARCH_CHIP_SAM3A
+
+config ARCH_CHIP_ATSAM4CMP16B
+	bool "ATSAM4CMP16B"
+	select ARCH_CORTEXM4
+	select ARCH_CHIP_SAM4CM
 
 config ARCH_CHIP_ATSAM4LC2C
 	bool "ATSAM4LC2C"
@@ -221,10 +226,21 @@ config ARCH_CHIP_SAM3U
 config ARCH_CHIP_SAM3X
 	bool
 	default n
+	select SAM34_HAVE_GPIOD_IRQ
+	select SAM34_HAVE_GPIOE_IRQ
+	select SAM34_HAVE_GPIOF_IRQ
 
 config ARCH_CHIP_SAM3A
 	bool
 	default n
+	select SAM34_HAVE_GPIOD_IRQ
+	select SAM34_HAVE_GPIOE_IRQ
+	select SAM34_HAVE_GPIOF_IRQ
+
+config ARCH_CHIP_SAM4CM
+	bool
+	default n
+	select ARCH_HAVE_TICKLESS
 
 config ARCH_CHIP_SAM4L
 	bool
@@ -238,6 +254,9 @@ config ARCH_CHIP_SAM4E
 	select ARCH_HAVE_EXTNAND
 	select ARCH_HAVE_EXTSRAM0
 	select ARCH_HAVE_EXTSRAM1
+	select SAM34_HAVE_GPIOD_IRQ
+	select SAM34_HAVE_GPIOE_IRQ
+	select SAM34_HAVE_GPIOF_IRQ
 
 config ARCH_CHIP_SAM4S
 	bool
@@ -270,9 +289,9 @@ config SAM34_ADC12B
 	depends on !ARCH_CHIP_SAM4E
 
 config SAM34_AES
-	bool "AES"
+	bool "Advanced Encryption Standard (AES)"
 	default n
-	depends on ARCH_CHIP_SAM4E
+	depends on ARCH_CHIP_SAM4CM || ARCH_CHIP_SAM4E
 
 config SAM34_AESA
 	bool "Advanced Encryption Standard (AESA)"
@@ -388,6 +407,11 @@ config SAM34_IISC
 	default n
 	depends on ARCH_CHIP_SAM4L
 
+config SAM34_SLCDC
+	bool "Segment LCD Controller (SLCDC)"
+	default n
+	depends on ARCH_CHIP_SAM4CM
+
 config SAM34_LCDCA
 	bool "LCD Controller A (LCDCA)"
 	default n
@@ -429,7 +453,7 @@ config SAM34_PICOUART
 	bool "PicoUART"
 	default n
 	depends on ARCH_CHIP_SAM4L
-	select ARCH_HAVE_UART
+	select UART_SERIALDRIVER
 
 config SAM34_PWM
 	bool "Pulse Width Modulation (PWM) Controller"
@@ -519,7 +543,7 @@ config SAM34_TC7
 	select SAM34_TC
 
 config SAM34_TC8
-	bool "Timer/Counter 6 (TC8)"
+	bool "Timer/Counter 8 (TC8)"
 	default n
 	depends on ARCH_CHIP_SAM3X || ARCH_CHIP_SAM3A || ARCH_CHIP_SAM4E
 	select SAM34_TC
@@ -528,44 +552,80 @@ config SAM34_TRNG
 	bool "True Random Number Generator (TRNG)"
 	default n
 	depends on ARCH_CHIP_SAM3X || ARCH_CHIP_SAM3A || ARCH_CHIP_SAM4L
+	select ARCH_HAVE_RNG
+
+config SAM34_TWI
+	bool
+	default n
+
+config SAM34_TWIM
+	bool
+	default n
+
+config SAM34_TWIS
+	bool
+	default n
+
 
 config SAM34_TWIM0
 	bool "Two-wire Master Interface 0 (TWIM0)"
 	default n
+	select SAM34_TWI
+	select SAM34_TWIM
 
 config SAM34_TWIS0
 	bool "Two-wire Slave Interface 0 (TWIS0)"
 	default n
+	select SAM34_TWI
+	select SAM34_TWIS
 
 config SAM34_TWIM1
 	bool "Two-wire Master Interface 1 (TWIM1)"
 	default n
+	select SAM34_TWI
+	select SAM34_TWIM
 
 config SAM34_TWIS1
 	bool "Two-wire Slave Interface 1 (TWIS1)"
 	default n
+	select SAM34_TWI
+	select SAM34_TWIS
 
 config SAM34_TWIM2
 	bool "Two-wire Master Interface 2 (TWIM2)"
 	default n
 	depends on ARCH_CHIP_SAM4L
+	select SAM34_TWI
+	select SAM34_TWIM
 
 config SAM34_TWIM3
 	bool "Two-wire Master Interface 3 (TWIM3)"
 	default n
 	depends on ARCH_CHIP_SAM4L
+	select SAM34_TWI
+	select SAM34_TWIM
 
 config SAM34_UART0
 	bool "UART 0"
 	default y
-	depends on ARCH_CHIP_SAM3U || ARCH_CHIP_SAM3X || ARCH_CHIP_SAM3A || ARCH_CHIP_SAM4S || ARCH_CHIP_SAM4E
-	select ARCH_HAVE_UART0
+	depends on ARCH_CHIP_SAM3U || ARCH_CHIP_SAM3X || ARCH_CHIP_SAM3A || ARCH_CHIP_SAM4CM || ARCH_CHIP_SAM4S || ARCH_CHIP_SAM4E
+	select UART0_SERIALDRIVER
+	select ARCH_HAVE_SERIAL_TERMIOS
 
 config SAM34_UART1
 	bool "UART 1"
 	default n
-	depends on ARCH_CHIP_SAM4S || ARCH_CHIP_SAM4E
-	select ARCH_HAVE_UART1
+	depends on ARCH_CHIP_SAM4CM || ARCH_CHIP_SAM4S || ARCH_CHIP_SAM4E
+	select UART1_SERIALDRIVER
+	select ARCH_HAVE_SERIAL_TERMIOS
+
+if SAM34_UART1 && ARCH_CHIP_SAM4CM
+
+config SAM34_UART1_OPTICAL
+	bool "UART 1 is optical"
+	default n
+
+endif
 
 config SAM34_UDP
 	bool "USB Device Full Speed (UDP)"
@@ -591,24 +651,28 @@ config SAM34_USBC
 config SAM34_USART0
 	bool "USART 0"
 	default n
-	select ARCH_HAVE_USART0
+	select USART0_SERIALDRIVER
+	select ARCH_HAVE_SERIAL_TERMIOS
 
 config SAM34_USART1
 	bool "USART 1"
 	default n
-	select ARCH_HAVE_USART1
+	select USART1_SERIALDRIVER
+	select ARCH_HAVE_SERIAL_TERMIOS
 
 config SAM34_USART2
 	bool "USART 2"
 	default n
-	select ARCH_HAVE_USART2
-	depends on ARCH_CHIP_SAM3U || ARCH_CHIP_SAM3X || ARCH_CHIP_SAM3A || ARCH_CHIP_SAM4L
+	depends on ARCH_CHIP_SAM3U || ARCH_CHIP_SAM3X || ARCH_CHIP_SAM3A || ARCH_CHIP_SAM4CM || ARCH_CHIP_SAM4L
+	select USART2_SERIALDRIVER
+	select ARCH_HAVE_SERIAL_TERMIOS
 
 config SAM34_USART3
 	bool "USART 3"
 	default n
-	select ARCH_HAVE_USART3
-	depends on ARCH_CHIP_SAM3U || ARCH_CHIP_SAM3X || ARCH_CHIP_SAM3A || ARCH_CHIP_SAM4L
+	depends on ARCH_CHIP_SAM3U || ARCH_CHIP_SAM3X || ARCH_CHIP_SAM3A || ARCH_CHIP_SAM4CM || ARCH_CHIP_SAM4L
+	select USART3_SERIALDRIVER
+	select ARCH_HAVE_SERIAL_TERMIOS
 
 config SAM34_WDT
 	bool "Watchdog Timer (WDT)"
@@ -851,8 +915,21 @@ endmenu # External Memory Configuration
 
 menu "AT91SAM3/4 GPIO Interrupt Configuration"
 
+config SAM34_HAVE_GPIOD_IRQ
+	bool
+	default n
+
+config SAM34_HAVE_GPIOE_IRQ
+	bool
+	default n
+
+config SAM34_HAVE_GPIOF_IRQ
+	bool
+	default n
+
 config SAM34_GPIO_IRQ
 	bool "GPIO pin interrupts"
+	depends on !ARCH_CHIP_SAM4L
 	---help---
 		Enable support for interrupting GPIO pins
 
@@ -873,20 +950,150 @@ config SAM34_GPIOC_IRQ
 config SAM34_GPIOD_IRQ
 	bool "GPIOD interrupts"
 	default n
-	depends on ARCH_CHIP_SAM3X || ARCH_CHIP_SAM3A
+	depends on SAM34_HAVE_GPIOD_IRQ
 
 config SAM34_GPIOE_IRQ
 	bool "GPIOE interrupts"
 	default n
-	depends on ARCH_CHIP_SAM3X || ARCH_CHIP_SAM3A
+	depends on SAM34_HAVE_GPIOE_IRQ
 
 config SAM34_GPIOF_IRQ
 	bool "GPIOF interrupts"
 	default n
-	depends on ARCH_CHIP_SAM3X || ARCH_CHIP_SAM3A
+	depends on SAM34_HAVE_GPIOF_IRQ
 
 endif # SAM34_GPIO_IRQ
 endmenu # AT91SAM3/4 GPIO Interrupt Configuration
+
+menu "AT91SAM3/4 Timer/Counter Configuration"
+	depends on SAM34_TC && ARCH_CHIP_SAM4CM
+
+config SAM34_TC0_CLK
+	bool "Enable TC channel 0 clock input pin"
+	default n
+	depends on SAM34_TC0
+
+config SAM34_TC0_TIOA
+	bool "Enable TC channel 0 output A"
+	default n
+	depends on SAM34_TC0
+
+config SAM34_TC0_TIOB
+	bool "Enable TC channel 0 output B"
+	default n
+	depends on SAM34_TC0
+
+config SAM34_TC1_CLK
+	bool "Enable TC channel 1 clock input pin"
+	default n
+	depends on SAM34_TC1
+
+config SAM34_TC1_TIOA
+	bool "Enable TC channel 1 output A"
+	default n
+	depends on SAM34_TC1
+
+config SAM34_TC1_TIOB
+	bool "Enable TC channel 1 output B"
+	default n
+	depends on SAM34_TC1
+
+config SAM34_TC2_CLK
+	bool "Enable TC channel 2 clock input pin"
+	default n
+	depends on SAM34_TC2
+
+config SAM34_TC2_TIOA2
+	bool "Enable TC channel 2 output A"
+	default n
+	depends on SAM34_TC2
+
+config SAM34_TC2_TIOB2
+	bool "Enable TC channel 2 output B"
+	default n
+	depends on SAM34_TC2
+
+config SAM34_TC3_CLK
+	bool "Enable TC channel 3 clock input pin"
+	default n
+	depends on SAM34_TC3
+
+config SAM34_TC3_TIOA
+	bool "Enable TC channel 3 output A"
+	default n
+	depends on SAM34_TC3
+
+config SAM34_TC3_TIOB
+	bool "Enable TC channel 3 output B"
+	default n
+	depends on SAM34_TC3
+
+config SAM34_TC4_CLK
+	bool "Enable TC channel 4 clock input pin"
+	default n
+	depends on SAM34_TC4
+
+config SAM34_TC4_TIOA
+	bool "Enable TC channel 4 output A"
+	default n
+	depends on SAM34_TC4
+
+config SAM34_TC4_TIOB
+	bool "Enable TC channel 4 output B"
+	default n
+	depends on SAM34_TC4
+
+config SAM34_TC5_CLK
+	bool "Enable TC channel 5 clock input pin"
+	default n
+	depends on SAM34_TC5
+
+config SAM34_TC5_TIOA
+	bool "Enable TC channel 5 output A"
+	default n
+	depends on SAM34_TC5
+
+config SAM34_TC5_TIOB
+	bool "Enable TC channel 5 output B"
+	default n
+	depends on SAM34_TC5
+
+config SAM34_ONESHOT
+	bool "TC one-shot wrapper"
+	default n if !SCHED_TICKLESS
+	default y if SCHED_TICKLESS
+	---help---
+		Enable a wrapper around the low level timer/counter functions to
+		support one-shot timer.
+
+config SAM34_FREERUN
+	bool "TC free-running wrapper"
+	default n if !SCHED_TICKLESS
+	default y if SCHED_TICKLESS
+	---help---
+		Enable a wrapper around the low level timer/counter functions to
+		support a free-running timer.
+
+if SCHED_TICKLESS
+
+config SAM34_TICKLESS_ONESHOT
+	int "Tickless one-shot timer channel"
+	default 0
+	range 0 8
+	---help---
+		If the Tickless OS feature is enabled, the one clock must be
+		assigned to provided the one-shot timer needed by the OS.
+
+config SAM34_TICKLESS_FREERUN
+	int "Tickless free-running timer channel"
+	default 1
+	range 0 8
+	---help---
+		If the Tickless OS feature is enabled, the one clock must be
+		assigned to provided the free-running timer needed by the OS.
+
+endif # SCHED_TICKLESS
+endmenu # AT91SAM3/4 Timer/Counter Configuration
 
 if SAM34_SPI0 || SAM34_SPI1
 
@@ -910,7 +1117,7 @@ config SAM34_SPI_DMATHRESHOLD
 
 config SAM34_SPI_DMADEBUG
 	bool "SPI DMA transfer debug"
-	depends on SAM34_SPI_DMA && DEBUG && DEBUG_DMA
+	depends on SAM34_SPI_DMA && DEBUG_FEATURES && DEBUG_DMA
 	default n
 	---help---
 		Enable special debug instrumentation analyze SPI DMA data transfers.
@@ -920,11 +1127,11 @@ config SAM34_SPI_DMADEBUG
 
 config SAM34_SPI_REGDEBUG
 	bool "SPI Register level debug"
-	depends on DEBUG
+	depends on DEBUG_SPI_INFO
 	default n
 	---help---
 		Output detailed register-level SPI device debug information.
-		Requires also DEBUG.
+		Requires also CONFIG_SPI_INFO.
 
 endmenu # AT91SAM3/4 SPI device driver options
 endif # SAM34_SPI0 || SAM34_SPI1
@@ -1128,9 +1335,9 @@ config SAM34_EMAC_PHYSR_100FD
 config SAM34_EMAC_REGDEBUG
 	bool "Register-Level Debug"
 	default n
-	depends on DEBUG
+	depends on DEBUG_NET_INFO
 	---help---
-		Enable very low-level register access debug.  Depends on DEBUG.
+		Enable very low-level register access debug.  Depends on CONFIG_DEBUG_NET_INFO.
 
 config SAM34_EMAC_ISETH0
 	bool
@@ -1161,7 +1368,7 @@ config SAM34_HSMCI_WRPROOF
 
 config SAM34_HSMCI_XFRDEBUG
 	bool "HSMCI transfer debug"
-	depends on DEBUG_FS && DEBUG_VERBOSE
+	depends on DEBUG_FS_INFO
 	default n
 	---help---
 		Enable special debug instrumentation analyze HSMCI data transfers.
@@ -1169,11 +1376,11 @@ config SAM34_HSMCI_XFRDEBUG
 		registers at key points in the data transfer and then dumps all of
 		the registers at the end of the transfer.  If DEBUG_DMA is also
 		enabled, then DMA register will be collected as well.  Requires also
-		DEBUG_FS and DEBUG_VERBOSE.
+		DEBUG_FS and CONFIG_DEBUG_INFO.
 
 config SAM34_HSMCI_CMDDEBUG
 	bool "HSMCI command debug"
-	depends on DEBUG_FS && DEBUG_VERBOSE
+	depends on DEBUG_FS_INFO
 	default n
 	---help---
 		Enable special debug instrumentation analyze HSMCI commands. This
@@ -1181,7 +1388,7 @@ config SAM34_HSMCI_CMDDEBUG
 		key points in the data transfer and then dumps all of the registers
 		at the end of the transfer.  If DEBUG_DMA is also enabled, then DMA
 		register will be collected as well.  Requires also DEBUG_FS and
-		DEBUG_VERBOSE.
+		CONFIG_DEBUG_INFO.
 
 endmenu # HSMCI device driver options
 endif # SAM34_HSMCI
@@ -1192,7 +1399,7 @@ menu "AT91SAM3/4 USB Full Speed Device Controller driver (DCD) options"
 config SAM34_UDP_REGDEBUG
 	bool "Enable low-level UDP register debug"
 	default n
-	depends on DEBUG
+	depends on DEBUG_USB_INFO
 
 endmenu # USB Full Speed Device Controller driver (DCD) options
 
@@ -1207,7 +1414,7 @@ menu "AT91SAM3/4 Timer/Counter options"
 config SAM34_TC_REGDEBUG
 	bool "Enable low-level timer/counter register debug"
 	default n
-	depends on DEBUG
+	depends on DEBUG_TIMER_INFO
 
 endmenu # USB Full Speed Device Controller driver (DCD) options
 

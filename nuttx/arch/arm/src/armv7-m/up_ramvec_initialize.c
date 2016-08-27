@@ -56,26 +56,23 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-/* Debug ********************************************************************/
-/* Non-standard debug that may be enabled just for testing the interrupt
- * config.  NOTE: that only lldbg types are used so that the output is
- * immediately available.
+/* Alignment ****************************************************************/
+/* Per the ARMv7M Architecture reference manual, the NVIC vector table
+ * requires 7-bit address alignment (i.e, bits 0-6 of the address of the
+ * vector table must be zero).  In this case alignment to a 128 byte address
+ * boundary is sufficient.
+ *
+ * Some parts, such as the LPC17xx family, require alignment to a 256 byte
+ * address boundary.  Any other unusual alignment requirements for the vector
+ * can be specified for a given architecture be redefining
+ * NVIC_VECTAB_TBLOFF_MASK in the chip-specific chip.h header file for the
+ * appropriate mask.
  */
 
-#ifdef CONFIG_DEBUG_IRQ
-#  define intdbg    lldbg
-#  define intvdbg   llvdbg
-#else
-#  define intdbg(x...)
-#  define intvdbg(x...)
-#endif
+#define RAMVEC_ALIGN ((~NVIC_VECTAB_TBLOFF_MASK & 0xffff) + 1)
 
 /****************************************************************************
- * Private Type Declarations
- ****************************************************************************/
-
-/****************************************************************************
- * Global Variables
+ * Public Data
  ****************************************************************************/
 
 /* If CONFIG_ARCH_RAMVECTORS is defined, then the ARM logic must provide
@@ -91,10 +88,10 @@
  */
 
 up_vector_t g_ram_vectors[ARMV7M_VECTAB_SIZE]
-  __attribute__ ((section (".ram_vectors"), aligned (128)));
+  __attribute__ ((section (".ram_vectors"), aligned (RAMVEC_ALIGN)));
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -132,7 +129,7 @@ void up_ramvec_initialize(void)
   src  = (const CODE up_vector_t *)getreg32(NVIC_VECTAB);
   dest = g_ram_vectors;
 
-  intvdbg("src=%p dest=%p\n", src, dest);
+  irqinfo("src=%p dest=%p\n", src, dest);
 
   for (i = 0; i < ARMV7M_VECTAB_SIZE; i++)
     {
@@ -148,7 +145,7 @@ void up_ramvec_initialize(void)
    * the table alignment is insufficient.
    */
 
-  intvdbg("NVIC_VECTAB=%08x\n", getreg32(NVIC_VECTAB));
+  irqinfo("NVIC_VECTAB=%08x\n", getreg32(NVIC_VECTAB));
   DEBUGASSERT(getreg32(NVIC_VECTAB) == (uint32_t)g_ram_vectors);
 }
 

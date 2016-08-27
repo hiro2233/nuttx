@@ -1,4 +1,4 @@
-/**************************************************************************
+/****************************************************************************
  * apps/examples/ostest/mqueue.c
  *
  *   Copyright (C) 2007-2009, 2011 Gregory Nutt. All rights reserved.
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Included Files
- **************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
@@ -51,9 +51,9 @@
 
 #include "ostest.h"
 
-/**************************************************************************
+/****************************************************************************
  * Private Definitions
- **************************************************************************/
+ ****************************************************************************/
 
 #define TEST_MESSAGE        "This is a test and only a test"
 #if defined(SDCC) || defined(__ZILOG__)
@@ -69,32 +69,32 @@
 #define TEST_SEND_NMSGS     (10)
 #define TEST_RECEIVE_NMSGS  (10)
 
-/**************************************************************************
+/****************************************************************************
  * Private Types
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Private Function Prototypes
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
- * Global Variables
- **************************************************************************/
+/****************************************************************************
+ * Public Data
+ ****************************************************************************/
 
-/**************************************************************************
- * Private Variables
- **************************************************************************/
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
 
 static mqd_t g_send_mqfd;
 static mqd_t g_recv_mqfd;
 
-/**************************************************************************
+/****************************************************************************
  * Private Functions
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Public Functions
- **************************************************************************/
+ ****************************************************************************/
 
 static void *sender_thread(void *arg)
 {
@@ -124,7 +124,7 @@ static void *sender_thread(void *arg)
    */
 
   g_send_mqfd = mq_open("timedmq", O_WRONLY|O_CREAT, 0666, &attr);
-  if (g_send_mqfd < 0)
+  if (g_send_mqfd == (mqd_t)-1)
     {
         printf("sender_thread: ERROR mq_open failed\n");
         pthread_exit((pthread_addr_t)1);
@@ -190,7 +190,7 @@ static void *sender_thread(void *arg)
 
   printf("sender_thread: returning nerrors=%d\n", nerrors);
   FFLUSH();
-  return (pthread_addr_t)nerrors;
+  return (pthread_addr_t)((uintptr_t)nerrors);
 }
 
 static void *receiver_thread(void *arg)
@@ -221,7 +221,7 @@ static void *receiver_thread(void *arg)
    */
 
    g_recv_mqfd = mq_open("timedmq", O_RDONLY|O_CREAT, 0666, &attr);
-   if (g_recv_mqfd < 0)
+   if (g_recv_mqfd == (mqd_t)-1)
      {
        printf("receiver_thread: ERROR mq_open failed\n");
        pthread_exit((pthread_addr_t)1);
@@ -310,8 +310,8 @@ static void *receiver_thread(void *arg)
 
   printf("receiver_thread: returning nerrors=%d\n", nerrors);
   FFLUSH();
-  pthread_exit((pthread_addr_t)nerrors);
-  return (pthread_addr_t)nerrors;
+  pthread_exit((pthread_addr_t)((uintptr_t)nerrors));
+  return (pthread_addr_t)((uintptr_t)nerrors);
 }
 
 void timedmqueue_test(void)
@@ -328,19 +328,22 @@ void timedmqueue_test(void)
   status = pthread_attr_init(&attr);
   if (status != 0)
     {
-      printf("timedmqueue_test: pthread_attr_init failed, status=%d\n", status);
+      printf("timedmqueue_test: pthread_attr_init failed, status=%d\n",
+             status);
     }
 
   status = pthread_attr_setstacksize(&attr, STACKSIZE);
   if (status != 0)
     {
-      printf("timedmqueue_test: pthread_attr_setstacksize failed, status=%d\n", status);
+      printf("timedmqueue_test: pthread_attr_setstacksize failed, status=%d\n",
+             status);
     }
 
   status = pthread_create(&sender, &attr, sender_thread, NULL);
   if (status != 0)
     {
-      printf("timedmqueue_test: pthread_create failed, status=%d\n", status);
+      printf("timedmqueue_test: pthread_create failed, status=%d\n",
+             status);
     }
 
   /* Wait for the sending thread to complete */
@@ -349,7 +352,8 @@ void timedmqueue_test(void)
   pthread_join(sender, &result);
   if (result != (void*)0)
     {
-      printf("timedmqueue_test: ERROR sender thread exited with %d errors\n", (int)result);
+      printf("timedmqueue_test: ERROR sender thread exited with %d errors\n",
+             (int)((intptr_t)result));
     }
 
   /* Start the receiving thread at the default priority */
@@ -358,19 +362,22 @@ void timedmqueue_test(void)
   status = pthread_attr_init(&attr);
   if (status != 0)
     {
-      printf("timedmqueue_test: pthread_attr_init failed, status=%d\n", status);
+      printf("timedmqueue_test: pthread_attr_init failed, status=%d\n",
+             status);
     }
 
   status = pthread_attr_setstacksize(&attr, STACKSIZE);
   if (status != 0)
     {
-      printf("timedmqueue_test: pthread_attr_setstacksize failed, status=%d\n", status);
+      printf("timedmqueue_test: pthread_attr_setstacksize failed, status=%d\n",
+             status);
     }
 
   status = pthread_create(&receiver, &attr, receiver_thread, NULL);
   if (status != 0)
     {
-      printf("timedmqueue_test: pthread_create failed, status=%d\n", status);
+      printf("timedmqueue_test: pthread_create failed, status=%d\n",
+             status);
     }
 
   /* Wait for the receiving thread to complete */
@@ -380,7 +387,7 @@ void timedmqueue_test(void)
   if (result != (void*)0)
     {
       printf("timedmqueue_test: ERROR receiver thread exited with %d errors\n",
-             (int)result);
+             (int)((intptr_t)result));
     }
 
   /* Make sure that the message queues were properly closed (otherwise, we

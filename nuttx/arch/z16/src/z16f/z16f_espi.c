@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z16/src/z16f/z16f_espi.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,38 +47,13 @@
 #include <debug.h>
 
 #include <arch/board/board.h>
+#include <nuttx/irq.h>
 #include <nuttx/spi/spi.h>
 
 #include "up_arch.h"
 #include "chip.h"
 
 #ifdef CONFIG_Z16F_ESPI
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-/* Debug *******************************************************************/
-/* Check if SPI debug is enabled (non-standard.. no support in
- * include/debug.h
- */
-
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_VERBOSE
-#  undef CONFIG_DEBUG_SPI
-#  undef CONFIG_Z16F_ESPI_REGDEBUG
-#endif
-
-#ifdef CONFIG_DEBUG_SPI
-#  define spidbg    lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define spivdbg lldbg
-#  else
-#    define spivdbg (void)
-#  endif
-#else
-#  define spidbg    (void)
-#  define spivdbg   (void)
-#endif
 
 /****************************************************************************
  * Private Types
@@ -90,13 +65,11 @@ struct z16f_spi_s
 {
   struct spi_dev_s spi;        /* Externally visible part of the SPI interface */
   bool initialized;            /* TRUE: Controller has been initialized */
-#ifndef CONFIG_SPI_OWNBUS
   uint8_t nbits;               /* Width of word in bits (1-8) */
   uint8_t mode;                /* Mode 0,1,2,3 */
   sem_t exclsem;               /* Assures mutually exclusive access to SPI */
   uint32_t frequency;          /* Requested clock frequency */
   uint32_t actual;             /* Actual clock frequency */
-#endif
 
   /* Debug stuff */
 
@@ -128,7 +101,7 @@ static void     spi_putreg16(FAR struct z16f_spi_s *priv, uint16_t regval,
 # define        spi_putreg16(priv,regval,regaddr) putreg16(regval, regaddr)
 #endif
 
-#if defined(CONFIG_DEBUG_SPI) && defined(CONFIG_DEBUG_VERBOSE)
+#ifdef CONFIG_DEBUG_SPI_INFO
 static void     spi_dumpregs(FAR struct z16f_spi_s *priv, const char *msg);
 #else
 # define        spi_dumpregs(priv,msg)
@@ -138,9 +111,7 @@ static void     spi_flush(FAR struct z16f_spi_s *priv);
 
 /* SPI methods */
 
-#ifndef CONFIG_SPI_OWNBUS
 static int      spi_lock(FAR struct spi_dev_s *dev, bool lock);
-#endif
 static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency);
 static void     spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode);
 static void     spi_setbits(FAR struct spi_dev_s *dev, int nbits);
@@ -162,13 +133,14 @@ static void     spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer,
 
 static const struct spi_ops_s g_epsiops =
 {
-#ifndef CONFIG_SPI_OWNBUS
   spi_lock,
-#endif
   z16f_espi_select,
   spi_setfrequency,
   spi_setmode,
   spi_setbits,
+#ifdef CONFIG_SPI_HWFEATURES
+  NULL, /* hwfeatures:  Not supported */
+#endif
   z16f_espi_status,
 #ifdef CONFIG_SPI_CMDDATA
   z16f_espi_cmddata,
@@ -233,7 +205,7 @@ static bool spi_checkreg(FAR struct z16f_spi_s *priv, bool wr, uint16_t regval,
         {
           /* Yes... show how many times we did it */
 
-          lldbg("...[Repeats %d times]...\n", priv->ntimes);
+          syslog(LOG_INFO, "...[Repeats %d times]...\n", priv->ntimes);
         }
 
       /* Save information about the new access */
@@ -265,7 +237,7 @@ static uint8_t spi_getreg8(FAR struct z16f_spi_s *priv, uintptr_t regaddr)
 
   if (spi_checkreg(priv, false, (uint16_t)regval, regaddr))
     {
-      lldbg("%06x->%02x\n", regaddr, regval);
+      syslog(LOG_INFO, "%06x->%02x\n", regaddr, regval);
     }
 
   return regval;
@@ -286,7 +258,7 @@ static void spi_putreg8(FAR struct z16f_spi_s *priv, uint8_t regval,
 {
   if (spi_checkreg(priv, true, (uint16_t)regval, regaddr))
     {
-      lldbg("%06x<-%02x\n", regaddr, regval);
+      syslog(LOG_INFO, "%06x<-%02x\n", regaddr, regval);
     }
 
   putreg8(regval, regaddr);
@@ -307,7 +279,7 @@ static void spi_putreg16(FAR struct z16f_spi_s *priv, uint16_t regval,
 {
   if (spi_checkreg(priv, true, regval, regaddr))
     {
-      lldbg("%06x<-%04x\n", regaddr, regval);
+      syslog(LOG_INFO, "%06x<-%04x\n", regaddr, regval);
     }
 
   putreg8(regval, regaddr);
@@ -329,14 +301,14 @@ static void spi_putreg16(FAR struct z16f_spi_s *priv, uint16_t regval,
  *
  ****************************************************************************/
 
-#if defined(CONFIG_DEBUG_SPI) && defined(CONFIG_DEBUG_VERBOSE)
+#ifdef CONFIG_DEBUG_SPI_INFO
 static void spi_dumpregs(FAR struct z16f_spi_s *priv, FAR const char *msg)
 {
-  spivdbg("%s:\n", msg);
-  spivdbg("   DCR: %02x  CTL: %02x MODE: %02x STAT: %02x\n",
+  spiinfo("%s:\n", msg);
+  spiinfo("   DCR: %02x  CTL: %02x MODE: %02x STAT: %02x\n",
           getreg8(Z16F_ESPI_DCR),  getreg8(Z16F_ESPI_CTL),
           getreg8(Z16F_ESPI_MODE), getreg8(Z16F_ESPI_STAT));
-  spivdbg(" STATE: %02x   BR: %02x %02x\n",
+  spiinfo(" STATE: %02x   BR: %02x %02x\n",
           getreg8(Z16F_ESPI_STATE),  getreg8(Z16F_ESPI_BRH),
           getreg8(Z16F_ESPI_BRL));
 }
@@ -393,12 +365,11 @@ static void spi_flush(FAR struct z16f_spi_s *priv)
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 {
   FAR struct z16f_spi_s *priv = (FAR struct z16f_spi_s *)dev;
 
-  spivdbg("lock=%d\n", lock);
+  spiinfo("lock=%d\n", lock);
   if (lock)
     {
       /* Take the semaphore (perhaps waiting) */
@@ -419,7 +390,6 @@ static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 
   return OK;
 }
-#endif
 
 /****************************************************************************
  * Name: spi_setfrequency
@@ -442,18 +412,16 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
   uint32_t actual;
   uint32_t brg;
 
-  spivdbg("frequency=%d\n", frequency);
+  spiinfo("frequency=%d\n", frequency);
 
   /* Check if the requested frequency is the same as the frequency selection */
 
-#ifndef CONFIG_SPI_OWNBUS
   if (priv->frequency == frequency)
     {
       /* We are already at this frequency.  Return the actual. */
 
       return priv->actual;
     }
-#endif
 
   /* Fbaud = Fsystem / (2 * BRG)
    * BRG   = Fsystem / (2 * Fbaud)
@@ -475,16 +443,14 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
   /* Calculate the new actual frequency */
 
   actual = (BOARD_SYSTEM_FREQUENCY >> 1) / brg;
-  spivdbg("BR=%04x actual=%ld\n", (unsigned int)brg, (long)actual);
+  spiinfo("BR=%04x actual=%ld\n", (unsigned int)brg, (long)actual);
 
   /* Save the frequency setting */
 
-#ifndef CONFIG_SPI_OWNBUS
   priv->frequency = frequency;
   priv->actual    = actual;
-#endif
 
-  spidbg("Frequency %d->%d\n", frequency, actual);
+  spiinfo("Frequency %d->%d\n", frequency, actual);
   return actual;
 }
 
@@ -508,14 +474,12 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
   FAR struct z16f_spi_s *priv = (FAR struct z16f_spi_s *)dev;
   uint8_t regval;
 
-  spivdbg("mode=%d\n", mode);
+  spiinfo("mode=%d\n", mode);
 
   /* Has the mode changed? */
 
-#ifndef CONFIG_SPI_OWNBUS
   if (mode != priv->mode)
     {
-#endif
       /* Yes... Set the mode appropriately:
        *
        * SPI  CPOL CPHA
@@ -552,14 +516,12 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
         }
 
       spi_putreg8(priv, regval, Z16F_ESPI_CTL);
-      spivdbg("ESPI CTL: %02x\n", regval);
+      spiinfo("ESPI CTL: %02x\n", regval);
 
       /* Save the mode so that subsequent re-configurations will be faster */
 
-#ifndef CONFIG_SPI_OWNBUS
       priv->mode = mode;
     }
-#endif
 }
 
 /****************************************************************************
@@ -582,14 +544,12 @@ static void spi_setbits(FAR struct spi_dev_s *dev, int nbits)
   FAR struct z16f_spi_s *priv = (FAR struct z16f_spi_s *)dev;
   uint8_t regval;
 
-  spivdbg("nbits=%d\n", nbits);
+  spiinfo("nbits=%d\n", nbits);
   DEBUGASSERT(priv && nbits > 0 && nbits <= 8);
 
   /* Has the number of bits changed? */
 
-#ifndef CONFIG_SPI_OWNBUS
   if (nbits != priv->nbits)
-#endif
     {
       /* Yes... Set number of bits appropriately */
 
@@ -604,13 +564,11 @@ static void spi_setbits(FAR struct spi_dev_s *dev, int nbits)
         }
 
       spi_putreg8(priv, regval, Z16F_ESPI_MODE);
-      spivdbg("ESPI MODE: %02x\n", regval);
+      spiinfo("ESPI MODE: %02x\n", regval);
 
-#ifndef CONFIG_SPI_OWNBUS
       /* Save the selection so the subsequence re-configurations will be faster */
 
       priv->nbits = nbits;
-#endif
     }
 }
 
@@ -644,7 +602,7 @@ static uint16_t spi_send(FAR struct spi_dev_s *dev, uint16_t wd)
   rxbyte = (uint8_t)0;
   spi_exchange(dev, &txbyte, &rxbyte, 1);
 
-  spivdbg("Sent %02x received %02x\n", txbyte, rxbyte);
+  spiinfo("Sent %02x received %02x\n", txbyte, rxbyte);
   return (uint16_t)rxbyte;
 }
 
@@ -677,7 +635,7 @@ static void spi_exchange(FAR struct spi_dev_s *dev, FAR const void *txbuffer,
   FAR uint8_t *rxptr = rxbuffer;
   FAR const uint8_t *txptr = txbuffer;
 
-  spivdbg("txbuffer=%p rxbuffer=%p nwords=%d\n", txbuffer, rxbuffer, nwords);
+  spiinfo("txbuffer=%p rxbuffer=%p nwords=%d\n", txbuffer, rxbuffer, nwords);
 
   /* Make sure that any previous transfer is flushed from the hardware */
 
@@ -755,7 +713,7 @@ static void spi_exchange(FAR struct spi_dev_s *dev, FAR const void *txbuffer,
     }
 }
 
-/***************************************************************************
+/****************************************************************************
  * Name: spi_sndblock
  *
  * Description:
@@ -820,7 +778,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer,
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_spiinitialize
+ * Name: z16_spibus_initialize
  *
  * Description:
  *   Initialize the selected SPI port
@@ -833,16 +791,13 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer,
  *
  ****************************************************************************/
 
-struct spi_dev_s *up_spiinitialize(int port)
+FAR struct spi_dev_s *z16_spibus_initialize(int port)
 {
   FAR struct z16f_spi_s *priv;
   irqstate_t flags;
-#ifndef CONFIG_SPI_OWNBUS
-  unsigned int offset;
-#endif
   uint8_t regval;
 
-  spivdbg("port: %d\n", port);
+  spiinfo("port: %d\n", port);
   DEBUGASSERT(port == 0);
 
   /* Check if we have already initialized the ESPI */
@@ -852,11 +807,9 @@ struct spi_dev_s *up_spiinitialize(int port)
     {
       /* Initialize the ESPI state structure */
 
-      flags = irqsave();
+      flags = enter_critical_section();
       priv->spi.ops = &g_epsiops;
-#ifndef CONFIG_SPI_OWNBUS
       sem_init(&priv->exclsem, 0, 1);
-#endif
 
       /* Set up the SPI pin configuration (board-specific logic is required to
        * configure and manage all chip selects).
@@ -896,7 +849,7 @@ struct spi_dev_s *up_spiinitialize(int port)
       /* Now we are initialized */
 
       priv->initialized = true;
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 
   spi_dumpregs(priv, "After initialization");

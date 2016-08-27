@@ -48,9 +48,9 @@
 /* Configuration ************************************************************/
 /* Debug/Trace-related definitions */
 
-#ifndef CONFIG_DEBUG
+#ifndef CONFIG_DEBUG_FEATURES
 #  undef CONFIG_DEBUG_USB
-#  undef CONFIG_DEBUG_VERBOSE
+#  undef CONFIG_DEBUG_INFO
 #endif
 
 #ifndef CONFIG_USBHOST_TRACE
@@ -61,7 +61,7 @@
 
 #if defined(CONFIG_USBHOST_TRACE) || defined(CONFIG_DEBUG_USB)
 #  define HAVE_USBHOST_TRACE 1
-#  if defined(CONFIG_USBHOST_TRACE_VERBOSE) || defined(CONFIG_DEBUG_VERBOSE)
+#  if defined(CONFIG_USBHOST_TRACE_VERBOSE) || defined(CONFIG_DEBUG_INFO)
 #    define HAVE_USBHOST_TRACE_VERBOSE 1
 #  endif
 #endif
@@ -94,7 +94,8 @@ typedef int (*usbhost_trcallback_t)(FAR uint32_t trace, FAR void *arg);
 #undef EXTERN
 #if defined(__cplusplus)
 # define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 # define EXTERN extern
 #endif
@@ -114,8 +115,8 @@ extern "C" {
  *
  ****************************************************************************/
 
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_VERBOSE
+#ifndef CONFIG_DEBUG_FEATURES
+#  undef CONFIG_DEBUG_INFO
 #  undef CONFIG_DEBUG_USB
 #endif
 

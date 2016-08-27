@@ -39,7 +39,7 @@
  ****************************************************************************/
 
 #include <string.h>
-#include <nuttx/regex.h>
+#include <nuttx/lib/regex.h>
 
 /****************************************************************************
  * Private Functions
@@ -191,7 +191,7 @@ int match(const char *pattern, const char *string)
 {
   const char *or;
 
-  for (;;)
+  for (; ; )
     {
       or = strchr(pattern, '|');
       if (or == (char *)0)

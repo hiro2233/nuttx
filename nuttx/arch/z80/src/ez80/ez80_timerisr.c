@@ -1,4 +1,4 @@
-/***************************************************************************
+/****************************************************************************
  * arch/z80/src/ez80/ez80_timerisr.c
  *
  *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ***************************************************************************/
+ ****************************************************************************/
 
-/***************************************************************************
+/****************************************************************************
  * Included Files
- ***************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
@@ -46,53 +46,51 @@
 #include <nuttx/arch.h>
 
 #include "chip/chip.h"
-#include "clock_internal.h"
+#include "clock/clock.h"
 #include "up_internal.h"
 
-/***************************************************************************
- * Definitions
- ***************************************************************************/
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
-/***************************************************************************
+/****************************************************************************
  * Private Types
- ***************************************************************************/
+ ****************************************************************************/
 
-/***************************************************************************
+/****************************************************************************
  * Private Functions
- ***************************************************************************/
+ ****************************************************************************/
 
-/***************************************************************************
+/****************************************************************************
  * Public Functions
- ***************************************************************************/
+ ****************************************************************************/
 
-/***************************************************************************
+/****************************************************************************
  * Function:  up_timerisr
  *
  * Description:
  *   The timer ISR will perform a variety of services for various portions
  *   of the system.
  *
- ***************************************************************************/
+ ****************************************************************************/
 
 int up_timerisr(int irq, chipreg_t *regs)
 {
-  volatile uint8_t reg;
-
-  /* Read the appropropriate timer0 registr to clear the interrupt */
+  /* Read the appropriate timer0 register to clear the interrupt */
 
 #ifdef _EZ80F91
-  reg = inp(EZ80_TMR0_IIR);
+  (void)inp(EZ80_TMR0_IIR);
 #else
   /* _EZ80190, _EZ80L92, _EZ80F92, _EZ80F93 */
 
-  reg = inp(EZ80_TMR0_CTL);
+  (void)inp(EZ80_TMR0_CTL);
 #endif
 
   /* Process timer interrupt */
 
   sched_process_timer();
 
- /* Architecture specific hook into the timer interrupt handler */
+  /* Architecture specific hook into the timer interrupt handler */
 
 #ifdef CONFIG_ARCH_TIMERHOOK
   up_timerhook();
@@ -101,19 +99,18 @@ int up_timerisr(int irq, chipreg_t *regs)
   return 0;
 }
 
-/***************************************************************************
- * Function:  up_timerinit
+/****************************************************************************
+ * Function:  up_timer_initialize
  *
  * Description:
  *   This function is called during start-up to initialize the timer
  *   interrupt.
  *
- ***************************************************************************/
+ ****************************************************************************/
 
-void up_timerinit(void)
+void up_timer_initialize(void)
 {
   uint16_t reload;
-  uint8_t  reg;
 
   /* Disable the timer */
 
@@ -149,9 +146,9 @@ void up_timerinit(void)
   /* Clear any pending timer interrupts */
 
 #if defined(_EZ80F91)
-  reg = inp(EZ80_TMR0_IIR);
+  (void)inp(EZ80_TMR0_IIR);
 #elif defined(_EZ80L92) || defined(_EZ80F92) ||defined(_EZ80F93)
-  reg = inp(EZ80_TMR0_CTL);
+  (void)inp(EZ80_TMR0_CTL);
 #endif
 
   /* Configure and enable the timer */

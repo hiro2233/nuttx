@@ -40,7 +40,6 @@
 #include <nuttx/config.h>
 
 #include <sys/types.h>
-//#include <sys/statfs.h>
 #include <sys/stat.h>
 
 #include <stdint.h>
@@ -93,11 +92,11 @@ static int     mtd_dup(FAR const struct file *oldp,
 static int     mtd_stat(FAR const char *relpath, FAR struct stat *buf);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /* See fs_mount.c -- this structure is explicitly externed there.
@@ -140,7 +139,7 @@ static int mtd_open(FAR struct file *filep, FAR const char *relpath,
 {
   FAR struct mtd_file_s *attr;
 
-  fvdbg("Open '%s'\n", relpath);
+  finfo("Open '%s'\n", relpath);
 
   /* PROCFS is read-only.  Any attempt to open with any kind of write
    * access is not permitted.
@@ -150,16 +149,16 @@ static int mtd_open(FAR struct file *filep, FAR const char *relpath,
 
   if ((oflags & O_WRONLY) != 0 || (oflags & O_RDONLY) == 0)
     {
-      fdbg("ERROR: Only O_RDONLY supported\n");
+      ferr("ERROR: Only O_RDONLY supported\n");
       return -EACCES;
     }
 
   /* Allocate a context structure */
 
-  attr = (FAR struct mtd_file_s *)kzalloc(sizeof(struct mtd_file_s));
+  attr = (FAR struct mtd_file_s *)kmm_zalloc(sizeof(struct mtd_file_s));
   if (!attr)
     {
-      fdbg("ERROR: Failed to allocate file attributes\n");
+      ferr("ERROR: Failed to allocate file attributes\n");
       return -ENOMEM;
     }
 
@@ -186,7 +185,7 @@ static int mtd_close(FAR struct file *filep)
 
   /* Release the file attributes structure */
 
-  kfree(attr);
+  kmm_free(attr);
   filep->f_priv = NULL;
   return OK;
 }
@@ -202,7 +201,7 @@ static ssize_t mtd_read(FAR struct file *filep, FAR char *buffer,
   ssize_t total = 0;
   ssize_t ret;
 
-  fvdbg("buffer=%p buflen=%d\n", buffer, (int)buflen);
+  finfo("buffer=%p buflen=%d\n", buffer, (int)buflen);
 
   /* Recover our private data from the struct file instance */
 
@@ -267,7 +266,7 @@ static int mtd_dup(FAR const struct file *oldp, FAR struct file *newp)
   FAR struct mtd_file_s *oldattr;
   FAR struct mtd_file_s *newattr;
 
-  fvdbg("Dup %p->%p\n", oldp, newp);
+  finfo("Dup %p->%p\n", oldp, newp);
 
   /* Recover our private data from the old struct file instance */
 
@@ -276,10 +275,10 @@ static int mtd_dup(FAR const struct file *oldp, FAR struct file *newp)
 
   /* Allocate a new container to hold the task and attribute selection */
 
-  newattr = (FAR struct mtd_file_s *)kzalloc(sizeof(struct mtd_file_s));
+  newattr = (FAR struct mtd_file_s *)kmm_zalloc(sizeof(struct mtd_file_s));
   if (!newattr)
     {
-      fdbg("ERROR: Failed to allocate file attributes\n");
+      ferr("ERROR: Failed to allocate file attributes\n");
       return -ENOMEM;
     }
 
@@ -304,7 +303,7 @@ static int mtd_stat(const char *relpath, struct stat *buf)
 {
   /* File/directory size, access block size */
 
-  buf->st_mode = S_IFREG|S_IROTH|S_IRGRP|S_IRUSR;
+  buf->st_mode    = S_IFREG | S_IROTH | S_IRGRP | S_IRUSR;
   buf->st_size    = 0;
   buf->st_blksize = 0;
   buf->st_blocks  = 0;
@@ -327,6 +326,7 @@ static int mtd_stat(const char *relpath, struct stat *buf)
  * in the procfs system simply for information purposes (if desired).
  *
  ****************************************************************************/
+
 int mtd_register(FAR struct mtd_dev_s *mtd, FAR const char *name)
 {
   FAR struct mtd_dev_s *plast;
@@ -359,6 +359,49 @@ int mtd_register(FAR struct mtd_dev_s *mtd, FAR const char *name)
 
       plast->pnext = mtd;
     }
+
+  return OK;
+}
+
+/****************************************************************************
+ * Name: mtd_unregister
+ *
+ * Description:
+ *   Un-Registers an MTD device with the procfs file system.
+ *
+ * In an embedded system, this all is really unnecessary, but is provided
+ * in the procfs system simply for information purposes (if desired).
+ *
+ ****************************************************************************/
+
+int mtd_unregister(FAR struct mtd_dev_s *mtd)
+{
+  FAR struct mtd_dev_s *plast;
+
+  /* Remove the MTD from the list of registered devices */
+
+  if (g_pfirstmtd == mtd)
+    {
+      g_pfirstmtd = mtd->pnext;
+    }
+  else
+    {
+      /* Remove from middle of list */
+
+      plast = g_pfirstmtd;
+      while (plast->pnext != mtd)
+        {
+          /* Skip to next entry as long as there is one */
+
+          plast = plast->pnext;
+        }
+
+      /* Now remove at this location */
+
+      plast->pnext = mtd->pnext;
+    }
+
+  return OK;
 }
 
 #endif /* !CONFIG_DISABLE_MOUNTPOINT && CONFIG_FS_PROCFS */

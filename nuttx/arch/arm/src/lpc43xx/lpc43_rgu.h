@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lpc43xx/lpc43_rgu.h
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -60,7 +60,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -75,13 +76,13 @@ extern "C" {
  * Description:
  *   Reset as many of the LPC43 peripherals as possible. This is necessary
  *   because the LPC43 does not provide any way of performing a full system
- *   reset under debugger control.  So, if CONFIG_DEBUG is set (indicating
+ *   reset under debugger control.  So, if CONFIG_DEBUG_FEATURES is set (indicating
  *   that a debugger is being used?), the boot logic will call this
  *   function on all restarts.
  *
  ****************************************************************************/
 
-EXTERN void lpc43_softreset(void);
+void lpc43_softreset(void);
 
 #undef EXTERN
 #if defined(__cplusplus)

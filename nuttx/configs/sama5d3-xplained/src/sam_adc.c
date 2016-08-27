@@ -1,5 +1,5 @@
 /************************************************************************************
- * configs/sama5d3-xplained/src/up_adc.c
+ * configs/sama5d3-xplained/src/sam_adc.c
  *
  *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -42,17 +42,15 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <nuttx/analog/adc.h>
 
 #include "sam_adc.h"
 #include "sama5d3-xplained.h"
 
-#ifdef CONFIG_ADC
-
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
-/* Configuration ********************************************************************/
 
 /************************************************************************************
  * Private Data
@@ -67,17 +65,16 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Name: adc_devinit
+ * Name: board_adc_initialize
  *
  * Description:
- *   All STM32 architectures must provide the following interface to work with
- *   examples/adc.
+ *   Initialize and register the ADC driver
  *
  ************************************************************************************/
 
-int adc_devinit(void)
-{
 #ifdef CONFIG_SAMA5_ADC
+int board_adc_initialize(void)
+{
   static bool initialized = false;
   struct adc_dev_s *adc;
   int ret;
@@ -91,7 +88,7 @@ int adc_devinit(void)
       adc = sam_adc_initialize();
       if (adc == NULL)
         {
-          adbg("ERROR: Failed to get ADC interface\n");
+          aerr("ERROR: Failed to get ADC interface\n");
           return -ENODEV;
         }
 
@@ -100,7 +97,7 @@ int adc_devinit(void)
       ret = adc_register("/dev/adc0", adc);
       if (ret < 0)
         {
-          adbg("adc_register failed: %d\n", ret);
+          aerr("ERROR: adc_register failed: %d\n", ret);
           return ret;
         }
 
@@ -110,9 +107,25 @@ int adc_devinit(void)
     }
 
   return OK;
+}
+#endif /* CONFIG_ADC */
+
+/************************************************************************************
+ * Name: board_adc_setup
+ *
+ * Description:
+ *   All SAMA5 architectures must provide the following interface to work with
+ *   examples/adc.
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_EXAMPLES_ADC
+int board_adc_setup(void)
+{
+#ifdef CONFIG_SAMA5_ADC
+  return board_adc_initialize();
 #else
   return -ENOSYS;
 #endif
 }
-
-#endif /* CONFIG_ADC */
+#endif /* CONFIG_EXAMPLES_ADC */

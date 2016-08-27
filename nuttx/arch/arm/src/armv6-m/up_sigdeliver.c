@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/armv6-m/up_sigdeliver.c
  *
- *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,9 +45,10 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 #include "up_arch.h"
 
@@ -86,7 +87,7 @@ void up_sigdeliver(void)
    * copy an may overwrite the regs[] array contents.  Sorry.
    */
 
-  struct tcb_s  *rtcb = (struct tcb_s*)g_readytorun.head;
+  struct tcb_s  *rtcb = this_task();
   uint32_t regs[XCPTCONTEXT_REGS + 4];
   sig_deliver_t sigdeliver;
 
@@ -97,9 +98,9 @@ void up_sigdeliver(void)
 
   int saved_errno = rtcb->pterrno;
 
-  board_led_on(LED_SIGNAL);
+  board_autoled_on(LED_SIGNAL);
 
-  sdbg("rtcb=%p sigdeliver=%p sigpendactionq.head=%p\n",
+  sinfo("rtcb=%p sigdeliver=%p sigpendactionq.head=%p\n",
         rtcb, rtcb->xcp.sigdeliver, rtcb->sigpendactionq.head);
   ASSERT(rtcb->xcp.sigdeliver != NULL);
 
@@ -109,7 +110,7 @@ void up_sigdeliver(void)
   regs[REG_PC]         = rtcb->xcp.saved_pc;
   regs[REG_PRIMASK]    = rtcb->xcp.saved_primask;
   regs[REG_XPSR]       = rtcb->xcp.saved_xpsr;
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
   regs[REG_LR]         = rtcb->xcp.saved_lr;
 #endif
 
@@ -123,7 +124,7 @@ void up_sigdeliver(void)
 
   /* Then restore the task interrupt state */
 
-  irqrestore((uint8_t)regs[REG_PRIMASK]);
+  up_irq_restore((uint8_t)regs[REG_PRIMASK]);
 
   /* Deliver the signal */
 
@@ -134,15 +135,15 @@ void up_sigdeliver(void)
    * errno that is needed by the user logic (it is probably EINTR).
    */
 
-  sdbg("Resuming\n");
-  (void)irqsave();
+  sinfo("Resuming\n");
+  (void)up_irq_save();
   rtcb->pterrno = saved_errno;
 
   /* Then restore the correct state for this thread of
    * execution.
    */
 
-  board_led_off(LED_SIGNAL);
+  board_autoled_off(LED_SIGNAL);
   up_fullcontextrestore(regs);
 }
 

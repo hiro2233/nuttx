@@ -51,7 +51,7 @@
 #endif
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
@@ -63,6 +63,10 @@
  *   Master Clock (MCK): Source = PLLACK, Prescalar = 1 to generate MCK = 84MHz
  *   CPU clock: 84MHz
  */
+
+#define BOARD_32KOSC_FREQUENCY     (32768)
+#define BOARD_SCLK_FREQUENCY       (BOARD_32KOSC_FREQUENCY)
+#define BOARD_MAINOSC_FREQUENCY    (12000000)  /* MAINOSC: 12MHz crystal on-board */
 
 /* Main oscillator register settings.
  *
@@ -97,7 +101,6 @@
 
 /* Resulting frequencies */
 
-#define BOARD_MAINOSC_FREQUENCY    (12000000)  /* MAINOSC: 12MHz crystal on-board */
 #define BOARD_PLLA_FREQUENCY       (168000000) /* PLLACK:  14 * 12Mhz / 1 */
 #define BOARD_MCK_FREQUENCY        (84000000)  /* MCK:     PLLACK / 2 */
 #define BOARD_CPU_FREQUENCY        (84000000)  /* CPU:     MCK */
@@ -155,14 +158,14 @@
  * GPIO output to low.
  */
 
-/* LED index values for use with sam_setled() */
+/* LED index values for use with board_userled() */
 
 #define BOARD_LED_L       0
 #define BOARD_LED_RX      1
 #define BOARD_LED_TX      2
 #define BOARD_NLEDS       3
 
-/* LED bits for use with sam_setleds() */
+/* LED bits for use with board_userled_all() */
 
 #define BOARD_LED_L_BIT   (1 << BOARD_LED_L)
 #define BOARD_LED_RX_BIT  (1 << BOARD_LED_RX)
@@ -188,7 +191,7 @@
 
 /* Thus if LED L is statically on, NuttX has successfully booted and is,
  * apparently, running normmally.  If LED RX is glowing, then NuttX is
- * handling interupts (and also signals and assertions).  If TX is flashing
+ * handling interrupts (and also signals and assertions).  If TX is flashing
  * at approximately 2Hz, then a fatal error has been detected and the system
  */
 
@@ -197,7 +200,7 @@
 
 /* GPIO pin configurations **********************************************************/
 
-#if 1 /* #ifdef CONFIG_ADRUINO_DUE_REV3 works with REV2 as well */
+#if 1 /* #ifdef CONFIG_ARDUINO_DUE_REV3 works with REV2 as well */
 /* This port was performed on the Arduino Due Rev 2 board.  A NuttX user reported
  * issues with the serial port on his Aduino Due Rev 3 board.  That problem was
  * resolved as follows:
@@ -249,22 +252,6 @@ extern "C" {
  ************************************************************************************/
 
 void sam_boardinitialize(void);
-
-/************************************************************************************
- * Name:  sam_ledinit, sam_setled, and sam_setleds
- *
- * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board LEDs.  If
- *   CONFIG_ARCH_LEDS is not defined, then the following interfacesare available to
- *   control the LEDs from user applications.
- *
- ************************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-void sam_ledinit(void);
-void sam_setled(int led, bool ledon);
-void sam_setleds(uint8_t ledset);
-#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

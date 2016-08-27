@@ -48,7 +48,7 @@
 #include <arch/avr/avr.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* The AT90USB has 38 interrupt vectors including vector 0, the reset
@@ -94,6 +94,8 @@
 #define AT90USB_IRQ_SPMRDY  36  /* 0x004a Store Program Memory Ready */
 
 #define NR_IRQS             37
+#define AVR_PC_SIZE         16
+#define XCPTCONTEXT_REGS    37 /* Size of the register state save array (in bytes) */
 
 /****************************************************************************
  * Public Types
@@ -107,7 +109,7 @@
 #endif /* __ASSEMBLY__ */
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -117,7 +119,8 @@
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

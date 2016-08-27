@@ -68,12 +68,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) may not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -90,7 +84,7 @@ NuttX buildroot Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -146,7 +140,7 @@ LPC21ISP (Linux)
 
 (ca. 2008)
 I use the lpc21isp tool to load NuttX into FLASH.  That tool is available
-in the files section at http://tech.groups.yahoo.com/group/lpc21isp/.  In
+in the files section at https://groups.yahoo.com/neo/groups/lpc21isp/info.  In
 the older version 1.60 of lpc21isp for Linux, I had to make several changes.
 This changes are shown in lpc21ips-1.60.diff.
 
@@ -335,7 +329,7 @@ Configurations
      change a configurations using that tool, you should:
 
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-        and misc/tools/
+        see additional README.txt files in the NuttX tools repository.
 
      b. Execute 'make menuconfig' in nuttx/ in order to start the
         reconfiguration process.

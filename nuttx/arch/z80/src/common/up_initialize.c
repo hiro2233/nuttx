@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z80/src/common/up_initialize.c
  *
- *   Copyright (C) 2007-2009, 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2012-2013, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,21 +42,23 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/fs/fs.h>
+#include <nuttx/board.h>
+#include <nuttx/sched_note.h>
+#include <nuttx/drivers/drivers.h>
+#include <nuttx/fs/loop.h>
+#include <nuttx/net/loopback.h>
+#include <nuttx/net/tun.h>
+#include <nuttx/syslog/syslog.h>
+#include <nuttx/syslog/syslog_console.h>
+#include <nuttx/serial/pty.h>
+#include <nuttx/crypto/crypto.h>
+#include <nuttx/power/pm.h>
 
 #include <arch/board/board.h>
 
 #include "chip/switch.h"
 #include "up_arch.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -72,16 +74,18 @@
  *
  ****************************************************************************/
 
-#if defined(CONFIG_ARCH_CALIBRATION) && defined(CONFIG_DEBUG)
+#if defined(CONFIG_ARCH_CALIBRATION) && defined(CONFIG_DEBUG_FEATURES)
 static void up_calibratedelay(void)
 {
   int i;
-  lldbg("Beginning 100s delay\n");
+
+  _warn("Beginning 100s delay\n");
   for (i = 0; i < 100; i++)
     {
       up_mdelay(1000);
     }
-  lldbg("End 100s delay\n");
+
+  _warn("End 100s delay\n");
 }
 #else
 # define up_calibratedelay()
@@ -118,9 +122,9 @@ void up_initialize(void)
 
   up_calibratedelay();
 
+#if CONFIG_MM_REGIONS > 1
   /* Add any extra memory fragments to the memory manager */
 
-#if CONFIG_MM_REGIONS > 1
   up_addregion();
 #endif
 
@@ -128,17 +132,27 @@ void up_initialize(void)
 
   up_irqinitialize();
 
-  /* Initialize the system timer interrupt */
+#ifdef CONFIG_PM
+  /* Initialize the power management subsystem.  This MCU-specific function
+   * must be called *very* early in the initialization sequence *before* any
+   * other device drivers are initialized (since they may attempt to register
+   * with the power management subsystem).
+   */
+
+  up_pminitialize();
+#endif
 
 #if !defined(CONFIG_SUPPRESS_INTERRUPTS) && !defined(CONFIG_SUPPRESS_TIMER_INTS)
-  up_timerinit();
+  /* Initialize the system timer interrupt */
+
+  up_timer_initialize();
 #endif
 
   /* Initialize the CPU for those that use it (only for the Z180).  This
    * needs to be done before any tasks are created).
    */
 
-#if CONFIG_ADDRENV
+#ifdef CONFIG_ARCH_ADDRENV
   (void)up_mmuinit();
 #endif
 
@@ -150,11 +164,27 @@ void up_initialize(void)
   devnull_register();   /* Standard /dev/null */
 #endif
 
+#if defined(CONFIG_DEV_RANDOM)
+  devrandom_register(); /* Standard /dev/random */
+#endif
+
+#if defined(CONFIG_DEV_URANDOM)
+  devurandom_register();   /* Standard /dev/urandom */
+#endif
+
 #if defined(CONFIG_DEV_ZERO)
   devzero_register();   /* Standard /dev/zero */
 #endif
 
+#if defined(CONFIG_DEV_LOOP)
+  loop_register();      /* Standard /dev/loop */
+#endif
 #endif /* CONFIG_NFILE_DESCRIPTORS */
+
+#if defined(CONFIG_SCHED_INSTRUMENTATION_BUFFER) && \
+    defined(CONFIG_DRIVER_NOTE)
+  note_register();      /* Non-standard /dev/note */
+#endif
 
   /* Initialize the serial device driver */
 
@@ -168,12 +198,58 @@ void up_initialize(void)
 
 #if defined(CONFIG_DEV_LOWCONSOLE)
   lowconsole_init();
+#elif defined(CONFIG_CONSOLE_SYSLOG)
+  syslog_console_init();
 #elif defined(CONFIG_RAMLOG_CONSOLE)
   ramlog_consoleinit();
 #endif
 
-  /* Initialize the netwok */
+#if CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_PSEUDOTERM_SUSV1)
+  /* Register the master pseudo-terminal multiplexor device */
+
+  (void)ptmx_register();
+#endif
+
+  /* Early initialization of the system logging device.  Some SYSLOG channel
+   * can be initialized early in the initialization sequence because they
+   * depend on minimal OS initialization.
+   */
+
+  syslog_initialize(SYSLOG_INIT_EARLY);
+
+#if defined(CONFIG_CRYPTO)
+  /* Initialize the HW crypto and /dev/crypto */
+
+  up_cryptoinitialize();
+#endif
+
+#if CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_CRYPTO_CRYPTODEV)
+  devcrypto_register();
+#endif
+
+#ifndef CONFIG_NETDEV_LATEINIT
+  /* Initialize the network */
 
   up_netinitialize();
-  board_led_on(LED_IRQSENABLED);
+#endif
+
+#ifdef CONFIG_NETDEV_LOOPBACK
+  /* Initialize the local loopback device */
+
+  (void)localhost_initialize();
+#endif
+
+#ifdef CONFIG_NET_TUN
+  /* Initialize the TUN device */
+
+  (void)tun_initialize();
+#endif
+
+#ifdef CONFIG_NETDEV_TELNET
+  /* Initialize the Telnet session factory */
+
+  (void)telnet_initialize();
+#endif
+
+  board_autoled_on(LED_IRQSENABLED);
 }

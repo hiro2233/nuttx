@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/input/ads7843e.c
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2014, 2016 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *            Diego Sanchez <dsanchez@nx-engineering.com>
  *
@@ -59,13 +59,14 @@
 #include <fcntl.h>
 #include <semaphore.h>
 #include <poll.h>
-#include <wdog.h>
 #include <errno.h>
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/kmalloc.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
+#include <nuttx/wdog.h>
+#include <nuttx/kmalloc.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/wqueue.h>
@@ -94,15 +95,8 @@
  ****************************************************************************/
 /* Low-level SPI helpers */
 
-#ifdef CONFIG_SPI_OWNBUS
-static inline void ads7843e_configspi(FAR struct spi_dev_s *spi);
-#  define ads7843e_lock(spi)
-#  define ads7843e_unlock(spi)
-#else
-#  define ads7843e_configspi(spi);
 static void ads7843e_lock(FAR struct spi_dev_s *spi);
 static void ads7843e_unlock(FAR struct spi_dev_s *spi);
-#endif
 
 static uint16_t ads7843e_sendcmd(FAR struct ads7843e_dev_s *priv, uint8_t cmd);
 
@@ -180,7 +174,6 @@ static struct ads7843e_dev_s *g_ads7843elist;
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static void ads7843e_lock(FAR struct spi_dev_s *spi)
 {
   /* Lock the SPI bus because there are multiple devices competing for the
@@ -197,18 +190,17 @@ static void ads7843e_lock(FAR struct spi_dev_s *spi)
   SPI_SELECT(spi, SPIDEV_TOUCHSCREEN, true);
   SPI_SETMODE(spi, CONFIG_ADS7843E_SPIMODE);
   SPI_SETBITS(spi, 8);
-  SPI_SETFREQUENCY(spi, CONFIG_ADS7843E_FREQUENCY);
+  (void)SPI_HWFEATURES(spi, 0);
+  (void)SPI_SETFREQUENCY(spi, CONFIG_ADS7843E_FREQUENCY);
   SPI_SELECT(spi, SPIDEV_TOUCHSCREEN, false);
 }
-#endif
 
 /****************************************************************************
  * Function: ads7843e_unlock
  *
  * Description:
- *   If we are sharing the SPI bus with other devices (CONFIG_SPI_OWNBUS
- *   undefined) then we need to un-lock the SPI bus for each transfer,
- *   possibly losing the current configuration.
+ *   Un-lock the SPI bus after each transfer,  possibly losing the current
+ *   configuration if we are sharing the bus with other devices.
  *
  * Parameters:
  *   spi  - Reference to the SPI driver structure
@@ -220,48 +212,12 @@ static void ads7843e_lock(FAR struct spi_dev_s *spi)
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static void ads7843e_unlock(FAR struct spi_dev_s *spi)
 {
   /* Relinquish the SPI bus. */
 
   (void)SPI_LOCK(spi, false);
 }
-#endif
-
-/****************************************************************************
- * Function: ads7843e_configspi
- *
- * Description:
- *   Configure the SPI for use with the ADS7843E.  This function should be
- *   called once during touchscreen initialization to configure the SPI
- *   bus.  Note that if CONFIG_SPI_OWNBUS is not defined, then this function
- *   does nothing.
- *
- * Parameters:
- *   spi  - Reference to the SPI driver structure
- *
- * Returned Value:
- *   None
- *
- * Assumptions:
- *
- ****************************************************************************/
-
-#ifdef CONFIG_SPI_OWNBUS
-static inline void ads7843e_configspi(FAR struct spi_dev_s *spi)
-{
-  /* Configure SPI for the ADS7843.  But only if we own the SPI bus.  Otherwise, don't
-   * bother because it might change.
-   */
-
-  SPI_SELECT(spi, SPIDEV_TOUCHSCREEN, true);
-  SPI_SETMODE(spi, CONFIG_ADS7843E_SPIMODE);
-  SPI_SETBITS(spi, 8);
-  SPI_SETFREQUENCY(spi, CONFIG_ADS7843E_FREQUENCY);
-  SPI_SELECT(spi, SPIDEV_TOUCHSCREEN, false);
-}
-#endif
 
 /****************************************************************************
  * Name: ads7843e_sendcmd
@@ -282,7 +238,7 @@ static inline void ads7843e_configspi(FAR struct spi_dev_s *spi)
  *   12-bit                                           DDDDDDDDDDDD...
  *   response
  *
- *   The BUSY output is high imedance when /CS is high.  BUSY goes low when
+ *   The BUSY output is high impedance when /CS is high.  BUSY goes low when
  *   /CS goes low (within 200ns).  BUSY goes high on the falling edge of the
  *   8th clock (within 200ns); BUSY goes low again after the falling edge of
  *   first clock of the 12-bit data read, at the leading edge of the MS bit
@@ -311,7 +267,7 @@ static uint16_t ads7843e_sendcmd(FAR struct ads7843e_dev_s *priv, uint8_t cmd)
 
   (void)SPI_SEND(priv->spi, cmd);
 
-  /* Wait a tiny amount to make sure that the aquisition time is complete */
+  /* Wait a tiny amount to make sure that the acquisition time is complete */
 
    up_udelay(3); /* 3 microseconds */
 
@@ -323,7 +279,7 @@ static uint16_t ads7843e_sendcmd(FAR struct ads7843e_dev_s *priv, uint8_t cmd)
   result = ((uint16_t)buffer[0] << 8) | (uint16_t)buffer[1];
   result = result >> 4;
 
-  ivdbg("cmd:%02x response:%04x\n", cmd, result);
+  iinfo("cmd:%02x response:%04x\n", cmd, result);
   return result;
 }
 
@@ -363,7 +319,7 @@ static void ads7843e_notify(FAR struct ads7843e_dev_s *priv)
       if (fds)
         {
           fds->revents |= POLLIN;
-          ivdbg("Report events: %02x\n", fds->revents);
+          iinfo("Report events: %02x\n", fds->revents);
           sem_post(fds->sem);
         }
     }
@@ -385,7 +341,7 @@ static int ads7843e_sample(FAR struct ads7843e_dev_s *priv,
    * from changing until it has been reported.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Is there new ADS7843E sample data available? */
 
@@ -395,7 +351,7 @@ static int ads7843e_sample(FAR struct ads7843e_dev_s *priv,
        * sampled data.
        */
 
-      memcpy(sample, &priv->sample, sizeof(struct ads7843e_sample_s ));
+      memcpy(sample, &priv->sample, sizeof(struct ads7843e_sample_s));
 
       /* Now manage state transitions */
 
@@ -420,7 +376,7 @@ static int ads7843e_sample(FAR struct ads7843e_dev_s *priv,
       ret = OK;
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return ret;
 }
 
@@ -443,7 +399,7 @@ static int ads7843e_waitsample(FAR struct ads7843e_dev_s *priv,
    */
 
   sched_lock();
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Now release the semaphore that manages mutually exclusive access to
    * the device structure.  This may cause other tasks to become ready to
@@ -460,7 +416,7 @@ static int ads7843e_waitsample(FAR struct ads7843e_dev_s *priv,
     {
       /* Wait for a change in the ADS7843E state */
 
-      ivdbg("Waiting..\n");
+      iinfo("Waiting..\n");
       priv->nwaiters++;
       ret = sem_wait(&priv->waitsem);
       priv->nwaiters--;
@@ -471,16 +427,16 @@ static int ads7843e_waitsample(FAR struct ads7843e_dev_s *priv,
            * the failure now.
            */
 
-          idbg("sem_wait: %d\n", errno);
+          ierr("ERROR: sem_wait: %d\n", errno);
           DEBUGASSERT(errno == EINTR);
           ret = -EINTR;
           goto errout;
         }
     }
 
-  ivdbg("Sampled\n");
+  iinfo("Sampled\n");
 
-   /* Re-acquire the semaphore that manages mutually exclusive access to
+  /* Re-acquire the semaphore that manages mutually exclusive access to
    * the device structure.  We may have to wait here.  But we have our sample.
    * Interrupts and pre-emption will be re-enabled while we wait.
    */
@@ -493,7 +449,7 @@ errout:
    * have pre-emption disabled.
    */
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   /* Restore pre-emption.  We might get suspended here but that is okay
    * because we already have our sample.  Note:  this means that if there
@@ -542,7 +498,7 @@ static int ads7843e_schedule(FAR struct ads7843e_dev_s *priv)
   ret = work_queue(HPWORK, &priv->work, ads7843e_worker, priv, 0);
   if (ret != 0)
     {
-      illdbg("Failed to queue work: %d\n", ret);
+      ierr("ERROR: Failed to queue work: %d\n", ret);
     }
 
   return OK;
@@ -625,7 +581,6 @@ static void ads7843e_worker(FAR void *arg)
 
       if (priv->sample.contact == CONTACT_NONE ||
           priv->sample.contact == CONTACT_UP)
-
         {
           goto ignored;
         }
@@ -794,7 +749,7 @@ static int ads7843e_open(FAR struct file *filep)
   uint8_t                   tmp;
   int                       ret;
 
-  ivdbg("Opening\n");
+  iinfo("Opening\n");
 
   DEBUGASSERT(filep);
   inode = filep->f_inode;
@@ -807,7 +762,7 @@ static int ads7843e_open(FAR struct file *filep)
   ret = sem_wait(&priv->devsem);
   if (ret < 0)
     {
-      /* This should only happen if the wait was canceled by an signal */
+      /* This should only happen if the wait was cancelled by an signal */
 
       DEBUGASSERT(errno == EINTR);
       return -EINTR;
@@ -836,7 +791,7 @@ errout_with_sem:
   sem_post(&priv->devsem);
   return ret;
 #else
-  ivdbg("Opening\n");
+  iinfo("Opening\n");
   return OK;
 #endif
 }
@@ -852,7 +807,7 @@ static int ads7843e_close(FAR struct file *filep)
   FAR struct ads7843e_dev_s *priv;
   int                       ret;
 
-  ivdbg("Closing\n");
+  iinfo("Closing\n");
   DEBUGASSERT(filep);
   inode = filep->f_inode;
 
@@ -882,7 +837,7 @@ static int ads7843e_close(FAR struct file *filep)
 
   sem_post(&priv->devsem);
 #endif
-  ivdbg("Closing\n");
+  iinfo("Closing\n");
   return OK;
 }
 
@@ -898,7 +853,7 @@ static ssize_t ads7843e_read(FAR struct file *filep, FAR char *buffer, size_t le
   struct ads7843e_sample_s   sample;
   int                        ret;
 
-  ivdbg("buffer:%p len:%d\n", buffer, len);
+  iinfo("buffer:%p len:%d\n", buffer, len);
   DEBUGASSERT(filep);
   inode = filep->f_inode;
 
@@ -915,7 +870,7 @@ static ssize_t ads7843e_read(FAR struct file *filep, FAR char *buffer, size_t le
        * handle smaller reads... but why?
        */
 
-      idbg("Unsupported read size: %d\n", len);
+      ierr("ERROR: Unsupported read size: %d\n", len);
       return -ENOSYS;
     }
 
@@ -924,9 +879,9 @@ static ssize_t ads7843e_read(FAR struct file *filep, FAR char *buffer, size_t le
   ret = sem_wait(&priv->devsem);
   if (ret < 0)
     {
-      /* This should only happen if the wait was canceled by an signal */
+      /* This should only happen if the wait was cancelled by an signal */
 
-      idbg("sem_wait: %d\n", errno);
+      ierr("ERROR: sem_wait: %d\n", errno);
       DEBUGASSERT(errno == EINTR);
       return -EINTR;
     }
@@ -941,7 +896,7 @@ static ssize_t ads7843e_read(FAR struct file *filep, FAR char *buffer, size_t le
        * option, then just return an error.
        */
 
-      ivdbg("Sample data is not available\n");
+      iinfo("Sample data is not available\n");
       if (filep->f_oflags & O_NONBLOCK)
         {
           ret = -EAGAIN;
@@ -955,7 +910,7 @@ static ssize_t ads7843e_read(FAR struct file *filep, FAR char *buffer, size_t le
         {
           /* We might have been awakened by a signal */
 
-          idbg("ads7843e_waitsample: %d\n", ret);
+          ierr("ERROR: ads7843e_waitsample: %d\n", ret);
           goto errout;
         }
     }
@@ -975,10 +930,10 @@ static ssize_t ads7843e_read(FAR struct file *filep, FAR char *buffer, size_t le
 
   if (sample.contact == CONTACT_UP)
     {
-       /* Pen is now up.  Is the positional data valid?  This is important to
-        * know because the release will be sent to the window based on its
-        * last positional data.
-        */
+      /* Pen is now up.  Is the positional data valid?  This is important to
+       * know because the release will be sent to the window based on its
+       * last positional data.
+       */
 
       if (sample.valid)
         {
@@ -1002,16 +957,16 @@ static ssize_t ads7843e_read(FAR struct file *filep, FAR char *buffer, size_t le
       report->point[0].flags  = TOUCH_MOVE | TOUCH_ID_VALID | TOUCH_POS_VALID;
     }
 
-  ivdbg("  id:      %d\n", report->point[0].id);
-  ivdbg("  flags:   %02x\n", report->point[0].flags);
-  ivdbg("  x:       %d\n", report->point[0].x);
-  ivdbg("  y:       %d\n", report->point[0].y);
+  iinfo("  id:      %d\n", report->point[0].id);
+  iinfo("  flags:   %02x\n", report->point[0].flags);
+  iinfo("  x:       %d\n", report->point[0].x);
+  iinfo("  y:       %d\n", report->point[0].y);
 
   ret = SIZEOF_TOUCH_SAMPLE_S(1);
 
 errout:
   sem_post(&priv->devsem);
-  ivdbg("Returning: %d\n", ret);
+  iinfo("Returning: %d\n", ret);
   return ret;
 }
 
@@ -1025,7 +980,7 @@ static int ads7843e_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   FAR struct ads7843e_dev_s *priv;
   int                       ret;
 
-  ivdbg("cmd: %d arg: %ld\n", cmd, arg);
+  iinfo("cmd: %d arg: %ld\n", cmd, arg);
   DEBUGASSERT(filep);
   inode = filep->f_inode;
 
@@ -1037,7 +992,7 @@ static int ads7843e_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   ret = sem_wait(&priv->devsem);
   if (ret < 0)
     {
-      /* This should only happen if the wait was canceled by an signal */
+      /* This should only happen if the wait was cancelled by an signal */
 
       DEBUGASSERT(errno == EINTR);
       return -EINTR;
@@ -1085,7 +1040,7 @@ static int ads7843e_poll(FAR struct file *filep, FAR struct pollfd *fds,
   int ret;
   int i;
 
-  ivdbg("setup: %d\n", (int)setup);
+  iinfo("setup: %d\n", (int)setup);
   DEBUGASSERT(filep && fds);
   inode = filep->f_inode;
 
@@ -1097,7 +1052,7 @@ static int ads7843e_poll(FAR struct file *filep, FAR struct pollfd *fds,
   ret = sem_wait(&priv->devsem);
   if (ret < 0)
     {
-      /* This should only happen if the wait was canceled by an signal */
+      /* This should only happen if the wait was cancelled by an signal */
 
       DEBUGASSERT(errno == EINTR);
       return -EINTR;
@@ -1201,7 +1156,7 @@ int ads7843e_register(FAR struct spi_dev_s *spi,
 #endif
   int ret;
 
-  ivdbg("spi: %p minor: %d\n", spi, minor);
+  iinfo("spi: %p minor: %d\n", spi, minor);
 
   /* Debug-only sanity checks */
 
@@ -1212,10 +1167,10 @@ int ads7843e_register(FAR struct spi_dev_s *spi,
 #ifndef CONFIG_ADS7843E_MULTIPLE
   priv = &g_ads7843e;
 #else
-  priv = (FAR struct ads7843e_dev_s *)kmalloc(sizeof(struct ads7843e_dev_s));
+  priv = (FAR struct ads7843e_dev_s *)kmm_malloc(sizeof(struct ads7843e_dev_s));
   if (!priv)
     {
-      idbg("kmalloc(%d) failed\n", sizeof(struct ads7843e_dev_s));
+      ierr("ERROR: kmm_malloc(%d) failed\n", sizeof(struct ads7843e_dev_s));
       return -ENOMEM;
     }
 #endif
@@ -1242,20 +1197,16 @@ int ads7843e_register(FAR struct spi_dev_s *spi,
   ret = config->attach(config, ads7843e_interrupt);
   if (ret < 0)
     {
-      idbg("Failed to attach interrupt\n");
+      ierr("ERROR: Failed to attach interrupt\n");
       goto errout_with_priv;
     }
 
-  idbg("Mode: %d Bits: 8 Frequency: %d\n",
-       CONFIG_ADS7843E_SPIMODE, CONFIG_ADS7843E_FREQUENCY);
+  iinfo("Mode: %d Bits: 8 Frequency: %d\n",
+        CONFIG_ADS7843E_SPIMODE, CONFIG_ADS7843E_FREQUENCY);
 
   /* Lock the SPI bus so that we have exclusive access */
 
   ads7843e_lock(spi);
-
-  /* Configure the SPI interface */
-
-  ads7843e_configspi(spi);
 
   /* Enable the PEN IRQ */
 
@@ -1268,24 +1219,24 @@ int ads7843e_register(FAR struct spi_dev_s *spi,
   /* Register the device as an input device */
 
   (void)snprintf(devname, DEV_NAMELEN, DEV_FORMAT, minor);
-  ivdbg("Registering %s\n", devname);
+  iinfo("Registering %s\n", devname);
 
   ret = register_driver(devname, &ads7843e_fops, 0666, priv);
   if (ret < 0)
     {
-      idbg("register_driver() failed: %d\n", ret);
+      ierr("ERROR: register_driver() failed: %d\n", ret);
       goto errout_with_priv;
     }
 
   /* If multiple ADS7843E devices are supported, then we will need to add
    * this new instance to a list of device instances so that it can be
-   * found by the interrupt handler based on the recieved IRQ number.
+   * found by the interrupt handler based on the received IRQ number.
    */
 
 #ifdef CONFIG_ADS7843E_MULTIPLE
   priv->flink    = g_ads7843elist;
   g_ads7843elist = priv;
-  irqrestore(flags);
+  leave_critical_section(flags);
 #endif
 
   /* Schedule work to perform the initial sampling and to set the data
@@ -1295,7 +1246,7 @@ int ads7843e_register(FAR struct spi_dev_s *spi,
   ret = work_queue(HPWORK, &priv->work, ads7843e_worker, priv, 0);
   if (ret != 0)
     {
-      idbg("Failed to queue work: %d\n", ret);
+      ierr("ERROR: Failed to queue work: %d\n", ret);
       goto errout_with_priv;
     }
 
@@ -1306,7 +1257,7 @@ int ads7843e_register(FAR struct spi_dev_s *spi,
 errout_with_priv:
   sem_destroy(&priv->devsem);
 #ifdef CONFIG_ADS7843E_MULTIPLE
-  kfree(priv);
+  kmm_free(priv);
 #endif
   return ret;
 }

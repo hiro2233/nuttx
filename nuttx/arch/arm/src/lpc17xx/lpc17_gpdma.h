@@ -60,7 +60,7 @@ typedef FAR void *DMA_HANDLE;
  * function is called at the completion of the DMA transfer.  'arg' is the
  * same 'arg' value that was provided when lpc17_dmastart() was called and
  * result indicates the result of the transfer:  Zero indicates a successful
- * tranfers.  On failure, a negated errno is returned indicating the general
+ * transfers.  On failure, a negated errno is returned indicating the general
  * nature of the DMA faiure.
  */
 
@@ -68,7 +68,7 @@ typedef void (*dma_callback_t)(DMA_HANDLE handle, void *arg, int result);
 
 /* The following is used for sampling DMA registers when CONFIG DEBUG_DMA is selected */
 
-#ifdef CONFIG_DEBUG_DMA
+#ifdef CONFIG__DEBUG_DMA_INFO
 struct lpc17_dmaglobalregs_s
 {
   /* Global Registers */
@@ -109,7 +109,7 @@ struct lpc17_dmaregs_s
   struct lpc17_dmachanregs_s   ch;
 };
 
-#endif /* CONFIG_DEBUG_DMA */
+#endif /* CONFIG__DEBUG_DMA_INFO */
 
 /****************************************************************************
  * Public Data
@@ -239,7 +239,7 @@ void lpc17_dmastop(DMA_HANDLE handle);
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_DMA
+#ifdef CONFIG__DEBUG_DMA_INFO
 void lpc17_dmasample(DMA_HANDLE handle, struct lpc17_dmaregs_s *regs);
 #else
 #  define lpc17_dmasample(handle,regs)
@@ -253,7 +253,7 @@ void lpc17_dmasample(DMA_HANDLE handle, struct lpc17_dmaregs_s *regs);
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_DMA
+#ifdef CONFIG__DEBUG_DMA_INFO
 void lpc17_dmadump(DMA_HANDLE handle, const struct lpc17_dmaregs_s *regs,
                    const char *msg);
 #else

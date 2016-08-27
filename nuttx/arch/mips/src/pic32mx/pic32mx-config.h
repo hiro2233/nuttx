@@ -491,7 +491,7 @@
  * reserved (0 is not used).
  */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_KERNEL
 #  if !defined(CONFIG_SYS_RESERVED) || CONFIG_SYS_RESERVED < 4
 #    error "CONFIG_SYS_RESERVED must be defined to be 4 for a kernel build"
 #  elif CONFIG_SYS_RESERVED > 4
@@ -600,7 +600,7 @@
 /* DEVCFG3 */
 
 #ifndef CONFIG_PIC32MX_USERID               /* User ID */
-#  define CONFIG_PIC32MX_USERID   0x584e    /* "NutX" */
+#  define CONFIG_PIC32MX_USERID   0x584e    /* "NX" */
 #endif
 
 #ifndef CONFIG_PIC32MX_PMDL1WAY             /* Peripheral module disable configuration */

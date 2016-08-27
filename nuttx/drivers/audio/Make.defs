@@ -37,14 +37,33 @@
 
 # Include Audio drivers
 
-ifeq ($(CONFIG_AUDIO),y)
+ifeq ($(CONFIG_AUDIO_DEVICES),y)
 
 ifeq ($(CONFIG_VS1053),y)
 CSRCS += vs1053.c
 endif
 
+ifeq ($(CONFIG_AUDIO_WM8904),y)
+CSRCS += wm8904.c
+ifeq ($(CONFIG_WM8904_REGDUMP),y)
+CSRCS += wm8904_debug.c
+else
+ifeq ($(CONFIG_WM8904_CLKDEBUG),y)
+CSRCS += wm8904_debug.c
+endif
+endif
+endif
+
+ifeq ($(CONFIG_AUDIO_NULL),y)
+CSRCS += audio_null.c
+endif
+
 ifeq ($(CONFIG_AUDIO_I2SCHAR),y)
 CSRCS += i2schar.c
+endif
+
+ifeq ($(CONFIG_AUDIO_TONE),y)
+CSRCS += tone.c
 endif
 
 # Include Audio driver support

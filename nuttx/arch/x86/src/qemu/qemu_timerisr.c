@@ -51,12 +51,12 @@
 #include <arch/io.h>
 #include <arch/board/board.h>
 
-#include "clock_internal.h"
+#include "clock/clock.h"
 #include "up_internal.h"
 #include "up_arch.h"
 
 #include "chip.h"
-#include "qemu_internal.h"
+#include "qemu.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -110,11 +110,11 @@ static int up_timerisr(int irq, uint32_t *regs)
 }
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Function:  up_timerinit
+ * Function:  up_timer_initialize
  *
  * Description:
  *   This function is called during start-up to initialize
@@ -122,7 +122,7 @@ static int up_timerisr(int irq, uint32_t *regs)
  *
  ****************************************************************************/
 
-void up_timerinit(void)
+void up_timer_initialize(void)
 {
   /* uint32_t to avoid compile time overflow errors */
 

@@ -1,5 +1,18 @@
 Board-Specific Configurations
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This directory contains the board support for logic for all boards supported
+by NuttX.  This directory is retained in a separate repository and is a Sub-
+Module of NuttX and will appear as nuttx/configs when the NuttX repository
+is cloned.
+
+The nuttx/configs directory is a part of the internal OS.  It there should
+contain only OS bring-up logic and driver initialization logic.  THERE SHOULD
+BE NO APPLICATION CALLABLE LOGIC IN THIS DIRECTORY.
+
+If you have board-specific, application callable logic, that logic should not
+go here.  Please consider using a sub-directory under apps/platform instead.
+
 Table of Contents
 ^^^^^^^^^^^^^^^^^
 
@@ -110,7 +123,7 @@ Make.defs -- This makefile fragment provides architecture and
 
   Definitions in the Make.defs file probably depend on some of the
   settings in the .config file.  For example, the CFLAGS will most likely be
-  different if CONFIG_DEBUG=y.
+  different if CONFIG_DEBUG_FEATURES=y.
 
   The included tools/Config.mk file contains additional definitions that may
   be overriden in the architecture-specific Make.defs file as necessary:
@@ -161,11 +174,6 @@ http://nuttx.org/Documentation/NuttXConfigVariables.html.
 Supported Boards
 ^^^^^^^^^^^^^^^^
 
-configs/16z
-  This is the port of NuttX port to the 16z board. The 16z board is based on
-  the ZiLOG ZNEO Z16F2811AL20EG part.  See https://github.com/toyaga/16z for
-  further information.
-
 configs/amber
   This is placeholder for the SoC Robotics Amber Web Server that is based
   on the Atmel AVR ATMega128 MCU.  There is not much there yet and what is
@@ -207,6 +215,10 @@ configs/demo9s12ne64
   port uses the m9s12x GCC toolchain.  STATUS:  (Still) under development; it
   is code complete but has not yet been verified.
 
+configs/dk-tm4c129x
+  This is the port of NuttX to the Tiva® DK-TM4C129x Connected Development Kit.  The
+  Tiva® DK-TM4C129x features the TM4C129XNCZAD MCU.
+
 configs/ea3131
   Embedded Artists EA3131 Development board.  This board is based on the
   an NXP LPC3131 MCU. This OS is built with the arm-nuttx-elf toolchain*.
@@ -222,6 +234,13 @@ configs/eagle100
   Micromint Eagle-100 Development board.  This board is based on the
   an ARM Cortex-M3 MCU, the Luminary LM3S6918. This OS is built with the
   arm-nuttx-elf toolchain*.  STATUS:  This port is complete and mature.
+
+configs/efm32-g8xx-stk
+  The port of NuttX to the the EFM32 Gecko Starter Kit (EFM32-G8XX-STK).
+
+configs/efm32gg-stk3700
+  The port of NuttX to the the EFM32 Giant Gecko Starter Kit
+  (EFM32GG-STK3700).
 
 configs/ekk-lm3s9b96
   TI/Stellaris EKK-LM3S9B96 board.  This board is based on the
@@ -242,6 +261,18 @@ configs/fire-stm32v2
   STM32F103VET6 chip.  See http://firestm32.taobao.com .  Version 2 and 3 of
   the boards are supported but only version 2 has been tested.
 
+configs/freedom-k64f
+  This port uses the FreeScale FREEDOM-K64F development board. This board
+  uses the Kinetis K64 MK64FN1M0VLL12 Cortex-M4 MCU.
+
+configs/freedom-kl25z
+configs/freedom-kl26z
+  These configurations are for the Freescale Freedom KL25Z and very similar
+  KL26Z board.  The Freedom-KL25Z features the K25Z120LE3AN chip; the
+  Freedom-KL26Z has the K26Z128VLH4 chip.  These are separate configurations
+  because of minor differences in the on-board logic.  Both include a
+  built-in SDA debugger.
+
 configs/hymini-stm32v
   A configuration for the HY-Mini STM32v board.  This board is based on the
   STM32F103VCT chip.
@@ -249,6 +280,10 @@ configs/hymini-stm32v
 configs/kwikstik-k40.
   Kinetis K40 Cortex-M4 MCU.  This port uses the FreeScale KwikStik-K40
   development board.
+
+configs/launchxl-tms57004
+  TI Hercules TMS570LS04x/03x LaunchPad Evaluation Kit (LAUNCHXL-TMS57004)
+  featuring the Hercules TMS570LS0432PZ chip.
 
 configs/lincoln60
    NuttX port to the Micromint Lincoln 60 board.
@@ -271,6 +306,10 @@ configs/lm4f120-launchpad
   platform for ARM® Cortex™-M4F-based microcontrollers from Texas
   Instruments.
 
+configs/lpcxpresso-lpc1115
+  NuttX board support for the Embedded Artists LPCXpresso LPC1115 board
+  featuring the NXP LPC1115 MCU.
+
 configs/lpcxpresso-lpc1768
   Embedded Artists base board with NXP LPCExpresso LPC1768.  This board
   is based on the NXP LPC1768.  The Code Red toolchain is used by default.
@@ -279,6 +318,20 @@ configs/lpcxpresso-lpc1768
 configs/lpc4330-xplorer
   NuttX port to the LPC4330-Xplorer board from NGX Technologies featuring
   the NXP LPC4330FET100 MCU
+
+configs/lpc4337-ws
+  NuttX port to the WaveShare LPC4337-ws board featuring the NXP LPC4337JBD144
+  MCU.
+
+configs/lpc4357-evb
+  NuttX port to the LPC4357-EVB board from Embest featuring the NXP
+  LPC4357FET256 MCU.  Based on the LPC4300 Xplorer port and provided by
+  Toby Duckworth.
+
+configs/lpc4370-link2
+  NuttX port to the NXP LPC4370-Link2 development board featuring the NXP
+  LPC4370FET100 MCU.  Based on the LPC4300 Xplorer port and provided by
+  Lok Tep.
 
 configs/maple
   NuttX support for the LeafLab's Maple and Maple Mini boards. These boards
@@ -308,6 +361,14 @@ configs/mirtoo
   This is the port to the DTX1-4000L "Mirtoo" module.  This module uses MicroChip
   PIC32MX250F128D.  See http://www.dimitech.com/ for further information.
 
+configs/moteino-mega
+  This is placeholder for the LowPowerLab MoteinoMEGA that is based
+  on the Atmel AVR ATMega1284P MCU.  There is not much there yet and what is
+  there is untested due to tool-related issues.
+
+configs/moxa
+  Moxa NP51x0 series of 2-port advanced RS-232/422/485 serial device servers.
+
 configs/mx1ads
   This is a port to the Motorola MX1ADS development board.  That board
   is based on the Freescale i.MX1 processor.  The i.MX1 is an ARM920T.
@@ -335,17 +396,30 @@ configs/ntosd-dm320
   STATUS: This port is code complete, verified, and included in the
   NuttX 0.2.1 release.
 
-configs/nucleo-f401re
-  STMicro ST Nucleo F401RE http://mbed.org/platforms/ST-Nucleo-F401RE
+configs/nucleo-144
+  STMicro Nucleo-144 development board family.  Included support for (1) the
+  Nucleo-F767ZG board featuring the STM32F746ZGT6U MCU. The STM32F746ZGT6U
+  is a 216MHz Cortex-M7 operation with 1024Kb Flash memory and 320Kb SRAM.
+  And (2) the Nucleo-F746ZG board featuring the STM32F767ZIT6 MCU. The
+  STM32F767ZIT6 is a 216MHz Cortex-M7 operation with 2048Kb Flash memory
+  and 512Kb SRAM.
 
-configs/nucleus2g
-  This port uses the Nucleus 2G board (with Babel CAN board).  This board
-  features an NXP LPC1768 processor.  See the 2G website (http://www.2g-eng.com/)
-  for more information about the Nucleus 2G.
+configs/nucleo-f4x1re
+  STMicro ST Nucleo F401RE and F411RE boards.  See
+  http://mbed.org/platforms/ST-Nucleo-F401RE and
+  http://developer.mbed.org/platforms/ST-Nucleo-F411RE for more
+  information about these boards.
+
+configs/nucleo-f303re
+  STMicro ST Nucleo F303RE board.  Contributed by Paul Alexander Patience.
 
 configs/nutiny-nuc120
   This is the port of NuttX to the NuvoTon NuTiny-SDK-NUC120 board.  This
   board has the NUC120LE3AN chip with a built-in NuLink debugger.
+
+configs/olimex-efm32g880f128-stk
+  This is the port of NuttX to the Olimex EFM32G880F128-STK development
+  board.
 
 configs/olimex-lpc1766stk
   This port uses the Olimex LPC1766-STK board and a GNU GCC toolchain* under
@@ -356,6 +430,22 @@ configs/olimex-lpc2378
   Linux or Cygwin.  STATUS: ostest and NSH configurations available.
   This port for the NXP LPC2378 was contributed by Rommel Marcelo.
 
+configs/olimex-stm32-h405
+  This port uses the Olimex STM32 H405 board and a GNU arm-nuttx-elf
+  toolchain* under Linux or Cygwin. See the http://www.olimex.com for
+  further information. This board features the STMicro STM32F405RGT6 MCU.
+  Contributed by Martin Lederhilger.
+
+configs/olimex-stm32-h407
+  This port uses the Olimex STM32 H407 board and a GNU arm-nuttx-elf
+  toolchain* under Linux or Cygwin. See the http://www.olimex.com for
+  further information. This board features the STMicro STM32F407ZGT6 (144
+  pins). Contributed by Neil Hancock.
+
+configs/olimex-stm32-e407
+  Olimex STM32 E407 board based on the STMicro STM32F407ZGT6 (144pins).
+  Contributed by Mateusz Szafoni.
+
 configs/olimex-stm32-p107
   This port uses the Olimex STM32-P107 board (STM32F107VC) and a GNU arm-nuttx-elf
   toolchain* under Linux or Cygwin. See the https://www.olimex.com/dev/stm32-p107.html
@@ -363,8 +453,13 @@ configs/olimex-stm32-p107
 
 configs/olimex-stm32-p207
   This port uses the Olimex STM32-P207 board (STM32F207ZE) and a GNU arm-nuttx-elf
-  toolchain* under Linux or Cygwin. See the https://www.olimex.com/dev/stm32-p207.html
+  toolchain under Linux or Cygwin. See the https://www.olimex.com/dev/stm32-p207.html
   for further information.  Contributed by Martin Lederhilger.
+
+configs/olimexino-stm32
+  This port uses the Olimexino STM32 board (STM32F103RBT6) and a GNU arm-nuttx-elf
+  toolchain* under Linux or Cygwin. See the http://www.olimex.com for further\
+  information.  Contribued by David Sidrane.
 
 configs/olimex-strp711
   This port uses the Olimex STR-P711 board and a GNU arm-nuttx-elf toolchain* under
@@ -415,7 +510,7 @@ configs/p112
   Dave Brooks was successfully funded through Kickstarter for and another
   run of P112 boards in November of 2012.
 
-configs/pic32-starterkit
+configs/pic32mx-starterkit
   This directory contains the port of NuttX to the Microchip PIC32 Ethernet
   Starter Kit (DM320004) with the Multimedia Expansion Board (MEB, DM320005).
   See www.microchip.com for further information.
@@ -426,19 +521,21 @@ configs/pic32mx7mmb
   http://www.mikroe.com/ for further information.
 
 configs/pirelli_dpl10
+configs/pic32mz-starterkit
+  This directory contains the port of NuttX to the Microchip PIC32MZ
+  Embedded Connectivity (EC) Starter Kit.  There are two configurations of
+  the starter kit:
+
+    1) The PIC32MZ Embedded Connectivity Starter Kit based on the
+       PIC32MZ2048ECH144-I/PH chip (DM320006), and
+    2) The PIC32MZ Embedded Connectivity Starter Kit based on the
+       PIC32MZ2048ECM144-I/PH w/Crypto Engine (DM320006-C)
+
+  See www.microchip.com for further information.
+
   This directory contains the board support for Pirelli "Discus" DP-L10 phones.
   It is a variant of the compal_e88 config with the small changes for the
   differences in the board.
-
-configs/pjrc-8051
-  8051 Microcontroller.  This port uses the PJRC 87C52 development system
-  and the SDCC toolchain.   This port is not quite ready for prime time.
-
-config/px4fmu-v2_upstream
-  This is a minimal configuration that supports low-level test of the
-  PX4FMU v2 in the NuttX source tree.  If you are using PX4, you probably
-  don't want this configuration.  You probably want the latest supported
-  configuration available from the PX4 GIT repositories.
 
 configs/qemu-i486
   Port of NuttX to QEMU in i486 mode.  This port will also run on real i486
@@ -453,6 +550,14 @@ configs/rgmp
 
   See http://rgmp.sourceforge.net/wiki/index.php/Main_Page for further
   information about RGMP.
+
+configs/sabre-6quad
+  This directory holds a port of NuttX to the NXP/Freescale Sabre board
+  featuring the iMX 6Quad CPU.
+
+configs/sama5d2-xult
+  This is the  port of NuttX to the Atmel SAMA5D2-Xplained Ultra development
+  board.  This board features the Atmel SAMA5D27.  See http://www.atmel.com.
 
 configs/sama5d3x-ek
   This is the  port of NuttX to the Atmel SAMA5D3x-EK development boards
@@ -474,9 +579,18 @@ configs/sama5d3-xplained
   This board features the Atmel SAMA5D36.  See
   http://www.atmel.com/devices/sama5d36.aspx.
 
+configs/sama5d4-ek
+  This is the  port of NuttX to the Atmel SAMA5D4-EK development board.
+  This board features the Atmel SAMA5D44.  See http://www.atmel.com.
+
 configs/samd20-xplained
   The port of NuttX to the Atmel SAMD20-Xplained Pro development board.  This
   board features the ATSAMD20J18A MCU (Cortex-M0+ with 256KB of FLASH and
+  32KB of SRAM).
+
+configs/samd21-xplained
+  The port of NuttX to the Atmel SAMD21-Xplained Pro development board.  This
+  board features the ATSAMD21J18A MCU (Cortex-M0+ with 256KB of FLASH and
   32KB of SRAM).
 
 configs/sam3u-ek
@@ -494,6 +608,12 @@ configs/sam4s-xplained
 
 configs/sam4s-xplained-pro
   The port of NuttX to the Atmel SAM4S-Xplained Pro development board.
+
+configs/same70-xplained
+  The port of NuttX to the Atmel SAME70 Xplained evaluation board.
+
+configs/samv71-xult
+  The port of NuttX to the Atmel SAMV71 Xplained Ultra evaluation board.
 
 configs/sim
   A user-mode port of NuttX to the x86 Linux platform is available.
@@ -528,17 +648,34 @@ configs/stm3240g-eval
   microcontroller (ARM Cortex-M4 with FPU).  This port uses a GNU Cortex-M4
   toolchain (such as CodeSourcery).
 
-configs/stm32f100rc_generic
-  STMicro STM32F100RC generic board based on STM32F100RC high-density value line
-  chip. This "generic" configuration is not very usable out-of-box, but can be
-  used as a starting point to creating new configs with similar STM32
-  high-density value line chips.
+configs/stm32butterfly2
+  Kamami stm32butterfly2 development board with optional ETH phy.
+
+configs/stm32f103-minimum
+  Generic STM32F103C8T6 Minimum ARM Development Board.
 
 configs/stm32f4discovery
   STMicro STM32F4-Discovery board based on the STMIcro STM32F407VGT6 MCU.
 
+configs/stm32f411e-disco
+  This is a minimal configuration that supports low-level test of the
+  STMicro STM32F411E-Discovery Board.
+
 configs/stm32f429i-disco
   STMicro STM32F429I-Discovery board based on the STMicro STM32F429ZIT6 MCU.
+
+configs/stm32f746g-disco
+  STMicro STM32F746G-DISCO development board featuring the STM32F746NGH6
+  MCU. The STM32F746NGH6  is a 216MHz Cortex-M7 operation with 1024Kb Flash
+  memory and 300Kb SRAM.
+
+configs/stm32f746g-ws
+  Waveshare STM32F746 development board featuring the STM32F746IG MCU.
+
+configs/stm32l476vg-disco
+  STMicro STM32L476VG_DISCO development board featuring the STM32L476VG
+  MCU. The STM32L476VG  is a Cortex-M4 optimised for low-power operation
+  at up to 80MHz operation with 1024Kb Flash memory and 96+32Kb SRAM.
 
 configs/stm32ldiscovery
   STMicro STM32L-Discovery board based on the STMicro STM32L152RB MCU.
@@ -553,13 +690,39 @@ configs/sure-pic32mx
   http://www.sureelectronics.net/goods.php?id=1168 for further
   information about the Sure DB-DP11215 board.
 
-configs/teensy
+configs/teensy-2.0
   This is the port of NuttX to the PJRC Teensy++ 2.0 board.  This board is
   developed by http://pjrc.com/teensy/.  The Teensy++ 2.0 is based
   on an Atmel AT90USB1286 MCU.
 
+configs/teensy-3.x
+  This is the port of NuttX to the Teensy-3.1 from PJRC
+  (https://www.pjrc.com/).  The Teensy-3.1 features the Freescale
+  MK30DX256VLH7 chip (now NXP).  The MK30DX256VLH7 is a 64-pin Cortex-M4
+  running at 72MHz.  It has 256KiB of program FLASH memory and 64KiB of
+  SRAM.  For more information about the Teensy 3.1, see
+
+    https://www.pjrc.com/teensy/teensy31.html
+    https://www.pjrc.com/store/teensy31.html
+
+  This board configuration can also be used with the older Teensy-3.0.  The
+  Teensy-3.0 has the same schematic (although some pins are not used on the
+  Teensy-3.0).  the primary difference is that the Teensy 3.0 has a
+  MK30DX128VLH5 with slightly less capability.
+
+configs/teensy-lc
+  This is the port of nuttx for the Teensy LC board.  The Teensy LC
+  is a DIP style breakout board for the MKL25Z64 and comes with a USB
+  based bootloader.
+
 configs/tm4c123g-launchpad
-  This is the port of NuttX to the Tiva TM4C123G LaunchPad.  The
+  This is the port of NuttX to the Tiva® TM4C123G LaunchPad.  The
+  Tiva® TM4C123G LaunchPad Evaluation Board is a low-cost evaluation
+  platform for ARM® Cortex™-M4F-based microcontrollers from Texas
+  Instruments.
+
+configs/tm4c1294-launchpad
+  This is the port of NuttX to the Tiva® TM4C1294 LaunchPad.  The
   Tiva® TM4C123G LaunchPad Evaluation Board is a low-cost evaluation
   platform for ARM® Cortex™-M4F-based microcontrollers from Texas
   Instruments.
@@ -585,11 +748,6 @@ configs/viewtool-stm32f107
   board may be fitted with either: (1) STM32F107VCT6 or (2) STM32F103VCT6.
   See http://www.viewtool.com/ for further information.
 
-configs/vsn
-  ISOTEL NetClamps VSN V1.2 ready2go sensor network platform based on the
-  STMicro STM32F103RET6.  Contributed by Uros Platise.  See
-  http://isotel.eu/NetClamps/
-
 configs/xtrs
   TRS80 Model 3.  This port uses a vintage computer based on the Z80.
   An emulator for this computer is available to run TRS80 programs on a
@@ -601,11 +759,9 @@ configs/z16f2800100zcog
   development environment is Cygwin under WinXP.
 
 configs/z80sim
-  z80 Microcontroller.  This port uses a Z80 instruction set simulator.
-  That simulator can be found in the NuttX GIT at
-  http://sourceforge.net/p/nuttx/git/ci/master/tree/misc/sims/z80sim.
-  This port also uses the SDCC toolchain (http://sdcc.sourceforge.net/")
-  (verified with version 2.6.0).
+  z80 Microcontroller.  This port uses a Z80 instruction set simulator
+  called z80sim.  This port also uses the SDCC toolchain
+  (http://sdcc.sourceforge.net/") (verified with version 2.6.0).
 
 configs/z8encore000zco
   z8Encore! Microcontroller.  This port use the Zilog z8encore000zco
@@ -674,7 +830,7 @@ There are also common-separated value (CSV) values in the source try that
 provide information about symbols.  In particular:
 
   nuttx/syscall/syscall.csv - Describes the NuttX RTOS interface, and
-  nuttx/lib/lib.csv         - Describes the NuttX C library interface.
+  nuttx/lib/libc.csv        - Describes the NuttX C library interface.
 
 There is a tool at nuttx/tools/mksymtab that will use these CSV files as
 input to generate a generic symbol table.  See nuttx/tools/README.txt for

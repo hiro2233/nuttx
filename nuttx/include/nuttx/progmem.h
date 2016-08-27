@@ -43,7 +43,6 @@
 #include <nuttx/config.h>
 #include <sys/types.h>
 
-#include <stdint.h>
 #include <stdbool.h>
 
 /****************************************************************************
@@ -53,7 +52,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -70,7 +70,7 @@ extern "C" {
  *
  ****************************************************************************/
 
-uint16_t up_progmem_npages(void);
+size_t up_progmem_npages(void);
 
 /****************************************************************************
  * Name: up_progmem_isuniform
@@ -90,7 +90,7 @@ bool up_progmem_isuniform(void);
  *
  ****************************************************************************/
 
-uint16_t up_progmem_pagesize(uint16_t page);
+size_t up_progmem_pagesize(size_t page);
 
 /****************************************************************************
  * Name: up_progmem_getpage
@@ -99,17 +99,33 @@ uint16_t up_progmem_pagesize(uint16_t page);
  *   Address to page conversion
  *
  * Input Parameters:
- *   addr - Address with of without flash offset (absolute or aligned to page0)
+ *   addr - Address with or without flash offset (absolute or aligned to page0)
  *
  * Returned Value:
  *   Page or negative value on error.  The following errors are reported
  *   (errno is not set!):
  *
- *     EFAULT: On invalid address
+ *     -EFAULT: On invalid address
  *
  ****************************************************************************/
 
-int up_progmem_getpage(uint32_t addr);
+ssize_t up_progmem_getpage(size_t addr);
+
+/****************************************************************************
+ * Name: up_progmem_getaddress
+ *
+ * Description:
+ *   Page to address conversion
+ *
+ * Input Parameters:
+ *   page - page index
+ *
+ * Returned Value:
+ *   Base address of given page, SIZE_MAX if page index is not valid.
+ *
+ ****************************************************************************/
+
+size_t up_progmem_getaddress(size_t page);
 
 /****************************************************************************
  * Name: up_progmem_erasepage
@@ -118,22 +134,22 @@ int up_progmem_getpage(uint32_t addr);
  *   Erase selected page.
  *
  * Input Parameters:
- *   page -
+ *   page - The page index to be erased.
  *
  * Returned Value:
  *   Page size or negative value on error.  The following errors are reported
  *   (errno is not set!):
  *
- *     EFAULT: On invalid page
- *     EIO: On unsuccessful erase
- *     EROFS: On access to write protected area
- *     EACCES: Insufficient permissions (read/write protected)
- *     EPERM: If operation is not permitted due to some other constraints
- *        (i.e. some internal block is not running etc.)
+ *     -EFAULT: On invalid page
+ *     -EIO:    On unsuccessful erase
+ *     -EROFS:  On access to write protected area
+ *     -EACCES: Insufficient permissions (read/write protected)
+ *     -EPERM:  If operation is not permitted due to some other constraints
+ *              (i.e. some internal block is not running etc.)
  *
  ****************************************************************************/
 
-int up_progmem_erasepage(uint16_t page);
+ssize_t up_progmem_erasepage(size_t page);
 
 /****************************************************************************
  * Name: up_progmem_ispageerased
@@ -142,18 +158,18 @@ int up_progmem_erasepage(uint16_t page);
  *   Checks whether page is erased
  *
  * Input Parameters:
- *    page -
+ *   page - The page index to be checked.
  *
  * Returned Value:
- *   Returns number of bytes written or negative value on error. If it
- *   returns zero then complete page is empty (erased).
+ *   Returns number of bytes NOT erased or negative value on error. If it
+ *   returns zero then complete page is erased.
  *
- *   The following errors are reported (errno is not set!)
- *     EFAULT: On invalid page
+ *   The following errors are reported:
+ *     -EFAULT: On invalid page
  *
  ****************************************************************************/
 
-int up_progmem_ispageerased(uint16_t page);
+ssize_t up_progmem_ispageerased(size_t page);
 
 /****************************************************************************
  * Name: up_progmem_write
@@ -167,29 +183,24 @@ int up_progmem_ispageerased(uint16_t page);
  * Input Parameters:
  *   addr  - Address with or without flash offset (absolute or aligned to page0)
  *   buf   - Pointer to buffer
- *   count - Number of bytes to write *
+ *   count - Number of bytes to write
  *
  * Returned Value:
  *   Bytes written or negative value on error.  The following errors are
  *   reported (errno is not set!)
  *
- *     EINVAL: if count is not aligned with the flash boundaries (i.e.
- *        some MCU's require per half-word or even word access)
+ *     EINVAL: If count is not aligned with the flash boundaries (i.e.
+ *             some MCU's require per half-word or even word access)
  *     EFAULT: On invalid address
- *     EIO: On unsuccessful write
- *     EROFS: On access to write protected area
+ *     EIO:    On unsuccessful write
+ *     EROFS:  On access to write protected area
  *     EACCES: Insufficient permissions (read/write protected)
- *     EPERM: If operation is not permitted due to some other constraints
- *        (i.e. some internal block is not running etc.)
+ *     EPERM:  If operation is not permitted due to some other constraints
+ *             (i.e. some internal block is not running etc.)
  *
  ****************************************************************************/
 
-int up_progmem_write(uint32_t addr, const void *buf, size_t count);
-
-/* TODO: Define the following functions and their options:
- *  - up_progmem_protect()
- *  - up_progmem_unprotect()
- */
+ssize_t up_progmem_write(size_t addr, FAR const void *buf, size_t count);
 
 #undef EXTERN
 #if defined(__cplusplus)

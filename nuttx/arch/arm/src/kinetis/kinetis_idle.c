@@ -1,7 +1,7 @@
 /****************************************************************************
  *  arch/arm/src/kinetis/kinetis_idle.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,8 @@
 #include <nuttx/config.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
+
 #include "up_internal.h"
 
 /****************************************************************************
@@ -52,8 +54,8 @@
  */
 
 #if defined(CONFIG_ARCH_LEDS) && defined(LED_IDLE)
-#  define BEGIN_IDLE() board_led_on(LED_IDLE)
-#  define END_IDLE()   board_led_off(LED_IDLE)
+#  define BEGIN_IDLE() board_autoled_on(LED_IDLE)
+#  define END_IDLE()   board_autoled_off(LED_IDLE)
 #else
 #  define BEGIN_IDLE()
 #  define END_IDLE()

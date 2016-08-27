@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 config MOUSE
@@ -19,6 +19,13 @@ config MOUSE_WHEEL
 		position.
 
 endif # MOUSE
+
+config INPUT_MAX11802
+	bool "MAX11802 touchscreen controller"
+	default n
+	select SPI
+	---help---
+		Enable support for the MAX11802 touchscreen controller
 
 config INPUT_TSC2007
 	bool "TI TSC2007 touchscreen controller"
@@ -113,8 +120,8 @@ config ADS7843E_THRESHX
 	default 12
 	---help---
 		New touch positions will only be reported when the X or Y data changes by these
-		thresholds. This trades reduces data rate for some loss in dragging accuracy.  For
-		12-bit values so the raw ranges are 0-4095. So for example, if your display is
+		thresholds. This trades reduced data rates for some loss in dragging accuracy.  For
+		12-bit values the raw ranges are 0-4095. So for example, if your display is
 		320x240, then THRESHX=13 and THRESHY=17 would correspond to one pixel.  Default: 12
 
 config ADS7843E_THRESHY
@@ -122,11 +129,68 @@ config ADS7843E_THRESHY
 	default 12
 	---help---
 		New touch positions will only be reported when the X or Y data changes by these
-		thresholds. This trades reduces data rate for some loss in dragging accuracy.  For
-		12-bit values so the raw ranges are 0-4095. So for example, if your display is
+		thresholds. This trades reduced data rates for some loss in dragging accuracy.  For
+		12-bit values the raw ranges are 0-4095. So for example, if your display is
 		320x240, then THRESHX=13 and THRESHY=17 would correspond to one pixel.  Default: 12
 
 endif
+
+config INPUT_MXT
+	bool "Atmel maXTouch Driver"
+	default n
+	---help---
+		Enables support for the Atmel maXTouch driver
+
+if INPUT_MXT
+
+config MXT_THRESHX
+	int "X threshold"
+	default 5
+	---help---
+		New touch positions will only be reported when the X or Y data
+		changes by these thresholds. This trades reduced data rates for some
+		loss in dragging accuracy.  For 12-bit values the raw ranges are
+		0-4095. So for example, if your display is 800x480, then THRESHX=5
+		and THRESHY=8 would correspond to a one pixel change. Default: 5
+
+		NOTE: This does nothing to reduce the interrupt rate.  It only
+		reduces the rate at which touch events are reports.
+
+config MXT_THRESHY
+	int "Y threshold"
+	default 8
+	---help---
+		New touch positions will only be reported when the X or Y data
+		changes by these thresholds. This trades reduced data rates for some
+		loss in dragging accuracy.  For 12-bit values the raw ranges are
+		0-4095. So for example, if your display is 800x480, then THRESHX=5
+		and THRESHY=8 would correspond to a one pixel change. Default: 8
+
+		NOTE: This does nothing to reduce the interrupt rate.  It only
+		reduces the rate at which touch events are reports.
+
+config MXT_NPOLLWAITERS
+	int "Number poll waiters"
+	default 4
+	depends on !DISABLE_POLL
+	---help---
+		Maximum number of threads that can be waiting on poll()
+
+config MXT_DISABLE_CONFIG_DEBUG_INFO
+	bool "Disable verbose debug output"
+	default y
+	depends on DEBUG_INPUT_INFO
+	---help---
+		The maXTouch tends to generate interrupts at a high rate during the
+		contact.  If verbose debug is enabled in this driver, you may not
+		be able to get anything done because of the high debug output rate.
+
+		This setting will allow you to keep verbose touchscreen debug output
+		in other modules, but to specifically suppress the debug out from
+		the MXT driver.  Debug (non-verbose) errors will still be generated,
+		but the chit-chat level will be eliminated.
+
+endif # INPUT_MXT
 
 config INPUT_STMPE811
 	bool "STMicro STMPE811 Driver"
@@ -206,8 +270,8 @@ config STMPE811_THRESHX
 	---help---
 		STMPE811 touchscreen data comes in a a very high rate.  New touch positions
 		will only be reported when the X or Y data changes by these thresholds.
-		This trades reduces data rate for some loss in dragging accuracy.  The
-		STMPE811 is configure for 12-bit values so the raw ranges are 0-4095. So
+		This trades reduced data rates for some loss in dragging accuracy.  The
+		STMPE811 is configure for 12-bit values the raw ranges are 0-4095. So
 		for example, if your display is 320x240, then THRESHX=13 and THRESHY=17
 		would correspond to one pixel.  Default: 12
 
@@ -218,8 +282,8 @@ config STMPE811_THRESHY
 	---help---
 		STMPE811 touchscreen data comes in a a very high rate.  New touch positions
 		will only be reported when the X or Y data changes by these thresholds.
-		This trades reduces data rate for some loss in dragging accuracy.  The
-		STMPE811 is configure for 12-bit values so the raw ranges are 0-4095. So
+		This trades reduced data rates for some loss in dragging accuracy.  The
+		STMPE811 is configure for 12-bit values the raw ranges are 0-4095. So
 		for example, if your display is 320x240, then THRESHX=13 and THRESHY=17
 		would correspond to one pixel.  Default: 12
 
@@ -252,8 +316,89 @@ config STMPE811_TEMP_DISABLE
 config STMPE811_REGDEBUG
 	bool "Enable Register-Level STMPE811 Debug"
 	default n
-	depends on DEBUG
+	depends on DEBUG_FEATURES
 	---help---
 		Enable very low register-level debug output.
 
-endif
+endif # INPUT_STMPE811
+
+config BUTTONS
+	bool "Button Inputs"
+	default n
+	---help---
+		Enable standard button upper half driver.
+
+if BUTTONS
+
+config BUTTONS_LOWER
+	bool "Generic Lower Half Button Driver"
+	default n
+	depends on ARCH_BUTTONS && ARCH_IRQBUTTONS
+	---help---
+		If the board supports the standard button interfaces as
+		defined in include/nuttx/board.h header file, then this
+		standard button lower half driver might be usable.
+
+		In order for this generic driver to be usable:
+
+		1. The board implementation must provide the button
+		   interfaces as defined in include/nuttx/board.h
+		2. The board implementation must support interrupts for each
+		  button.
+		3. The board.h header file must provide the definition
+		   NUM_BUTTONS, and
+		4. The board.h header file must not include any other
+		   header files that are not accessibble in this context
+		   (such as those in arch/<arch>/src/<chip>) UNLESS those
+		   inclusions are conditioned on __KERNEL__.  button_lower.c
+		   will undefine __KERNEL__ before included board.h.
+
+		If your board does not meet these requirements, then the
+		button_lower.c file can still be copied to your your
+		board src/ directory and modified for your specific board
+		requirements.
+
+config BUTTONS_NPOLLWAITERS
+	int "Max Number of Poll Waiters"
+	default 2
+	depends on !DISABLE_POLL
+
+endif # BUTTONS
+
+config DJOYSTICK
+	bool "Discrete Joystick"
+	default n
+	---help---
+		Enable standard discrete joystick upper half driver.  A discrete
+		joystick refers to a joystick that could be implemented entirely
+		with GPIO input pins.  So up, down, left, and right are all discrete
+		values like buttons (as opposed to integer values like you might
+		obtain from an analog joystick).
+
+if DJOYSTICK
+
+config DJOYSTICK_NPOLLWAITERS
+	int "Max Number of Poll Waiters"
+	default 2
+	depends on !DISABLE_POLL
+
+endif # DJOYSTICK
+
+config AJOYSTICK
+	bool "Analog Joystick"
+	default n
+	---help---
+		Enable standard analog joystick upper half driver.  An analog
+		joystick refers to a joystick that provides position data as an
+		integer value that might have been obtained through Analog-
+		to-Digital Conversion (ADC).  The analog positional data may also
+		be accompanied by discrete button data.
+
+if AJOYSTICK
+
+config AJOYSTICK_NPOLLWAITERS
+	int "Max Number of Poll Waiters"
+	default 2
+	depends on !DISABLE_POLL
+
+endif # AJOYSTICK

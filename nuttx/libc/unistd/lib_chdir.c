@@ -45,12 +45,12 @@
 #include <unistd.h>
 #include <errno.h>
 
-#include "lib_internal.h"
+#include "libc.h"
 
 #if CONFIG_NFILE_DESCRIPTORS > 0 && !defined(CONFIG_DISABLE_ENVIRON)
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -64,14 +64,14 @@
 #if 0
 static inline void _trimdir(char *path)
 {
- /* Skip any trailing '/' characters (unless it is also the leading '/') */
+  /* Skip any trailing '/' characters (unless it is also the leading '/') */
 
- int len = strlen(path) - 1;
- while (len > 0 && path[len] == '/')
-   {
+  int len = strlen(path) - 1;
+  while (len > 0 && path[len] == '/')
+    {
       path[len] = '\0';
       len--;
-   }
+    }
 }
 #else
 #  define _trimdir(p)
@@ -119,14 +119,14 @@ int chdir(FAR const char *path)
   struct stat buf;
   char *oldpwd;
   char *alloc;
-  int err;
+  int errcode;
   int ret;
 
   /* Verify the input parameters */
 
   if (!path)
     {
-      err = ENOENT;
+      errcode = ENOENT;
       goto errout;
     }
 
@@ -135,7 +135,7 @@ int chdir(FAR const char *path)
   ret = stat(path, &buf);
   if (ret != 0)
     {
-      err = ENOENT;
+      errcode = ENOENT;
       goto errout;
     }
 
@@ -143,7 +143,7 @@ int chdir(FAR const char *path)
 
   if (!S_ISDIR(buf.st_mode))
     {
-      err = ENOTDIR;
+      errcode = ENOTDIR;
       goto errout;
     }
 
@@ -173,7 +173,7 @@ int chdir(FAR const char *path)
   return OK;
 
 errout:
-  set_errno(err);
+  set_errno(errcode);
   return ERROR;
 }
 #endif /* CONFIG_NFILE_DESCRIPTORS && !CONFIG_DISABLE_ENVIRON */

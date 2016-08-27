@@ -1,4 +1,4 @@
-/**************************************************************************
+/****************************************************************************
  * arch/arm/src/sama5/sam_lowputc.c
  *
  *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
@@ -31,137 +31,63 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Included Files
- **************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
 #include <stdint.h>
 
-#include <arch/irq.h>
-#include <arch/board/board.h>
+#include <nuttx/irq.h>
 
 #include "up_internal.h"
 #include "up_arch.h"
 
 #include "sam_pio.h"
 #include "sam_periphclks.h"
+#include "sam_config.h"
 #include "sam_dbgu.h"
 #include "sam_lowputc.h"
 
 #include "chip/sam_uart.h"
+#include "chip/sam_flexcom.h"
 #include "chip/sam_dbgu.h"
 #include "chip/sam_pinmap.h"
 
-/**************************************************************************
- * Private Definitions
- **************************************************************************/
+#include <arch/board/board.h>
 
-/* Configuration **********************************************************/
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
-/* If the USART is not being used as a UART, then it really isn't enabled
- * for our purposes.
- */
+/* The UART/USART modules are driven by the peripheral clock (MCK or MCK2). */
 
-#ifndef CONFIG_USART0_ISUART
-#  undef CONFIG_SAMA5_USART0
-#endif
-#ifndef CONFIG_USART1_ISUART
-#  undef CONFIG_SAMA5_USART1
-#endif
-#ifndef CONFIG_USART2_ISUART
-#  undef CONFIG_SAMA5_USART2
-#endif
-#ifndef CONFIG_USART3_ISUART
-#  undef CONFIG_SAMA5_USART3
-#endif
-
-/* Is there a serial console?  It could be on UART0-1 or USART0-3 */
-
-#if defined(CONFIG_SAMA5_DBGU_CONSOLE) && defined(CONFIG_SAMA5_DBGU)
-#  undef CONFIG_UART0_SERIAL_CONSOLE
-#  undef CONFIG_UART1_SERIAL_CONSOLE
-#  undef CONFIG_USART0_SERIAL_CONSOLE
-#  undef CONFIG_USART1_SERIAL_CONSOLE
-#  undef CONFIG_USART2_SERIAL_CONSOLE
-#  undef CONFIG_USART3_SERIAL_CONSOLE
-#  undef HAVE_UART_CONSOLE
-#elif defined(CONFIG_UART0_SERIAL_CONSOLE) && defined(CONFIG_SAMA5_UART0)
-#  undef CONFIG_SAMA5_DBGU_CONSOLE
-#  undef CONFIG_UART1_SERIAL_CONSOLE
-#  undef CONFIG_USART0_SERIAL_CONSOLE
-#  undef CONFIG_USART1_SERIAL_CONSOLE
-#  undef CONFIG_USART2_SERIAL_CONSOLE
-#  undef CONFIG_USART3_SERIAL_CONSOLE
-#  define HAVE_UART_CONSOLE 1
-#elif defined(CONFIG_UART1_SERIAL_CONSOLE) && defined(CONFIG_SAMA5_UART1)
-#  undef CONFIG_SAMA5_DBGU_CONSOLE
-#  undef CONFIG_UART0_SERIAL_CONSOLE
-#  undef CONFIG_USART0_SERIAL_CONSOLE
-#  undef CONFIG_USART1_SERIAL_CONSOLE
-#  undef CONFIG_USART2_SERIAL_CONSOLE
-#  undef CONFIG_USART3_SERIAL_CONSOLE
-#  define HAVE_UART_CONSOLE 1
-#elif defined(CONFIG_USART0_SERIAL_CONSOLE) && defined(CONFIG_SAMA5_USART0)
-#  undef CONFIG_SAMA5_DBGU_CONSOLE
-#  undef CONFIG_UART0_SERIAL_CONSOLE
-#  undef CONFIG_UART1_SERIAL_CONSOLE
-#  undef CONFIG_USART1_SERIAL_CONSOLE
-#  undef CONFIG_USART2_SERIAL_CONSOLE
-#  undef CONFIG_USART3_SERIAL_CONSOLE
-#  define HAVE_UART_CONSOLE 1
-#elif defined(CONFIG_USART1_SERIAL_CONSOLE) && defined(CONFIG_SAMA5_USART1)
-#  undef CONFIG_SAMA5_DBGU_CONSOLE
-#  undef CONFIG_UART0_SERIAL_CONSOLE
-#  undef CONFIG_UART1_SERIAL_CONSOLE
-#  undef CONFIG_USART0_SERIAL_CONSOLE
-#  undef CONFIG_USART2_SERIAL_CONSOLE
-#  undef CONFIG_USART3_SERIAL_CONSOLE
-#  define HAVE_UART_CONSOLE 1
-#elif defined(CONFIG_USART2_SERIAL_CONSOLE) && defined(CONFIG_SAMA5_USART2)
-#  undef CONFIG_SAMA5_DBGU_CONSOLE
-#  undef CONFIG_UART0_SERIAL_CONSOLE
-#  undef CONFIG_UART1_SERIAL_CONSOLE
-#  undef CONFIG_USART0_SERIAL_CONSOLE
-#  undef CONFIG_USART1_SERIAL_CONSOLE
-#  undef CONFIG_USART3_SERIAL_CONSOLE
-#  define HAVE_UART_CONSOLE 1
-#elif defined(CONFIG_USART3_SERIAL_CONSOLE) && defined(CONFIG_SAMA5_USART3)
-#  undef CONFIG_SAMA5_DBGU_CONSOLE
-#  undef CONFIG_UART0_SERIAL_CONSOLE
-#  undef CONFIG_UART1_SERIAL_CONSOLE
-#  undef CONFIG_USART0_SERIAL_CONSOLE
-#  undef CONFIG_USART1_SERIAL_CONSOLE
-#  undef CONFIG_USART2_SERIAL_CONSOLE
-#  define HAVE_UART_CONSOLE 1
+#ifdef SAMA5_HAVE_FLEXCOM_CONSOLE
+#  define SAM_USART_CLOCK      BOARD_FLEXCOM_FREQUENCY /* Frequency of the FLEXCOM clock */
+#  define SAM_MR_USCLKS        FLEXUS_MR_USCLKS_MCK    /* Source = Main clock */
 #else
-#  warning "No valid CONFIG_USARTn_SERIAL_CONSOLE Setting"
-#  undef CONFIG_SAMA5_DBGU_CONSOLE
-#  undef CONFIG_UART0_SERIAL_CONSOLE
-#  undef CONFIG_UART1_SERIAL_CONSOLE
-#  undef CONFIG_USART0_SERIAL_CONSOLE
-#  undef CONFIG_USART1_SERIAL_CONSOLE
-#  undef CONFIG_USART2_SERIAL_CONSOLE
-#  undef CONFIG_USART3_SERIAL_CONSOLE
-#  undef HAVE_UART_CONSOLE
+#  define SAM_USART_CLOCK      BOARD_USART_FREQUENCY   /* Frequency of the USART clock */
+#  define SAM_MR_USCLKS        UART_MR_USCLKS_MCK      /* Source = Main clock */
 #endif
-
-/* The UART/USART modules are driven by the main clock (MCK). */
-
-#define SAM_USART_CLOCK  BOARD_MCK_FREQUENCY  /* Frequency of the main clock */
-#define SAM_MR_USCLKS    UART_MR_USCLKS_MCK   /* Source = Main clock */
 
 /* Select USART parameters for the selected console */
 
 #if defined(CONFIG_SAMA5_DBGU_CONSOLE)
 #  define SAM_CONSOLE_VBASE    SAM_DBGU_VBASE
-#  define SAM_CONSOLE_BAUD     CONFIG_SAMA5_DBGU_BAUD
 #  define SAM_CONSOLE_BITS     8
-#  define SAM_CONSOLE_PARITY   CONFIG_SAMA5_DBGU_PARITY
 #  define SAM_CONSOLE_2STOP    0
+#  ifdef CONFIG_SAMA5_DBGU_NOCONFIG
+#    undef  SUPPRESS_CONSOLE_CONFIG
+#    define SUPPRESS_CONSOLE_CONFIG 1
+#    define SAM_CONSOLE_BAUD   115200
+#    define SAM_CONSOLE_PARITY 0
+#  else
+#    define SAM_CONSOLE_BAUD   CONFIG_SAMA5_DBGU_BAUD
+#    define SAM_CONSOLE_PARITY CONFIG_SAMA5_DBGU_PARITY
+#  endif
 #elif defined(CONFIG_UART0_SERIAL_CONSOLE)
 #  define SAM_CONSOLE_VBASE    SAM_UART0_VBASE
 #  define SAM_CONSOLE_BAUD     CONFIG_UART0_BAUD
@@ -174,40 +100,96 @@
 #  define SAM_CONSOLE_BITS     CONFIG_UART1_BITS
 #  define SAM_CONSOLE_PARITY   CONFIG_UART1_PARITY
 #  define SAM_CONSOLE_2STOP    CONFIG_UART1_2STOP
+#elif defined(CONFIG_UART2_SERIAL_CONSOLE)
+#  define SAM_CONSOLE_VBASE    SAM_UART2_VBASE
+#  define SAM_CONSOLE_BAUD     CONFIG_UART2_BAUD
+#  define SAM_CONSOLE_BITS     CONFIG_UART2_BITS
+#  define SAM_CONSOLE_PARITY   CONFIG_UART2_PARITY
+#  define SAM_CONSOLE_2STOP    CONFIG_UART2_2STOP
+#elif defined(CONFIG_UART3_SERIAL_CONSOLE)
+#  define SAM_CONSOLE_VBASE    SAM_UART3_VBASE
+#  define SAM_CONSOLE_BAUD     CONFIG_UART3_BAUD
+#  define SAM_CONSOLE_BITS     CONFIG_UART3_BITS
+#  define SAM_CONSOLE_PARITY   CONFIG_UART3_PARITY
+#  define SAM_CONSOLE_2STOP    CONFIG_UART3_2STOP
+#elif defined(CONFIG_UART4_SERIAL_CONSOLE)
+#  define SAM_CONSOLE_VBASE    SAM_UART4_VBASE
+#  define SAM_CONSOLE_BAUD     CONFIG_UART4_BAUD
+#  define SAM_CONSOLE_BITS     CONFIG_UART4_BITS
+#  define SAM_CONSOLE_PARITY   CONFIG_UART4_PARITY
+#  define SAM_CONSOLE_2STOP    CONFIG_UART4_2STOP
 #elif defined(CONFIG_USART0_SERIAL_CONSOLE)
-#  define SAM_CONSOLE_VBASE    SAM_USART0_VBASE
+#  ifdef CONFIG_SAMA5_FLEXCOM0_USART
+#    define SAM_CONSOLE_VBASE  SAM_FLEXCOM0_VBASE
+#  else
+#    define SAM_CONSOLE_VBASE  SAM_USART0_VBASE
+#  endif
 #  define SAM_CONSOLE_BAUD     CONFIG_USART0_BAUD
 #  define SAM_CONSOLE_BITS     CONFIG_USART0_BITS
 #  define SAM_CONSOLE_PARITY   CONFIG_USART0_PARITY
 #  define SAM_CONSOLE_2STOP    CONFIG_USART0_2STOP
 #elif defined(CONFIG_USART1_SERIAL_CONSOLE)
-#  define SAM_CONSOLE_VBASE    SAM_USART1_VBASE
+#  ifdef CONFIG_SAMA5_FLEXCOM1_USART
+#    define SAM_CONSOLE_VBASE  SAM_FLEXCOM1_VBASE
+#  else
+#    define SAM_CONSOLE_VBASE  SAM_USART1_VBASE
+#  endif
 #  define SAM_CONSOLE_BAUD     CONFIG_USART1_BAUD
 #  define SAM_CONSOLE_BITS     CONFIG_USART1_BITS
 #  define SAM_CONSOLE_PARITY   CONFIG_USART1_PARITY
 #  define SAM_CONSOLE_2STOP    CONFIG_USART1_2STOP
 #elif defined(CONFIG_USART2_SERIAL_CONSOLE)
-#  define SAM_CONSOLE_VBASE    SAM_USART2_VBASE
+#  ifdef CONFIG_SAMA5_FLEXCOM2_USART
+#    define SAM_CONSOLE_VBASE  SAM_FLEXCOM2_VBASE
+#  else
+#    define SAM_CONSOLE_VBASE  SAM_USART2_VBASE
+#  endif
 #  define SAM_CONSOLE_BAUD     CONFIG_USART2_BAUD
 #  define SAM_CONSOLE_BITS     CONFIG_USART2_BITS
 #  define SAM_CONSOLE_PARITY   CONFIG_USART2_PARITY
 #  define SAM_CONSOLE_2STOP    CONFIG_USART2_2STOP
 #elif defined(CONFIG_USART3_SERIAL_CONSOLE)
-#  define SAM_CONSOLE_VBASE    SAM_USART3_VBASE
+#  ifdef CONFIG_SAMA5_FLEXCOM3_USART
+#   define SAM_CONSOLE_VBASE   SAM_FLEXCOM3_VBASE
+#  else
+#   define SAM_CONSOLE_VBASE   SAM_USART3_VBASE
+#  endif
 #  define SAM_CONSOLE_BAUD     CONFIG_USART3_BAUD
 #  define SAM_CONSOLE_BITS     CONFIG_USART3_BITS
 #  define SAM_CONSOLE_PARITY   CONFIG_USART3_PARITY
 #  define SAM_CONSOLE_2STOP    CONFIG_USART3_2STOP
+#elif defined(CONFIG_USART4_SERIAL_CONSOLE)
+#  ifdef CONFIG_SAMA5_FLEXCOM4_USART
+#    define SAM_CONSOLE_VBASE  SAM_FLEXCOM4_VBASE
+#  else
+#    define SAM_CONSOLE_VBASE  SAM_USART4_VBASE
+#  endif
+#  define SAM_CONSOLE_BAUD     CONFIG_USART4_BAUD
+#  define SAM_CONSOLE_BITS     CONFIG_USART4_BITS
+#  define SAM_CONSOLE_PARITY   CONFIG_USART4_PARITY
+#  define SAM_CONSOLE_2STOP    CONFIG_USART4_2STOP
 #else
 #  error "No CONFIG_U[S]ARTn_SERIAL_CONSOLE Setting"
 #endif
 
 /* Select the settings for the mode register */
 
+#if defined(SAMA5_HAVE_UART_CONSOLE)
+#  if SAM_CONSOLE_BITS == 8 && SAM_CONSOLE_PARITY == 0
+#  elif SAM_CONSOLE_BITS == 7 && SAM_CONSOLE_PARITY != 0
+#  else
+#    error "Unsupported combination of bits and parity in UART console"
+#  endif
+
+#  if SAM_CONSOLE_2STOP != 0
+#    error "Unsupported number of stop bits and parity for UART console"
+#  endif
+#endif
+
 #if SAM_CONSOLE_BITS == 5
 #  define MR_CHRL_VALUE UART_MR_CHRL_5BITS /* 5 bits */
 #elif SAM_CONSOLE_BITS == 6
-#  define MR_CHRL_VALUE UART_MR_CHRL_6BITS  /* 6 bits */
+#  define MR_CHRL_VALUE UART_MR_CHRL_6BITS /* 6 bits */
 #elif SAM_CONSOLE_BITS == 7
 #  define MR_CHRL_VALUE UART_MR_CHRL_7BITS /* 7 bits */
 #elif SAM_CONSOLE_BITS == 8
@@ -233,47 +215,33 @@
 #  define MR_NBSTOP_VALUE UART_MR_NBSTOP_1
 #endif
 
-#define MR_VALUE (UART_MR_MODE_NORMAL | SAM_MR_USCLKS | \
-                  MR_CHRL_VALUE | MR_PAR_VALUE | MR_NBSTOP_VALUE)
+#if defined(ATSAMA5D2)
+#  define MR_VALUE (MR_PAR_VALUE | UART_MR_PERIPHCLK | \
+                    UART_MR_CHMODE_NORMAL)
+#elif defined(ATSAMA5D3) ||defined(ATSAMA5D4)
+#  define MR_VALUE (UART_MR_MODE_NORMAL | SAM_MR_USCLKS | \
+                    MR_CHRL_VALUE | MR_PAR_VALUE | MR_NBSTOP_VALUE | \
+                    UART_MR_CHMODE_NORMAL)
+#endif
 
-/**************************************************************************
- * Private Types
- **************************************************************************/
-
-/**************************************************************************
- * Private Function Prototypes
- **************************************************************************/
-
-/**************************************************************************
- * Global Variables
- **************************************************************************/
-
-/**************************************************************************
- * Private Variables
- **************************************************************************/
-
-/**************************************************************************
- * Private Functions
- **************************************************************************/
-
-/**************************************************************************
+/****************************************************************************
  * Public Functions
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Name: up_lowputc
  *
  * Description:
  *   Output one byte on the serial console
  *
- **************************************************************************/
+ ****************************************************************************/
 
 void up_lowputc(char ch)
 {
-#if defined(HAVE_UART_CONSOLE)
+#if defined(SAMA5_HAVE_UART_CONSOLE) || defined(SAMA5_HAVE_USART_CONSOLE)
   irqstate_t flags;
 
-  for (;;)
+  for (; ; )
     {
       /* Wait for the transmitter to be available */
 
@@ -284,23 +252,52 @@ void up_lowputc(char ch)
        * atomic.
        */
 
-      flags = irqsave();
+      flags = enter_critical_section();
       if ((getreg32(SAM_CONSOLE_VBASE + SAM_UART_SR_OFFSET) &
         UART_INT_TXEMPTY) != 0)
         {
           /* Send the character */
 
           putreg32((uint32_t)ch, SAM_CONSOLE_VBASE + SAM_UART_THR_OFFSET);
-          irqrestore(flags);
+          leave_critical_section(flags);
           return;
         }
 
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
+
+#elif defined(SAMA5_HAVE_FLEXCOM_CONSOLE)
+  irqstate_t flags;
+
+  for (; ; )
+    {
+      /* Wait for the transmitter to be available */
+
+      while ((getreg32(SAM_CONSOLE_VBASE + SAM_FLEXUS_CSR_OFFSET) &
+        FLEXUS_INT_TXEMPTY) == 0);
+
+      /* Disable interrupts so that the test and the transmission are
+       * atomic.
+       */
+
+      flags = enter_critical_section();
+      if ((getreg32(SAM_CONSOLE_VBASE + SAM_FLEXUS_CSR_OFFSET) &
+        FLEXUS_INT_TXEMPTY) != 0)
+        {
+          /* Send the character */
+
+          putreg32((uint32_t)ch, SAM_CONSOLE_VBASE + SAM_FLEXUS_THR_OFFSET);
+          leave_critical_section(flags);
+          return;
+        }
+
+      leave_critical_section(flags);
+    }
+
 #elif defined(CONFIG_SAMA5_DBGU_CONSOLE)
   irqstate_t flags;
 
-  for (;;)
+  for (; ; )
     {
       /* Wait for the transmitter to be available */
 
@@ -310,17 +307,17 @@ void up_lowputc(char ch)
        * atomic.
        */
 
-      flags = irqsave();
+      flags = enter_critical_section();
       if ((getreg32(SAM_DBGU_SR) & DBGU_INT_TXEMPTY) != 0)
         {
           /* Send the character */
 
           putreg32((uint32_t)ch, SAM_DBGU_THR);
-          irqrestore(flags);
+          leave_critical_section(flags);
           return;
         }
 
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 #endif
 }
@@ -335,7 +332,8 @@ void up_lowputc(char ch)
 
 int up_putc(int ch)
 {
-#if defined(HAVE_UART_CONSOLE) || defined(CONFIG_SAMA5_DBGU_CONSOLE)
+#if defined(SAMA5_HAVE_UART_CONSOLE) || defined(SAMA5_HAVE_USART_CONSOLE) || \
+    defined(SAMA5_HAVE_FLEXCOM_CONSOLE) || defined(CONFIG_SAMA5_DBGU_CONSOLE)
   /* Check for LF */
 
   if (ch == '\n')
@@ -346,11 +344,11 @@ int up_putc(int ch)
     }
 
   up_lowputc(ch);
+#endif
   return ch;
 }
-#endif
 
-/**************************************************************************
+/****************************************************************************
  * Name: sam_lowsetup
  *
  * Description:
@@ -358,11 +356,13 @@ int up_putc(int ch)
  *   console.  Its purpose is to get the console output availabe as soon
  *   as possible.
  *
- **************************************************************************/
+ ****************************************************************************/
 
 void sam_lowsetup(void)
 {
-  /* Enable clocking for all selected UART/USARTs */
+  /* Enable clocking for all selected UART/USARTs (USARTs may not
+   * necessarily be configured as UARTs).
+   */
 
 #ifdef CONFIG_SAMA5_UART0
   sam_uart0_enableclk();
@@ -370,7 +370,16 @@ void sam_lowsetup(void)
 #ifdef CONFIG_SAMA5_UART1
   sam_uart1_enableclk();
 #endif
-#ifdef CONFIG_SAMA5_USART0
+#ifdef CONFIG_SAMA5_UART2
+  sam_uart2_enableclk();
+#endif
+#ifdef CONFIG_SAMA5_UART3
+  sam_uart3_enableclk();
+#endif
+#ifdef CONFIG_SAMA5_UART4
+  sam_uart4_enableclk();
+#endif
+#ifdef CONFIG_USART0_SERIALDRIVER
   sam_usart0_enableclk();
 #endif
 #ifdef CONFIG_SAMA5_USART1
@@ -382,8 +391,25 @@ void sam_lowsetup(void)
 #ifdef CONFIG_SAMA5_USART3
   sam_usart3_enableclk();
 #endif
+#ifdef CONFIG_SAMA5_FLEXCOM0
+  sam_flexcom0_enableclk();
+#endif
+#ifdef CONFIG_SAMA5_FLEXCOM1
+  sam_flexcom1_enableclk();
+#endif
+#ifdef CONFIG_SAMA5_FLEXCOM2
+  sam_flexcom2_enableclk();
+#endif
+#ifdef CONFIG_SAMA5_FLEXCOM3
+  sam_flexcom3_enableclk();
+#endif
+#ifdef CONFIG_SAMA5_FLEXCOM4
+  sam_flexcom4_enableclk();
+#endif
 
-  /* Configure UART pins for all selected UART/USARTs */
+  /* Configure UART pins for all selected UART/USARTs.  USARTs pins are
+   * only configured if the USART is also configured as as a UART.
+   */
 
 #ifdef CONFIG_SAMA5_UART0
   (void)sam_configpio(PIO_UART0_RXD);
@@ -395,7 +421,22 @@ void sam_lowsetup(void)
   (void)sam_configpio(PIO_UART1_TXD);
 #endif
 
-#ifdef CONFIG_SAMA5_USART0
+#ifdef CONFIG_SAMA5_UART2
+  (void)sam_configpio(PIO_UART2_RXD);
+  (void)sam_configpio(PIO_UART2_TXD);
+#endif
+
+#ifdef CONFIG_SAMA5_UART3
+  (void)sam_configpio(PIO_UART3_RXD);
+  (void)sam_configpio(PIO_UART3_TXD);
+#endif
+
+#ifdef CONFIG_SAMA5_UART4
+  (void)sam_configpio(PIO_UART4_RXD);
+  (void)sam_configpio(PIO_UART4_TXD);
+#endif
+
+#if defined(CONFIG_USART0_SERIALDRIVER) && defined(CONFIG_SAMA5_USART0)
   (void)sam_configpio(PIO_USART0_RXD);
   (void)sam_configpio(PIO_USART0_TXD);
 #ifdef CONFIG_USART0_OFLOWCONTROL
@@ -406,7 +447,7 @@ void sam_lowsetup(void)
 #endif
 #endif
 
-#ifdef CONFIG_SAMA5_USART1
+#if defined(CONFIG_USART1_SERIALDRIVER) && defined(CONFIG_SAMA5_USART1)
   (void)sam_configpio(PIO_USART1_RXD);
   (void)sam_configpio(PIO_USART1_TXD);
 #ifdef CONFIG_USART1_OFLOWCONTROL
@@ -417,7 +458,7 @@ void sam_lowsetup(void)
 #endif
 #endif
 
-#ifdef CONFIG_SAMA5_USART2
+#if defined(CONFIG_USART2_SERIALDRIVER) && defined(CONFIG_SAMA5_USART2)
   (void)sam_configpio(PIO_USART2_RXD);
   (void)sam_configpio(PIO_USART2_TXD);
 #ifdef CONFIG_USART2_OFLOWCONTROL
@@ -428,7 +469,7 @@ void sam_lowsetup(void)
 #endif
 #endif
 
-#ifdef CONFIG_SAMA5_USART3
+#if defined(CONFIG_USART3_SERIALDRIVER) && defined(CONFIG_SAMA5_USART3)
   (void)sam_configpio(PIO_USART3_RXD);
   (void)sam_configpio(PIO_USART3_TXD);
 #ifdef CONFIG_USART3_OFLOWCONTROL
@@ -439,9 +480,85 @@ void sam_lowsetup(void)
 #endif
 #endif
 
+#if defined(CONFIG_USART4_SERIALDRIVER) && defined(CONFIG_SAMA5_USART4)
+  (void)sam_configpio(PIO_USART4_RXD);
+  (void)sam_configpio(PIO_USART4_TXD);
+#ifdef CONFIG_USART4_OFLOWCONTROL
+  (void)sam_configpio(PIO_USART4_CTS);
+#endif
+#ifdef CONFIG_USART4_IFLOWCONTROL
+  (void)sam_configpio(PIO_USART4_RTS);
+#endif
+#endif
+
+  /* For Flexcom USARTs:
+   *
+   *   FLEXCOM_IO0 = TXD
+   *   FLEXCOM_IO1 = RXD
+   *   FLEXCOM_IO2 = SCK
+   *   FLEXCOM_IO3 = CTS
+   *   FLEXCOM_IO4 = RTS
+   */
+
+#if defined(CONFIG_USART0_SERIALDRIVER) && defined(CONFIG_SAMA5_FLEXCOM0_USART)
+  (void)sam_configpio(PIO_FLEXCOM0_IO0);
+  (void)sam_configpio(PIO_FLEXCOM0_IO1);
+#ifdef CONFIG_USART0_OFLOWCONTROL
+  (void)sam_configpio(PIO_FLEXCOM0_IO3);
+#endif
+#ifdef CONFIG_USART0_IFLOWCONTROL
+  (void)sam_configpio(PIO_FLEXCOM0_IO4);
+#endif
+#endif
+
+#if defined(CONFIG_USART1_SERIALDRIVER) && defined(CONFIG_SAMA5_FLEXCOM1_USART)
+  (void)sam_configpio(PIO_FLEXCOM1_IO0);
+  (void)sam_configpio(PIO_FLEXCOM1_IO1);
+#ifdef CONFIG_USART1_OFLOWCONTROL
+  (void)sam_configpio(PIO_FLEXCOM1_IO3);
+#endif
+#ifdef CONFIG_USART1_IFLOWCONTROL
+  (void)sam_configpio(PIO_FLEXCOM1_IO4);
+#endif
+#endif
+
+#if defined(CONFIG_USART2_SERIALDRIVER) && defined(CONFIG_SAMA5_FLEXCOM2_USART)
+  (void)sam_configpio(PIO_FLEXCOM2_IO0);
+  (void)sam_configpio(PIO_FLEXCOM2_IO1);
+#ifdef CONFIG_USART2_OFLOWCONTROL
+  (void)sam_configpio(PIO_FLEXCOM2_IO3);
+#endif
+#ifdef CONFIG_USART2_IFLOWCONTROL
+  (void)sam_configpio(PIO_FLEXCOM2_IO4);
+#endif
+#endif
+
+#if defined(CONFIG_USART3_SERIALDRIVER) && defined(CONFIG_SAMA5_FLEXCOM3_USART)
+  (void)sam_configpio(PIO_FLEXCOM3_IO0);
+  (void)sam_configpio(PIO_FLEXCOM3_IO1);
+#ifdef CONFIG_USART3_OFLOWCONTROL
+  (void)sam_configpio(PIO_FLEXCOM3_IO3);
+#endif
+#ifdef CONFIG_USART3_IFLOWCONTROL
+  (void)sam_configpio(PIO_FLEXCOM3_IO4);
+#endif
+#endif
+
+#if defined(CONFIG_USART4_SERIALDRIVER) && defined(CONFIG_SAMA5_FLEXCOM4_USART)
+  (void)sam_configpio(PIO_FLEXCOM4_IO0);
+  (void)sam_configpio(PIO_FLEXCOM4_IO1);
+#ifdef CONFIG_USART4_OFLOWCONTROL
+  (void)sam_configpio(PIO_FLEXCOM4_IO3);
+#endif
+#ifdef CONFIG_USART4_IFLOWCONTROL
+  (void)sam_configpio(PIO_FLEXCOM4_IO4);
+#endif
+#endif
+
   /* Configure the console (only) */
 
-#if defined(HAVE_UART_CONSOLE) && !defined(CONFIG_SUPPRESS_UART_CONFIG)
+#if (defined(SAMA5_HAVE_UART_CONSOLE) || defined(SAMA5_HAVE_USART_CONSOLE)) && \
+    !defined(SUPPRESS_CONSOLE_CONFIG)
   /* Reset and disable receiver and transmitter */
 
   putreg32((UART_CR_RSTRX | UART_CR_RSTTX | UART_CR_RXDIS | UART_CR_TXDIS),
@@ -466,6 +583,37 @@ void sam_lowsetup(void)
 
   putreg32((UART_CR_RXEN | UART_CR_TXEN),
            SAM_CONSOLE_VBASE + SAM_UART_CR_OFFSET);
+
+#elif defined(SAMA5_HAVE_FLEXCOM_CONSOLE) &&  !defined(SUPPRESS_CONSOLE_CONFIG)
+  /* Select USART mode for the Flexcom */
+
+  putreg32(FLEX_MR_OPMODE_USART, SAM_CONSOLE_VBASE + SAM_FLEX_MR_OFFSET);
+
+  /* Reset and disable receiver and transmitter */
+
+  putreg32((FLEXUS_CR_RSTRX | FLEXUS_CR_RSTTX | FLEXUS_CR_RXDIS | FLEXUS_CR_TXDIS),
+           SAM_CONSOLE_VBASE + SAM_FLEXUS_CR_OFFSET);
+
+  /* Disable all interrupts */
+
+  putreg32(0xffffffff, SAM_CONSOLE_VBASE + SAM_FLEXUS_IDR_OFFSET);
+
+  /* Set up the mode register */
+
+  putreg32(MR_VALUE, SAM_CONSOLE_VBASE + SAM_FLEXUS_MR_OFFSET);
+
+  /* Configure the console baud.  NOTE: Oversampling by 8 is not supported.
+   * This may limit BAUD rates for lower USART clocks.
+   */
+
+  putreg32(((SAM_USART_CLOCK + (SAM_CONSOLE_BAUD << 3)) / (SAM_CONSOLE_BAUD << 4)),
+           SAM_CONSOLE_VBASE + SAM_FLEXUS_BRGR_OFFSET);
+
+  /* Enable receiver & transmitter */
+
+  putreg32((FLEXUS_CR_RXEN | FLEXUS_CR_TXEN),
+           SAM_CONSOLE_VBASE + SAM_FLEXUS_CR_OFFSET);
+
 #endif
 
 #ifdef CONFIG_SAMA5_DBGU

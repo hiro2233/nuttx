@@ -1,7 +1,7 @@
 /****************************************************************************
  * libc/pthread/pthread_attrsetschedpolicy.c
  *
- *   Copyright (C) 2007-2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,26 +46,6 @@
 #include <errno.h>
 
 /****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Type Declarations
- ****************************************************************************/
-
-/****************************************************************************
- * Global Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -90,13 +70,17 @@ int pthread_attr_setschedpolicy(FAR pthread_attr_t *attr, int policy)
 {
   int ret;
 
-  sdbg("attr=0x%p policy=%d\n", attr, policy);
+  linfo("attr=0x%p policy=%d\n", attr, policy);
 
+  if (!attr ||
+      (policy != SCHED_FIFO
 #if CONFIG_RR_INTERVAL > 0
-  if (!attr || (policy != SCHED_FIFO && policy != SCHED_RR))
-#else
-  if (!attr || policy != SCHED_FIFO )
+       && policy != SCHED_RR
 #endif
+#ifdef CONFIG_SCHED_SPORADIC
+       && policy != SCHED_SPORADIC
+#endif
+    ))
     {
       ret = EINVAL;
     }
@@ -106,6 +90,6 @@ int pthread_attr_setschedpolicy(FAR pthread_attr_t *attr, int policy)
       ret = OK;
     }
 
-  sdbg("Returning %d\n", ret);
+  linfo("Returning %d\n", ret);
   return ret;
 }

@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/binfmt/elf.h
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,6 +48,7 @@
 #include <stdbool.h>
 #include <elf32.h>
 
+#include <nuttx/arch.h>
 #include <nuttx/binfmt/binfmt.h>
 
 /****************************************************************************
@@ -86,7 +87,7 @@
  * Public Types
  ****************************************************************************/
 
-/* This struct provides a desciption of the currently loaded instantiation
+/* This struct provides a description of the currently loaded instantiation
  * of an ELF binary.
  */
 
@@ -95,8 +96,8 @@ struct elf_loadinfo_s
   /* elfalloc is the base address of the memory that is allocated to hold the
    * ELF program image.
    *
-   * If CONFIG_ADDRENV=n, elfalloc will be allocated using kmalloc() (or
-   * kzalloc()).  If CONFIG_ADDRENV-y, then elfalloc will be allocated using
+   * If CONFIG_ARCH_ADDRENV=n, elfalloc will be allocated using kmm_malloc() (or
+   * kmm_zalloc()).  If CONFIG_ARCH_ADDRENV-y, then elfalloc will be allocated using
    * up_addrenv_create().  In either case, there will be a unique instance
    * of elfalloc (and stack) for each instance of a process.
    *
@@ -104,8 +105,10 @@ struct elf_loadinfo_s
    * the ELF module has been loaded.
    */
 
-  uintptr_t         elfalloc;    /* Memory allocated when ELF file was loaded */
-  size_t            elfsize;     /* Size of the ELF memory allocation */
+  uintptr_t         textalloc;   /* .text memory allocated when ELF file was loaded */
+  uintptr_t         dataalloc;   /* .bss/.data memory allocated when ELF file was loaded */
+  size_t            textsize;    /* Size of the ELF .text memory allocation */
+  size_t            datasize;    /* Size of the ELF .bss/.data memory allocation */
   off_t             filelen;     /* Length of the entire ELF file */
   Elf32_Ehdr        ehdr;        /* Buffered ELF file header */
   FAR Elf32_Shdr    *shdr;       /* Buffered ELF section headers */
@@ -127,12 +130,12 @@ struct elf_loadinfo_s
    * addrenv - This is the handle created by up_addrenv_create() that can be
    *   used to manage the tasks address space.
    * oldenv  - This is a value returned by up_addrenv_select() that must be
-   *   used to restore the current hardware address environment.
+   *   used to restore the current address environment.
    */
 
-#ifdef CONFIG_ADDRENV
-  task_addrenv_t addrenv;  /* Task address environment */
-  hw_addrenv_t   oldenv;   /* Saved hardware address environment */
+#ifdef CONFIG_ARCH_ADDRENV
+  group_addrenv_t    addrenv;    /* Task group address environment */
+  save_addrenv_t     oldenv;     /* Saved address environment */
 #endif
 
   uint16_t           symtabidx;  /* Symbol table section index */
@@ -148,7 +151,8 @@ struct elf_loadinfo_s
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -267,69 +271,6 @@ int elf_initialize(void);
  ****************************************************************************/
 
 void elf_uninitialize(void);
-
-/****************************************************************************
- * These are APIs must be provided by architecture-specific logic:
- ****************************************************************************/
-/****************************************************************************
- * Name: arch_checkarch
- *
- * Description:
- *   Given the ELF header in 'hdr', verify that the ELF file is appropriate
- *   for the current, configured architecture.  Every architecture that uses
- *   the ELF loader must provide this function.
- *
- * Input Parameters:
- *   hdr - The ELF header read from the ELF file.
- *
- * Returned Value:
- *   True if the architecture supports this ELF file.
- *
- ****************************************************************************/
-
-bool arch_checkarch(FAR const Elf32_Ehdr *hdr);
-
-/****************************************************************************
- * Name: arch_relocate and arch_relocateadd
- *
- * Description:
- *   Perform on architecture-specific ELF relocation.  Every architecture
- *   that uses the ELF loader must provide this function.
- *
- * Input Parameters:
- *   rel - The relocation type
- *   sym - The ELF symbol structure containing the fully resolved value.
- *   addr - The address that requires the relocation.
- *
- * Returned Value:
- *   Zero (OK) if the relocation was successful.  Otherwise, a negated errno
- *   value indicating the cause of the relocation failure.
- *
- ****************************************************************************/
-
-int arch_relocate(FAR const Elf32_Rel *rel, FAR const Elf32_Sym *sym,
-                  uintptr_t addr);
-int arch_relocateadd(FAR const Elf32_Rela *rel,
-                     FAR const Elf32_Sym *sym, uintptr_t addr);
-
-/****************************************************************************
- * Name: arch_flushicache
- *
- * Description:
- *   Flush the instruction cache.
- *
- * Input Parameters:
- *   addr - Start address to flush
- *   len  - Number of bytes to flush
- *
- * Returned Value:
- *   True if the architecture supports this ELF file.
- *
- ****************************************************************************/
-
-#ifdef CONFIG_ELF_ICACHE
-bool arch_flushicache(FAR void *addr, size_t len);
-#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

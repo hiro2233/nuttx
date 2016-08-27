@@ -34,8 +34,8 @@
  *
  ************************************************************************************/
 
-#ifndef __EZ80_UP_MEM_H
-#define __EZ80_UP_MEM_H
+#ifndef __ARCH_Z80_SRC_EZ80_UP_MEM_H
+#define __ARCH_Z80_SRC_EZ80_UP_MEM_H
 
 /************************************************************************************
  * Included Files
@@ -44,7 +44,7 @@
 #include <stdint.h>
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* For the ZiLOG ZDS-II toolchain(s), the heap will be set using linker-
@@ -74,7 +74,8 @@
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -85,4 +86,4 @@ extern "C" {
 #endif
 #endif
 
-#endif  /* __EZ80_UP_MEM_H */
+#endif  /* __ARCH_Z80_SRC_EZ80_UP_MEM_H */

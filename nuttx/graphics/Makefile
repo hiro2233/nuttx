@@ -1,7 +1,7 @@
 ############################################################################
 # graphics/Makefile
 #
-#   Copyright (C) 2008-2009, 2011-2012 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2008-2009, 2011-2012, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -35,54 +35,32 @@
 
 -include $(TOPDIR)/Make.defs
 
-DEPPATH		= --dep-path .
+DEPPATH = --dep-path .
 
 ifeq ($(WINTOOL),y)
-INCDIROPT	= -w
+INCDIROPT = -w
 endif
+
+ASRCS =
+CSRCS =
+VPATH =
 
 include nxglib/Make.defs
-DEPPATH		+= --dep-path nxglib
-CFLAGS		+= ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)/graphics/nxglib}
-
 include nxbe/Make.defs
-DEPPATH		+= --dep-path nxbe
-CFLAGS		+= ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)/graphics/nxbe}
-
-ifeq ($(CONFIG_NX_MULTIUSER),y)
 include nxmu/Make.defs
-DEPPATH		+= --dep-path nxmu
-CFLAGS		+= ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)/graphics/nxmu}
-else
 include nxsu/Make.defs
-DEPPATH		+= --dep-path nxsu
-CFLAGS		+= ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)/graphics/nxsu}
-endif
+include nxterm/Make.defs
+include vnc/Make.defs
 
-ifeq ($(CONFIG_NXCONSOLE),y)
-include nxconsole/Make.defs
-DEPPATH		+= --dep-path nxconsole
-CFLAGS		+= ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)/graphics/nxconsole}
-endif
+AOBJS = $(ASRCS:.S=$(OBJEXT))
+COBJS = $(CSRCS:.c=$(OBJEXT))
 
-ASRCS		= $(NXGLIB_ASRCS) $(NXBE_ASRCS) $(NX_ASRCS) $(NXTK_ASRCS) $(NXCON_ASRCS)
-AOBJS		= $(ASRCS:.S=$(OBJEXT))
+SRCS = $(ASRCS) $(CSRCS)
+OBJS = $(AOBJS) $(COBJS)
 
-CSRCS		= $(NXGLIB_CSRCS) $(NXBE_CSRCS) $(NX_CSRCS) $(NXTK_CSRCS) $(NXCON_CSRCS)
-COBJS		= $(CSRCS:.c=$(OBJEXT))
+BIN = libgraphics$(LIBEXT)
 
-SRCS		= $(ASRCS) $(CSRCS)
-OBJS		= $(AOBJS) $(COBJS)
-
-BIN		= libgraphics$(LIBEXT)
-
-ifeq ($(CONFIG_NX_MULTIUSER),y)
-VPATH		= nxglib:nxbe:nxmu:nxconsole
-else
-VPATH		= nxglib:nxbe:nxsu:nxconsole
-endif
-
-all:	mklibgraphics
+all: mklibgraphics
 .PHONY : context depend clean distclean mklibgraphics gensources gen1bppsources \
 	 gen2bppsource gen4bppsource gen8bppsource gen16bppsource gen24bppsource \
 	 gen32bppsources

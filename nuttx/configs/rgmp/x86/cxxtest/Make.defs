@@ -50,12 +50,12 @@ else
   ARCHOPTIMIZATION	= -O2
 endif
 
-#ARCHCXXFLAGS   = -fno-builtin -fno-exceptions -fno-rtti
+#ARCHCXXFLAGS   = -fno-builtin -fno-exceptions -fcheck-new -fno-rtti
 ARCHCXXFLAGS    = -fno-builtin
 ARCHCPUFLAGS    = -fno-builtin -nostdinc -fno-stack-protector
 ARCHPICFLAGS    = -fpic
-ARCHWARNINGS    = -Wall -Wstrict-prototypes -Wshadow
-ARCHWARNINGSXX  = -Wall -Wshadow
+ARCHWARNINGS    = -Wall -Wstrict-prototypes -Wshadow -Wundef
+ARCHWARNINGSXX  = -Wall -Wshadow -Wundef
 ARCHDEFINES	    = -D__RGMP_KERNEL__ -D__RTOS_KERNEL__ -D__SHARE_KERNEL__
 ARCHINCLUDES    = -I. -isystem $(TOPDIR)/include -I$(RGMPINCDIR) \
                   -I$(TOPDIR)/configs/rgmp/include -I$(TOPDIR)/arch/rgmp/include/x86
@@ -84,6 +84,7 @@ CXXFLAGS    = $(ARCHCXXFLAGS) $(ARCHWARNINGSXX) $(ARCHOPTIMIZATION) $(ARCHCPUFLA
 CXXPICFLAGS = $(ARCHPICFLAGS) $(CXXFLAGS)
 AFLAGS		= $(CFLAGS) -D__ASSEMBLY__
 
+ASMEXT			= .S
 OBJEXT			= .o
 LIBEXT			= .a
 
@@ -97,7 +98,7 @@ LDFLAGS         += -nostdlib
 EXTRA_LIBS		= $(shell $(CC) -print-file-name=libsupc++.a) \
                   $(shell $(CC) -print-file-name=libgcc_eh.a)
 
-MKDEP			= $(TOPDIR)/tools/mkdeps.sh
+MKDEP			= $(TOPDIR)/tools/mkdeps$(HOSTEXEEXT)
 
 HOSTCC			= gcc
 HOSTINCLUDES	= -I.

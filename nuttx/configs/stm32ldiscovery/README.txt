@@ -243,12 +243,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   The CodeSourcery Toolchain (2009q1)
   -----------------------------------
   The CodeSourcery toolchain (2009q1) does not work with default optimization
@@ -336,7 +330,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -396,8 +390,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -487,7 +481,7 @@ Serial Console
     drive an external RS-232 transceiver.
 
   - The crystal X3 is not installed on the STM32L3-Discovery.  As a result,
-    the HSE clock is not availabled and the less acurate HSI must be used.
+    the HSE clock is not available and the less accurate HSI must be used.
     This may limit the accuracy of the computed baud, especially at higher
     BAUD.  The HSI is supposedly calibrated in the factory to within 1% at
     room temperatures so perhaps this not a issue.
@@ -608,7 +602,7 @@ STM32L-Discovery-specific Configuration Options
 
     CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
        cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
+       serves no purpose other than it allows you to calibrate
        CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
        the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
        the delay actually is 100 seconds.
@@ -713,7 +707,7 @@ STM32L-Discovery-specific Configuration Options
     CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2 is defined.
     CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
     CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
-    CONFIG_CAN_REGDEBUG - If CONFIG_DEBUG is set, this will generate an
+    CONFIG_STM32_CAN_REGDEBUG - If CONFIG_DEBUG_FEATURES is set, this will generate an
       dump of all CAN registers.
 
   STM32L-Discovery SPI Configuration
@@ -746,7 +740,7 @@ Configurations
   change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -792,7 +786,7 @@ Configuration sub-directories
          CONFIG_STM32_LCD=y                      : Enable the Segment LCD
 
        When the LCD is enabled and the LEDs are disabled, the USART1
-       serial console will automaticall move to PB6 and PB7 (you will get
+       serial console will automatically move to PB6 and PB7 (you will get
        a compilation error if you forget to disable the LEDs).
 
        SIGNAL FUNCTION   LED        CONNECTION
@@ -819,8 +813,8 @@ Configuration sub-directories
          CONFIG_LCD=y                            : (Needed to enable LCD debug)
 
        Build Setup -> Debug Options:
-         CONFIG_DEBUG=y                          : Enable debug features
-         CONFIG_DEBUG_VERBOSE=y                  : Enable LCD debug
+         CONFIG_DEBUG_FEATURES=y                 : Enable debug features
+         CONFIG_DEBUG_INFO=y                     : Enable LCD debug
 
        NOTE:  At this point in time, testing of the SLCD is very limited because
        there is not much in apps/examples/slcd.  Certainly there are more bugs

@@ -48,7 +48,7 @@
 #include "tiva_gpio.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* How many SSI modules does this chip support? The LM3S6965 supports 1 SSI
@@ -57,13 +57,10 @@
  */
 
 #if TIVA_NSSI < 1
-#  undef CONFIG_SSI0_DISABLE
-#  define CONFIG_SSI0_DISABLE 1
-#  undef CONFIG_SSI1_DISABLE
-#  define CONFIG_SSI1_DISABLE 1
+#  undef CONFIG_TIVA_SSI0
+#  undef CONFIG_TIVA_SSI1
 #elif TIVA_NSSI < 2
-#  undef CONFIG_SSI1_DISABLE
-#  define CONFIG_SSI1_DISABLE 1
+#  undef CONFIG_TIVA_SSI1
 #endif
 
 /* LM4F LaunchPad *******************************************************************/
@@ -130,17 +127,17 @@
 #ifndef __ASSEMBLY__
 
 /************************************************************************************
- * Name: lm4f_ssiinitialize
+ * Name: lm4f_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the LM4F LaunchPad.
  *
  ************************************************************************************/
 
-void weak_function lm4f_ssiinitialize(void);
+void weak_function lm4f_spidev_initialize(void);
 
 /****************************************************************************
- * Name: lm4f_ledinit
+ * Name: lm4f_led_initialize
  *
  * Description:
  *   Called to initialize the on-board LEDs.
@@ -148,7 +145,7 @@ void weak_function lm4f_ssiinitialize(void);
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void lm4f_ledinit(void);
+void lm4f_led_initialize(void);
 #endif
 
 #endif /* __ASSEMBLY__ */

@@ -1,8 +1,7 @@
 /************************************************************************************
  * configs/stm3210e-eval/include/board.h
- * include/arch/board/board.h
  *
- *   Copyright (C) 2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,7 +49,7 @@
 #include "stm32.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
@@ -94,14 +93,14 @@
 #define STM32_RCC_CFGR_PPRE1    RCC_CFGR_PPRE1_HCLKd2
 #define STM32_PCLK1_FREQUENCY   (STM32_HCLK_FREQUENCY/2)
 
-/* APB1 timers 2-4 will be twice PCLK1 (I presume the remaining will receive PCLK1) */
+/* APB1 timers 2-7 will be twice PCLK1 */
 
 #define STM32_APB1_TIM2_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 #define STM32_APB1_TIM3_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 #define STM32_APB1_TIM4_CLKIN   (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM5_CLKIN   (STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM6_CLKIN   (STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM7_CLKIN   (STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM5_CLKIN   (2*STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM6_CLKIN   (2*STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM7_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 
 /* USB divider -- Divide PLL clock by 1.5 */
 
@@ -111,8 +110,14 @@
  * otherwise frequency is 2xAPBx.
  * Note: TIM1,8 are on APB2, others on APB1 */
 
-#define STM32_TIM18_FREQUENCY   STM32_HCLK_FREQUENCY
-#define STM32_TIM27_FREQUENCY   STM32_HCLK_FREQUENCY
+#define BOARD_TIM1_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM2_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM3_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM4_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM5_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM6_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM7_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM8_FREQUENCY    STM32_HCLK_FREQUENCY
 
 /* SDIO dividers.  Note that slower clocking is required when DMA is disabled
  * in order to avoid RX overrun/TX underrun errors due to delayed responses
@@ -167,41 +172,51 @@
 
 /* The STM3210E-EVAL supports several buttons
  *
- * Reset           -- Connected to NRST
- * Wakeup          -- Connected to PA.0
- * Tamper          -- Connected to PC.13
- * Key             -- Connected to PG.8
+ *  Reset           -- Connected to NRST
+ *   Wakeup          -- Connected to PA.0
+ *   Tamper          -- Connected to PC.13
+ *   Key             -- Connected to PG.8
  *
  * And a Joystick
  *
- * Joystick center -- Connected to PG.7
- * Joystick down   -- Connected to PD.3
- * Joystick left   -- Connected to PG.14
- * Joystick right  -- Connected to PG.13
- * Joystick up     -- Connected to PG.15
+ *   Joystick center -- Connected to PG.7
+ *   Joystick down   -- Connected to PD.3
+ *   Joystick left   -- Connected to PG.14
+ *   Joystick right  -- Connected to PG.13
+ *   Joystick up     -- Connected to PG.15
+ *
+ * The Joystick is treated like the other buttons unless CONFIG_DJOYSTICK
+ * is defined, then it is assumed that they should be used by the discrete
+ * joystick driver.
  */
 
-#define BUTTON_WAKEUP      0
-#define BUTTON_TAMPER      1
-#define BUTTON_KEY         2
+#define BUTTON_WAKEUP        0
+#define BUTTON_TAMPER        1
+#define BUTTON_KEY           2
 
-#define JOYSTICK_SEL       3
-#define JOYSTICK_DOWN      4
-#define JOYSTICK_LEFT      5
-#define JOYSTICK_RIGHT     6
-#define JOYSTICK_UP        7
+#ifdef CONFIG_DJOYSTICK
+#  define NUM_BUTTONS        3
+#else
+#  define JOYSTICK_SEL       3
+#  define JOYSTICK_DOWN      4
+#  define JOYSTICK_LEFT      5
+#  define JOYSTICK_RIGHT     6
+#  define JOYSTICK_UP        7
 
-#define NUM_BUTTONS        8
+#  define NUM_BUTTONS        8
+#endif
 
-#define BUTTON_WAKEUP_BIT  (1 << BUTTON_WAKEUP)
-#define BUTTON_TAMPER_BIT  (1 << BUTTON_TAMPER)
-#define BUTTON_KEY_BIT     (1 << BUTTON_KEY)
+#define BUTTON_WAKEUP_BIT    (1 << BUTTON_WAKEUP)
+#define BUTTON_TAMPER_BIT    (1 << BUTTON_TAMPER)
+#define BUTTON_KEY_BIT       (1 << BUTTON_KEY)
 
-#define JOYSTICK_SEL_BIT   (1 << JOYSTICK_SEL)
-#define JOYSTICK_DOWN_BIT  (1 << JOYSTICK_DOWN)
-#define JOYSTICK_LEFT_BIT  (1 << JOYSTICK_LEFT)
-#define JOYSTICK_RIGHT_BIT (1 << JOYSTICK_RIGHT)
-#define JOYSTICK_UP_BIT    (1 << JOYSTICK_UP)
+#ifdef CONFIG_DJOYSTICK
+#  define JOYSTICK_SEL_BIT   (1 << JOYSTICK_SEL)
+#  define JOYSTICK_DOWN_BIT  (1 << JOYSTICK_DOWN)
+#  define JOYSTICK_LEFT_BIT  (1 << JOYSTICK_LEFT)
+#  define JOYSTICK_RIGHT_BIT (1 << JOYSTICK_RIGHT)
+#  define JOYSTICK_UP_BIT    (1 << JOYSTICK_UP)
+#endif
 
 /************************************************************************************
  * Public Data
@@ -212,7 +227,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -225,12 +241,12 @@ extern "C" {
  *
  * Description:
  *   All STM32 architectures must provide the following entry point.  This entry point
- *   is called early in the intitialization -- after all memory has been configured
+ *   is called early in the initialization -- after all memory has been configured
  *   and mapped but before any devices have been initialized.
  *
  ************************************************************************************/
 
-EXTERN void stm32_boardinitialize(void);
+void stm32_boardinitialize(void);
 
 /************************************************************************************
  * Name:  stm3210e_lcdclear
@@ -244,7 +260,7 @@ EXTERN void stm32_boardinitialize(void);
  ************************************************************************************/
 
 #ifdef CONFIG_STM32_FSMC
-EXTERN void stm3210e_lcdclear(uint16_t color);
+void stm3210e_lcdclear(uint16_t color);
 #endif
 
 /************************************************************************************
@@ -262,7 +278,7 @@ EXTERN void stm3210e_lcdclear(uint16_t color);
  ************************************************************************************/
 
 #if defined(CONFIG_I2C) && defined(CONFIG_I2C_LM75) && defined(CONFIG_STM32_I2C1)
-EXTERN int stm32_lm75initialize(FAR const char *devpath);
+int stm32_lm75initialize(FAR const char *devpath);
 #endif
 
 /************************************************************************************
@@ -280,7 +296,7 @@ EXTERN int stm32_lm75initialize(FAR const char *devpath);
  ************************************************************************************/
 
 #if defined(CONFIG_I2C) && defined(CONFIG_I2C_LM75) && defined(CONFIG_STM32_I2C1)
-EXTERN xcpt_t stm32_lm75attach(xcpt_t irqhandler);
+xcpt_t stm32_lm75attach(xcpt_t irqhandler);
 #endif
 
 #undef EXTERN

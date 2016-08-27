@@ -48,10 +48,10 @@
 
 #include "nxfe.h"
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -172,7 +172,7 @@ int nx_mousein(NXHANDLE handle, nxgl_coord_t x, nxgl_coord_t y, uint8_t buttons)
       y = g_mrange.y - 1;
     }
 
- /* Look any change in values */
+  /* Look any change in values */
 
   if (x != g_mpos.x || y != g_mpos.y || buttons != g_mbutton)
     {
@@ -215,4 +215,4 @@ int nx_mousein(NXHANDLE handle, nxgl_coord_t x, nxgl_coord_t y, uint8_t buttons)
   return OK;
 }
 
-#endif /* CONFIG_NX_MOUSE */
+#endif /* CONFIG_NX_XYINPUT */

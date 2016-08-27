@@ -2,7 +2,7 @@
  * apps/netutitls/smtp/smtp.c
  * smtp SMTP E-mail sender
  *
- *   Copyright (C) 2007, 2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Heavily leveraged from uIP 1.0 which also has a BSD-like license:
@@ -48,6 +48,7 @@
 
 #include <nuttx/config.h>
 
+#include <sys/socket.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -55,13 +56,14 @@
 #include <unistd.h>
 #include <string.h>
 #include <semaphore.h>
-#include <sys/socket.h>
 
-#include <nuttx/net/uip/uip.h>
-#include <apps/netutils/smtp.h>
+#include <arpa/inet.h>
+
+#include <nuttx/net/ip.h>
+#include "netutils/smtp.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define SMTP_INPUT_BUFFER_SIZE 512
@@ -87,7 +89,7 @@ struct smtp_state
   uint8_t      state;
   bool         connected;
   sem_t        sem;
-  uip_ipaddr_t smtpserver;
+  in_addr_t    smtpserver;
   const char  *localhostname;
   const char  *to;
   const char  *cc;
@@ -283,12 +285,12 @@ static inline int smtp_send_message(int sockfd, struct smtp_state *psmtp)
  *               configured.
  */
 
-void smtp_configure(void *handle, const char *lhostname,
-                    const uip_ipaddr_t *paddr)
+void smtp_configure(FAR void *handle, FAR const char *lhostname,
+                    FAR const in_addr_t *paddr)
 {
-  struct smtp_state *psmtp = (struct smtp_state *)handle;
+  FAR struct smtp_state *psmtp = (FAR struct smtp_state *)handle;
   psmtp->localhostname = lhostname;
-  uip_ipaddr_copy(psmtp->smtpserver, paddr);
+  net_ipv4addr_copy(psmtp->smtpserver, paddr);
 }
 
 /* Send an e-mail.
@@ -362,6 +364,7 @@ void *smtp_open(void)
       memset(psmtp, 0, sizeof(struct smtp_state));
      (void)sem_init(&psmtp->sem, 0, 0);
     }
+
   return (void*)psmtp;
 }
 

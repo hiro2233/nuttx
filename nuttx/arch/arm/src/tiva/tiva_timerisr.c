@@ -46,7 +46,7 @@
 #include <arch/board/board.h>
 
 #include "nvic.h"
-#include "clock_internal.h"
+#include "clock/clock.h"
 #include "up_internal.h"
 #include "up_arch.h"
 
@@ -84,7 +84,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -98,14 +98,14 @@
 
 int up_timerisr(int irq, uint32_t *regs)
 {
-   /* Process timer interrupt */
+  /* Process timer interrupt */
 
-   sched_process_timer();
-   return 0;
+  sched_process_timer();
+  return 0;
 }
 
 /****************************************************************************
- * Function:  up_timerinit
+ * Function:  up_timer_initialize
  *
  * Description:
  *   This function is called during start-up to initialize
@@ -113,7 +113,7 @@ int up_timerisr(int irq, uint32_t *regs)
  *
  ****************************************************************************/
 
-void up_timerinit(void)
+void up_timer_initialize(void)
 {
   uint32_t regval;
 
@@ -134,7 +134,8 @@ void up_timerinit(void)
 
   /* Enable SysTick interrupts */
 
-  putreg32((NVIC_SYSTICK_CTRL_CLKSOURCE|NVIC_SYSTICK_CTRL_TICKINT|NVIC_SYSTICK_CTRL_ENABLE), NVIC_SYSTICK_CTRL);
+  putreg32((NVIC_SYSTICK_CTRL_CLKSOURCE | NVIC_SYSTICK_CTRL_TICKINT |
+            NVIC_SYSTICK_CTRL_ENABLE), NVIC_SYSTICK_CTRL);
 
   /* And enable the timer interrupt */
 

@@ -80,7 +80,7 @@ static const char *g_boarddir      = NULL;  /* Name of board subdirectory */
 static char       *g_configdir     = NULL;  /* Name of configuration subdirectory */
 
 static char       *g_topdir        = NULL;  /* Full path to top-level NuttX build directory */
-static char       *g_apppath       = NULL;  /* Full path to the applicatino directory */
+static char       *g_apppath       = NULL;  /* Full path to the application directory */
 static char       *g_configtop     = NULL;  /* Full path to the top-level configuration directory */
 static char       *g_configpath    = NULL;  /* Full path to the configuration sub-directory */
 static char       *g_verstring     = "0.0"; /* Version String */
@@ -178,13 +178,13 @@ static void parse_args(int argc, char **argv)
             break;
 
           case 'w' :
-             g_delim = '/';
-             g_winpaths = true;
+             g_delim = '\\';
+             g_winpaths = false;
              break;
 
           case 'l' :
-             g_delim = '\\';
-             g_winpaths = false;
+             g_delim = '/';
+             g_winpaths = true;
              break;
 
           case 'h' :
@@ -588,8 +588,7 @@ static void check_appdir(void)
     }
   else
     {
-      snprintf(g_buffer, BUFFER_SIZE, "%s%c%s", g_topdir, g_delim, g_appdir);
-      if (!verify_appdir(g_buffer))
+      if (!verify_appdir(g_appdir))
         {
           fprintf(stderr, "ERROR: Command line path to application directory does not exist\n");
           exit(EXIT_FAILURE);

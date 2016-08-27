@@ -35,76 +35,27 @@
 
 -include $(TOPDIR)/Make.defs
 
-CFLAGS += -I$(TOPDIR)/sched
-
 ASRCS =
-AOBJS = $(ASRCS:.S=$(OBJEXT))
-
-CSRCS = up_boot.c up_leds.c up_buttons.c up_spi.c up_usbdev.c
-
-ifeq ($(CONFIG_HAVE_CXXINITIALIZE),y)
-CSRCS += up_cxxinitialize.c
-endif
+CSRCS = sam_boot.c sam_leds.c sam_buttons.c sam_spi.c sam_usbdev.c
 
 ifeq ($(CONFIG_LCD),y)
-CSRCS += up_lcd.c
+CSRCS += sam_lcd.c
 endif
 
-ifeq ($(CONFIG_NSH_ARCHINIT),y)
-CSRCS += up_nsh.c
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+CSRCS += sam_appinit.c
 endif
 
 ifeq ($(CONFIG_SAM34_HSMCI),y)
-CSRCS += up_mmcsd.c
+CSRCS += sam_mmcsd.c
 endif
 
 ifeq ($(CONFIG_USBMSC),y)
-CSRCS += up_usbmsc.c
+CSRCS += sam_usbmsc.c
 endif
 
 ifeq ($(CONFIG_INPUT_ADS7843E),y)
-CSRCS += up_touchscreen.c
+CSRCS += sam_touchscreen.c
 endif
 
-COBJS = $(CSRCS:.c=$(OBJEXT))
-
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-ARCH_SRCDIR = $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(WINTOOL),y)
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}"
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/common}"
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/armv7-m}"
-else
-  CFLAGS += -I$(ARCH_SRCDIR)/chip
-  CFLAGS += -I$(ARCH_SRCDIR)/common
-  CFLAGS += -I$(ARCH_SRCDIR)/armv7-m
-endif
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

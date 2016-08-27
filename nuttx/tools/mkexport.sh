@@ -1,7 +1,7 @@
 #!/bin/bash
 # tools/mkexport.sh
 #
-#   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2011-2012, 2014, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -32,28 +32,22 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 
-# TODO:
-# 1. This script assumes the host archiver ar may not be appropriate for
-#    non-GCC toolchains
-# 2. For the kernel build, the user libriars should be built into some
-#    libuser.a.  The list of user libraries would have to accepted with
-#    some new argument, perhaps -u.
-
 # Get the input parameter list
 
-USAGE="USAGE: $0 [-d] [-z] [-w|wy|wn] -t <top-dir> [-x <lib-ext>] -l \"lib1 [lib2 [lib3 ...]]\""
+USAGE="USAGE: $0 [-d] [-z] [-u] [-w|wy|wn] -t <top-dir> [-x <lib-ext>] -l \"lib1 [lib2 [lib3 ...]]\""
 unset TOPDIR
 unset LIBLIST
 unset TGZ
+USRONLY=n
 WINTOOL=n
 LIBEXT=.a
 
 while [ ! -z "$1" ]; do
 	case $1 in
- 		-d )
+		-d )
 			set -x
 			;;
- 		-l )
+		-l )
 			shift
 			LIBLIST=$1
 			;;
@@ -67,11 +61,14 @@ while [ ! -z "$1" ]; do
 			shift
 			TOPDIR=$1
 			;;
- 		-x )
+		-u )
+			USRONLY=y
+			;;
+		-x )
 			shift
 			LIBEXT=$1
 			;;
- 		-z )
+		-z )
 			TGZ=y
 			;;
 		-h )
@@ -100,12 +97,31 @@ if [ ! -d "${TOPDIR}" ]; then
 	exit 1
 fi
 
-# Get the version string
+# Check configuration
+# Verify that we have Make.defs, .config, and .version files.
+
+if [ ! -f "${TOPDIR}/Make.defs" ]; then
+	echo "MK: Directory ${TOPDIR}/Make.defs does not exist"
+	exit 1
+fi
+
+if [ ! -f "${TOPDIR}/.config" ]; then
+	echo "MK: Directory ${TOPDIR}/.config does not exist"
+	exit 1
+fi
 
 if [ ! -f "${TOPDIR}/.version" ]; then
 	echo "MK: File ${TOPDIR}/.version does not exist"
 	exit 1
 fi
+
+# Check if the make environment variable has been defined
+
+if [ -z "${MAKE}" ]; then
+	MAKE=`which make`
+fi
+
+# Get the version string
 
 source "${TOPDIR}/.version"
 if [ ! -z "${CONFIG_VERSION_STRING}" -a "${CONFIG_VERSION_STRING}" != "0.0" ]; then
@@ -136,14 +152,15 @@ mkdir "${EXPORTDIR}" || { echo "MK: 'mkdir ${EXPORTDIR}' failed"; exit 1; }
 mkdir "${EXPORTDIR}/startup" || { echo "MK: 'mkdir ${EXPORTDIR}/startup' failed"; exit 1; }
 mkdir "${EXPORTDIR}/libs" || { echo "MK: 'mkdir ${EXPORTDIR}/libs' failed"; exit 1; }
 mkdir "${EXPORTDIR}/build" || { echo "MK: 'mkdir ${EXPORTDIR}/build' failed"; exit 1; }
-mkdir "${EXPORTDIR}/arch" || { echo "MK: 'mkdir ${EXPORTDIR}/arch' failed"; exit 1; }
 
-# Verify that we have a Make.defs file.
-
-if [ ! -f "${TOPDIR}/Make.defs" ]; then
-	echo "MK: Directory ${TOPDIR}/Make.defs does not exist"
-	exit 1
+if [ "X${USRONLY}" != "Xy" ]; then
+  mkdir "${EXPORTDIR}/arch" || { echo "MK: 'mkdir ${EXPORTDIR}/arch' failed"; exit 1; }
 fi
+
+# Copy the .config file
+
+cp -a "${TOPDIR}/.config" "${EXPORTDIR}/.config" ||
+  { echo "MK: Failed to copy ${TOPDIR}/.config to ${EXPORTDIR}/.config"; exit 1; }
 
 # Copy the Make.defs files, but disable windows path conversions
 
@@ -151,7 +168,7 @@ grep -v "WINTOOL[ \t]*=[ \t]y" "${TOPDIR}/Make.defs"  > "${EXPORTDIR}/Make.defs"
 
 # Extract information from the Make.defs file.  A Makefile can do this best
 
-make -C "${TOPDIR}/tools" -f Makefile.export TOPDIR="${TOPDIR}" EXPORTDIR="${EXPORTDIR}"
+${MAKE} -C "${TOPDIR}/tools" -f Makefile.export TOPDIR="${TOPDIR}" EXPORTDIR="${EXPORTDIR}"
 source "${EXPORTDIR}/makeinfo.sh"
 rm -f "${EXPORTDIR}/makeinfo.sh"
 rm -f "${EXPORTDIR}/Make.defs"
@@ -165,25 +182,58 @@ fi
 
 # Is there a linker script in this configuration?
 
-if [ ! -z "${LDPATH}" ]; then
+if [ "X${USRONLY}" != "Xy" ]; then
+	if [ ! -z "${LDPATH}" ]; then
 
-	# Apparently so.  Verify that the script exists
+		# Apparently so.  Verify that the script exists
 
-	if [ ! -f "${LDPATH}" ]; then
-		echo "MK: File ${LDPATH} does not exist"
-		exit 1
+		if [ ! -f "${LDPATH}" ]; then
+			echo "MK: File ${LDPATH} does not exist"
+			exit 1
+		fi
+
+		# Copy the linker script
+
+		cp -p "${LDPATH}" "${EXPORTDIR}/build/." || \
+			{ echo "MK: cp ${LDPATH} failed"; exit 1; }
 	fi
-
-	# Copy the linker script
-
-	cp -p "${LDPATH}" "${EXPORTDIR}/build/." || \
-		{ echo "MK: cp ${LDPATH} failed"; exit 1; }
 fi
 
 # Save the compilation options
 
-echo "ARCHCFLAGS = ${ARCHCFLAGS}" >"${EXPORTDIR}/build/Make.defs"
-echo "ARCHCXXFLAGS = ${ARCHCXXFLAGS}" >>"${EXPORTDIR}/build/Make.defs"
+if [ "X${USRONLY}" == "Xy" ]; then
+	echo "ARCHCFLAGS       = ${ARCHCFLAGS}" >"${EXPORTDIR}/build/Make.defs"
+	echo "ARCHCXXFLAGS     = ${ARCHCXXFLAGS}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "ARCHPICFLAGS     = ${ARCHPICFLAGS}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "ARCHWARNINGS     = ${ARCHWARNINGS}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "ARCHWARNINGSXX   = ${ARCHWARNINGSXX}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "ARCHOPTIMIZATION = ${ARCHOPTIMIZATION}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "WINTOOL          = ${WINTOOL}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "CROSSDEV         = ${CROSSDEV}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "CC               = ${CC}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "CXX              = ${CXX}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "CPP              = ${CPP}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "LD               = ${LD}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "AR               = ${AR}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "NM               = ${NM}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "OBJCOPY          = ${OBJCOPY}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "OBJDUMP          = ${OBJDUMP}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "NXFLATLDFLAGS1   = ${NXFLATLDFLAGS1}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "NXFLATLDFLAGS2   = ${NXFLATLDFLAGS2}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "OBJEXT           = ${OBJEXT}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "LIBEXT           = ${LIBEXT}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "EXEEXT           = ${EXEEXT}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "HOSTCC           = ${HOSTCC}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "HOSTCFLAGS       = ${HOSTCFLAGS}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "HOSTLDFLAGS      = ${HOSTLDFLAGS}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "HOSTEXEEXT       = ${HOSTEXEEXT}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "DIRLINK          = ${DIRLINK}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "DIRUNLINK        = ${DIRUNLINK}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "MKDEP            = ${MKDEP}" >>"${EXPORTDIR}/build/Make.defs"
+else
+	echo "ARCHCFLAGS   = ${ARCHCFLAGS}" >"${EXPORTDIR}/build/Make.defs"
+	echo "ARCHCXXFLAGS = ${ARCHCXXFLAGS}" >>"${EXPORTDIR}/build/Make.defs"
+fi
 
 # Copy the NuttX include directory (retaining attributes and following symbolic links)
 
@@ -192,7 +242,7 @@ cp -LR -p "${TOPDIR}/include" "${EXPORTDIR}/." || \
 
 # Copy the startup object file(s)
 
-make -C ${ARCHDIR} export_head TOPDIR=${TOPDIR} EXPORT_DIR="${EXPORTDIR}"
+${MAKE} -C ${ARCHDIR} export_startup TOPDIR=${TOPDIR} EXPORT_DIR="${EXPORTDIR}"
 
 # Copy architecture-specific header files into the arch export sub-directory.
 # This is tricky because each architecture does things in a little different
@@ -209,50 +259,59 @@ cp -f "${ARCHDIR}"/*.h "${EXPORTDIR}"/arch/. 2>/dev/null
 # as symbolic links to directories, then copy the header files from
 # those directories into the EXPORTDIR
 
-ARCH_HDRDIRS="arm armv7-m avr avr32 board common chip mips32"
-for hdir in $ARCH_HDRDIRS; do
+if [ "X${USRONLY}" != "Xy" ]; then
+	ARCH_HDRDIRS="arm armv7-m avr avr32 board common chip mips32"
+	for hdir in $ARCH_HDRDIRS; do
 
-	# Does the directory (or symbolic link) exist?
+		# Does the directory (or symbolic link) exist?
 
-	if [ -d "${ARCHDIR}/${hdir}" -o -h "${ARCHDIR}/${hdir}" ]; then
-
-		# Yes.. create a export sub-directory of the same name
-
-		mkdir "${EXPORTDIR}/arch/${hdir}" || \
-			{ echo "MK: 'mkdir ${EXPORTDIR}/arch/${hdir}' failed"; exit 1; }
-
-		# Then copy the header files (only) into the new directory
-
-		cp -f "${ARCHDIR}"/${hdir}/*.h "${EXPORTDIR}"/arch/${hdir}/. 2>/dev/null
-
-		# One architecture has low directory called "chip" that holds the
-		# header files
-
-		if [ -d "${ARCHDIR}/${hdir}/chip" ]; then
+		if [ -d "${ARCHDIR}/${hdir}" -o -h "${ARCHDIR}/${hdir}" ]; then
 
 			# Yes.. create a export sub-directory of the same name
 
-			mkdir "${EXPORTDIR}/arch/${hdir}/chip" || \
-				{ echo "MK: 'mkdir ${EXPORTDIR}/arch/${hdir}/chip' failed"; exit 1; }
+			mkdir "${EXPORTDIR}/arch/${hdir}" || \
+				{ echo "MK: 'mkdir ${EXPORTDIR}/arch/${hdir}' failed"; exit 1; }
 
 			# Then copy the header files (only) into the new directory
 
-			cp -f "${ARCHDIR}"/${hdir}/chip/*.h "${EXPORTDIR}"/arch/${hdir}/chip/. 2>/dev/null
+			cp -f "${ARCHDIR}"/${hdir}/*.h "${EXPORTDIR}"/arch/${hdir}/. 2>/dev/null
+
+			# One architecture has low directory called "chip" that holds the
+			# header files
+
+			if [ -d "${ARCHDIR}/${hdir}/chip" ]; then
+
+				# Yes.. create a export sub-directory of the same name
+
+				mkdir "${EXPORTDIR}/arch/${hdir}/chip" || \
+					{ echo "MK: 'mkdir ${EXPORTDIR}/arch/${hdir}/chip' failed"; exit 1; }
+
+				# Then copy the header files (only) into the new directory
+
+				cp -f "${ARCHDIR}"/${hdir}/chip/*.h "${EXPORTDIR}"/arch/${hdir}/chip/. 2>/dev/null
+			fi
 		fi
+	done
+
+	# Copy OS internal header files as well.  They are used by some architecture-
+	# specific header files.
+
+	mkdir "${EXPORTDIR}/arch/os" || \
+		{ echo "MK: 'mkdir ${EXPORTDIR}/arch/os' failed"; exit 1; }
+
+	OSDIRS="clock environ errno group init irq mqueue paging pthread sched semaphore signal task timer wdog"
+
+	for dir in ${OSDIRS}; do
+		mkdir "${EXPORTDIR}/arch/os/${dir}" || \
+			{ echo "MK: 'mkdir ${EXPORTDIR}/arch/os/${dir}' failed"; exit 1; }
+		cp -f "${TOPDIR}"/sched/${dir}/*.h "${EXPORTDIR}"/arch/os/${dir}/. 2>/dev/null
+	done
+
+	# Add the board library to the list of libraries
+
+	if [ -f "${ARCHDIR}/board/libboard${LIBEXT}" ]; then
+		LIBLIST="${LIBLIST} ${ARCHSUBDIR}/board/libboard${LIBEXT}"
 	fi
-done
-
-# Copy OS internal header files as well.  They are used by some architecture-
-# specific header files.
-
-mkdir "${EXPORTDIR}/arch/os" || \
-	{ echo "MK: 'mkdir ${EXPORTDIR}/arch/${hdir}/chip' failed"; exit 1; }
-cp -f "${TOPDIR}"/sched/*.h "${EXPORTDIR}"/arch/os/. 2>/dev/null
-
-# Add the board library to the list of libraries
-
-if [ -f "${ARCHDIR}/board/libboard${LIBEXT}" ]; then
-	LIBLIST="${LIBLIST} ${ARCHSUBDIR}/board/libboard${LIBEXT}"
 fi
 
 # Then process each library

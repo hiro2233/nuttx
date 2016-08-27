@@ -33,11 +33,9 @@
 #
 ############################################################################
 
-# Don't build anything if there is no NX support for LCD drivers
-
 ifeq ($(CONFIG_NX_LCDDRIVER),y)
 
-# Include LCD drivers
+# Include support for Graphics LCD drivers
 
 ifeq ($(CONFIG_LCD_P14201),y)
   CSRCS += p14201.c
@@ -56,11 +54,23 @@ ifeq ($(CONFIG_LCD_UG9664HSWAG01),y)
 endif
 
 ifeq ($(CONFIG_LCD_SSD1306),y)
-  CSRCS += ssd1306.c
+  CSRCS += ssd1306_base.c
+endif
+
+ifeq ($(CONFIG_LCD_SSD1306_SPI),y)
+  CSRCS += ssd1306_spi.c
+endif
+
+ifeq ($(CONFIG_LCD_SSD1306_I2C),y)
+  CSRCS += ssd1306_i2c.c
 endif
 
 ifeq ($(CONFIG_LCD_SSD1289),y)
   CSRCS += ssd1289.c
+endif
+
+ifeq ($(CONFIG_LCD_SSD1351),y)
+  CSRCS += ssd1351.c
 endif
 
 ifeq ($(CONFIG_LCD_MIO283QT2),y)
@@ -71,6 +81,10 @@ ifeq ($(CONFIG_LCD_MIO283QT9A),y)
   CSRCS += mio283qt9a.c
 endif
 
+ifeq ($(CONFIG_LCD_ST7565),y)
+  CSRCS += st7565.c
+endif
+
 ifeq ($(CONFIG_LCD_ST7567),y)
   CSRCS += st7567.c
 endif
@@ -79,10 +93,32 @@ ifeq ($(CONFIG_LCD_SHARP_MEMLCD),y)
   CSRCS += memlcd.c
 endif
 
-# Include LCD driver build support
-
-DEPPATH += --dep-path lcd
-VPATH += :lcd
-CFLAGS += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)$(DELIM)drivers$(DELIM)lcd}
+ifeq ($(CONFIG_LCD_ILI9341),y)
+  CSRCS += ili9341.c
 endif
 
+ifeq ($(CONFIG_LCD_RA8875),y)
+  CSRCS += ra8875.c
+endif
+endif # CONFIG_NX_LCDDRIVER
+
+ifeq ($(CONFIG_SLCD),y)
+
+# Include support for Alphanumeric/Segment LCD drivers
+
+ifeq ($(CONFIG_LCD_BACKPACK),y)
+  CSRCS += pcf8574_lcd_backpack.c
+endif
+endif # CONFIG_SLCD
+
+# Include LCD driver build support (the nested if-then-else implements an OR)
+
+ifeq ($(CONFIG_NX_LCDDRIVER),y)
+  DEPPATH += --dep-path lcd
+  VPATH += :lcd
+  CFLAGS += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)$(DELIM)drivers$(DELIM)lcd}
+else ifeq ($(CONFIG_SLCD),y)
+  DEPPATH += --dep-path lcd
+  VPATH += :lcd
+  CFLAGS += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)$(DELIM)drivers$(DELIM)lcd}
+endif

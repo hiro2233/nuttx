@@ -1,11 +1,11 @@
 /****************************************************************************
  * arch/arm/src/c5471/c5471_ethernet.c
  *
- *   Copyright (C) 2007, 2009-2010, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009-2010, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Based one a C5471 Linux driver and released under this BSD license with
- * special permisson from the copyright holder of the Linux driver:
+ * special permission from the copyright holder of the Linux driver:
  * Todd Fischer, Cadenux, LLC.  Other references: "TMS320VC547x CPU and
  * Peripherals Reference Guide," TI document spru038.pdf.
  *
@@ -51,16 +51,20 @@
 #include <time.h>
 #include <string.h>
 #include <debug.h>
-#include <wdog.h>
 #include <errno.h>
 
+#include <arpa/inet.h>
+#include <net/ethernet.h>
+
+#include <nuttx/wdog.h>
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
-
-#include <net/ethernet.h>
-#include <nuttx/net/uip/uip.h>
 #include <nuttx/net/arp.h>
-#include <nuttx/net/uip/uip-arch.h>
+#include <nuttx/net/netdev.h>
+
+#ifdef CONFIG_NET_PKT
+#  include <nuttx/net/pkt.h>
+#endif
 
 #include "chip.h"
 #include "up_arch.h"
@@ -108,12 +112,11 @@
 /* Timing values ************************************************************/
 /* TX poll deley = 1 seconds. CLK_TCK=number of clock ticks per second */
 
-#define C5471_WDDELAY   (1*CLK_TCK)
-#define C5471_POLLHSEC  (1*2)
+#define C5471_WDDELAY         (1*CLK_TCK)
 
 /* TX timeout = 1 minute */
 
-#define C5471_TXTIMEOUT (60*CLK_TCK)
+#define C5471_TXTIMEOUT       (60*CLK_TCK)
 
 /* Ethernet GPIO bit settings ***********************************************/
 
@@ -270,7 +273,7 @@
 
 /* This is a helper pointer for accessing the contents of the Ethernet header */
 
-#define BUF ((struct uip_eth_hdr *)c5471->c_dev.d_buf)
+#define BUF ((struct eth_hdr_s *)c5471->c_dev.d_buf)
 
 /****************************************************************************
  * Private Types
@@ -328,9 +331,9 @@ struct c5471_driver_s
   uint32_t c_rxdropped;      /* Packets dropped because of size */
 #endif
 
-  /* This holds the information visible to uIP/NuttX */
+  /* This holds the information visible to the NuttX network */
 
-  struct uip_driver_s c_dev;  /* Interface understood by uIP */
+  struct net_driver_s c_dev;  /* Interface understood by the network */
 };
 
 /****************************************************************************
@@ -359,7 +362,7 @@ static inline void c5471_incrxcpu(struct c5471_driver_s *c5471);
 /* Common TX logic */
 
 static int  c5471_transmit(struct c5471_driver_s *c5471);
-static int  c5471_uiptxpoll(struct uip_driver_s *dev);
+static int  c5471_txpoll(struct net_driver_s *dev);
 
 /* Interrupt handling */
 
@@ -380,12 +383,12 @@ static void c5471_txtimeout(int argc, uint32_t arg, ...);
 
 /* NuttX callback functions */
 
-static int c5471_ifup(struct uip_driver_s *dev);
-static int c5471_ifdown(struct uip_driver_s *dev);
-static int c5471_txavail(struct uip_driver_s *dev);
+static int c5471_ifup(struct net_driver_s *dev);
+static int c5471_ifdown(struct net_driver_s *dev);
+static int c5471_txavail(struct net_driver_s *dev);
 #ifdef CONFIG_NET_IGMP
-static int c5471_addmac(struct uip_driver_s *dev, FAR const uint8_t *mac);
-static int c5471_rmmac(struct uip_driver_s *dev, FAR const uint8_t *mac);
+static int c5471_addmac(struct net_driver_s *dev, FAR const uint8_t *mac);
+static int c5471_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
 
 /* Initialization functions */
@@ -410,11 +413,11 @@ static void c5471_macassign(struct c5471_driver_s *c5471);
 #ifdef CONFIG_C5471_NET_DUMPBUFFER
 static inline void c5471_dumpbuffer(const char *msg, const uint8_t *buffer, unsigned int nbytes)
 {
-  /* CONFIG_DEBUG, CONFIG_DEBUG_VERBOSE, and CONFIG_DEBUG_NET have to be
+  /* CONFIG_DEBUG_FEATURES, CONFIG_DEBUG_INFO, and CONFIG_DEBUG_NET have to be
    * defined or the following does nothing.
    */
 
-  nvdbgdumpbuffer(msg, buffer, nbytes);
+  ninfodumpbuffer(msg, buffer, nbytes);
 }
 #else
 # define c5471_dumpbuffer(msg, buffer,nbytes)
@@ -537,7 +540,7 @@ static int c5471_mdrxbit (void)
 
   /* MDCLK falling edge. */
 
-  putreg32((getreg32(GPIO_IO)&~GPIO_IO_MDCLK), GPIO_IO); /* MDCLK falling edge */
+  putreg32((getreg32(GPIO_IO) & ~GPIO_IO_MDCLK), GPIO_IO); /* MDCLK falling edge */
   if (bit_state)
     {
       return 1;
@@ -734,22 +737,22 @@ static int c5471_phyinit (void)
   phyid = (c5471_mdread(0, MD_PHY_MSB_REG) << 16) | c5471_mdread(0, MD_PHY_LSB_REG);
   if (phyid != LU3X31_T64_PHYID)
     {
-      ndbg("Unrecognized PHY ID: %08x\n", phyid);
+      nerr("ERROR: Unrecognized PHY ID: %08x\n", phyid);
       return ERROR;
     }
 
   /* Next, Set desired network rate, 10BaseT, 100BaseT, or auto. */
 
 #ifdef CONFIG_C5471_AUTONEGOTIATION
-  ndbg("Setting PHY Transceiver for Autonegotiation\n");
+  ninfo("Setting PHY Transceiver for Autonegotiation\n");
   c5471_mdwrite(0, MD_PHY_CONTROL_REG, MODE_AUTONEG);
 #endif
 #ifdef CONFIG_C5471_BASET100
-  ndbg("Setting PHY Transceiver for 100BaseT FullDuplex\n");
+  ninfo("Setting PHY Transceiver for 100BaseT FullDuplex\n");
   c5471_mdwrite(0, MD_PHY_CONTROL_REG, MODE_100MBIT_FULLDUP);
 #endif
 #ifdef CONFIG_C5471_BASET10
-  ndbg("Setting PHY Transceiver for 10BaseT FullDuplex\n");
+  ninfo("Setting PHY Transceiver for 10BaseT FullDuplex\n");
   c5471_mdwrite(0, MD_PHY_CONTROL_REG, MODE_10MBIT_FULLDUP);
 #endif
 
@@ -799,7 +802,7 @@ static inline void c5471_inctxcpu(struct c5471_driver_s *c5471)
       c5471->c_txcpudesc += 2*sizeof(uint32_t);
     }
 
-  nvdbg("TX CPU desc: %08x\n", c5471->c_txcpudesc);
+  ninfo("TX CPU desc: %08x\n", c5471->c_txcpudesc);
 }
 
 /****************************************************************************
@@ -822,7 +825,7 @@ static inline void c5471_incrxcpu(struct c5471_driver_s *c5471)
       c5471->c_rxcpudesc += 2*sizeof(uint32_t);
     }
 
-  nvdbg("RX CPU desc: %08x\n", c5471->c_rxcpudesc);
+  ninfo("RX CPU desc: %08x\n", c5471->c_rxcpudesc);
 }
 
 /****************************************************************************
@@ -844,7 +847,7 @@ static inline void c5471_incrxcpu(struct c5471_driver_s *c5471)
 
 static int c5471_transmit(struct c5471_driver_s *c5471)
 {
-  struct uip_driver_s *dev = &c5471->c_dev;
+  struct net_driver_s *dev = &c5471->c_dev;
   volatile uint16_t *packetmem;
   uint16_t framelen;
   bool bfirstframe;
@@ -858,7 +861,7 @@ static int c5471_transmit(struct c5471_driver_s *c5471)
   bfirstframe            = true;
   c5471->c_lastdescstart = c5471->c_rxcpudesc;
 
-  nvdbg("Packet size: %d RX CPU desc: %08x\n", nbytes, c5471->c_rxcpudesc);
+  ninfo("Packet size: %d RX CPU desc: %08x\n", nbytes, c5471->c_rxcpudesc);
   c5471_dumpbuffer("Transmit packet", dev->d_buf, dev->d_len);
 
   while (nbytes)
@@ -867,11 +870,11 @@ static int c5471_transmit(struct c5471_driver_s *c5471)
       /* Words #0 and #1 of descriptor */
 
       while (EIM_TXDESC_OWN_HOST & getreg32(c5471->c_rxcpudesc))
-       {
-         /* Loop until the SWITCH lets go of the descriptor giving us access
-          * rights to submit our new ether frame to it.
-          */
-       }
+        {
+          /* Loop until the SWITCH lets go of the descriptor giving us access
+           * rights to submit our new ether frame to it.
+           */
+        }
 
       if (bfirstframe)
         {
@@ -905,17 +908,17 @@ static int c5471_transmit(struct c5471_driver_s *c5471)
 
       /* Words #2 and #3 of descriptor */
 
-      packetmem = (uint16_t*)getreg32(c5471->c_rxcpudesc + sizeof(uint32_t));
+      packetmem = (uint16_t *)getreg32(c5471->c_rxcpudesc + sizeof(uint32_t));
       for (i = 0; i < nshorts; i++, j++)
         {
           /* 16-bits at a time. */
 
-          packetmem[i] = htons(((uint16_t*)dev->d_buf)[j]);
+          packetmem[i] = htons(((uint16_t *)dev->d_buf)[j]);
         }
 
       putreg32(((getreg32(c5471->c_rxcpudesc) & ~EIM_RXDESC_BYTEMASK) | framelen), c5471->c_rxcpudesc);
       nbytes -= framelen;
-      nvdbg("Wrote framelen: %d nbytes: %d nshorts: %d\n", framelen, nbytes, nshorts);
+      ninfo("Wrote framelen: %d nbytes: %d nshorts: %d\n", framelen, nbytes, nshorts);
 
       if (0 == nbytes)
         {
@@ -954,11 +957,11 @@ static int c5471_transmit(struct c5471_driver_s *c5471)
 }
 
 /****************************************************************************
- * Function: c5471_uiptxpoll
+ * Function: c5471_txpoll
  *
  * Description:
- *   The transmitter is available, check if uIP has any outgoing packets ready
- *   to send.  This is a callback from uip_poll().  uip_poll() may be called:
+ *   The transmitter is available, check if the network has any outgoing packets ready
+ *   to send.  This is a callback from devif_poll().  devif_poll() may be called:
  *
  *   1. When the preceding TX packet send is complete,
  *   2. When the preceding TX packet send timesout and the interface is reset
@@ -974,7 +977,7 @@ static int c5471_transmit(struct c5471_driver_s *c5471)
  *
  ****************************************************************************/
 
-static int c5471_uiptxpoll(struct uip_driver_s *dev)
+static int c5471_txpoll(struct net_driver_s *dev)
 {
   struct c5471_driver_s *c5471 = (struct c5471_driver_s *)dev->d_private;
 
@@ -984,7 +987,30 @@ static int c5471_uiptxpoll(struct uip_driver_s *dev)
 
   if (c5471->c_dev.d_len > 0)
     {
-      arp_out(&c5471->c_dev);
+      /* Look up the destination MAC address and add it to the Ethernet
+       * header.
+       */
+
+#ifdef CONFIG_NET_IPv4
+#ifdef CONFIG_NET_IPv6
+      if (IFF_IS_IPv4(c5471->c_dev.d_flags))
+#endif
+        {
+          arp_out(&c5471->c_dev);
+        }
+#endif /* CONFIG_NET_IPv4 */
+
+#ifdef CONFIG_NET_IPv6
+#ifdef CONFIG_NET_IPv4
+      else
+#endif
+        {
+          neighbor_out(&c5471->c_dev);
+        }
+#endif /* CONFIG_NET_IPv6 */
+
+      /* Send the packet */
+
       c5471_transmit(c5471);
 
       /* Check if the ESM has let go of the RX descriptor giving us access
@@ -1031,7 +1057,7 @@ static void c5471_rxstatus(struct c5471_driver_s *c5471)
   /* Walk that last packet we just received to collect xmit status bits. */
 
   rxstatus = 0;
-  for (;;)
+  for (; ; )
     {
       if (EIM_TXDESC_OWN_HOST & getreg32(desc))
         {
@@ -1066,43 +1092,43 @@ static void c5471_rxstatus(struct c5471_driver_s *c5471)
       if ((rxstatus & EIM_TXDESC_RETRYERROR) != 0)
         {
           c5471->c_rxretries++;
-          nvdbg("c_rxretries: %d\n", c5471->c_rxretries);
+          ninfo("c_rxretries: %d\n", c5471->c_rxretries);
         }
 
       if ((rxstatus & EIM_TXDESC_HEARTBEAT) != 0)
         {
           c5471->c_rxheartbeat++;
-          nvdbg("c_rxheartbeat: %d\n", c5471->c_rxheartbeat);
+          ninfo("c_rxheartbeat: %d\n", c5471->c_rxheartbeat);
         }
 
       if ((rxstatus & EIM_TXDESC_LCOLLISON) != 0)
         {
           c5471->c_rxlcollision++;
-          nvdbg("c_rxlcollision: %d\n", c5471->c_rxlcollision);
+          ninfo("c_rxlcollision: %d\n", c5471->c_rxlcollision);
         }
 
       if ((rxstatus & EIM_TXDESC_COLLISION) != 0)
         {
           c5471->c_rxcollision++;
-          nvdbg("c_rxcollision: %d\n", c5471->c_rxcollision);
+          ninfo("c_rxcollision: %d\n", c5471->c_rxcollision);
         }
 
       if ((rxstatus & EIM_TXDESC_CRCERROR) != 0)
         {
           c5471->c_rxcrc++;
-          nvdbg("c_rxcrc: %d\n", c5471->c_rxcrc);
+          ninfo("c_rxcrc: %d\n", c5471->c_rxcrc);
         }
 
       if ((rxstatus & EIM_TXDESC_UNDERRUN) != 0)
         {
           c5471->c_rxunderrun++;
-          nvdbg("c_rxunderrun: %d\n", c5471->c_rxunderrun);
+          ninfo("c_rxunderrun: %d\n", c5471->c_rxunderrun);
         }
 
       if ((rxstatus & EIM_TXDESC_LOC) != 0)
         {
           c5471->c_rxloc++;
-          nvdbg("c_rxloc: %d\n", c5471->c_rxloc);
+          ninfo("c_rxloc: %d\n", c5471->c_rxloc);
         }
     }
 }
@@ -1126,7 +1152,7 @@ static void c5471_rxstatus(struct c5471_driver_s *c5471)
 
 static void c5471_receive(struct c5471_driver_s *c5471)
 {
-  struct uip_driver_s *dev = &c5471->c_dev;
+  struct net_driver_s *dev = &c5471->c_dev;
   uint16_t *packetmem;
   bool bmore = true;
   int packetlen = 0;
@@ -1136,11 +1162,11 @@ static void c5471_receive(struct c5471_driver_s *c5471)
   int j = 0;
 
   /* Walk the newly received packet contained within the EIM and transfer
-   * its contents to the uIP buffer. This frees up the memory contained within
+   * its contents to the network buffer. This frees up the memory contained within
    * the EIM for additional packets that might be received later from the network.
    */
 
-  nvdbg("Reading TX CPU desc: %08x\n", c5471->c_txcpudesc);
+  ninfo("Reading TX CPU desc: %08x\n", c5471->c_txcpudesc);
   while (bmore)
     {
       /* Words #0 and #1 of descriptor */
@@ -1159,18 +1185,18 @@ static void c5471_receive(struct c5471_driver_s *c5471)
       framelen   = (getreg32(c5471->c_txcpudesc) & EIM_TXDESC_BYTEMASK);
       packetlen += framelen;
 
-      /* Check if the received packet will fit within the uIP packet buffer */
+      /* Check if the received packet will fit within the network packet buffer */
 
-      if (packetlen < (CONFIG_NET_BUFSIZE + 4))
+      if (packetlen < (CONFIG_NET_ETH_MTU + 4))
         {
           /* Get the packet memory from words #2 and #3 of descriptor */
 
-          packetmem = (uint16_t*)getreg32(c5471->c_txcpudesc + sizeof(uint32_t));
+          packetmem = (uint16_t *)getreg32(c5471->c_txcpudesc + sizeof(uint32_t));
 
           /* Divide by 2 with round up to get the number of 16-bit words. */
 
           nshorts = (framelen + 1) >> 1;
-          nvdbg("Reading framelen: %d packetlen: %d nshorts: %d packetmen: %p\n",
+          ninfo("Reading framelen: %d packetlen: %d nshorts: %d packetmen: %p\n",
                  framelen, packetlen, nshorts, packetmem);
 
           for (i = 0 ; i < nshorts; i++, j++)
@@ -1179,12 +1205,12 @@ static void c5471_receive(struct c5471_driver_s *c5471)
                * a time.
                */
 
-              ((uint16_t*)dev->d_buf)[j] = htons(packetmem[i]);
+              ((uint16_t *)dev->d_buf)[j] = htons(packetmem[i]);
             }
         }
       else
         {
-          nvdbg("Discarding framelen: %d packetlen\n", framelen, packetlen);
+          ninfo("Discarding framelen: %d packetlen\n", framelen, packetlen);
         }
 
       if (getreg32(c5471->c_txcpudesc) & EIM_TXDESC_LIF)
@@ -1196,7 +1222,7 @@ static void c5471_receive(struct c5471_driver_s *c5471)
        * the settings of a select few. Can leave descriptor words 2/3 alone.
        */
 
-      putreg32((getreg32(c5471->c_txcpudesc) & (EIM_TXDESC_WRAP_NEXT|EIM_TXDESC_INTRE)),
+      putreg32((getreg32(c5471->c_txcpudesc) & (EIM_TXDESC_WRAP_NEXT | EIM_TXDESC_INTRE)),
                c5471->c_txcpudesc);
 
       /* Next, Give ownership of now emptied descriptor back to the Ether Module's SWITCH */
@@ -1208,7 +1234,7 @@ static void c5471_receive(struct c5471_driver_s *c5471)
       c5471_inctxcpu(c5471);
     }
 
-  /* Adjust the packet length to remove the CRC bytes that uIP doesn't care about. */
+  /* Adjust the packet length to remove the CRC bytes that the network doesn't care about. */
 
   packetlen -= 4;
 
@@ -1218,28 +1244,37 @@ static void c5471_receive(struct c5471_driver_s *c5471)
   c5471->c_rxpackets++;
 #endif
 
-  /* If we successfully transferred the data into the uIP buffer, then pass it on
-   * to uIP for processing.
+  /* If we successfully transferred the data into the network buffer, then pass it on
+   * to the network for processing.
    */
 
-  if (packetlen > 0 && packetlen < CONFIG_NET_BUFSIZE)
+  if (packetlen > 0 && packetlen < CONFIG_NET_ETH_MTU)
     {
       /* Set amount of data in c5471->c_dev.d_len. */
 
       dev->d_len = packetlen;
-      nvdbg("Received packet, packetlen: %d type: %02x\n", packetlen, ntohs(BUF->type));
+      ninfo("Received packet, packetlen: %d type: %02x\n", packetlen, ntohs(BUF->type));
       c5471_dumpbuffer("Received packet", dev->d_buf, dev->d_len);
+
+#ifdef CONFIG_NET_PKT
+      /* When packet sockets are enabled, feed the frame into the packet tap */
+
+      pkt_input(dev);
+#endif
 
       /* We only accept IP packets of the configured type and ARP packets */
 
-#ifdef CONFIG_NET_IPv6
-      if (BUF->type == HTONS(UIP_ETHTYPE_IP6))
-#else
-      if (BUF->type == HTONS(UIP_ETHTYPE_IP))
-#endif
+#ifdef CONFIG_NET_IPv4
+      if (BUF->type == HTONS(ETHTYPE_IP))
         {
+          ninfo("IPv4 frame\n");
+
+          /* Handle ARP on input then give the IPv4 packet to the network
+           * layer
+           */
+
           arp_ipin(dev);
-          uip_input(dev);
+          ipv4_input(dev);
 
           /* If the above function invocation resulted in data that should be
            * sent out on the network, the field  d_len will set to a value > 0.
@@ -1250,11 +1285,70 @@ static void c5471_receive(struct c5471_driver_s *c5471)
           if (dev->d_len > 0 &&
              (EIM_TXDESC_OWN_HOST & getreg32(c5471->c_rxcpudesc)) == 0)
             {
-              arp_out(dev);
-              c5471_transmit(c5471);
+              /* Update the Ethernet header with the correct MAC address */
+
+#ifdef CONFIG_NET_IPv6
+              if (IFF_IS_IPv4(dev->d_flags))
+#endif
+                {
+                  arp_out(dev);
+                }
+#ifdef CONFIG_NET_IPv6
+              else
+                {
+                  neighbor_out(dev);
+                }
+#endif
+
+              /* And send the packet */
+
+               c5471_transmit(c5471);
             }
         }
-      else if (BUF->type == HTONS(UIP_ETHTYPE_ARP))
+      else
+#endif
+#ifdef CONFIG_NET_IPv6
+      if (BUF->type == HTONS(ETHTYPE_IP6))
+        {
+          ninfo("Iv6 frame\n");
+
+          /* Give the IPv6 packet to the network layer */
+
+          ipv6_input(dev);
+
+          /* If the above function invocation resulted in data that should be
+           * sent out on the network, the field  d_len will set to a value > 0.
+           * Send that data now if ESM has let go of the RX descriptor giving us
+           * access rights to submit another Ethernet frame.
+           */
+
+          if (dev->d_len > 0 &&
+             (EIM_TXDESC_OWN_HOST & getreg32(c5471->c_rxcpudesc)) == 0)
+            {
+              /* Update the Ethernet header with the correct MAC address */
+
+#ifdef CONFIG_NET_IPv4
+              if (IFF_IS_IPv4(dev->d_flags))
+                {
+                  arp_out(dev);
+                }
+              else
+#endif
+#ifdef CONFIG_NET_IPv6
+                {
+                  neighbor_out(dev);
+                }
+#endif
+
+              /* And send the packet */
+
+               c5471_transmit(c5471);
+            }
+        }
+      else
+#endif
+#ifdef CONFIG_NET_ARP
+      if (BUF->type == HTONS(ETHTYPE_ARP))
         {
           arp_arpin(dev);
 
@@ -1270,13 +1364,14 @@ static void c5471_receive(struct c5471_driver_s *c5471)
               c5471_transmit(c5471);
             }
         }
+#endif
     }
 #ifdef CONFIG_C5471_NET_STATS
   else
     {
       /* Increment the count of dropped packets */
 
-      ndbg("Too big! packetlen: %d\n", packetlen);
+      nwarn("WARNING: Too big! packetlen: %d\n", packetlen);
       c5471->c_rxdropped++;
     }
 #endif
@@ -1309,7 +1404,7 @@ static void c5471_txstatus(struct c5471_driver_s *c5471)
   txstatus = 0;
   if (c5471->c_lastdescstart && c5471->c_lastdescend)
     {
-      for (;;)
+      for (; ; )
         {
           txstatus |= (getreg32(desc) & EIM_RXDESC_STATUSMASK);
           if (desc == c5471->c_lastdescend)
@@ -1337,43 +1432,43 @@ static void c5471_txstatus(struct c5471_driver_s *c5471)
       if ((txstatus & EIM_RXDESC_MISS) != 0)
         {
           c5471->c_txmiss++;
-          nvdbg("c_txmiss: %d\n", c5471->c_txmiss);
+          ninfo("c_txmiss: %d\n", c5471->c_txmiss);
         }
 
       if ((txstatus & EIM_RXDESC_VLAN) != 0)
         {
           c5471->c_txvlan++;
-          nvdbg("c_txvlan: %d\n", c5471->c_txvlan);
+          ninfo("c_txvlan: %d\n", c5471->c_txvlan);
         }
 
       if ((txstatus & EIM_RXDESC_LFRAME) != 0)
         {
           c5471->c_txlframe++;
-          nvdbg("c_txlframe: %d\n", c5471->c_txlframe);
+          ninfo("c_txlframe: %d\n", c5471->c_txlframe);
         }
 
       if ((txstatus & EIM_RXDESC_SFRAME) != 0)
         {
           c5471->c_txsframe++;
-          nvdbg("c_txsframe: %d\n", c5471->c_txsframe);
+          ninfo("c_txsframe: %d\n", c5471->c_txsframe);
         }
 
       if ((txstatus & EIM_RXDESC_CRCERROR) != 0)
         {
           c5471->c_txcrc++;
-          nvdbg("c_txcrc: %d\n", c5471->c_txcrc);
+          ninfo("c_txcrc: %d\n", c5471->c_txcrc);
         }
 
       if ((txstatus & EIM_RXDESC_OVERRUN) != 0)
         {
           c5471->c_txoverrun++;
-          nvdbg("c_txoverrun: %d\n", c5471->c_txoverrun);
+          ninfo("c_txoverrun: %d\n", c5471->c_txoverrun);
         }
 
       if ((txstatus & EIM_RXDESC_OVERRUN) != 0)
         {
           c5471->c_txalign++;
-          nvdbg("c_txalign: %d\n", c5471->c_txalign);
+          ninfo("c_txalign: %d\n", c5471->c_txalign);
         }
     }
 }
@@ -1401,9 +1496,9 @@ static void c5471_txdone(struct c5471_driver_s *c5471)
 
   wd_cancel(c5471->c_txtimeout);
 
-  /* Then poll uIP for new XMIT data */
+  /* Then poll the network for new XMIT data */
 
-  (void)uip_poll(&c5471->c_dev, c5471_uiptxpoll);
+  (void)devif_poll(&c5471->c_dev, c5471_txpoll);
 }
 
 /****************************************************************************
@@ -1512,7 +1607,7 @@ static void c5471_txtimeout(int argc, uint32_t arg, ...)
 
 #ifdef CONFIG_C5471_NET_STATS
   c5471->c_txtimeouts++;
-  nvdbg("c_txtimeouts: %d\n", c5471->c_txtimeouts);
+  ninfo("c_txtimeouts: %d\n", c5471->c_txtimeouts);
 #endif
 
   /* Then try to restart the hardware */
@@ -1520,9 +1615,9 @@ static void c5471_txtimeout(int argc, uint32_t arg, ...)
   c5471_ifdown(&c5471->c_dev);
   c5471_ifup(&c5471->c_dev);
 
-  /* Then poll uIP for new XMIT data */
+  /* Then poll the network for new XMIT data */
 
-  (void)uip_poll(&c5471->c_dev, c5471_uiptxpoll);
+  (void)devif_poll(&c5471->c_dev, c5471_txpoll);
 }
 
 /****************************************************************************
@@ -1552,9 +1647,9 @@ static void c5471_polltimer(int argc, uint32_t arg, ...)
 
   if ((EIM_TXDESC_OWN_HOST & getreg32(c5471->c_rxcpudesc)) == 0)
     {
-      /* If so, update TCP timing states and poll uIP for new XMIT data */
+      /* If so, update TCP timing states and poll the network for new XMIT data */
 
-      (void)uip_timer(&c5471->c_dev, c5471_uiptxpoll, C5471_POLLHSEC);
+      (void)devif_timer(&c5471->c_dev, c5471_txpoll);
     }
 
   /* Setup the watchdog poll timer again */
@@ -1580,14 +1675,14 @@ static void c5471_polltimer(int argc, uint32_t arg, ...)
  *
  ****************************************************************************/
 
-static int c5471_ifup(struct uip_driver_s *dev)
+static int c5471_ifup(struct net_driver_s *dev)
 {
   struct c5471_driver_s *c5471 = (struct c5471_driver_s *)dev->d_private;
   volatile uint32_t clearbits;
 
-  ndbg("Bringing up: %d.%d.%d.%d\n",
-       dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
-       (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24 );
+  ninfo("Bringing up: %d.%d.%d.%d\n",
+        dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
+        (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24);
 
   /* Initilize Ethernet interface */
 
@@ -1600,10 +1695,12 @@ static int c5471_ifup(struct uip_driver_s *dev)
   /* Clear pending interrupts by reading the EIM status register */
 
   clearbits = getreg32(EIM_STATUS);
+  UNUSED(clearbits);
 
   /* Enable interrupts going from EIM Module to Interrupt Module. */
 
-  putreg32(((getreg32(EIM_INTEN) | EIM_INTEN_CPU_TX|EIM_INTEN_CPU_RX)), EIM_INTEN);
+  putreg32(((getreg32(EIM_INTEN) | EIM_INTEN_CPU_TX | EIM_INTEN_CPU_RX)),
+           EIM_INTEN);
 
   /* Next, go on-line. According to the C547X documentation the enables have to
    * occur in this order to insure proper operation; ESM first then the ENET.
@@ -1640,21 +1737,22 @@ static int c5471_ifup(struct uip_driver_s *dev)
  *
  ****************************************************************************/
 
-static int c5471_ifdown(struct uip_driver_s *dev)
+static int c5471_ifdown(struct net_driver_s *dev)
 {
   struct c5471_driver_s *c5471 = (struct c5471_driver_s *)dev->d_private;
   irqstate_t flags;
 
-  ndbg("Stopping\n");
+  ninfo("Stopping\n");
 
   /* Disable the Ethernet interrupt */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   up_disable_irq(C5471_IRQ_ETHER);
 
   /* Disable interrupts going from EIM Module to Interrupt Module. */
 
-  putreg32((getreg32(EIM_INTEN) & ~(EIM_INTEN_CPU_TX|EIM_INTEN_CPU_RX)), EIM_INTEN);
+  putreg32((getreg32(EIM_INTEN) & ~(EIM_INTEN_CPU_TX | EIM_INTEN_CPU_RX)),
+           EIM_INTEN);
 
   /* Disable ENET */
 
@@ -1672,7 +1770,7 @@ static int c5471_ifdown(struct uip_driver_s *dev)
   /* Reset the device */
 
   c5471->c_bifup = false;
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -1695,13 +1793,13 @@ static int c5471_ifdown(struct uip_driver_s *dev)
  *
  ****************************************************************************/
 
-static int c5471_txavail(struct uip_driver_s *dev)
+static int c5471_txavail(struct net_driver_s *dev)
 {
   struct c5471_driver_s *c5471 = (struct c5471_driver_s *)dev->d_private;
   irqstate_t flags;
 
-  ndbg("Polling\n");
-  flags = irqsave();
+  ninfo("Polling\n");
+  flags = enter_critical_section();
 
   /* Ignore the notification if the interface is not yet up */
 
@@ -1712,14 +1810,14 @@ static int c5471_txavail(struct uip_driver_s *dev)
        */
 
       if ((EIM_TXDESC_OWN_HOST & getreg32(c5471->c_rxcpudesc)) == 0)
-       {
-          /* If so, then poll uIP for new XMIT data */
+        {
+          /* If so, then poll the network for new XMIT data */
 
-          (void)uip_poll(&c5471->c_dev, c5471_uiptxpoll);
-       }
+          (void)devif_poll(&c5471->c_dev, c5471_txpoll);
+        }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -1742,7 +1840,7 @@ static int c5471_txavail(struct uip_driver_s *dev)
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IGMP
-static int c5471_addmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
+static int c5471_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct c5471_driver_s *priv = (FAR struct c5471_driver_s *)dev->d_private;
 
@@ -1772,7 +1870,7 @@ static int c5471_addmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IGMP
-static int c5471_rmmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
+static int c5471_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct c5471_driver_s *priv = (FAR struct c5471_driver_s *)dev->d_private;
 
@@ -1813,7 +1911,8 @@ static void c5471_eimreset (struct c5471_driver_s *c5471)
 
   /* Assert nRESET to reset the board's PHY0/1 chips */
 
-  putreg32((CLKM_CTL_RST_EXT_RESET|CLKM_CTL_RST_LEAD_RESET), CLKM_CTL_RST);
+  putreg32((CLKM_CTL_RST_EXT_RESET | CLKM_CTL_RST_LEAD_RESET),
+           CLKM_CTL_RST);
   up_mdelay(2);
 
   /* Release the peripheral nRESET signal */
@@ -1852,7 +1951,7 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
 
   /* TX ENET 0 */
 
-  ndbg("TX ENET0 desc: %08x pbuf: %08x\n", desc, pbuf);
+  ninfo("TX ENET0 desc: %08x pbuf: %08x\n", desc, pbuf);
   putreg32((desc & 0x0000ffff), ENET0_TDBA); /* 16-bit offset address */
   for (i = NUM_DESC_TX-1; i >= 0; i--)
     {
@@ -1861,7 +1960,8 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
       else
         val = EIM_TXDESC_WRAP_FIRST;
 
-      val |= EIM_TXDESC_OWN_HOST|EIM_TXDESC_INTRE|EIM_TXDESC_PADCRC|EIM_PACKET_BYTES;
+      val |= EIM_TXDESC_OWN_HOST | EIM_TXDESC_INTRE | EIM_TXDESC_PADCRC |
+             EIM_PACKET_BYTES;
 
       putreg32(val, desc);
       desc += sizeof(uint32_t);
@@ -1878,7 +1978,7 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
 
   /* RX ENET 0 */
 
-  ndbg("RX ENET0 desc: %08x pbuf: %08x\n", desc, pbuf);
+  ninfo("RX ENET0 desc: %08x pbuf: %08x\n", desc, pbuf);
   putreg32((desc & 0x0000ffff), ENET0_RDBA); /* 16-bit offset address */
   for (i = NUM_DESC_RX-1; i >= 0; i--)
     {
@@ -1887,7 +1987,8 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
       else
         val = EIM_RXDESC_WRAP_FIRST;
 
-      val |= EIM_RXDESC_OWN_ENET|EIM_RXDESC_INTRE|EIM_RXDESC_PADCRC|EIM_PACKET_BYTES;
+      val |= EIM_RXDESC_OWN_ENET | EIM_RXDESC_INTRE | EIM_RXDESC_PADCRC |
+             EIM_PACKET_BYTES;
 
       putreg32(val, desc);
       desc += sizeof(uint32_t);
@@ -1900,11 +2001,11 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
 
       putreg32(0, pbuf);
       pbuf += sizeof(uint32_t); /* Ether Module's "Buffer Usage Word" */
-  }
+    }
 
   /* TX CPU */
 
-  ndbg("TX CPU desc: %08x pbuf: %08x\n", desc, pbuf);
+  ninfo("TX CPU desc: %08x pbuf: %08x\n", desc, pbuf);
   c5471->c_txcpudesc = desc;
   putreg32((desc & 0x0000ffff), EIM_CPU_TXBA); /* 16-bit offset address */
   for (i = NUM_DESC_TX-1; i >= 0; i--)
@@ -1916,7 +2017,8 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
       else
         val = EIM_TXDESC_WRAP_FIRST;
 
-      val |= EIM_TXDESC_OWN_HOST|EIM_TXDESC_INTRE|EIM_TXDESC_PADCRC|EIM_PACKET_BYTES;
+      val |= EIM_TXDESC_OWN_HOST | EIM_TXDESC_INTRE | EIM_TXDESC_PADCRC |
+             EIM_PACKET_BYTES;
 
       putreg32(val, desc);
       desc += sizeof(uint32_t);
@@ -1929,11 +2031,11 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
 
       putreg32(0, pbuf);
       pbuf += sizeof(uint32_t); /* Ether Module's "Buffer Usage Word" */
-  }
+    }
 
   /* RX CPU */
 
-  ndbg("RX CPU desc: %08x pbuf: %08x\n", desc, pbuf);
+  ninfo("RX CPU desc: %08x pbuf: %08x\n", desc, pbuf);
   c5471->c_rxcpudesc = desc;
   putreg32((desc & 0x0000ffff), EIM_CPU_RXBA); /* 16-bit offset address */
   for (i = NUM_DESC_RX-1; i >= 0; i--)
@@ -1945,7 +2047,8 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
       else
         val = EIM_RXDESC_WRAP_FIRST;
 
-      val |= EIM_RXDESC_OWN_ENET|EIM_RXDESC_INTRE|EIM_RXDESC_PADCRC|EIM_PACKET_BYTES;
+      val |= EIM_RXDESC_OWN_ENET | EIM_RXDESC_INTRE | EIM_RXDESC_PADCRC |
+             EIM_PACKET_BYTES;
 
       putreg32(val, desc);
       desc += sizeof(uint32_t);
@@ -1958,8 +2061,9 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
 
       putreg32(0, pbuf);
       pbuf += sizeof(uint32_t); /* Ether Module's "Buffer Usage Word" */
-  }
-  ndbg("END desc: %08x pbuf: %08x\n", desc, pbuf);
+    }
+
+  ninfo("END desc: %08x pbuf: %08x\n", desc, pbuf);
 
   /* Save the descriptor packet size */
 
@@ -1970,9 +2074,10 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
 #if 0
   putreg32(EIM_FILTER_UNICAST, EIM_CPU_FILTER);
 #else
-//  putreg32(EIM_FILTER_LOGICAL|EIM_FILTER_UNICAST|EIM_FILTER_MULTICAST|
+//  putreg32(EIM_FILTER_LOGICAL | EIM_FILTER_UNICAST | EIM_FILTER_MULTICAST |
 //           EIM_FILTER_BROADCAST, EIM_CPU_FILTER);
-  putreg32(EIM_FILTER_UNICAST|EIM_FILTER_MULTICAST|EIM_FILTER_BROADCAST, EIM_CPU_FILTER);
+  putreg32(EIM_FILTER_UNICAST | EIM_FILTER_MULTICAST | EIM_FILTER_BROADCAST,
+           EIM_CPU_FILTER);
 #endif
 
   /* Disable all Ethernet interrupts */
@@ -1982,11 +2087,12 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
   /* Setup the EIM control register */
 
 #if 1
-  putreg32(EIM_CTRL_ENET0_EN|EIM_CTRL_RXENET0_EN|EIM_CTRL_TXENET0_EN|
-           EIM_CTRL_RXCPU_EN|EIM_CTRL_TXCPU_EN, EIM_CTRL);
+  putreg32(EIM_CTRL_ENET0_EN | EIM_CTRL_RXENET0_EN | EIM_CTRL_TXENET0_EN |
+           EIM_CTRL_RXCPU_EN | EIM_CTRL_TXCPU_EN, EIM_CTRL);
 #else
-  putreg32(EIM_CTRL_ENET0_EN|EIM_CTRL_ENET0_FLW|EIM_CTRL_RXENET0_EN|
-           EIM_CTRL_TXENET0_EN|EIM_CTRL_RXCPU_EN|EIM_CTRL_TXCPU_EN, EIM_CTRL);
+  putreg32(EIM_CTRL_ENET0_EN | EIM_CTRL_ENET0_FLW | EIM_CTRL_RXENET0_EN |
+           EIM_CTRL_TXENET0_EN | EIM_CTRL_RXCPU_EN | EIM_CTRL_TXCPU_EN,
+           EIM_CTRL);
 #endif
 
 #if 1
@@ -2004,9 +2110,11 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
   /* Setup the ENET0 mode register */
 
 #if 1
-  putreg32(ENET_MODE_RJCT_SFE|ENET_MODE_MWIDTH|ENET_MODE_FULLDUPLEX, ENET0_MODE);
+  putreg32(ENET_MODE_RJCT_SFE | ENET_MODE_MWIDTH | ENET_MODE_FULLDUPLEX,
+           ENET0_MODE);
 #else
-  putreg32(ENET_MODE_RJCT_SFE|ENET_MODE_MWIDTH|ENET_MODE_HALFDUPLEX, ENET0_MODE);
+  putreg32(ENET_MODE_RJCT_SFE | ENET_MODE_MWIDTH | ENET_MODE_HALFDUPLEX,
+           ENET0_MODE);
 #endif
 
   putreg32(0x00000000, ENET0_BOFFSEED);
@@ -2015,7 +2123,7 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
   putreg32(0x00000000, ENET0_VTYPE);
 
 #if 0
-  putreg32(ENET_ADR_BROADCAST|ENET_ADR_PROMISCUOUS, ENET0_ADRMODE_EN);
+  putreg32(ENET_ADR_BROADCAST | ENET_ADR_PROMISCUOUS, ENET0_ADRMODE_EN);
 #else
   /* The CPU port is not PROMISCUOUS, it wants a no-promiscuous address
    * match yet the SWITCH receives packets from the PROMISCUOUS ENET0
@@ -2042,13 +2150,13 @@ static void c5471_eimconfig(struct c5471_driver_s *c5471)
 static void c5471_reset(struct c5471_driver_s *c5471)
 {
 #if defined(CONFIG_C5471_PHY_LU3X31T_T64)
-  ndbg("EIM reset\n");
+  ninfo("EIM reset\n");
   c5471_eimreset(c5471);
 #endif
-  ndbg("PHY init\n");
+  ninfo("PHY init\n");
   c5471_phyinit();
 
-  ndbg("EIM config\n");
+  ninfo("EIM config\n");
   c5471_eimconfig(c5471);
 }
 
@@ -2066,11 +2174,11 @@ static void c5471_reset(struct c5471_driver_s *c5471)
 
 static void c5471_macassign(struct c5471_driver_s *c5471)
 {
-  struct uip_driver_s *dev = &c5471->c_dev;
+  struct net_driver_s *dev = &c5471->c_dev;
   uint8_t *mptr = dev->d_mac.ether_addr_octet;
   register uint32_t tmp;
 
-  ndbg("MAC: %0x:%0x:%0x:%0x:%0x:%0x\n",
+  ninfo("MAC: %0x:%0x:%0x:%0x:%0x:%0x\n",
         mptr[0], mptr[1], mptr[2], mptr[3], mptr[4], mptr[5]);
 
   /* Set CPU port MAC address. S/W will only see incoming packets that match
@@ -2133,31 +2241,30 @@ void up_netinitialize(void)
     {
       /* We could not attach the ISR to the ISR */
 
-      nlldbg("irq_attach() failed\n");
+      nerr("ERROR: irq_attach() failed\n");
       return;
     }
 
   /* Initialize the driver structure */
 
   memset(g_c5471, 0, CONFIG_C5471_NET_NINTERFACES*sizeof(struct c5471_driver_s));
-  g_c5471[0].c_dev.d_ifup    = c5471_ifup;     /* I/F down callback */
-  g_c5471[0].c_dev.d_ifdown  = c5471_ifdown;   /* I/F up (new IP address) callback */
-  g_c5471[0].c_dev.d_txavail = c5471_txavail;  /* New TX data callback */
- #ifdef CONFIG_NET_IGMP
-  g_c5471[0].c_dev.d_addmac  = c5471_addmac;   /* Add multicast MAC address */
-  g_c5471[0].c_dev.d_rmmac   = c5471_rmmac;    /* Remove multicast MAC address */
+  g_c5471[0].c_dev.d_ifup    = c5471_ifup;      /* I/F down callback */
+  g_c5471[0].c_dev.d_ifdown  = c5471_ifdown;    /* I/F up (new IP address) callback */
+  g_c5471[0].c_dev.d_txavail = c5471_txavail;   /* New TX data callback */
+#ifdef CONFIG_NET_IGMP
+  g_c5471[0].c_dev.d_addmac  = c5471_addmac;    /* Add multicast MAC address */
+  g_c5471[0].c_dev.d_rmmac   = c5471_rmmac;     /* Remove multicast MAC address */
 #endif
- g_c5471[0].c_dev.d_private = (void*)g_c5471; /* Used to recover private state from dev */
+  g_c5471[0].c_dev.d_private = (void *)g_c5471; /* Used to recover private state from dev */
 
   /* Create a watchdog for timing polling for and timing of transmisstions */
 
-  g_c5471[0].c_txpoll       = wd_create();   /* Create periodic poll timer */
-  g_c5471[0].c_txtimeout    = wd_create();   /* Create TX timeout timer */
+  g_c5471[0].c_txpoll        = wd_create();     /* Create periodic poll timer */
+  g_c5471[0].c_txtimeout     = wd_create();     /* Create TX timeout timer */
 
   /* Register the device with the OS so that socket IOCTLs can be performed */
 
-  (void)netdev_register(&g_c5471[0].c_dev);
+  (void)netdev_register(&g_c5471[0].c_dev, NET_LL_ETHERNET);
 }
 
 #endif /* CONFIG_NET */
-

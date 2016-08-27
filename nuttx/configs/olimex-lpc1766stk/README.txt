@@ -216,12 +216,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -268,7 +262,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -328,8 +322,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -364,7 +358,7 @@ LEDs
   - configs/olimex-lpc1766stk/include/board.h - Defines LED constants, types and
     prototypes the LED interface functions.
 
-  - configs/olimex-lpc1766stk/src/lpc1766stk_internal.h - GPIO settings for the LEDs.
+  - configs/olimex-lpc1766stk/src/lpc1766stk.h - GPIO settings for the LEDs.
 
   - configs/olimex-lpc1766stk/src/up_leds.c - LED control logic.
 
@@ -779,11 +773,11 @@ Olimex LPC1766-STK Configuration Options
     CONFIG_NET_NRXDESC - Configured number of Rx descriptors. Default: 18
     CONFIG_NET_WOL - Enable Wake-up on Lan (not fully implemented).
     CONFIG_NET_REGDEBUG - Enabled low level register debug.  Also needs
-      CONFIG_DEBUG.
+      CONFIG_DEBUG_FEATURES.
     CONFIG_NET_DUMPPACKET - Dump all received and transmitted packets.
-      Also needs CONFIG_DEBUG.
+      Also needs CONFIG_DEBUG_FEATURES.
     CONFIG_NET_HASH - Enable receipt of near-perfect match frames.
-    CONFIG_NET_MULTICAST - Enable receipt of multicast (and unicast) frames.
+    CONFIG_LPC17_MULTICAST - Enable receipt of multicast (and unicast) frames.
       Automatically set if CONFIG_NET_IGMP is selected.
 
   LPC17xx USB Device Configuration
@@ -887,7 +881,7 @@ Common Configuration Notes
      change a configuration using that tool, you should:
 
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-        and misc/tools/
+        see additional README.txt files in the NuttX tools repository.
 
      b. Execute 'make menuconfig' in nuttx/ in order to start the
         reconfiguration process.
@@ -935,8 +929,8 @@ Configuration Sub-Directories
     2. You may also want to define the following in your configuration file.
        Otherwise, you will have not feedback about what is going on:
 
-       CONFIG_DEBUG=y
-       CONFIG_DEBUG_VERBOSE=y
+       CONFIG_DEBUG_FEATURES=y
+       CONFIG_DEBUG_INFO=y
        CONFIG_DEBUG_FTPC=y
 
   hidkbd:
@@ -951,6 +945,48 @@ Configuration Sub-Directories
        CONFIG_HOST_WINDOWS=y                   : Windows
        CONFIG_WINDOWS_CYGWIN=y                 : Cygwin environment on Windows
        CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y : CodeSourcery under Windows
+
+    2. I used this configuration to test the USB hub class.  I did this
+       testing with the following changes to the configuration:
+
+       Drivers -> USB Host Driver Support
+         CONFIG_USBHOST_HUB=y                  : Enable the hub class
+         CONFIG_USBHOST_ASYNCH=y               : Asynchonous I/O supported needed for hubs
+
+       System Type -> USB host configuration
+         CONFIG_LPC17_USBHOST_NASYNCH=8        : Allow up to 8 asynchronous requests
+         CONFIG_USBHOST_NEDS=3                 : Increase number of endpoint descriptors from 2
+         CONFIG_USBHOST_NTDS=4                 : Increase number of transfer descriptors from 3
+         CONFIG_USBHOST_TDBUFFERS=4            : Increase number of transfer buffers from 3
+         CONFIG_USBHOST_IOBUFSIZE=256          : Decrease the size of I/O buffers from 512
+
+       RTOS Features -> Work Queue Support
+         CONFIG_SCHED_LPWORK=y         : Low priority queue support is needed
+         CONFIG_SCHED_LPNTHREADS=1
+         CONFIG_SCHED_LPWORKSTACKSIZE=1024
+
+       NOTES:
+
+       1. It is necessary to perform work on the low-priority work queue
+          (vs. the high priority work queue) because deferred hub-related
+          work requires some delays and waiting that is not appropriate on
+          the high priority work queue.
+
+       2. I also increased some stack sizes.  These values are not tuned.
+          When I ran into stack size issues, I just increased the size of
+          all threads that had smaller stacks.
+
+          CONFIG_EXAMPLES_HIDKBD_STACKSIZE=2048    : Was 1024
+          CONFIG_HIDKBD_STACKSIZE=2048             : Was 1024
+          CONFIG_SCHED_HPWORKSTACKSIZE=2048        : Was 1024 (1024 is probably ok)
+          CONFIG_LPC1766STK_USBHOST_STACKSIZE=1536 | Was 1024
+
+       STATUS:
+         2015-05-03: The hub basically works.  The only problem that I see is
+                     that the code does not enumerate the hub if it is
+                     connected at the time of reset up.  It does not a power-up
+                     reset, but not with the reset button.  This sounds like
+                     a hardwares reset issue on the board to me.
 
   hidmouse:
     This configuration directory supports a variant of an NSH configution.
@@ -1044,7 +1080,7 @@ Configuration Sub-Directories
        use the UART1 hardware flow control yet.
 
        NOTE: The Linux slip module hard-codes its MTU size to 296.  So you
-       might as well set CONFIG_NET_BUFSIZE to 296 as well.
+       might as well set CONFIG_NET_ETH_MTU to 296 as well.
 
     4. After turning over the line to the SLIP driver, you must configure
        the network interface. Again, you do this using the standard
@@ -1072,9 +1108,39 @@ Configuration Sub-Directories
     hardware flow control is partially implemented but does not behave as
     expected.  It needs a little more work.
 
-  thttpd:
+  thttpd-binfs:
     This builds the THTTPD web server example using the THTTPD and
-    the apps/examples/thttpd application.
+    the apps/examples/thttpd application.  This version uses the built-in
+    binary format with the BINFS file system and the Union File System.
+    Otherwise it is equivalent to thttpd-binfs.
+
+    NOTES:
+
+    1. Uses the CodeSourcery EABI toolchain under Windows.  But that is
+       easily reconfigured:
+
+       CONFIG_HOST_WINDOWS=y                   : Windows
+       CONFIG_HOST_WINDOWS_CYGWIN=y            : under Cygwin
+       CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y : CodeSourcery toolchain
+
+  STATUS:
+    2015-06-02.  This configuration was added in an attempt to replace
+      thttpd-nxflat (see below).  I concurrently get out-of-memory errors
+      during execution of CGI.  The 32KiB SRAM may be insufficient for
+      this configuration; this might be fixed with some careful tuning
+      of stack usage.
+
+    2015-06-06: Modified to use the Union File System.  Untested.
+      This configuration was ported to the lincoln60 which has an LPC1769
+      and, hence, more SRAM.  Additional memory reduction steps were
+      required to run on the LPC1769.  See nuttx/configs/lincoln60/README.txt
+      for additional information.
+
+  thttpd-nxflat:
+    This builds the THTTPD web server example using the THTTPD and
+    the apps/examples/thttpd application.  This version uses the NXFLAT
+    binary format with the ROMFS file system, otherwise it is equivalent to
+    thttpd-binfs.
 
     NOTES:
 
@@ -1084,6 +1150,12 @@ Configuration Sub-Directories
        CONFIG_HOST_LINUX=y                 : Linux
        CONFIG_ARMV7M_TOOLCHAIN_BUILDROOT=y : Buildroot toolchain
        CONFIG_ARMV7M_OABI_TOOLCHAIN=n      : Newer, EABI toolchain
+
+  STATUS:
+    2015-06-02.  Do to issues introduced by recent versions of GCC, NXFLAT
+      is not often usable.
+
+      See http://www.nuttx.org/doku.php?id=wiki:vfs:nxflat#toolchain_compatibility_problem
 
   usbserial:
     This configuration directory exercises the USB serial class

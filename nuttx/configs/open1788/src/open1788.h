@@ -45,7 +45,7 @@
 #include <nuttx/compiler.h>
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Open1788 GPIO Pin Definitions ****************************************************/
@@ -103,7 +103,7 @@
 #define GPIO_JOY_D       (GPIO_INTBOTH | GPIO_PULLUP | GPIO_PORT2 | GPIO_PIN19)
 #define GPIO_JOY_CTR     (GPIO_INTBOTH | GPIO_PULLUP | GPIO_PORT0 | GPIO_PIN14)
 
-/* IRQ numbers for the buttons that do support interrrupts */
+/* IRQ numbers for the buttons that do support interrupts */
 
 #define GPIO_USER2_IRQ   LPC17_IRQ_P2p22
 #define GPIO_USER3_IRQ   LPC17_IRQ_P0p10
@@ -166,14 +166,14 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Name: open1788_sspinitialize
+ * Name: open1788_sspdev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the WaveShare Open1788 board.
  *
  ************************************************************************************/
 
-void weak_function open1788_sspinitialize(void);
+void weak_function open1788_sspdev_initialize(void);
 
 /************************************************************************************
  * Name: open1788_sdram_initialize
@@ -223,25 +223,6 @@ void open1788_nand_initialize(void);
 
 #ifdef CONFIG_LPC17_LCD
 void open1788_lcd_initialize(void);
-#endif
-
-/************************************************************************************
- * Name: nsh_archinitialize
- *
- * Description:
- *   Perform architecture specific initialization for NSH.
- *
- *   CONFIG_NSH_ARCHINIT=y :
- *     Called from the NSH library
- *
- *   CONFIG_BOARD_INITIALIZE=y, CONFIG_NSH_LIBRARY=y, &&
- *   CONFIG_NSH_ARCHINIT=n:
- *     Called from board_initialize().
- *
- ************************************************************************************/
-
-#ifdef CONFIG_NSH_LIBRARY
-int nsh_archinitialize(void);
 #endif
 
 #endif /* __ASSEMBLY__ */

@@ -7,7 +7,7 @@
  *
  * This file is a part of NuttX:
  *
- *   Copyright (C) 2010 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2014, 2016 Gregory Nutt. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -53,6 +53,7 @@
 #include <debug.h>
 
 #include <arch/board/board.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/analog/dac.h>
 
@@ -84,7 +85,6 @@ static void dac_shutdown(FAR struct dac_dev_s *dev);
 static void dac_txint(FAR struct dac_dev_s *dev, bool enable);
 static int  dac_send(FAR struct dac_dev_s *dev, FAR struct dac_msg_s *msg);
 static int  dac_ioctl(FAR struct dac_dev_s *dev, int cmd, unsigned long arg);
-static int  dac_interrupt(int irq, void *context);
 
 /****************************************************************************
  * Private Data
@@ -92,12 +92,12 @@ static int  dac_interrupt(int irq, void *context);
 
 static const struct dac_ops_s g_dacops =
 {
-  .ao_reset =dac_reset,
-  .ao_setup = dac_setup,
+  .ao_reset    = dac_reset,
+  .ao_setup    = dac_setup,
   .ao_shutdown = dac_shutdown,
-  .ao_txint = dac_txint,
-  .ao_send = dac_send,
-  .ao_ioctl = dac_ioctl,
+  .ao_txint    = dac_txint,
+  .ao_send     = dac_send,
+  .ao_ioctl    = dac_ioctl,
 };
 
 static struct dac_dev_s g_dacdev =
@@ -118,18 +118,18 @@ static void dac_reset(FAR struct dac_dev_s *dev)
   irqstate_t flags;
   uint32_t regval;
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   regval  = getreg32(LPC17_SYSCON_PCLKSEL0);
   regval &= ~SYSCON_PCLKSEL0_DAC_MASK;
   regval |= (SYSCON_PCLKSEL_CCLK8 << SYSCON_PCLKSEL0_DAC_SHIFT);
   putreg32(regval, LPC17_SYSCON_PCLKSEL0);
 
-  //putreg32(DAC_CTRL_DBLBUFEN,LPC17_DAC_CTRL); ?
+  //putreg32(DAC_CTRL_DBLBUFEN, LPC17_DAC_CTRL); ?
 
   lpc17_configgpio(GPIO_AOUT);
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /* Configure the DAC. This method is called the first time that the DAC
@@ -159,21 +159,21 @@ static void dac_txint(FAR struct dac_dev_s *dev, bool enable)
 
 static int  dac_send(FAR struct dac_dev_s *dev, FAR struct dac_msg_s *msg)
 {
-  putreg32((msg->am_data>>16)&0xfffff,LPC17_DAC_CR);
+  /* adjust the binary value to the lpc1768's register format (plus high
+   * speed profile in bit 16)
+   */
+
+  putreg32(((((msg->am_data) << 6) | 0x10000) & 0xffff), LPC17_DAC_CR);
   dac_txdone(&g_dacdev);
   return 0;
 }
 
 /* All ioctl calls will be routed through this method */
 
-static int  dac_ioctl(FAR struct dac_dev_s *dev, int cmd, unsigned long arg)
+static int dac_ioctl(FAR struct dac_dev_s *dev, int cmd, unsigned long arg)
 {
-  dbg("Fix me:Not Implemented\n");
+  aerr("ERROR: Fix me -- Not Implemented\n");
   return 0;
-}
-
-static int  dac_interrupt(int irq, void *context)
-{
 }
 
 /****************************************************************************

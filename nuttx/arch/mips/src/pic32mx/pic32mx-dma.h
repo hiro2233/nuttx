@@ -48,7 +48,7 @@
 #if CHIP_NDMACH > 0
 
 /********************************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ********************************************************************************************/
 /* Register Offsets *************************************************************************/
 /* Global DMA Registers */
@@ -517,7 +517,7 @@
 /* Global DMA Registers */
 /* DMA Controller Control Register */
 
-#if defined(CHIP_PIC32MX3) || defined(CHIP_PIC32MX4)
+#if defined(CHIP_PIC32MX1) || defined(CHIP_PIC32MX2)
 
 #  define DMA_CON_DMABUSY             (1 << 11) /* Bit 15: DMA module busy */
 #  define DMA_CON_SUSPEND             (1 << 12) /* Bit 12: DMA suspend */
@@ -681,7 +681,8 @@
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

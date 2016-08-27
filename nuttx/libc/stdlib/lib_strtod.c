@@ -87,7 +87,7 @@ static inline int is_real(double x)
  *
  ****************************************************************************/
 
-double_t strtod(const char *str, char **endptr)
+double_t strtod(FAR const char *str, FAR char **endptr)
 {
   double_t number;
   int exponent;
@@ -115,6 +115,8 @@ double_t strtod(const char *str, char **endptr)
       negative = 1; /* Fall through to increment position */
     case '+':
       p++;
+    default:
+      break;
     }
 
   number       = 0.;
@@ -151,7 +153,8 @@ double_t strtod(const char *str, char **endptr)
   if (num_digits == 0)
     {
       set_errno(ERANGE);
-      return 0.0;
+      number = 0.0;
+      goto errout;
     }
 
   /* Correct for sign */
@@ -168,12 +171,14 @@ double_t strtod(const char *str, char **endptr)
       /* Handle optional sign */
 
       negative = 0;
-      switch(*++p)
+      switch (*++p)
         {
         case '-':
           negative = 1;   /* Fall through to increment pos */
         case '+':
           p++;
+        default:
+          break;
         }
 
       /* Process string of digits */
@@ -199,7 +204,8 @@ double_t strtod(const char *str, char **endptr)
       exponent > __DBL_MAX_EXP__)
     {
       set_errno(ERANGE);
-      return infinite;
+      number = infinite;
+      goto errout;
     }
 
   /* Scale the result */
@@ -220,6 +226,7 @@ double_t strtod(const char *str, char **endptr)
               number *= p10;
             }
         }
+
       n >>= 1;
       p10 *= p10;
     }
@@ -229,6 +236,7 @@ double_t strtod(const char *str, char **endptr)
       set_errno(ERANGE);
     }
 
+errout:
   if (endptr)
     {
       *endptr = p;
@@ -238,4 +246,3 @@ double_t strtod(const char *str, char **endptr)
 }
 
 #endif /* CONFIG_HAVE_DOUBLE */
-

@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/pipe/pipe_common.h
  *
- *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,15 +47,42 @@
 #include <stdbool.h>
 #include <poll.h>
 
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+/* Pipe/FIFO support */
+
+#ifndef CONFIG_PIPES
+#  undef CONFIG_DEV_PIPE_MAXSIZE
+#  undef CONFIG_DEV_PIPE_SIZE
+#  undef CONFIG_DEV_FIFO_SIZE
+#  define CONFIG_DEV_PIPE_MAXSIZE 0
+#  define CONFIG_DEV_PIPE_SIZE 0
+#  define CONFIG_DEV_FIFO_SIZE 0
+#endif
+
+/* Pipe/FIFO size */
+
+#ifndef CONFIG_DEV_PIPE_MAXSIZE
+#  define CONFIG_DEV_PIPE_MAXSIZE 1024
+#endif
+
+#if CONFIG_DEV_PIPE_MAXSIZE <= 0
+#  undef CONFIG_PIPES
+#  undef CONFIG_DEV_PIPE_SIZE
+#  undef CONFIG_DEV_FIFO_SIZE
+#  define CONFIG_DEV_PIPE_SIZE 0
+#  define CONFIG_DEV_FIFO_SIZE 0
+#endif
+
 #ifndef CONFIG_DEV_PIPE_SIZE
 #  define CONFIG_DEV_PIPE_SIZE 1024
 #endif
 
-#if CONFIG_DEV_PIPE_SIZE > 0
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
+#ifndef CONFIG_DEV_FIFO_SIZE
+#  define CONFIG_DEV_FIFO_SIZE 1024
+#endif
 
 /* Maximum number of threads than can be waiting for POLL events */
 
@@ -67,15 +94,29 @@
 
 #define CONFIG_DEV_PIPE_MAXUSER 255
 
+/* d_flags values */
+
+#define PIPE_FLAG_POLICY    (1 << 0) /* Bit 0: Policy=Free buffer when empty */
+#define PIPE_FLAG_UNLINKED  (1 << 1) /* Bit 1: The driver has been unlinked */
+
+#define PIPE_POLICY_0(f)    do { (f) &= ~PIPE_FLAG_POLICY; } while (0)
+#define PIPE_POLICY_1(f)    do { (f) |= PIPE_FLAG_POLICY; } while (0)
+#define PIPE_IS_POLICY_0(f) (((f) & PIPE_FLAG_POLICY) == 0)
+#define PIPE_IS_POLICY_1(f) (((f) & PIPE_FLAG_POLICY) != 0)
+
+#define PIPE_UNLINK(f)      do { (f) |= PIPE_FLAG_UNLINKED; } while (0)
+#define PIPE_IS_UNLINKED(f) (((f) & PIPE_FLAG_UNLINKED) != 0)
+
+
 /****************************************************************************
  * Public Types
  ****************************************************************************/
 
 /* Make the buffer index as small as possible for the configured pipe size */
 
-#if CONFIG_DEV_PIPE_SIZE > 65535
+#if CONFIG_DEV_PIPE_MAXSIZE > 65535
 typedef uint32_t pipe_ndx_t;  /* 32-bit index */
-#elif CONFIG_DEV_PIPE_SIZE > 255
+#elif CONFIG_DEV_PIPE_MAXSIZE > 255
 typedef uint16_t pipe_ndx_t;  /* 16-bit index */
 #else
 typedef uint8_t pipe_ndx_t;   /*  8-bit index */
@@ -93,9 +134,12 @@ struct pipe_dev_s
   sem_t      d_wrsem;       /* Full buffer - Writer waits for data read */
   pipe_ndx_t d_wrndx;       /* Index in d_buffer to save next byte written */
   pipe_ndx_t d_rdndx;       /* Index in d_buffer to return the next byte read */
+  pipe_ndx_t d_bufsize;     /* allocated size of d_buffer in bytes */
   uint8_t    d_refs;        /* References counts on pipe (limited to 255) */
   uint8_t    d_nwriters;    /* Number of reference counts for write access */
+  uint8_t    d_nreaders;    /* Number of reference counts for read access */
   uint8_t    d_pipeno;      /* Pipe minor number */
+  uint8_t    d_flags;       /* See PIPE_FLAG_* definitions */
   uint8_t   *d_buffer;      /* Buffer allocated when device opened */
 
   /* The following is a list if poll structures of threads waiting for
@@ -114,20 +158,28 @@ struct pipe_dev_s
 
 #ifdef __cplusplus
 #  define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #  define EXTERN extern
 #endif
 
-EXTERN FAR struct pipe_dev_s *pipecommon_allocdev(void);
-EXTERN void    pipecommon_freedev(FAR struct pipe_dev_s *dev);
-EXTERN int     pipecommon_open(FAR struct file *filep);
-EXTERN int     pipecommon_close(FAR struct file *filep);
-EXTERN ssize_t pipecommon_read(FAR struct file *, FAR char *, size_t);
-EXTERN ssize_t pipecommon_write(FAR struct file *, FAR const char *, size_t);
+struct file;  /* Forward reference */
+struct inode; /* Forward reference */
+
+FAR struct pipe_dev_s *pipecommon_allocdev(size_t bufsize);
+void    pipecommon_freedev(FAR struct pipe_dev_s *dev);
+int     pipecommon_open(FAR struct file *filep);
+int     pipecommon_close(FAR struct file *filep);
+ssize_t pipecommon_read(FAR struct file *, FAR char *, size_t);
+ssize_t pipecommon_write(FAR struct file *, FAR const char *, size_t);
+int     pipecommon_ioctl(FAR struct file *filep, int cmd, unsigned long arg);
 #ifndef CONFIG_DISABLE_POLL
-EXTERN int     pipecommon_poll(FAR struct file *filep, FAR struct pollfd *fds,
+int     pipecommon_poll(FAR struct file *filep, FAR struct pollfd *fds,
                                bool setup);
+#endif
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+int     pipecommon_unlink(FAR struct inode *priv);
 #endif
 
 #undef EXTERN
@@ -135,5 +187,4 @@ EXTERN int     pipecommon_poll(FAR struct file *filep, FAR struct pollfd *fds,
 }
 #endif
 
-#endif /* CONFIG_DEV_PIPE_SIZE > 0 */
 #endif /* __DRIVERS_PIPES_PIPE_COMMON_H */

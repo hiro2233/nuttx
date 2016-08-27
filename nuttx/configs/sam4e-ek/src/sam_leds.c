@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/sam4e-ek/src/sam_leds.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,7 @@
 #include <stdbool.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -54,7 +55,7 @@
 #ifdef CONFIG_ARCH_LEDS
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* The SAM4E-EK board has three, user-controllable LEDs labelled D2 (blue),
  * D3 (amber), and D4 (green) on the board.  Usage of these LEDs is defined
@@ -96,18 +97,6 @@
 #define D4_OFF         (LED_OFF << D4_SHIFT)
 #define D4_ON          (LED_ON << D4_SHIFT)
 #define D4_NOCHANGE    (LED_NOCHANGE << D4_SHIFT)
-
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg  lldbg
-#  define ledvdbg llvdbg
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
 
 /****************************************************************************
  * Private Data
@@ -184,10 +173,10 @@ static void sam_setleds(uint8_t state)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_led_initialize
+ * Name: board_autoled_initialize
  ****************************************************************************/
 
-void board_led_initialize(void)
+void board_autoled_initialize(void)
 {
   (void)sam_configgpio(GPIO_D3);
   (void)sam_configgpio(GPIO_D2);
@@ -195,19 +184,19 @@ void board_led_initialize(void)
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  ****************************************************************************/
 
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   sam_setleds(g_ledon[led & 7]);
 }
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  ****************************************************************************/
 
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   sam_setleds(g_ledoff[led & 7]);
 }

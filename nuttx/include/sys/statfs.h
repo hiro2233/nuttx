@@ -46,7 +46,7 @@
 #include <stdint.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* struct statfs file system types. */
@@ -102,6 +102,8 @@
 #define PROCFS_MAGIC          0x434f5250
 #define NXFFS_MAGIC           0x4747
 #define SMARTFS_MAGIC         0x54524D53
+#define UNIONFS_MAGIC         0x53464e55
+#define HOSTFS_MAGIC          0x54534f48
 
 /****************************************************************************
  * Type Definitions
@@ -126,7 +128,8 @@ struct statfs
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -136,8 +139,8 @@ extern "C" {
  * form of the struct statfs.
  */
 
-EXTERN int statfs(const char *path, struct statfs *buf);
-EXTERN int fstatfs(int fd, struct statfs *buf);
+int statfs(FAR const char *path, FAR struct statfs *buf);
+int fstatfs(int fd, FAR struct statfs *buf);
 
 #undef EXTERN
 #if defined(__cplusplus)

@@ -56,7 +56,7 @@
  * Public Types
  ****************************************************************************/
 
-/* This struct provides a desciption of the currently loaded instantiation
+/* This struct provides a description of the currently loaded instantiation
  * of an nxflat binary.
  */
 
@@ -77,8 +77,8 @@ struct nxflat_loadinfo_s
   /* Data Space (DSpace): This region contains all information that is
    * referenced as data (other than the stack which is separately allocated).
    *
-   * If CONFIG_ADDRENV=n, DSpace will be allocated using kmalloc() (or
-   * kzalloc()).  If CONFIG_ADDRENV-y, then DSpace will be allocated using
+   * If CONFIG_ARCH_ADDRENV=n, DSpace will be allocated using kmm_malloc() (or
+   * kmm_zalloc()).  If CONFIG_ARCH_ADDRENV-y, then DSpace will be allocated using
    * up_addrenv_create().  In either case, there will be a unique instance
    * of DSpace (and stack) for each instance of a process.
    */
@@ -99,17 +99,17 @@ struct nxflat_loadinfo_s
    * addrenv - This is the handle created by up_addrenv_create() that can be
    *   used to manage the tasks address space.
    * oldenv  - This is a value returned by up_addrenv_select() that must be
-   *   used to restore the current hardware address environment.
+   *   used to restore the current address environment.
    */
 
-#ifdef CONFIG_ADDRENV
-  task_addrenv_t addrenv;  /* Task address environment */
-  hw_addrenv_t   oldenv;   /* Saved hardware address environment */
+#ifdef CONFIG_ARCH_ADDRENV
+  group_addrenv_t addrenv; /* Task group address environment */
+  save_addrenv_t oldenv;   /* Saved address environment */
 #endif
 
   /* File descriptors */
 
-  int    filfd;            /* Descriptor for the file being loaded */
+  int filfd;               /* Descriptor for the file being loaded */
 
   /* This is a copy of the NXFLAT header (still in network order) */
 
@@ -123,7 +123,8 @@ struct nxflat_loadinfo_s
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -248,7 +249,7 @@ int nxflat_unload(struct nxflat_loadinfo_s *loadinfo);
 /****************************************************************************
  * These are APIs used internally only by NuttX:
  ****************************************************************************/
-/***********************************************************************
+/****************************************************************************
  * Name: nxflat_initialize
  *
  * Description:
@@ -261,7 +262,7 @@ int nxflat_unload(struct nxflat_loadinfo_s *loadinfo);
  *   0 (OK) is returned on success and a negated errno is returned on
  *   failure.
  *
- ***********************************************************************/
+ ****************************************************************************/
 
 int nxflat_initialize(void);
 

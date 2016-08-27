@@ -53,18 +53,6 @@
 #include "nxffs.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Public Types
- ****************************************************************************/
-
-/****************************************************************************
- * Public Variables
- ****************************************************************************/
-
-/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
@@ -134,10 +122,10 @@ static int nxffs_rdentry(FAR struct nxffs_volume_s *volume, off_t offset,
   /* Allocate memory to hold the variable-length file name */
 
   namlen = inode.namlen;
-  entry->name = (FAR char *)kmalloc(namlen + 1);
+  entry->name = (FAR char *)kmm_malloc(namlen + 1);
   if (!entry->name)
     {
-      fdbg("ERROR: Failed to allocate name, namlen: %d\n", namlen);
+      ferr("ERROR: Failed to allocate name, namlen: %d\n", namlen);
       ret = -ENOMEM;
       goto errout_no_offset;
     }
@@ -153,7 +141,7 @@ static int nxffs_rdentry(FAR struct nxffs_volume_s *volume, off_t offset,
   ret = nxffs_rdcache(volume, volume->ioblock);
   if (ret < 0)
     {
-      fdbg("ERROR: nxffsx_rdcache failed: %d\n", -ret);
+      ferr("ERROR: nxffsx_rdcache failed: %d\n", -ret);
       goto errout_with_name;
     }
 
@@ -167,7 +155,7 @@ static int nxffs_rdentry(FAR struct nxffs_volume_s *volume, off_t offset,
   crc = crc32part((FAR const uint8_t *)entry->name, namlen, crc);
   if (crc != ecrc)
     {
-      fdbg("ERROR: CRC entry: %08x CRC calculated: %08x\n", ecrc, crc);
+      ferr("ERROR: CRC entry: %08x CRC calculated: %08x\n", ecrc, crc);
       ret = -EIO;
       goto errout_with_name;
     }
@@ -222,7 +210,7 @@ errout:
  *   to dispose of that memory when the inode entry is no longer needed.
  *
  *   Note that the nxffs_entry_s containing structure is not freed.  The
- *   caller may call kfree upon return of this function if necessary to
+ *   caller may call kmm_free upon return of this function if necessary to
  *   free the entry container.
  *
  * Input parameters:
@@ -237,7 +225,7 @@ void nxffs_freeentry(FAR struct nxffs_entry_s *entry)
 {
   if (entry->name)
     {
-      kfree(entry->name);
+      kmm_free(entry->name);
       entry->name = NULL;
     }
 }
@@ -276,14 +264,14 @@ int nxffs_nextentry(FAR struct nxffs_volume_s *volume, off_t offset,
 
   nerased = 0;
   nmagic  = 0;
-  for (;;)
+  for (; ; )
     {
       /* Read the next character */
 
       ch = nxffs_getc(volume, SIZEOF_NXFFS_INODE_HDR - nmagic);
       if (ch < 0)
         {
-          fdbg("ERROR: nxffs_getc failed: %d\n", -ch);
+          ferr("ERROR: nxffs_getc failed: %d\n", -ch);
           return ch;
         }
 
@@ -298,7 +286,7 @@ int nxffs_nextentry(FAR struct nxffs_volume_s *volume, off_t offset,
 
           if (++nerased >= NXFFS_NERASED)
             {
-              fvdbg("No entry found\n");
+              finfo("No entry found\n");
               return -ENOENT;
             }
         }
@@ -349,7 +337,7 @@ int nxffs_nextentry(FAR struct nxffs_volume_s *volume, off_t offset,
               ret = nxffs_rdentry(volume, offset, entry);
               if (ret == OK)
                 {
-                  fvdbg("Found a valid fileheader, offset: %d\n", offset);
+                  finfo("Found a valid fileheader, offset: %d\n", offset);
                   return OK;
                 }
 
@@ -401,14 +389,14 @@ int nxffs_findinode(FAR struct nxffs_volume_s *volume, FAR const char *name,
    * media.
    */
 
-  for (;;)
+  for (; ; )
    {
       /* Get the next, valid NXFFS inode entry */
 
       ret = nxffs_nextentry(volume, offset, entry);
       if (ret < 0)
         {
-          fvdbg("No inode found: %d\n", -ret);
+          finfo("No inode found: %d\n", -ret);
           return ret;
         }
 

@@ -47,14 +47,14 @@
 #include <net/if.h>
 #include <arpa/inet.h>
 
-#include <apps/netutils/telnetd.h>
-#include <apps/netutils/uiplib.h>
+#include "netutils/telnetd.h"
+#include "netutils/netlib.h"
 
 #include "shell.h"
-#include <apps/nsh.h>
+#include "nshlib/nshlib.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -200,7 +200,11 @@ static void shell_netinit(void)
  * Public Functions
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int shell_main(int argc, char *argv[])
+#endif
 {
   struct telnetd_config_s config;
   int ret;

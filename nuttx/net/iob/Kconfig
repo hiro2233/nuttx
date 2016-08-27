@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 menu "Network I/O Buffer Support"
@@ -34,8 +34,8 @@ config IOB_BUFSIZE
 
 config IOB_NCHAINS
 	int "Number of pre-allocated I/O buffer chain heads"
-	default 0 if !NET_TCP_READAHEAD
-	default 8 if NET_TCP_READAHEAD
+	default 0 if !NET_TCP_READAHEAD && !NET_UDP_READAHEAD
+	default 8 if NET_TCP_READAHEAD || NET_UDP_READAHEAD
 	---help---
 		These tiny nodes are used as "containers" to support queueing of
 		I/O buffer chains.  This will limit the number of I/O transactions
@@ -63,7 +63,7 @@ config IOB_THROTTLE
 config IOB_DEBUG
 	bool "Force I/O buffer debug"
 	default n
-	depends on DEBUG
+	depends on DEBUG_FEATURES
 	---help---
 		This option will force debug output from I/O buffer logic,
 		even without network debug output.  This is not normally something

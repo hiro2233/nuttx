@@ -49,7 +49,7 @@
 
 	/* This macro will modify r0, r1, r2 and r14 */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 	.macro	showprogress, code
 	mov	r0, #\code
 	bl	up_lowputc
@@ -115,7 +115,7 @@ __start:
 	bl		up_earlyserialinit
 #endif
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 	mov		r0, #'C'
 	bl		up_putc
 	mov		r0, #'\n'
@@ -125,10 +125,10 @@ __start:
 	/* Initialize onboard LEDs */
 
 #ifdef CONFIG_ARCH_LEDS
-	bl		board_led_initialize
+	bl		board_autoled_initialize
 #endif
 
-#ifdef CONFIG_DEBUG_STACK
+#ifdef CONFIG_STACK_COLORATION
 	/* Write a known value to the IDLE thread stack to support stack
 	 * monitoring logic
 	 */
@@ -170,7 +170,7 @@ __start:
 	.long	_edata
 #endif
 
-#ifdef CONFIG_DEBUG_STACK
+#ifdef CONFIG_STACK_COLORATION
 	.type	.Lstkinit, %object
 .Lstkinit:
 	.long	_ebss					/* Beginning of the IDLE stack, then words of IDLE stack */

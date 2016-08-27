@@ -1,6 +1,5 @@
 /****************************************************************************
- * arch/arm/src/m9s12/m9s12_irq.c
- * arch/arm/src/chip/m9s12_irq.c
+ * arch/hc/src/m9s12/m9s12_irq.c
  *
  *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -48,27 +47,14 @@
 #include <arch/irq.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
-#include "m9s12_internal.h"
-
-/****************************************************************************
- * Definitions
- ****************************************************************************/
+#include "m9s12.h"
 
 /****************************************************************************
  * Public Data
  ****************************************************************************/
 
-volatile uint8_t *current_regs;
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
+volatile uint8_t *g_current_regs;
 
 /****************************************************************************
  * Public Functions
@@ -82,19 +68,19 @@ void up_irqinitialize(void)
 {
   /* currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  g_current_regs = NULL;
 
   /* Initialize logic to support a second level of interrupt decoding for
    * GPIO pins.
    */
 
-#ifdef CONFIG_GPIO_IRQ
+#ifdef CONFIG_HCS12_GPIOIRQ
   hcs12_gpioirqinitialize();
 #endif
 
   /* And finally, enable interrupts */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
-  irqrestore(0);
+  up_irq_restore(0);
 #endif
 }

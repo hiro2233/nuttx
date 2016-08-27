@@ -50,7 +50,7 @@
 #endif
 
 #include <nuttx/version.h>
-#include <apps/nsh.h>
+#include "nshlib/nshlib.h"
 
 #include "nsh.h"
 #include "nsh_console.h"
@@ -196,7 +196,7 @@ static int nsh_parse_command(FAR struct nsh_vtbl_s *vtbl, FAR char *cmdline);
 
 static const char g_token_separator[] = " \t\n";
 #ifndef NSH_DISABLE_SEMICOLON
-static const char g_line_separator[]  = "\";\n";
+static const char g_line_separator[]  = "\"#;\n";
 #endif
 #ifdef CONFIG_NSH_ARGCAT
 static const char g_arg_separator[]   = "`$";
@@ -224,10 +224,18 @@ const char g_nshgreeting[]       = "\nNuttShell (NSH) NuttX-" CONFIG_VERSION_STR
 const char g_nshgreeting[]       = "\nNuttShell (NSH)\n";
 #endif
 
+/* Fixed Message of the Day (MOTD) */
+
+#if defined(CONFIG_NSH_MOTD) && !defined(CONFIG_NSH_PLATFORM_MOTD)
+const char g_nshmotd[]           = CONFIG_NSH_MOTD_STRING;
+#endif
+
 /* Telnet login prompts */
 
+#ifdef CONFIG_NSH_LOGIN
 #if defined(CONFIG_NSH_TELNET_LOGIN) && defined(CONFIG_NSH_TELNET)
 const char g_telnetgreeting[]    = "\nWelcome to NuttShell(NSH) Telnet Server...\n";
+#endif
 const char g_userprompt[]        = "login: ";
 const char g_passwordprompt[]    = "password: ";
 const char g_loginsuccess[]      = "\nUser Logged-in!\n";
@@ -241,7 +249,7 @@ const char g_nshprompt[]         = "nsh> ";
 
 /* Common, message formats */
 
-const char g_nshsyntax[]         = "nsh: %s: syntax error\n";
+const char g_fmtsyntax[]         = "nsh: %s: syntax error\n";
 const char g_fmtargrequired[]    = "nsh: %s: missing required argument(s)\n";
 const char g_fmtnomatching[]     = "nsh: %s: no matching %s\n";
 const char g_fmtarginvalid[]     = "nsh: %s: argument invalid\n";
@@ -355,7 +363,7 @@ static pthread_addr_t nsh_child(pthread_addr_t arg)
   struct cmdarg_s *carg = (struct cmdarg_s *)arg;
   int ret;
 
-  dbg("BG %s\n", carg->argv[0]);
+  _info("BG %s\n", carg->argv[0]);
 
   /* Execute the specified command on the child thread */
 
@@ -363,9 +371,9 @@ static pthread_addr_t nsh_child(pthread_addr_t arg)
 
   /* Released the cloned arguments */
 
-  dbg("BG %s complete\n", carg->argv[0]);
+  _info("BG %s complete\n", carg->argv[0]);
   nsh_releaseargs(carg);
-  return (void*)ret;
+  return (pthread_addr_t)((uintptr_t)ret);
 }
 #endif
 
@@ -874,7 +882,7 @@ static FAR char *nsh_cmdparm(FAR struct nsh_vtbl_s *vtbl, FAR char *cmdline,
   /* Create a unique file name using the task ID */
 
   tmpfile = NULL;
-  ret = asprintf(&tmpfile, "%s/TMP%d.dat", CONFIG_NSH_TMPDIR, getpid());
+  ret = asprintf(&tmpfile, "%s/TMP%d.dat", CONFIG_LIBC_TMPDIR, getpid());
   if (ret < 0 || !tmpfile)
     {
       nsh_output(vtbl, g_fmtcmdoutofmemory, "``");
@@ -1203,7 +1211,7 @@ static FAR char *nsh_argexpand(FAR struct nsh_vtbl_s *vtbl, FAR char *cmdline,
 
       *rptr = '\0';
 
-      /* Then execute the command to get the paramter value */
+      /* Then execute the command to get the parameter value */
 
       argument = nsh_cmdparm(vtbl, cmdline + 1, allocation);
     }
@@ -2191,22 +2199,23 @@ int nsh_parse(FAR struct nsh_vtbl_s *vtbl, FAR char *cmdline)
       np->np_loffs = (uint16_t)(working - cmdline);
 #endif
       /* A command may be terminated with a newline character, the end of the
-       * line, or a semicolon.  NOTE that the set of delimiting characters
-       * includes the quotation mark.  We need to handle quotation marks here
-       * because a semicolon or newline character within a quoted string must
-       * be ignored.
+       * line, a semicolon, or a '#' character.  NOTE that the set of
+       * delimiting characters includes the quotation mark.  We need to
+       * handle quotation marks here because any other delimiter within a
+       * quoted string must be treated as normal text.
        */
 
       len = strcspn(working, g_line_separator);
       ptr = working + len;
 
       /* Check for the last command on the line.  This means that the none
-       * of the delimiting characters was found or that the newline character
-       * was found.  Anything after the newline character is ignored (there
-       * should not be anything.
+       * of the delimiting characters was found or that the newline or '#'
+       * character was found.  Anything after the newline or '#' character
+       * is ignored (there should not be anything after a newline, of
+       * course).
        */
 
-      if (*ptr == '\0' || *ptr == '\n')
+      if (*ptr == '\0' || *ptr == '\n' || *ptr == '#')
         {
           /* Parse the last command on the line */
 

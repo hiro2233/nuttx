@@ -43,7 +43,7 @@
 #include <nuttx/config.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* The task_create task size can be specified in the defconfig file */
@@ -73,7 +73,7 @@
 
 /* Priority inheritance */
 
-#if defined(CONFIG_DEBUG) && defined(CONFIG_PRIORITY_INHERITANCE) && defined(CONFIG_SEM_PHDEBUG)
+#if defined(CONFIG_DEBUG_FEATURES) && defined(CONFIG_PRIORITY_INHERITANCE) && defined(CONFIG_SEM_PHDEBUG)
 #  define dump_nfreeholders(s) printf(s " nfreeholders: %d\n", sem_nfreeholders())
 #else
 #  define dump_nfreeholders(s)
@@ -96,7 +96,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -110,6 +110,12 @@ int dev_null(void);
 /* fpu.c ********************************************************************/
 
 void fpu_test(void);
+
+/* aio.c ********************************************************************/
+
+#ifdef CONFIG_FS_AIO
+void aio_test(void);
+#endif
 
 /* restart.c ****************************************************************/
 
@@ -133,6 +139,14 @@ void recursive_mutex_test(void);
 
 void sem_test(void);
 
+/* semtimed.c ***************************************************************/
+
+void semtimed_test(void);
+
+/* nsem.c *******************************************************************/
+
+void nsem_test(void);
+
 /* cond.c *******************************************************************/
 
 void cond_test(void);
@@ -153,17 +167,34 @@ void cancel_test(void);
 
 void timedwait_test(void);
 
+/* sigprocmask.c ****************************************************************/
+
+void sigprocmask_test(void);
+
 /* sighand.c ****************************************************************/
 
 void sighand_test(void);
 
+/* signest.c ****************************************************************/
+
+void signest_test(void);
+
 /* posixtimers.c ************************************************************/
 
 void timer_test(void);
+void sigev_thread_test(void);
 
 /* roundrobin.c *************************************************************/
 
 void rr_test(void);
+
+/* sporadic.c *************************************************************/
+
+void sporadic_test(void);
+
+/* tls.c ********************************************************************/
+
+void tls_test(void);
 
 /* barrier.c ****************************************************************/
 
@@ -184,7 +215,7 @@ int vfork_test(void);
  * priority inheritance
  */
 
-#if defined(CONFIG_DEBUG) && defined(CONFIG_PRIORITY_INHERITANCE) && defined(CONFIG_SEM_PHDEBUG)
+#if defined(CONFIG_DEBUG_FEATURES) && defined(CONFIG_PRIORITY_INHERITANCE) && defined(CONFIG_SEM_PHDEBUG)
 void sem_enumholders(FAR sem_t *sem);
 int sem_nfreeholders(void);
 #else

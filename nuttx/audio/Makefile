@@ -50,7 +50,7 @@ VPATH = .
 # the appropriate paths to the VPATH variable
 
 ifeq ($(CONFIG_AUDIO_FORMAT_PCM),y)
-  CSRCS += pcm.c
+  CSRCS += pcm_decode.c
 endif
 
 AOBJS = $(ASRCS:.S=$(OBJEXT))
@@ -62,6 +62,7 @@ OBJS = $(AOBJS) $(COBJS)
 BIN = libaudio$(LIBEXT)
 
 all: $(BIN)
+.PHONY: depend clean distclean
 
 $(AOBJS): %$(OBJEXT): %.S
 	$(call ASSEMBLE, $<, $@)

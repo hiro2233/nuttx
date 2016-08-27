@@ -42,12 +42,8 @@
  *
  ****************************************************************************/
 
-#ifndef __ARCH_ARM_SRC_ARMV7_A_CPSR_H
-#define __ARCH_ARM_SRC_ARMV7_A_CPSR_H
-
-/****************************************************************************
- * Included Files
- ****************************************************************************/
+#ifndef __ARCH_ARM_SRC_ARMV7_A_ARM_H
+#define __ARCH_ARM_SRC_ARMV7_A_ARM_H
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -96,7 +92,7 @@
 #endif /* __ASSEMBLY__ */
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -106,7 +102,8 @@
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -133,4 +130,4 @@ void arm_data_initialize(void);
 #endif
 #endif /* __ASSEMBLY__ */
 
-#endif  /* __ARCH_ARM_SRC_ARMV7_A_CPSR_H */
+#endif  /* __ARCH_ARM_SRC_ARMV7_A_ARM_H */

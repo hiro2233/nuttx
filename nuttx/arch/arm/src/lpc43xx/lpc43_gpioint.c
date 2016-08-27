@@ -1,7 +1,7 @@
 /****************************************************************************
  *  arch/arm/src/lpc43/lpc43_gpioint.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,19 +34,21 @@
  ****************************************************************************/
 /* GPIO pin interrupts
  *
- * From all available GPIO pins, up to eight pins can be selected in the system
- * control block to serve as external interrupt pins. The external interrupt pins
- * are connected to eight individual interrupts in the NVIC and are created based
- * on rising or falling edges or on the input level on the pin.
+ *   From all available GPIO pins, up to eight pins can be selected in the
+ *   system control block to serve as external interrupt pins. The external
+ *   interrupt pins are connected to eight individual interrupts in the NVIC
+ *   and are created based on rising or falling edges or on the input level
+ *   on the pin.
  *
  * GPIO group interrupt
  *
- * For each port/pin connected to one of the two the GPIO Grouped Interrupt blocks
- * (GROUP0 and GROUP1), the GPIO grouped interrupt registers determine which pins are
- * enabled to generate interrupts and what the active polarities of each of those
- * inputs are. The GPIO grouped interrupt registers also select whether the interrupt
- * output will be level or edge triggered and whether it will be based on the OR or
- * the AND of all of the enabled inputs.
+ *   For each port/pin connected to one of the two the GPIO Grouped Interrupt
+ *   blocks (GROUP0 and GROUP1), the GPIO grouped interrupt registers
+ *   determine which pins are enabled to generate interrupts and what the
+ *   active polarities of each of those inputs are. The GPIO grouped
+ *   interrupt registers also select whether the interrupt output will be
+ *   level or edge triggered and whether it will be based on the OR or the
+ *   AND of all of the enabled inputs.
  */
 
 /****************************************************************************
@@ -55,15 +57,21 @@
 
 #include <arch/board/board.h>
 #include <nuttx/config.h>
+#include <debug.h>
 
-#include <nuttx/arch.h>
 #include <errno.h>
 
+#include <nuttx/irq.h>
+#include <nuttx/arch.h>
+
+#include "up_arch.h"
 #include "chip.h"
 #include "chip/lpc43_scu.h"
+#include "chip/lpc43_gpio.h"
+#include "lpc43_gpio.h"
 #include "lpc43_gpioint.h"
 
-#ifdef CONFIG_GPIO_IRQ
+#ifdef CONFIG_LPC43_GPIO_IRQ
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -110,7 +118,7 @@ int lpc43_gpioint_grpinitialize(int group, bool anded, bool level)
 
   /* Select the group register base address and disable the group interrupt */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (group == 0)
     {
       grpbase = LPC43_GRP0INT_BASE;
@@ -144,9 +152,10 @@ int lpc43_gpioint_grpinitialize(int group, bool anded, bool level)
     {
       regval |= GRPINT_CTRL_TRIG;
     }
-  putreg32(regbal, grpbase + LPC43_GRP1INT_CTRL_OFFSET);
 
-  irqrestore(flags);
+  putreg32(regval, grpbase + LPC43_GRPINT_CTRL_OFFSET);
+
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -168,11 +177,13 @@ int lpc43_gpioint_grpinitialize(int group, bool anded, bool level)
 int lpc43_gpioint_pinconfig(uint16_t gpiocfg)
 {
   unsigned int port    = ((gpiocfg & GPIO_PORT_MASK) >> GPIO_PORT_SHIFT);
-  unsigned int pin     = ((gpiocfg & GPIO_PORT_MASK) >> GPIO_PORT_SHIFT);
+  unsigned int pin     = ((gpiocfg & GPIO_PIN_MASK) >> GPIO_PIN_SHIFT);
   unsigned int pinint  = ((gpiocfg & GPIO_PININT_MASK) >> GPIO_PININT_SHIFT);
   uint32_t     bitmask = (1 << pinint);
-  uint32_t     regval;
-  int          ret     = OK;
+  uint32_t     pinsel;
+  uint32_t     isel;
+  uint32_t     einr;
+  uint32_t     einf;
 
   DEBUGASSERT(port < NUM_GPIO_PORTS && pin < NUM_GPIO_PINS && GPIO_IS_PININT(gpiocfg));
 
@@ -189,59 +200,68 @@ int lpc43_gpioint_pinconfig(uint16_t gpiocfg)
 
   if (pinint < 4)
     {
-      regval = getreg32(LPC43_SCU_PINTSEL0);
-      regval &= ~SCU_PINTSEL0_MASK(pinint);
-      regval |= ((pin  << SCU_PINTSEL0_INTPIN_SHIFT(pinint)) |
+      pinsel  = getreg32(LPC43_SCU_PINTSEL0);
+      pinsel &= ~SCU_PINTSEL0_MASK(pinint);
+      pinsel |= ((pin  << SCU_PINTSEL0_INTPIN_SHIFT(pinint)) |
                  (port << SCU_PINTSEL0_PORTSEL_SHIFT(pinint)));
-      putreg32(regval, LPC43_SCU_PINTSEL0);
+      putreg32(pinsel, LPC43_SCU_PINTSEL0);
     }
   else
     {
-      regval = getreg32(LPC43_SCU_PINTSEL1);
-      regval &= ~SCU_PINTSEL1_MASK(pinint);
-      regval |= ((pin  << SCU_PINTSEL1_INTPIN_SHIFT(pinint)) |
+      pinsel  = getreg32(LPC43_SCU_PINTSEL1);
+      pinsel &= ~SCU_PINTSEL1_MASK(pinint);
+      pinsel |= ((pin  << SCU_PINTSEL1_INTPIN_SHIFT(pinint)) |
                  (port << SCU_PINTSEL1_PORTSEL_SHIFT(pinint)));
-      putreg32(regval, LPC43_SCU_PINTSEL1);
+      putreg32(pinsel, LPC43_SCU_PINTSEL1);
     }
 
-  /* Set level or edge sensitive */
+  /* Configure the active level or rising/falling edge
+   *
+   *   ISEL
+   *     0 = Edge sensitive
+   *     1 = Level sensitive
+   *   EINR 0-7:
+   *     0 = Disable rising edge or level interrupt.
+   *     1 = Enable rising edge or level interrupt.
+   *   EINF 0-7:
+   *     0 = Disable falling edge interrupt or set active interrupt level
+   *         LOW.
+   *     1 = Enable falling edge interrupt enabled or set active interrupt
+   *         level HIGH
+   */
 
-  regval = getreg32(LPC43_GPIOINT_ISEL);
-  if (GPIO_IS_LEVEL(gpiocfg))
-    {
-      regval |= bitmask;
-    }
-  else
-    {
-      regval &= ~bitmask;
-    }
-  putreg32(regval, LPC43_GPIOINT_ISEL);
+  isel  = getreg32(LPC43_GPIOINT_ISEL) & ~bitmask;
+  einr  = getreg32(LPC43_GPIOINT_IENR) & ~bitmask;
+  einf  = getreg32(LPC43_GPIOINT_IENF) & ~bitmask;
 
-  /* Configure the active high level or rising edge */
+  switch (gpiocfg & GPIO_INT_MASK)
+    {
+      case GPIO_INT_LEVEL_HI:
+        einf |= bitmask;  /* Enable active level HI */
+      case GPIO_INT_LEVEL_LOW:
+        isel |= bitmask;  /* Level sensitive */
+        einr |= bitmask;  /* Enable level interrupt */
+        break;
 
-  regval = getreg32(LPC43_GPIOINT_IENR);
-  if (GPIO_IS_ACTIVE_HI(gpiocfg))
-    {
-      regval |= bitmask;
-    }
-  else
-    {
-      regval &= ~bitmask;
-    }
-  putreg32(regval, LPC43_GPIOINT_IENR);
+      case GPIO_INT_EDGE_RISING:
+        einr |= bitmask;  /* Enable rising edge interrupt */
+        break;
 
-  /* Configure the active high low or falling edge */
+      case GPIO_INT_EDGE_BOTH:
+        einr |= bitmask;  /* Enable rising edge interrupt */
+      case GPIO_INT_EDGE_FALLING:
+        einf |= bitmask;  /* Enable falling edge interrupt */
+        break;
 
-  regval = getreg32(LPC43_GPIOINT_IENF);
-  if (GPIO_IS_ACTIVE_LOW(gpiocfg))
-    {
-      regval |= bitmask;
+      /* Default is edge sensitive but with both edges disabled. */
+
+      default:
+        break;
     }
-  else
-    {
-      regval &= ~bitmask;
-    }
-  putreg32(regval, LPC43_GPIOINT_IENF);
+
+  putreg32(isel, LPC43_GPIOINT_ISEL);
+  putreg32(einr, LPC43_GPIOINT_IENR);
+  putreg32(einf, LPC43_GPIOINT_IENF);
 
   return OK;
 }
@@ -250,8 +270,8 @@ int lpc43_gpioint_pinconfig(uint16_t gpiocfg)
  * Name: lpc43_gpioint_grpconfig
  *
  * Description:
- *   Configure a GPIO pin as an GPIO group interrupt member (after it has been
- *   configured as an input).
+ *   Configure a GPIO pin as an GPIO group interrupt member (after it has
+ *   been configured as an input).
  *
  * Returned Value:
  *   Zero on success; a negated errno value on failure.
@@ -270,11 +290,10 @@ int lpc43_gpioint_grpconfig(uint16_t gpiocfg)
   uintptr_t    regaddr;
   uint32_t     regval;
   uint32_t     bitmask = (1 << pin);
-  int          ret     = OK;
 
   /* Select the group register base address */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (GPIO_IS_GROUP0(gpiocfg))
     {
       grpbase = LPC43_GRP0INT_BASE;
@@ -309,9 +328,33 @@ int lpc43_gpioint_grpconfig(uint16_t gpiocfg)
   regval |= bitmask;
   putreg32(regval, regaddr);
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
-#endif /* CONFIG_GPIO_IRQ */
+/****************************************************************************
+ * Name: lpc43_gpioint_ack
+ *
+ * Description:
+ *   Acknowledge the interrupt for a given pint interrupt number. Call this
+ *   inside the interrupt handler. For edge sensitive interrupts, the interrupt
+ *   status is cleared. For level sensitive interrupts, the active-high/-low
+ *   sensitivity is inverted.
+ *
+ * Returned Value:
+ *   Zero on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
 
+int lpc43_gpioint_ack(uint8_t intnumber)
+{
+  uint32_t regval;
+
+  regval  = getreg32(LPC43_GPIOINT_IST);
+  regval |= (1 << intnumber);
+  putreg32(regval, LPC43_GPIOINT_IST);
+
+  return OK;
+}
+
+#endif /* CONFIG_LPC43_GPIO_IRQ */

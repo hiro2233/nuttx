@@ -1,8 +1,7 @@
 /****************************************************************************
  * arch/z80/include/z180/irq.h
- * arch/chip/irq.h
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -173,7 +172,7 @@ typedef uint16_t chipreg_t;
 struct z180_cbr_s
 {
   uint8_t cbr;   /* The CBR value used by the thread */
-  uint8_t crefs; /* The number of threads sharing this CBR value */
+  uint8_t crefs; /* The number of task groups using this CBR value (0 or 1) */
   uint8_t pages; /* The number of 4KB pages of physical memory in the allocation */
 };
 
@@ -183,10 +182,6 @@ struct z180_cbr_s
 
 struct xcptcontext
 {
-  /* CBR allocation */
-
-  FAR struct z180_cbr_s *cbr;
-
   /* Register save area */
 
   chipreg_t regs[XCPTCONTEXT_REGS];
@@ -211,7 +206,7 @@ struct xcptcontext
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -221,13 +216,23 @@ struct xcptcontext
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
 
-EXTERN irqstate_t irqsave(void) __naked;
-EXTERN void       irqrestore(irqstate_t flags) __naked;
+/* Name: up_irq_save, up_irq_restore, and friends.
+ *
+ * NOTE: This function should never be called from application code and,
+ * as a general rule unless you really know what you are doing, this
+ * function should not be called directly from operation system code either:
+ * Typically, the wrapper functions, enter_critical_section() and
+ * leave_critical section(), are probably what you really want.
+ */
+
+irqstate_t up_irq_save(void) __naked;
+void       up_irq_restore(irqstate_t flags) __naked;
 
 #undef EXTERN
 #ifdef __cplusplus

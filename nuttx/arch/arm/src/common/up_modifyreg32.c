@@ -42,22 +42,10 @@
 #include <stdint.h>
 #include <debug.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 
 #include "up_arch.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -76,10 +64,10 @@ void modifyreg32(unsigned int addr, uint32_t clearbits, uint32_t setbits)
   irqstate_t flags;
   uint32_t   regval;
 
-  flags   = irqsave();
+  flags   = enter_critical_section();
   regval  = getreg32(addr);
   regval &= ~clearbits;
   regval |= setbits;
   putreg32(regval, addr);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }

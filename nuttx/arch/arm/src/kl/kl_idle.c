@@ -1,7 +1,7 @@
 /****************************************************************************
  *  arch/arm/src/kl/kl_idle.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,9 +41,10 @@
 #include <nuttx/config.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/power/pm.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 
 #include "chip.h"
 #include "up_internal.h"
@@ -57,12 +58,14 @@
  */
 
 #if defined(CONFIG_ARCH_LEDS) && defined(LED_IDLE)
-#  define BEGIN_IDLE() board_led_on(LED_IDLE)
-#  define END_IDLE()   board_led_off(LED_IDLE)
+#  define BEGIN_IDLE() board_autoled_on(LED_IDLE)
+#  define END_IDLE()   board_autoled_off(LED_IDLE)
 #else
 #  define BEGIN_IDLE()
 #  define END_IDLE()
 #endif
+
+#define PM_IDLE_DOMAIN 0 /* Revisit */
 
 /****************************************************************************
  * Private Data
@@ -90,26 +93,26 @@ static void up_idlepm(void)
 
   /* Decide, which power saving level can be obtained */
 
-  newstate = pm_checkstate();
+  newstate = pm_checkstate(PM_IDLE_DOMAIN);
 
   /* Check for state changes */
 
   if (newstate != oldstate)
     {
-      flags = irqsave();
+      flags = enter_critical_section();
 
       /* Perform board-specific, state-dependent logic here */
 
-      llvdbg("newstate= %d oldstate=%d\n", newstate, oldstate);
+      _info("newstate= %d oldstate=%d\n", newstate, oldstate);
 
       /* Then force the global state change */
 
-      ret = pm_changestate(newstate);
+      ret = pm_changestate(PM_IDLE_DOMAIN, newstate);
       if (ret < 0)
         {
           /* The new state change failed, revert to the preceding state */
 
-          (void)pm_changestate(oldstate);
+          (void)pm_changestate(PM_IDLE_DOMAIN, oldstate);
         }
       else
         {
@@ -140,7 +143,7 @@ static void up_idlepm(void)
           break;
         }
 
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 }
 #else

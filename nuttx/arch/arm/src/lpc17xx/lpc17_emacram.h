@@ -42,6 +42,7 @@
 
 #include <nuttx/config.h>
 #include "chip.h"
+#include "chip/lpc17_ethernet.h"
 #include "chip/lpc17_memorymap.h"
 
 /************************************************************************************
@@ -60,7 +61,7 @@
 #endif
 
 /* Is networking enabled?  Is the LPC17xx Ethernet device enabled? Does this chip have
- * and Ethernet controlloer?  Yes... then we will replace the above default definitions.
+ * and Ethernet controller?  Yes... then we will replace the above default definitions.
  */
 
 #if defined(CONFIG_NET) && defined(CONFIG_LPC17_ETHERNET) && LPC17_NETHCONTROLLERS > 0
@@ -75,13 +76,13 @@
 /* Number of Tx descriptors */
 
 #ifndef CONFIG_NET_NTXDESC
-#  define CONFIG_NET_NTXDESC 18
+#  define CONFIG_NET_NTXDESC 13
 #endif
 
 /* Number of Rx descriptors */
 
 #ifndef CONFIG_NET_NRXDESC
-#  define CONFIG_NET_NRXDESC 18
+#  define CONFIG_NET_NRXDESC 13
 #endif
 
 /* Size of the region at the beginning of AHB SRAM 0 set set aside for the EMAC.
@@ -123,8 +124,8 @@
 /* Descriptor Memory Layout *********************************************************/
 /* EMAC DMA RAM and descriptor definitions.  The configured number of descriptors
  * will determine the organization and the size of the descriptor and status tables.
- * There is a complex interaction between the maximum packet size (CONFIG_NET_BUFSIZE)
- * and the number of Rx and Tx descriptors that can be suppored (CONFIG_NET_NRXDESC
+ * There is a complex interaction between the maximum packet size (CONFIG_NET_ETH_MTU)
+ * and the number of Rx and Tx descriptors that can be supported (CONFIG_NET_NRXDESC
  * and CONFIG_NET_NTXDESC): Small buffers -> more packets.  This is something that
  * needs to be tuned for you system.
  *
@@ -132,51 +133,9 @@
  *
  *  16384 <= ntx * (pktsize + 8 + 4) + nrx * (pktsize + 8 + 8)
  *
- * If ntx == nrx and pktsize == 424, then you could have
- * ntx = nrx = 18.
- *
- * An example with all of the details:
- *
- * NTXDESC=18 NRXDESC=18 CONFIG_NET_EMACRAM_SIZE=16Kb CONFIG_NET_BUFSIZE=420:
- *   LPC17_TXDESCTAB_SIZE = 18*8 = 144
- *   LPC17_TXSTATTAB_SIZE = 18*4 =  72
- *   LPC17_TXTAB_SIZE     = 216
- *
- *   LPC17_RXDESCTAB_SIZE = 16*8 = 144
- *   LPC17_RXSTATTAB_SIZE = 16*8 = 144
- *   LPC17_TXTAB_SIZE     = 288
- *
- *   LPC17_DESCTAB_SIZE   = 504
- *   LPC17_DESC_BASE      = LPC17_SRAM_BANK0 + 0x00004000 - 504
- *                        = LPC17_SRAM_BANK0 + 0x00003e08
- *   LPC17_TXDESC_BASE    = LPC17_SRAM_BANK0 + 0x00003e08
- *   LPC17_TXSTAT_BASE    = LPC17_SRAM_BANK0 + 0x00003e98
- *   LPC17_RXDESC_BASE    = LPC17_SRAM_BANK0 + 0x00003ee0
- *   LPC17_RXSTAT_BASE    = LPC17_SRAM_BANK0 + 0x00003f70
- *
- *   LPC17_PKTMEM_BASE    = LPC17_SRAM_BANK0
- *   LPC17_PKTMEM_SIZE    = 0x00004000-504 = 0x00003e40
- *   LPC17_PKTMEM_END     = LPC17_SRAM_BANK0 + 0x00003e08
-
- *   LPC17_MAXPACKET_SIZE = ((420 + 3 + 2) & ~3) = 424
- *   LPC17_NTXPKTS        = 18
- *   LPC17_NRXPKTS        = 18
-
- *   LPC17_TXBUFFER_SIZE  = 18 * 424 = 0x00001dd0
- *   LPC17_RXBUFFER_SIZE  = 18 * 424 = 0x00001dd0
- *   LPC17_BUFFER_SIZE    = 0x00003ba0
-
- *   LPC17_BUFFER_BASE    = LPC17_SRAM_BANK0
- *   LPC17_TXBUFFER_BASE  = LPC17_SRAM_BANK0
- *   LPC17_RXBUFFER_BASE  = LPC17_SRAM_BANK0 + 0x00001dd0
- *   LPC17_BUFFER_END     = LPC17_SRAM_BANK0 + 0x00003ba0
- *
- *   Then the check LPC17_BUFFER_END < LPC17_PKTMEM_END passes. The amount of
- *   unused memory is small: 0x00003e08-0x00003ba0 or about 616 bytes -- not
- *   enough for two more packets.
- *
- * [It is also possible, with some effort, to reclaim any unused
- *  SRAM for the use in the heap.  But that has not yet been pursued.]
+ * If ntx == nrx and pktsize == 590+2, then you could have ntx = nrx = 13.  In this
+ * case, you would need only 15,756 bytes of EMAC RAM (but be careful with alignment!
+ * 15,756 is not well aligned.).
  */
 
 #define LPC17_TXDESCTAB_SIZE (CONFIG_NET_NTXDESC*LPC17_TXDESC_SIZE)
@@ -209,7 +168,7 @@
 #define LPC17_PKTMEM_SIZE     (LPC17_EMACRAM_SIZE-LPC17_DESCTAB_SIZE)
 #define LPC17_PKTMEM_END      (LPC17_EMACRAM_BASE+LPC17_PKTMEM_SIZE)
 
-#define LPC17_MAXPACKET_SIZE  ((CONFIG_NET_BUFSIZE + CONFIG_NET_GUARDSIZE + 3) & ~3)
+#define LPC17_MAXPACKET_SIZE  ((CONFIG_NET_ETH_MTU + CONFIG_NET_GUARDSIZE + 3) & ~3)
 #define LPC17_NTXPKTS         CONFIG_NET_NTXDESC
 #define LPC17_NRXPKTS         CONFIG_NET_NRXDESC
 

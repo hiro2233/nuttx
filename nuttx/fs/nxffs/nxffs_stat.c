@@ -55,22 +55,6 @@
 #include "nxffs.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Public Types
- ****************************************************************************/
-
-/****************************************************************************
- * Public Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -86,7 +70,7 @@ int nxffs_statfs(FAR struct inode *mountpt, FAR struct statfs *buf)
   FAR struct nxffs_volume_s *volume;
   int ret;
 
-  fvdbg("Entry\n");
+  finfo("Entry\n");
 
   /* Sanity checks */
 
@@ -132,7 +116,7 @@ int nxffs_stat(FAR struct inode *mountpt, FAR const char *relpath,
   struct nxffs_entry_s entry;
   int ret;
 
-  fvdbg("Entry\n");
+  finfo("Entry\n");
 
   /* Sanity checks */
 
@@ -151,7 +135,6 @@ int nxffs_stat(FAR struct inode *mountpt, FAR const char *relpath,
 
   memset(buf, 0, sizeof(struct stat));
   buf->st_blksize = volume->geo.blocksize;
-  buf->st_blocks  = entry.datlen / (volume->geo.blocksize - SIZEOF_NXFFS_BLOCK_HDR);
 
   /* The requested directory must be the volume-relative "root" directory */
 
@@ -162,11 +145,12 @@ int nxffs_stat(FAR struct inode *mountpt, FAR const char *relpath,
       ret = nxffs_findinode(volume, relpath, &entry);
       if (ret < 0)
         {
-          fdbg("ERROR: Inode '%s' not found: %d\n", -ret);
+          ferr("ERROR: Inode '%s' not found: %d\n", -ret);
           goto errout_with_semaphore;
         }
 
-      buf->st_mode    = S_IFREG|S_IXOTH|S_IXGRP|S_IXUSR;
+      buf->st_blocks  = entry.datlen / (volume->geo.blocksize - SIZEOF_NXFFS_BLOCK_HDR);
+      buf->st_mode    = S_IFREG | S_IXOTH | S_IXGRP | S_IXUSR;
       buf->st_size    = entry.datlen;
       buf->st_atime   = entry.utc;
       buf->st_mtime   = entry.utc;
@@ -180,7 +164,8 @@ int nxffs_stat(FAR struct inode *mountpt, FAR const char *relpath,
     {
       /* It's a read/execute-only directory name */
 
-      buf->st_mode   = S_IFDIR|S_IROTH|S_IRGRP|S_IRUSR|S_IXOTH|S_IXGRP|S_IXUSR;
+      buf->st_mode   = S_IFDIR | S_IROTH | S_IRGRP | S_IRUSR | S_IXOTH |
+                       S_IXGRP | S_IXUSR;
     }
 
   ret = OK;

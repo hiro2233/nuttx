@@ -19,7 +19,7 @@ Toolchain
   different from the default).
 
   If you have no SH toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
 
   1. You must have already configured Nuttx in <some-dir>nuttx.
 
@@ -73,7 +73,7 @@ Common Configuration Notes
      change a configurations using that tool, you should:
 
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-        and misc/tools/
+        see additional README.txt files in the NuttX tools repository.
 
      b. Execute 'make menuconfig' in nuttx/ in order to start the
         reconfiguration process.
@@ -110,9 +110,9 @@ specific to the SH-1
 Architecture selection
 
   CONFIG_ARCH - identifies the arch subdirectory and, hence, the
-    processor architecture.  This should be sh (for arch/sh)
+    processor architecture.  This should be renesas (for arch/renesas)
   CONFIG_ARCH_CHIP - Identifies the arch/*/chip subdirectory.
-    This should be sh1 (for arch/sh/src/sh1 and arch/sh/include/sh1)
+    This should be sh1 (for arch/renesas/src/sh1 and arch/renesas/include/sh1)
   CONFIG_ARCH_SH1 and CONFIG_ARCH_CHIP_SH7032 - for use in C code.  These
     identify the particular chip or SoC that the architecture is
     implemented in.

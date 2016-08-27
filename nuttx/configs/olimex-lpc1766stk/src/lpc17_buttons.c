@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/olimex-lpc1766stk/src/lpc17_buttons.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,7 @@
 #include <stdbool.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/irq.h>
 
 #include <arch/board/board.h>
@@ -53,7 +54,7 @@
 #ifdef CONFIG_ARCH_BUTTONS
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -69,11 +70,11 @@ static const uint16_t g_buttoncfg[BOARD_NUM_BUTTONS] =
   LPC1766STK_UP,   LPC1766STK_DOWN, LPC1766STK_LEFT,   LPC1766STK_RIGHT
 };
 
-/* This array defines all of the interupt handlers current attached to
+/* This array defines all of the interrupt handlers current attached to
  * button events.
  */
 
-#if defined(CONFIG_ARCH_IRQBUTTONS) && defined(CONFIG_GPIO_IRQ)
+#if defined(CONFIG_ARCH_IRQBUTTONS) && defined(CONFIG_LPC17_GPIOIRQ)
 static xcpt_t g_buttonisr[BOARD_NUM_BUTTONS];
 
 /* This array provides the mapping from button ID numbers to button IRQ
@@ -180,7 +181,7 @@ uint8_t board_buttons(void)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_ARCH_IRQBUTTONS) && defined(CONFIG_GPIO_IRQ)
+#if defined(CONFIG_ARCH_IRQBUTTONS) && defined(CONFIG_LPC17_GPIOIRQ)
 xcpt_t board_button_irq(int id, xcpt_t irqhandler)
 {
   xcpt_t oldhandler = NULL;
@@ -198,7 +199,7 @@ xcpt_t board_button_irq(int id, xcpt_t irqhandler)
 
       /* Disable interrupts until we are done */
 
-      flags = irqsave();
+      flags = enter_critical_section();
 
       /* Configure the interrupt.  Either attach and enable the new
        * interrupt or disable and detach the old interrupt handler.
@@ -219,7 +220,7 @@ xcpt_t board_button_irq(int id, xcpt_t irqhandler)
           up_disable_irq(irq);
           (void)irq_detach(irq);
         }
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
   return oldhandler;
 }

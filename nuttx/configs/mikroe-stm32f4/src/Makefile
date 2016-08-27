@@ -1,7 +1,7 @@
 ############################################################################
 # configs/mikroe-stm32f4/src/Makefile
 #
-#   Copyright (C) 2011-2013 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2011-2013, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 #   Updates: 04/15/2013 - Ken Pettit
@@ -39,110 +39,55 @@
 
 -include $(TOPDIR)/Make.defs
 
-CFLAGS += -I$(TOPDIR)/sched
-
 ASRCS =
-AOBJS = $(ASRCS:.S=$(OBJEXT))
-
-CSRCS = up_boot.c up_spi.c
-
-ifeq ($(CONFIG_HAVE_CXX),y)
-CSRCS += up_cxxinitialize.c
-endif
+CSRCS = stm32_boot.c stm32_spi.c
 
 ifeq ($(CONFIG_ARCH_BOARD_STM32_CUSTOM_CLOCKCONFIG),y)
-CSRCS += up_clockconfig.c
+CSRCS += stm32_clockconfig.c
 endif
 
 ifeq ($(CONFIG_STM32_OTGFS),y)
-CSRCS += up_usb.c
+CSRCS += stm32_usb.c
 endif
 
 ifeq ($(CONFIG_PWM),y)
-CSRCS += up_pwm.c
+CSRCS += stm32_pwm.c
 endif
 
 ifeq ($(CONFIG_QENCODER),y)
-CSRCS += up_qencoder.c
+CSRCS += stm32_qencoder.c
 endif
 
-ifeq ($(CONFIG_WATCHDOG),y)
-CSRCS += up_watchdog.c
-endif
-
-ifeq ($(CONFIG_NSH_ARCHINIT),y)
-CSRCS += up_nsh.c
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+CSRCS += stm32_appinit.c
 endif
 
 ifeq ($(CONFIG_ARCH_CUSTOM_PMINIT),y)
-CSRCS += up_pm.c
+CSRCS += stm32_pm.c
 endif
 
 ifeq ($(CONFIG_ARCH_IDLE_CUSTOM),y)
-CSRCS += up_idle.c
+CSRCS += stm32_idle.c
 endif
 
 ifeq ($(CONFIG_STM32_FSMC),y)
-CSRCS += up_extmem.c
+CSRCS += stm32_extmem.c
 endif
 
 ifeq ($(CONFIG_INPUT),y)
-CSRCS += up_touchscreen.c
+CSRCS += stm32_touchscreen.c
 endif
 
 ifeq ($(CONFIG_LCD_MIO283QT2),y)
-CSRCS += up_mio283qt2.c
+CSRCS += stm32_mio283qt2.c
 endif
 
 ifeq ($(CONFIG_LCD_MIO283QT9A),y)
-CSRCS += up_mio283qt9a.c
+CSRCS += stm32_mio283qt9a.c
 endif
 
 ifeq ($(CONFIG_VS1053),y)
-CSRCS += up_vs1053.c
+CSRCS += stm32_vs1053.c
 endif
 
-COBJS = $(CSRCS:.c=$(OBJEXT))
-
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-ARCH_SRCDIR = $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(CONFIG_WINDOWS_NATIVE),y)
-  CFLAGS += -I$(ARCH_SRCDIR)\chip -I$(ARCH_SRCDIR)\common -I$(ARCH_SRCDIR)\armv7-m
-else
-ifeq ($(WINTOOL),y)
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
-			-I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
-			-I "${shell cygpath -w $(ARCH_SRCDIR)/armv7-m}"
-else
-  CFLAGS += -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/armv7-m
-endif
-endif
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

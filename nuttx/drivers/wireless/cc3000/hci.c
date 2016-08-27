@@ -1,6 +1,7 @@
-/*****************************************************************************
- *  hci.c  - CC3000 Host Driver Implementation.
- *  Copyright (C) 2011 Texas Instruments Incorporated - http://www.ti.com/
+/****************************************************************************
+ *  drivers/wireless/cc3000/hci.c  - CC3000 Host Driver Implementation.
+ *
+ *    Copyright (C) 2011 Texas Instruments Incorporated - http://www.ti.com/
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions
@@ -30,11 +31,11 @@
  *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
-/******************************************************************************
+/****************************************************************************
  * Included Files
- ******************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
@@ -47,16 +48,16 @@
 #include <nuttx/wireless/cc3000/evnt_handler.h>
 #include <nuttx/wireless/cc3000/wlan.h>
 
-/******************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- ******************************************************************************/
+ ****************************************************************************/
 
 #define SL_PATCH_PORTION_SIZE    (1000)
 
-/******************************************************************************
+/****************************************************************************
  * Public Functions
- ******************************************************************************/
-/******************************************************************************
+ ****************************************************************************/
+/****************************************************************************
  * Name: hci_command_send
  *
  * Description:
@@ -70,7 +71,7 @@
  * Returned Value:
  *   Zero
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 uint16_t hci_command_send(uint16_t usOpcode, uint8_t *pucBuff,
                           uint8_t ucArgsLength)
@@ -79,7 +80,7 @@ uint16_t hci_command_send(uint16_t usOpcode, uint8_t *pucBuff,
 
   stream = (pucBuff + SPI_HEADER_SIZE);
 
-  nllvdbg("Send 0x%x\n",usOpcode);
+  ninfo("Send 0x%x\n", usOpcode);
   UINT8_TO_STREAM(stream, HCI_TYPE_CMND);
   stream = UINT16_TO_STREAM(stream, usOpcode);
   UINT8_TO_STREAM(stream, ucArgsLength);
@@ -87,12 +88,12 @@ uint16_t hci_command_send(uint16_t usOpcode, uint8_t *pucBuff,
   /* Update the opcode of the event we will be waiting for */
 
   cc3000_write(pucBuff, ucArgsLength + SIMPLE_LINK_HCI_CMND_HEADER_SIZE);
-  nllvdbg("Send of 0x%x Completed\n",usOpcode);
+  ninfo("Send of 0x%x Completed\n", usOpcode);
 
   return 0;
 }
 
-/******************************************************************************
+/****************************************************************************
  * Name: hci_data_send
  *
  * Description:
@@ -108,7 +109,7 @@ uint16_t hci_command_send(uint16_t usOpcode, uint8_t *pucBuff,
  * Returned Value:
  *   None
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 long hci_data_send(uint8_t ucOpcode, uint8_t *ucArgs, uint16_t usArgsLength,
                    uint16_t usDataLength, const uint8_t *ucTail,
@@ -132,7 +133,7 @@ long hci_data_send(uint8_t ucOpcode, uint8_t *ucArgs, uint16_t usArgsLength,
   return ESUCCESS;
 }
 
-/******************************************************************************
+/****************************************************************************
  * Name: hci_data_command_send
  *
  * Description:
@@ -147,10 +148,10 @@ long hci_data_send(uint8_t ucOpcode, uint8_t *ucArgs, uint16_t usArgsLength,
  * Returned Value:
  *   None
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 void hci_data_command_send(uint16_t usOpcode, uint8_t *pucBuff,
-                           uint8_t ucArgsLength,uint16_t ucDataLength)
+                           uint8_t ucArgsLength, uint16_t ucDataLength)
 {
   uint8_t *stream = (pucBuff + SPI_HEADER_SIZE);
 
@@ -166,7 +167,7 @@ void hci_data_command_send(uint16_t usOpcode, uint8_t *pucBuff,
                SIMPLE_LINK_HCI_DATA_CMND_HEADER_SIZE);
 }
 
-/******************************************************************************
+/****************************************************************************
  * Name: hci_patch_send
  *
  * Description:
@@ -181,7 +182,7 @@ void hci_data_command_send(uint16_t usOpcode, uint8_t *pucBuff,
  * Returned Value:
  *   None
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 void hci_patch_send(uint8_t ucOpcode, uint8_t *pucBuff, char *patch,
                     uint16_t usDataLength)

@@ -1,8 +1,7 @@
 /****************************************************************************
  * arch/arm/src/stm32/stm32_irq.c
- * arch/arm/src/chip/stm32_irq.c
  *
- *   Copyright (C) 2009-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,20 +49,19 @@
 #include "nvic.h"
 #include "ram_vectors.h"
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 #include "stm32.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Get a 32-bit version of the default priority */
 
 #define DEFPRIORITY32 \
-  (NVIC_SYSH_PRIORITY_DEFAULT << 24 |\
-   NVIC_SYSH_PRIORITY_DEFAULT << 16 |\
-   NVIC_SYSH_PRIORITY_DEFAULT << 8  |\
+  (NVIC_SYSH_PRIORITY_DEFAULT << 24 | \
+   NVIC_SYSH_PRIORITY_DEFAULT << 16 | \
+   NVIC_SYSH_PRIORITY_DEFAULT << 8  | \
    NVIC_SYSH_PRIORITY_DEFAULT)
 
 /* Given the address of a NVIC ENABLE register, this is the offset to
@@ -77,11 +75,25 @@
  * Public Data
  ****************************************************************************/
 
-volatile uint32_t *current_regs;
+/* g_current_regs[] holds a references to the current interrupt level
+ * register storage structure.  If is non-NULL only during interrupt
+ * processing.  Access to g_current_regs[] must be through the macro
+ * CURRENT_REGS for portability.
+ */
 
-/****************************************************************************
- * Private Data
- ****************************************************************************/
+volatile uint32_t *g_current_regs[1];
+
+ /* This is the address of the  exception vector table (determined by the
+  * linker script).
+  */
+
+#if defined(__ICCARM__)
+/* _vectors replaced on __vector_table for IAR C-SPY Simulator */
+
+extern uint32_t __vector_table[];
+#else
+extern uint32_t _vectors[];
+#endif
 
 /****************************************************************************
  * Private Functions
@@ -95,41 +107,43 @@ volatile uint32_t *current_regs;
  *
  ****************************************************************************/
 
-#if defined(CONFIG_DEBUG_IRQ)
+#if defined(CONFIG_DEBUG_IRQ_INFO)
 static void stm32_dumpnvic(const char *msg, int irq)
 {
   irqstate_t flags;
 
-  flags = irqsave();
-  lldbg("NVIC (%s, irq=%d):\n", msg, irq);
-  lldbg("  INTCTRL:    %08x VECTAB:  %08x\n",
-        getreg32(NVIC_INTCTRL), getreg32(NVIC_VECTAB));
+  flags = enter_critical_section();
+
+  irqinfo("NVIC (%s, irq=%d):\n", msg, irq);
+  irqinfo("  INTCTRL:    %08x VECTAB:  %08x\n",
+          getreg32(NVIC_INTCTRL), getreg32(NVIC_VECTAB));
 #if 0
-  lldbg("  SYSH ENABLE MEMFAULT: %08x BUSFAULT: %08x USGFAULT: %08x SYSTICK: %08x\n",
-        getreg32(NVIC_SYSHCON_MEMFAULTENA), getreg32(NVIC_SYSHCON_BUSFAULTENA),
-        getreg32(NVIC_SYSHCON_USGFAULTENA), getreg32(NVIC_SYSTICK_CTRL_ENABLE));
+  irqinfo("  SYSH ENABLE MEMFAULT: %08x BUSFAULT: %08x USGFAULT: %08x SYSTICK: %08x\n",
+          getreg32(NVIC_SYSHCON_MEMFAULTENA), getreg32(NVIC_SYSHCON_BUSFAULTENA),
+          getreg32(NVIC_SYSHCON_USGFAULTENA), getreg32(NVIC_SYSTICK_CTRL_ENABLE));
 #endif
-  lldbg("  IRQ ENABLE: %08x %08x %08x\n",
-        getreg32(NVIC_IRQ0_31_ENABLE), getreg32(NVIC_IRQ32_63_ENABLE),
-        getreg32(NVIC_IRQ64_95_ENABLE));
-  lldbg("  SYSH_PRIO:  %08x %08x %08x\n",
-        getreg32(NVIC_SYSH4_7_PRIORITY), getreg32(NVIC_SYSH8_11_PRIORITY),
-        getreg32(NVIC_SYSH12_15_PRIORITY));
-  lldbg("  IRQ PRIO:   %08x %08x %08x %08x\n",
-        getreg32(NVIC_IRQ0_3_PRIORITY), getreg32(NVIC_IRQ4_7_PRIORITY),
-        getreg32(NVIC_IRQ8_11_PRIORITY), getreg32(NVIC_IRQ12_15_PRIORITY));
-  lldbg("              %08x %08x %08x %08x\n",
-        getreg32(NVIC_IRQ16_19_PRIORITY), getreg32(NVIC_IRQ20_23_PRIORITY),
-        getreg32(NVIC_IRQ24_27_PRIORITY), getreg32(NVIC_IRQ28_31_PRIORITY));
-  lldbg("              %08x %08x %08x %08x\n",
-        getreg32(NVIC_IRQ32_35_PRIORITY), getreg32(NVIC_IRQ36_39_PRIORITY),
-        getreg32(NVIC_IRQ40_43_PRIORITY), getreg32(NVIC_IRQ44_47_PRIORITY));
-  lldbg("              %08x %08x %08x %08x\n",
-        getreg32(NVIC_IRQ48_51_PRIORITY), getreg32(NVIC_IRQ52_55_PRIORITY),
-        getreg32(NVIC_IRQ56_59_PRIORITY), getreg32(NVIC_IRQ60_63_PRIORITY));
-  lldbg("              %08x\n",
-        getreg32(NVIC_IRQ64_67_PRIORITY));
-  irqrestore(flags);
+  irqinfo("  IRQ ENABLE: %08x %08x %08x\n",
+          getreg32(NVIC_IRQ0_31_ENABLE), getreg32(NVIC_IRQ32_63_ENABLE),
+          getreg32(NVIC_IRQ64_95_ENABLE));
+  irqinfo("  SYSH_PRIO:  %08x %08x %08x\n",
+          getreg32(NVIC_SYSH4_7_PRIORITY), getreg32(NVIC_SYSH8_11_PRIORITY),
+          getreg32(NVIC_SYSH12_15_PRIORITY));
+  irqinfo("  IRQ PRIO:   %08x %08x %08x %08x\n",
+          getreg32(NVIC_IRQ0_3_PRIORITY), getreg32(NVIC_IRQ4_7_PRIORITY),
+          getreg32(NVIC_IRQ8_11_PRIORITY), getreg32(NVIC_IRQ12_15_PRIORITY));
+  irqinfo("              %08x %08x %08x %08x\n",
+          getreg32(NVIC_IRQ16_19_PRIORITY), getreg32(NVIC_IRQ20_23_PRIORITY),
+          getreg32(NVIC_IRQ24_27_PRIORITY), getreg32(NVIC_IRQ28_31_PRIORITY));
+  irqinfo("              %08x %08x %08x %08x\n",
+          getreg32(NVIC_IRQ32_35_PRIORITY), getreg32(NVIC_IRQ36_39_PRIORITY),
+          getreg32(NVIC_IRQ40_43_PRIORITY), getreg32(NVIC_IRQ44_47_PRIORITY));
+  irqinfo("              %08x %08x %08x %08x\n",
+          getreg32(NVIC_IRQ48_51_PRIORITY), getreg32(NVIC_IRQ52_55_PRIORITY),
+          getreg32(NVIC_IRQ56_59_PRIORITY), getreg32(NVIC_IRQ60_63_PRIORITY));
+  irqinfo("              %08x\n",
+          getreg32(NVIC_IRQ64_67_PRIORITY));
+
+  leave_critical_section(flags);
 }
 #else
 #  define stm32_dumpnvic(msg, irq)
@@ -146,51 +160,51 @@ static void stm32_dumpnvic(const char *msg, int irq)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 static int stm32_nmi(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! NMI received\n");
+  (void)up_irq_save();
+  _err("PANIC!!! NMI received\n");
   PANIC();
   return 0;
 }
 
 static int stm32_busfault(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! Bus fault received: %08x\n", getreg32(NVIC_CFAULTS));
+  (void)up_irq_save();
+  _err("PANIC!!! Bus fault received: %08x\n", getreg32(NVIC_CFAULTS));
   PANIC();
   return 0;
 }
 
 static int stm32_usagefault(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! Usage fault received: %08x\n", getreg32(NVIC_CFAULTS));
+  (void)up_irq_save();
+  _err("PANIC!!! Usage fault received: %08x\n", getreg32(NVIC_CFAULTS));
   PANIC();
   return 0;
 }
 
 static int stm32_pendsv(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! PendSV received\n");
+  (void)up_irq_save();
+  _err("PANIC!!! PendSV received\n");
   PANIC();
   return 0;
 }
 
 static int stm32_dbgmonitor(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! Debug Monitor receieved\n");
+  (void)up_irq_save();
+  _err("PANIC!!! Debug Monitor received\n");
   PANIC();
   return 0;
 }
 
 static int stm32_reserved(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! Reserved interrupt\n");
+  (void)up_irq_save();
+  _err("PANIC!!! Reserved interrupt\n");
   PANIC();
   return 0;
 }
@@ -231,39 +245,25 @@ static inline void stm32_prioritize_syscall(int priority)
 static int stm32_irqinfo(int irq, uintptr_t *regaddr, uint32_t *bit,
                          uintptr_t offset)
 {
+  int n;
+
   DEBUGASSERT(irq >= STM32_IRQ_NMI && irq < NR_IRQS);
 
   /* Check for external interrupt */
 
-  if (irq >= STM32_IRQ_INTERRUPTS)
+  if (irq >= STM32_IRQ_FIRST)
     {
-      if (irq < STM32_IRQ_INTERRUPTS + 32)
-        {
-           *regaddr = (NVIC_IRQ0_31_ENABLE + offset);
-           *bit     = 1 << (irq - STM32_IRQ_INTERRUPTS);
-        }
-      else if (irq < STM32_IRQ_INTERRUPTS + 64)
-        {
-           *regaddr = (NVIC_IRQ32_63_ENABLE + offset);
-           *bit     = 1 << (irq - STM32_IRQ_INTERRUPTS - 32);
-        }
-      else if (irq < NR_IRQS)
-        {
-           *regaddr = (NVIC_IRQ64_95_ENABLE + offset);
-           *bit     = 1 << (irq - STM32_IRQ_INTERRUPTS - 64);
-        }
-      else
-        {
-          return ERROR; /* Invalid interrupt */
-        }
+      n        = irq - STM32_IRQ_FIRST;
+      *regaddr = NVIC_IRQ_ENABLE(n) + offset;
+      *bit     = (uint32_t)1 << (n & 0x1f);
     }
 
   /* Handle processor exceptions.  Only a few can be disabled */
 
   else
     {
-       *regaddr = NVIC_SYSHCON;
-       if (irq == STM32_IRQ_MEMFAULT)
+      *regaddr = NVIC_SYSHCON;
+      if (irq == STM32_IRQ_MEMFAULT)
         {
           *bit = NVIC_SYSHCON_MEMFAULTENA;
         }
@@ -301,15 +301,18 @@ void up_irqinitialize(void)
 {
   uint32_t regaddr;
   int num_priority_registers;
+  int i;
 
   /* Disable all interrupts */
 
-  putreg32(0, NVIC_IRQ0_31_ENABLE);
-  putreg32(0, NVIC_IRQ32_63_ENABLE);
+  for (i = 0; i < NR_IRQS - STM32_IRQ_FIRST; i += 32)
+    {
+      putreg32(0xffffffff, NVIC_IRQ_CLEAR(i));
+    }
 
   /* Colorize the interrupt stack for debug purposes */
 
-#if defined(CONFIG_DEBUG_STACK) && CONFIG_ARCH_INTERRUPTSTACK > 3
+#if defined(CONFIG_STACK_COLORATION) && CONFIG_ARCH_INTERRUPTSTACK > 3
   {
     size_t intstack_size = (CONFIG_ARCH_INTERRUPTSTACK & ~3);
     up_stack_color((FAR void *)((uintptr_t)&g_intstackbase - intstack_size),
@@ -321,15 +324,20 @@ void up_irqinitialize(void)
    * at address 0x0800:0000.  If we are using the STMicro DFU bootloader, then
    * the vector table will be offset to a different location in FLASH and we
    * will need to set the NVIC vector location to this alternative location.
-   *
-   * If CONFIG_ARCH_RAMVECTORS is defined, then we are using a RAM-based
+   */
+
+#if defined(__ICCARM__)
+  putreg32((uint32_t)__vector_table, NVIC_VECTAB);
+#else
+  putreg32((uint32_t)_vectors, NVIC_VECTAB);
+#endif
+
+#ifdef CONFIG_ARCH_RAMVECTORS
+  /* If CONFIG_ARCH_RAMVECTORS is defined, then we are using a RAM-based
    * vector table that requires special initialization.
    */
 
-#if defined(CONFIG_ARCH_RAMVECTORS)
   up_ramvec_initialize();
-#elif defined(CONFIG_STM32_DFU)
-  putreg32((uint32_t)_vectors, NVIC_VECTAB);
 #endif
 
   /* Set all interrupts (and exceptions) to the default priority */
@@ -360,7 +368,7 @@ void up_irqinitialize(void)
 
   /* currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  CURRENT_REGS = NULL;
 
   /* Attach the SVCall and Hard Fault exception handlers.  The SVCall
    * exception is used for performing context switches; The Hard Fault
@@ -374,26 +382,26 @@ void up_irqinitialize(void)
   /* Set the priority of the SVCall interrupt */
 
 #ifdef CONFIG_ARCH_IRQPRIO
-/* up_prioritize_irq(STM32_IRQ_PENDSV, NVIC_SYSH_PRIORITY_MIN); */
+  /* up_prioritize_irq(STM32_IRQ_PENDSV, NVIC_SYSH_PRIORITY_MIN); */
 #endif
 #ifdef CONFIG_ARMV7M_USEBASEPRI
-   stm32_prioritize_syscall(NVIC_SYSH_SVCALL_PRIORITY);
+  stm32_prioritize_syscall(NVIC_SYSH_SVCALL_PRIORITY);
 #endif
 
   /* If the MPU is enabled, then attach and enable the Memory Management
    * Fault handler.
    */
 
-#ifdef CONFIG_ARMV7M_MPU
+#ifdef CONFIG_ARM_MPU
   irq_attach(STM32_IRQ_MEMFAULT, up_memfault);
   up_enable_irq(STM32_IRQ_MEMFAULT);
 #endif
 
   /* Attach all other processor exceptions (except reset and sys tick) */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   irq_attach(STM32_IRQ_NMI, stm32_nmi);
-#ifndef CONFIG_ARMV7M_MPU
+#ifndef CONFIG_ARM_MPU
   irq_attach(STM32_IRQ_MEMFAULT, up_memfault);
 #endif
   irq_attach(STM32_IRQ_BUSFAULT, stm32_busfault);
@@ -409,7 +417,7 @@ void up_irqinitialize(void)
 
   /* And finally, enable interrupts */
 
-  irqenable();
+  up_irq_enable();
 #endif
 }
 
@@ -435,7 +443,7 @@ void up_disable_irq(int irq)
        * clear the bit in the System Handler Control and State Register.
        */
 
-      if (irq >= STM32_IRQ_INTERRUPTS)
+      if (irq >= STM32_IRQ_FIRST)
         {
           putreg32(bit, regaddr);
         }
@@ -472,7 +480,7 @@ void up_enable_irq(int irq)
        * set the bit in the System Handler Control and State Register.
        */
 
-      if (irq >= STM32_IRQ_INTERRUPTS)
+      if (irq >= STM32_IRQ_FIRST)
         {
           putreg32(bit, regaddr);
         }
@@ -520,7 +528,7 @@ int up_prioritize_irq(int irq, int priority)
   DEBUGASSERT(irq >= STM32_IRQ_MEMFAULT && irq < NR_IRQS &&
               (unsigned)priority <= NVIC_SYSH_PRIORITY_MIN);
 
-  if (irq < STM32_IRQ_INTERRUPTS)
+  if (irq < STM32_IRQ_FIRST)
     {
       /* NVIC_SYSH_PRIORITY() maps {0..15} to one of three priority
        * registers (0-3 are invalid)
@@ -533,7 +541,7 @@ int up_prioritize_irq(int irq, int priority)
     {
       /* NVIC_IRQ_PRIORITY() maps {0..} to one of many priority registers */
 
-      irq    -= STM32_IRQ_INTERRUPTS;
+      irq    -= STM32_IRQ_FIRST;
       regaddr = NVIC_IRQ_PRIORITY(irq);
     }
 

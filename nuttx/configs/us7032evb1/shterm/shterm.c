@@ -50,7 +50,7 @@
 #include <errno.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Size of the circular buffer used for interrupt I/O */
@@ -62,8 +62,8 @@
 
 #define DEFAULT_BAUD 9600
 
-#define dbg(format, ...)  if (debug > 0) printconsole(format, ##__VA_ARGS__)
-#define vdbg(format, ...) if (debug > 1) printconsole(format, ##__VA_ARGS__)
+#define  _err(format, ...)  if (debug > 0) printconsole(format, ##__VA_ARGS__)
+#define _info(format, ...) if (debug > 1) printconsole(format, ##__VA_ARGS__)
 
 /****************************************************************************
  * Private Types
@@ -609,8 +609,8 @@ int main(int argc, char **argv, char **envp)
   tty.c_cflag &= ~(CSIZE|PARENB);
   tty.c_cflag |= CS8;
 
- (void)cfsetispeed(&tty, speed);
- (void)cfsetospeed(&tty, speed);
+  (void)cfsetispeed(&tty, speed);
+  (void)cfsetospeed(&tty, speed);
 
   ret = tcsetattr(g_fd, TCSANOW, &tty);
   if (ret < 0)

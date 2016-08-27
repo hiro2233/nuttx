@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/avr/src/common/up_initialize.c
  *
- *   Copyright (C) 2010, 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2012-2013, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,8 +42,17 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/fs/fs.h>
-#include <nuttx/syslog/ramlog.h>
+#include <nuttx/sched_note.h>
+#include <nuttx/drivers/drivers.h>
+#include <nuttx/fs/loop.h>
+#include <nuttx/net/loopback.h>
+#include <nuttx/net/tun.h>
+#include <nuttx/net/telnet.h>
+#include <nuttx/syslog/syslog.h>
+#include <nuttx/syslog/syslog_console.h>
+#include <nuttx/serial/pty.h>
+#include <nuttx/crypto/crypto.h>
+#include <nuttx/power/pm.h>
 
 #include <arch/board/board.h>
 
@@ -53,6 +62,7 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
 /* Determine which (if any) console driver to use.  This will probably cause
  * up_serialinit to be incorrectly called if there is no USART configured to
  * be an RS-232 device (see as an example arch/avr/src/at32uc23/at32uc3_config.h)
@@ -92,17 +102,6 @@
 #  define USE_SERIALDRIVER 1
 #endif
 
-/* Determine which device to use as the system logging device */
-
-#ifndef CONFIG_SYSLOG
-#  undef CONFIG_SYSLOG_CHAR
-#  undef CONFIG_RAMLOG_SYSLOG
-#endif
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
@@ -117,16 +116,18 @@
  *
  ****************************************************************************/
 
-#if defined(CONFIG_ARCH_CALIBRATION) && defined(CONFIG_DEBUG)
+#if defined(CONFIG_ARCH_CALIBRATION) && defined(CONFIG_DEBUG_FEATURES)
 static void up_calibratedelay(void)
 {
   int i;
-  lldbg("Beginning 100s delay\n");
+
+  _warn("Beginning 100s delay\n");
   for (i = 0; i < 100; i++)
     {
       up_mdelay(1000);
     }
-  lldbg("End 100s delay\n");
+
+  _warn("End 100s delay\n");
 }
 #else
 # define up_calibratedelay()
@@ -141,7 +142,7 @@ static void up_calibratedelay(void)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_DEBUG_STACK) && CONFIG_ARCH_INTERRUPTSTACK > 3
+#if defined(CONFIG_STACK_COLORATION) && CONFIG_ARCH_INTERRUPTSTACK > 3
 static inline void up_color_intstack(void)
 {
   uint8_t *ptr = (uint8_t *)&g_intstackalloc;
@@ -183,7 +184,7 @@ void up_initialize(void)
 {
   /* Initialize global variables */
 
-  current_regs = NULL;
+  g_current_regs = NULL;
 
   /* Calibrate the timing loop */
 
@@ -201,11 +202,21 @@ void up_initialize(void)
 
   up_irqinitialize();
 
-  /* Initialize the DMA subsystem if the weak function stm32_dmainitialize has been
+#ifdef CONFIG_PM
+  /* Initialize the power management subsystem.  This MCU-specific function
+   * must be called *very* early in the initialization sequence *before* any
+   * other device drivers are initialized (since they may attempt to register
+   * with the power management subsystem).
+   */
+
+  up_pminitialize();
+#endif
+
+#ifdef CONFIG_ARCH_DMA
+  /* Initialize the DMA subsystem if the weak function up_dmainitialize has been
    * brought into the build
    */
 
-#ifdef CONFIG_ARCH_DMA
 #ifdef CONFIG_HAVE_WEAKFUNCTIONS
   if (up_dmainitialize)
 #endif
@@ -217,7 +228,7 @@ void up_initialize(void)
   /* Initialize the system timer interrupt */
 
 #if !defined(CONFIG_SUPPRESS_INTERRUPTS) && !defined(CONFIG_SUPPRESS_TIMER_INTS)
-  up_timerinit();
+  up_timer_initialize();
 #endif
 
   /* Register devices */
@@ -228,11 +239,27 @@ void up_initialize(void)
   devnull_register();   /* Standard /dev/null */
 #endif
 
+#if defined(CONFIG_DEV_RANDOM)
+  devrandom_register(); /* Standard /dev/random */
+#endif
+
+#if defined(CONFIG_DEV_URANDOM)
+  devurandom_register();   /* Standard /dev/urandom */
+#endif
+
 #if defined(CONFIG_DEV_ZERO)
   devzero_register();   /* Standard /dev/zero */
 #endif
 
+#if defined(CONFIG_DEV_LOOP)
+  loop_register();      /* Standard /dev/loop */
+#endif
 #endif /* CONFIG_NFILE_DESCRIPTORS */
+
+#if defined(CONFIG_SCHED_INSTRUMENTATION_BUFFER) && \
+    defined(CONFIG_DRIVER_NOTE)
+  note_register();      /* Non-standard /dev/note */
+#endif
 
   /* Initialize the serial device driver */
 
@@ -246,27 +273,64 @@ void up_initialize(void)
 
 #if defined(CONFIG_DEV_LOWCONSOLE)
   lowconsole_init();
+#elif defined(CONFIG_CONSOLE_SYSLOG)
+  syslog_console_init();
 #elif defined(CONFIG_RAMLOG_CONSOLE)
   ramlog_consoleinit();
 #endif
 
-  /* Initialize the system logging device */
+#if CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_PSEUDOTERM_SUSV1)
+  /* Register the master pseudo-terminal multiplexor device */
 
-#ifdef CONFIG_SYSLOG_CHAR
-  syslog_initialize();
-#endif
-#ifdef CONFIG_RAMLOG_SYSLOG
-  ramlog_sysloginit();
+  (void)ptmx_register();
 #endif
 
+  /* Early initialization of the system logging device.  Some SYSLOG channel
+   * can be initialized early in the initialization sequence because they
+   * depend on only minimal OS initialization.
+   */
+
+  syslog_initialize(SYSLOG_INIT_EARLY);
+
+#if defined(CONFIG_CRYPTO)
+  /* Initialize the HW crypto and /dev/crypto */
+
+  up_cryptoinitialize();
+#endif
+
+#if CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_CRYPTO_CRYPTODEV)
+  devcrypto_register();
+#endif
+
+#ifndef CONFIG_NETDEV_LATEINIT
   /* Initialize the network */
 
   up_netinitialize();
+#endif
+
+#ifdef CONFIG_NETDEV_LOOPBACK
+  /* Initialize the local loopback device */
+
+  (void)localhost_initialize();
+#endif
+
+#ifdef CONFIG_NET_TUN
+  /* Initialize the TUN device */
+
+  (void)tun_initialize();
+#endif
+
+#ifdef CONFIG_NETDEV_TELNET
+  /* Initialize the Telnet session factory */
+
+  (void)telnet_initialize();
+#endif
 
   /* Initialize USB */
 
   up_usbinitialize();
 
-  board_led_on(LED_IRQSENABLED);
+#if defined(ARCH_HAVE_LEDS)
+  board_autoled_on(LED_IRQSENABLED);
+#endif
 }
-

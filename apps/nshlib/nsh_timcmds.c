@@ -1,7 +1,7 @@
 /****************************************************************************
  * apps/nshlib/dbg_timcmds.c
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,14 +48,16 @@
 #include "nsh_console.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define MAX_TIME_STRING 80
 
-/****************************************************************************
- * Private Types
- ****************************************************************************/
+#ifdef CONFIG_CLOCK_MONOTONIC
+#  define TIME_CLOCK CLOCK_MONOTONIC
+#else
+#  define TIME_CLOCK CLOCK_REALTIME
+#endif
 
 /****************************************************************************
  * Private Function Prototypes
@@ -65,7 +67,7 @@
  * Private Data
  ****************************************************************************/
 
-#if defined (CONFIG_RTC) && !defined(CONFIG_DISABLE_CLOCK) && !defined(CONFIG_NSH_DISABLE_DATE)
+#ifndef  CONFIG_NSH_DISABLE_DATE
 static FAR const char * const g_datemontab[] =
 {
   "jan", "feb", "mar", "apr", "may", "jun",
@@ -85,7 +87,7 @@ static FAR const char * const g_datemontab[] =
  * Name: date_month
  ****************************************************************************/
 
-#if defined (CONFIG_RTC) && !defined(CONFIG_DISABLE_CLOCK) && !defined(CONFIG_NSH_DISABLE_DATE)
+#ifndef CONFIG_NSH_DISABLE_DATE
 static inline int date_month(FAR const char *abbrev)
 {
   int i;
@@ -105,10 +107,14 @@ static inline int date_month(FAR const char *abbrev)
  * Name: date_gettime
  ****************************************************************************/
 
-#if defined (CONFIG_RTC) && !defined(CONFIG_DISABLE_CLOCK) && !defined(CONFIG_NSH_DISABLE_DATE)
+#ifndef CONFIG_NSH_DISABLE_DATE
 static inline int date_showtime(FAR struct nsh_vtbl_s *vtbl, FAR const char *name)
 {
+#if defined(CONFIG_LIBC_LOCALTIME) || defined(CONFIG_TIME_EXTENDED)
+  static const char format[] = "%a, %b %d %H:%M:%S %Y";
+#else
   static const char format[] = "%b %d %H:%M:%S %Y";
+#endif
   struct timespec ts;
   struct tm tm;
   char timbuf[MAX_TIME_STRING];
@@ -125,11 +131,21 @@ static inline int date_showtime(FAR struct nsh_vtbl_s *vtbl, FAR const char *nam
 
   /* Break the current time up into the format needed by strftime */
 
-  (void)gmtime_r((FAR const time_t*)&ts.tv_sec, &tm);
+  if (gmtime_r((FAR const time_t*)&ts.tv_sec, &tm) == NULL)
+    {
+      nsh_output(vtbl, g_fmtcmdfailed, name, "gmtime_r", NSH_ERRNO);
+      return ERROR;
+    }
 
   /* Show the current time in the requested format */
 
-  (void)strftime(timbuf, MAX_TIME_STRING, format, &tm);
+  ret = strftime(timbuf, MAX_TIME_STRING, format, &tm);
+  if (ret < 0)
+    {
+      nsh_output(vtbl, g_fmtcmdfailed, name, "strftime", NSH_ERRNO);
+      return ERROR;
+    }
+
   nsh_output(vtbl, "%s\n", timbuf);
   return OK;
 }
@@ -139,7 +155,7 @@ static inline int date_showtime(FAR struct nsh_vtbl_s *vtbl, FAR const char *nam
  * Name: date_settime
  ****************************************************************************/
 
-#if defined (CONFIG_RTC) && !defined(CONFIG_DISABLE_CLOCK) && !defined(CONFIG_NSH_DISABLE_DATE)
+#ifndef CONFIG_NSH_DISABLE_DATE
 static inline int date_settime(FAR struct nsh_vtbl_s *vtbl, FAR const char *name,
                                FAR char *newtime)
 {
@@ -178,6 +194,7 @@ static inline int date_settime(FAR struct nsh_vtbl_s *vtbl, FAR const char *name
     {
       goto errout_bad_parm;
     }
+
   tm.tm_mday = (int)result;
 
   /* Get the hours */
@@ -193,6 +210,7 @@ static inline int date_settime(FAR struct nsh_vtbl_s *vtbl, FAR const char *name
     {
       goto errout_bad_parm;
     }
+
   tm.tm_hour = (int)result;
 
   /* Get the minutes */
@@ -208,6 +226,7 @@ static inline int date_settime(FAR struct nsh_vtbl_s *vtbl, FAR const char *name
     {
       goto errout_bad_parm;
     }
+
   tm.tm_min = (int)result;
 
   /* Get the seconds */
@@ -223,6 +242,7 @@ static inline int date_settime(FAR struct nsh_vtbl_s *vtbl, FAR const char *name
     {
       goto errout_bad_parm;
     }
+
   tm.tm_sec = (int)result;
 
   /* And finally the year */
@@ -238,6 +258,7 @@ static inline int date_settime(FAR struct nsh_vtbl_s *vtbl, FAR const char *name
     {
       goto errout_bad_parm;
     }
+
   tm.tm_year = (int)result - 1900;
 
   /* Convert this to the right form, then set the timer */
@@ -251,6 +272,7 @@ static inline int date_settime(FAR struct nsh_vtbl_s *vtbl, FAR const char *name
       nsh_output(vtbl, g_fmtcmdfailed, name, "clock_settime", NSH_ERRNO);
       return ERROR;
     }
+
   return OK;
 
 errout_bad_parm:
@@ -264,10 +286,88 @@ errout_bad_parm:
  ****************************************************************************/
 
 /****************************************************************************
+ * Name: cmd_time
+ ****************************************************************************/
+
+#ifndef CONFIG_NSH_DISABLE_TIME
+int cmd_time(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
+{
+  struct timespec start;
+#ifndef CONFIG_NSH_DISABLEBG
+  bool bgsave;
+#endif
+#if CONFIG_NFILE_STREAMS > 0
+  bool redirsave;
+#endif
+  int ret;
+
+  /* Get the current time */
+
+  ret = clock_gettime(TIME_CLOCK, &start);
+  if (ret < 0)
+    {
+       nsh_output(vtbl, g_fmtcmdfailed, argv[0], "clock_gettime", NSH_ERRNO);
+       return ERROR;
+    }
+
+  /* Save state */
+
+#ifndef CONFIG_NSH_DISABLEBG
+  bgsave    = vtbl->np.np_bg;
+#endif
+#if CONFIG_NFILE_STREAMS > 0
+  redirsave = vtbl->np.np_redirect;
+#endif
+
+  /* Execute the command */
+
+  ret = nsh_parse(vtbl, argv[1]);
+  if (ret >= 0)
+    {
+      struct timespec end;
+      struct timespec diff;
+
+      /* Get and print the elapsed time */
+
+      ret = clock_gettime(TIME_CLOCK, &end);
+      if (ret < 0)
+        {
+           nsh_output(vtbl, g_fmtcmdfailed, argv[0], "clock_gettime", NSH_ERRNO);
+           ret = ERROR;
+        }
+      else
+        {
+          diff.tv_sec = end.tv_sec - start.tv_sec;
+          if (start.tv_nsec > end.tv_nsec)
+            {
+              diff.tv_sec--;
+              end.tv_nsec += 1000000000;
+            }
+
+          diff.tv_nsec = end.tv_nsec - start.tv_nsec;
+          nsh_output(vtbl, "\n%lu.%04lu sec\n", (unsigned long)diff.tv_sec,
+                     (unsigned long)diff.tv_nsec / 100000);
+        }
+    }
+
+  /* Restore state */
+
+#ifndef CONFIG_NSH_DISABLEBG
+  vtbl->np.np_bg       = bgsave;
+#endif
+#if CONFIG_NFILE_STREAMS > 0
+  vtbl->np.np_redirect = redirsave;
+#endif
+
+  return ret;
+}
+#endif
+
+/****************************************************************************
  * Name: cmd_date
  ****************************************************************************/
 
-#if defined (CONFIG_RTC) && !defined(CONFIG_DISABLE_CLOCK) && !defined(CONFIG_NSH_DISABLE_DATE)
+#ifndef CONFIG_NSH_DISABLE_DATE
 int cmd_date(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 {
   FAR char *newtime = NULL;
@@ -312,17 +412,18 @@ int cmd_date(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
       goto errout;
     }
 
- /* Display or set the time */
+  /* Display or set the time */
 
- if (newtime)
-   {
-     ret = date_settime(vtbl, argv[0], newtime);
-   }
- else
-   {
-     ret = date_showtime(vtbl, argv[0]);
-   }
- return ret;
+  if (newtime)
+    {
+      ret = date_settime(vtbl, argv[0], newtime);
+    }
+  else
+    {
+      ret = date_showtime(vtbl, argv[0]);
+    }
+
+  return ret;
 
 errout:
   nsh_output(vtbl, errfmt, argv[0]);

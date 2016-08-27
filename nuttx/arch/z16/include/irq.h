@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/irq.h
+ * arch/z16/include/irq.h
  *
  *   Copyright (C) 2008 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -37,8 +37,8 @@
  * only indirectly through nuttx/irq.h
  */
 
-#ifndef __ARCH_IRQ_H
-#define __ARCH_IRQ_H
+#ifndef __ARCH_Z16_INCLUDE_IRQ_H
+#define __ARCH_Z16_INCLUDE_IRQ_H
 
 /****************************************************************************
  * Included Files
@@ -48,7 +48,7 @@
 #include <arch/chip/irq.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -56,7 +56,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -66,7 +66,8 @@
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -77,5 +78,5 @@ extern "C" {
 #endif
 #endif
 
-#endif /* __ARCH_IRQ_H */
+#endif /* __ARCH_Z16_INCLUDE_IRQ_H */
 

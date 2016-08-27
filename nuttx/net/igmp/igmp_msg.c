@@ -46,28 +46,21 @@
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip.h>
-#include <nuttx/net/uip/uip-igmp.h>
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/net.h>
+#include <nuttx/net/igmp.h>
 
-#include "uip/uip_internal.h"
+#include "devif/devif.h"
+#include "igmp/igmp.h"
 
 #ifdef CONFIG_NET_IGMP
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: uip_igmpschedmsg
+ * Name: igmp_schedmsg
  *
  * Description:
  *   Schedule a message to be send at the next driver polling interval.
@@ -77,21 +70,21 @@
  *
  ****************************************************************************/
 
-void uip_igmpschedmsg(FAR struct igmp_group_s *group, uint8_t msgid)
+void igmp_schedmsg(FAR struct igmp_group_s *group, uint8_t msgid)
 {
-  uip_lock_t flags;
+  net_lock_t flags;
 
   /* The following should be atomic */
 
-  flags = uip_lock();
+  flags = net_lock();
   DEBUGASSERT(!IS_SCHEDMSG(group->flags));
   group->msgid = msgid;
   SET_SCHEDMSG(group->flags);
-  uip_unlock(flags);
+  net_unlock(flags);
 }
 
 /****************************************************************************
- * Name: uip_igmpwaitmsg
+ * Name: igmp_waitmsg
  *
  * Description:
  *   Schedule a message to be send at the next driver polling interval and
@@ -99,20 +92,20 @@ void uip_igmpschedmsg(FAR struct igmp_group_s *group, uint8_t msgid)
  *
  * Assumptions:
  *   This function cannot be called from an interrupt handler (if you try it,
- *   uip_lockedwait will assert).
+ *   net_lockedwait will assert).
  *
  ****************************************************************************/
 
-void uip_igmpwaitmsg(FAR struct igmp_group_s *group, uint8_t msgid)
+void igmp_waitmsg(FAR struct igmp_group_s *group, uint8_t msgid)
 {
-  uip_lock_t flags;
+  net_lock_t flags;
 
   /* Schedule to send the message */
 
-  flags = uip_lock();
+  flags = net_lock();
   DEBUGASSERT(!IS_WAITMSG(group->flags));
   SET_WAITMSG(group->flags);
-  uip_igmpschedmsg(group, msgid);
+  igmp_schedmsg(group, msgid);
 
   /* Then wait for the message to be sent */
 
@@ -120,20 +113,20 @@ void uip_igmpwaitmsg(FAR struct igmp_group_s *group, uint8_t msgid)
     {
       /* Wait for the semaphore to be posted */
 
-      while (uip_lockedwait(&group->sem) != 0)
+      while (net_lockedwait(&group->sem) != 0)
         {
-          /* The only error that should occur from uip_lockedwait() is if
+          /* The only error that should occur from net_lockedwait() is if
            * the wait is awakened by a signal.
            */
 
-          ASSERT(errno == EINTR);
+          ASSERT(get_errno() == EINTR);
         }
     }
 
   /* The message has been sent and we are no longer waiting */
 
   CLR_WAITMSG(group->flags);
-  uip_unlock(flags);
+  net_unlock(flags);
 }
 
 #endif /* CONFIG_NET_IGMP */

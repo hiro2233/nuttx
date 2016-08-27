@@ -56,14 +56,6 @@
 #include "nxffs.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
  * Private Data
  ****************************************************************************/
 
@@ -74,10 +66,6 @@
 #ifdef CONFIG_NXFFS_PREALLOCATED
 static struct nxffs_wrfile_s g_wrfile;
 #endif
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -357,7 +345,7 @@ static inline int nxffs_wrname(FAR struct nxffs_volume_s *volume,
   ret = nxffs_rdcache(volume, volume->ioblock);
   if (ret < 0)
     {
-      fdbg("ERROR: Failed to read inode name block %d: %d\n",
+      ferr("ERROR: Failed to read inode name block %d: %d\n",
            volume->ioblock, -ret);
       return ret;
     }
@@ -368,7 +356,7 @@ static inline int nxffs_wrname(FAR struct nxffs_volume_s *volume,
   ret = nxffs_wrcache(volume);
   if (ret < 0)
     {
-      fdbg("ERROR: Failed to write inode header block %d: %d\n",
+      ferr("ERROR: Failed to write inode header block %d: %d\n",
            volume->ioblock, -ret);
     }
 
@@ -403,8 +391,8 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
   ret = sem_wait(&volume->wrsem);
   if (ret != OK)
     {
-      fdbg("ERROR: sem_wait failed: %d\n", ret);
-      ret = -errno;
+      ferr("ERROR: sem_wait failed: %d\n", ret);
+      ret = -get_errno();
       goto errout;
     }
 
@@ -416,8 +404,8 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
   ret = sem_wait(&volume->exclsem);
   if (ret != OK)
     {
-      fdbg("ERROR: sem_wait failed: %d\n", ret);
-      ret = -errno;
+      ferr("ERROR: sem_wait failed: %d\n", ret);
+      ret = -get_errno();
       goto errout_with_wrsem;
     }
 
@@ -441,7 +429,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
            * Limitation:  Files cannot be open both for reading and writing.
            */
 
-          fdbg("ERROR: File is open for reading\n");
+          ferr("ERROR: File is open for reading\n");
           ret = -ENOSYS;
           goto errout_with_exclsem;
         }
@@ -450,9 +438,9 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
        * exclusively.
        */
 
-      else if ((oflags & (O_CREAT|O_EXCL)) == (O_CREAT|O_EXCL))
+      else if ((oflags & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL))
         {
-          fdbg("ERROR: File exists, can't create O_EXCL\n");
+          ferr("ERROR: File exists, can't create O_EXCL\n");
           ret = -EEXIST;
           goto errout_with_exclsem;
         }
@@ -462,7 +450,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
        * we will not re-create the file unless O_CREAT is also specified.
        */
 
-      else if ((oflags & (O_CREAT|O_TRUNC)) == (O_CREAT|O_TRUNC))
+      else if ((oflags & (O_CREAT | O_TRUNC)) == (O_CREAT | O_TRUNC))
         {
           /* Just schedule the removal the file and fall through to re-create it.
            * Note that the old file of the same name will not actually be removed
@@ -478,7 +466,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
 
       else
         {
-          fdbg("ERROR: File %s exists and we were not asked to truncate it\n");
+          ferr("ERROR: File %s exists and we were not asked to truncate it\n");
           ret = -ENOSYS;
           goto errout_with_exclsem;
         }
@@ -490,7 +478,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
 
   if ((oflags & O_CREAT) == 0)
     {
-      fdbg("ERROR: Not asked to create the file\n");
+      ferr("ERROR: Not asked to create the file\n");
       ret = -ENOENT;
       goto errout_with_exclsem;
     }
@@ -500,7 +488,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
   namlen = strlen(name);
   if (namlen > CONFIG_NXFFS_MAXNAMLEN)
     {
-      fdbg("ERROR: Name is too long: %d\n", namlen);
+      ferr("ERROR: Name is too long: %d\n", namlen);
       ret = -EINVAL;
       goto errout_with_exclsem;
     }
@@ -514,7 +502,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
   wrfile = &g_wrfile;
   memset(wrfile, 0, sizeof(struct nxffs_wrfile_s));
 #else
-  wrfile = (FAR struct nxffs_wrfile_s *)kzalloc(sizeof(struct nxffs_wrfile_s));
+  wrfile = (FAR struct nxffs_wrfile_s *)kmm_zalloc(sizeof(struct nxffs_wrfile_s));
   if (!wrfile)
     {
       ret = -ENOMEM;
@@ -546,7 +534,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
    */
 
   packed = false;
-  for (;;)
+  for (; ; )
     {
       /* File a valid location to position the inode header.  Start with the
        * first byte in the free FLASH region.
@@ -574,7 +562,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
 
       if (ret != -ENOSPC || packed)
         {
-          fdbg("ERROR: Failed to find inode header memory: %d\n", -ret);
+          ferr("ERROR: Failed to find inode header memory: %d\n", -ret);
           goto errout_with_name;
         }
 
@@ -585,7 +573,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
       ret = nxffs_pack(volume);
       if (ret < 0)
         {
-          fdbg("ERROR: Failed to pack the volume: %d\n", -ret);
+          ferr("ERROR: Failed to pack the volume: %d\n", -ret);
           goto errout_with_name;
         }
 
@@ -600,7 +588,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
    * Note that nothing is written to FLASH.
    */
 
-  for (;;)
+  for (; ; )
     {
       /* File a valid location to position the inode name.  Start with the
        * first byte in the free FLASH region.
@@ -621,7 +609,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
               ret = nxffs_wrname(volume, &wrfile->ofile.entry, namlen);
               if (ret < 0)
                 {
-                  fdbg("ERROR: Failed to write the inode name: %d\n", -ret);
+                  ferr("ERROR: Failed to write the inode name: %d\n", -ret);
                   goto errout_with_name;
                 }
 
@@ -640,7 +628,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
 
       if (ret != -ENOSPC || packed)
         {
-          fdbg("ERROR: Failed to find inode name memory: %d\n", -ret);
+          ferr("ERROR: Failed to find inode name memory: %d\n", -ret);
           goto errout_with_name;
         }
 
@@ -651,7 +639,7 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
       ret = nxffs_pack(volume);
       if (ret < 0)
         {
-          fdbg("ERROR: Failed to pack the volume: %d\n", -ret);
+          ferr("ERROR: Failed to pack the volume: %d\n", -ret);
           goto errout_with_name;
         }
 
@@ -678,10 +666,10 @@ static inline int nxffs_wropen(FAR struct nxffs_volume_s *volume,
   return OK;
 
 errout_with_name:
-  kfree(wrfile->ofile.entry.name);
+  kmm_free(wrfile->ofile.entry.name);
 errout_with_ofile:
 #ifndef CONFIG_NXFFS_PREALLOCATED
-  kfree(wrfile);
+  kmm_free(wrfile);
 #endif
 
 errout_with_exclsem:
@@ -714,8 +702,8 @@ static inline int nxffs_rdopen(FAR struct nxffs_volume_s *volume,
   ret = sem_wait(&volume->exclsem);
   if (ret != OK)
     {
-      fdbg("ERROR: sem_wait failed: %d\n", ret);
-      ret = -errno;
+      ferr("ERROR: sem_wait failed: %d\n", ret);
+      ret = -get_errno();
       goto errout;
     }
 
@@ -730,7 +718,7 @@ static inline int nxffs_rdopen(FAR struct nxffs_volume_s *volume,
 
       if ((ofile->oflags & O_WROK) != 0)
         {
-          fdbg("ERROR: File is open for writing\n");
+          ferr("ERROR: File is open for writing\n");
           ret = -ENOSYS;
           goto errout_with_exclsem;
         }
@@ -738,7 +726,7 @@ static inline int nxffs_rdopen(FAR struct nxffs_volume_s *volume,
       /* Just increment the reference count on the ofile */
 
       ofile->crefs++;
-      fvdbg("crefs: %d\n", ofile->crefs);
+      finfo("crefs: %d\n", ofile->crefs);
     }
 
   /* The file has not yet been opened.
@@ -750,10 +738,10 @@ static inline int nxffs_rdopen(FAR struct nxffs_volume_s *volume,
     {
       /* Not already open.. create a new open structure */
 
-      ofile = (FAR struct nxffs_ofile_s *)kzalloc(sizeof(struct nxffs_ofile_s));
+      ofile = (FAR struct nxffs_ofile_s *)kmm_zalloc(sizeof(struct nxffs_ofile_s));
       if (!ofile)
         {
-          fdbg("ERROR: ofile allocation failed\n");
+          ferr("ERROR: ofile allocation failed\n");
           ret = -ENOMEM;
           goto errout_with_exclsem;
         }
@@ -768,7 +756,7 @@ static inline int nxffs_rdopen(FAR struct nxffs_volume_s *volume,
       ret = nxffs_findinode(volume, name, &ofile->entry);
       if (ret != OK)
         {
-          fvdbg("Inode '%s' not found: %d\n", name, -ret);
+          finfo("Inode '%s' not found: %d\n", name, -ret);
           goto errout_with_ofile;
         }
 
@@ -785,7 +773,7 @@ static inline int nxffs_rdopen(FAR struct nxffs_volume_s *volume,
   return OK;
 
 errout_with_ofile:
-  kfree(ofile);
+  kmm_free(ofile);
 errout_with_exclsem:
   sem_post(&volume->exclsem);
 errout:
@@ -829,7 +817,7 @@ static inline void nxffs_remofile(FAR struct nxffs_volume_s *volume,
     }
   else
     {
-      fdbg("ERROR: Open inode %p not found\n", ofile);
+      ferr("ERROR: Open inode %p not found\n", ofile);
     }
 }
 
@@ -853,10 +841,10 @@ static inline void nxffs_freeofile(FAR struct nxffs_volume_s *volume,
    */
 
 #ifdef CONFIG_NXFFS_PREALLOCATED
-  if ((FAR struct nxffs_wrfile_s*)ofile != &g_wrfile)
+  if ((FAR struct nxffs_wrfile_s *)ofile != &g_wrfile)
 #endif
     {
-      kfree(ofile);
+      kmm_free(ofile);
     }
 }
 
@@ -890,7 +878,7 @@ static inline int nxffs_wrclose(FAR struct nxffs_volume_s *volume,
       ret = nxffs_wrblkhdr(volume, wrfile);
       if (ret < 0)
         {
-          fdbg("ERROR: Failed to write the final block of the file: %d\n", -ret);
+          ferr("ERROR: Failed to write the final block of the file: %d\n", -ret);
           goto errout;
         }
     }
@@ -904,12 +892,12 @@ static inline int nxffs_wrclose(FAR struct nxffs_volume_s *volume,
 
   if (wrfile->truncate && wrfile->ofile.entry.name)
     {
-      fvdbg("Removing old file: %s\n", wrfile->ofile.entry.name);
+      finfo("Removing old file: %s\n", wrfile->ofile.entry.name);
 
       ret = nxffs_rminode(volume, wrfile->ofile.entry.name);
       if (ret < 0)
         {
-          fdbg("ERROR: nxffs_rminode failed: %d\n", -ret);
+          ferr("ERROR: nxffs_rminode failed: %d\n", -ret);
           goto errout;
         }
     }
@@ -1012,7 +1000,7 @@ int nxffs_open(FAR struct file *filep, FAR const char *relpath,
   FAR struct nxffs_ofile_s *ofile = NULL;
   int ret;
 
-  fvdbg("Open '%s'\n", relpath);
+  finfo("Open '%s'\n", relpath);
 
   /* Sanity checks */
 
@@ -1022,7 +1010,7 @@ int nxffs_open(FAR struct file *filep, FAR const char *relpath,
    * file structure
    */
 
-  volume = (FAR struct nxffs_volume_s*)filep->f_inode->i_private;
+  volume = (FAR struct nxffs_volume_s *)filep->f_inode->i_private;
   DEBUGASSERT(volume != NULL);
 
 #ifdef CONFIG_FILE_MODE
@@ -1036,11 +1024,11 @@ int nxffs_open(FAR struct file *filep, FAR const char *relpath,
    * extension is supported.
    */
 
-   switch (oflags & (O_WROK|O_RDOK))
+   switch (oflags & (O_WROK | O_RDOK))
      {
        case 0:
        default:
-         fdbg("ERROR: One of O_WRONLY/O_RDONLY must be provided\n");
+         ferr("ERROR: One of O_WRONLY/O_RDONLY must be provided\n");
          return -EINVAL;
 
        case O_WROK:
@@ -1051,8 +1039,8 @@ int nxffs_open(FAR struct file *filep, FAR const char *relpath,
          ret = nxffs_rdopen(volume, relpath, &ofile);
          break;
 
-       case O_WROK|O_RDOK:
-         fdbg("ERROR: O_RDWR is not supported\n");
+       case O_WROK | O_RDOK:
+         ferr("ERROR: O_RDWR is not supported\n");
          return -ENOSYS;
      }
 
@@ -1076,23 +1064,23 @@ int nxffs_open(FAR struct file *filep, FAR const char *relpath,
 
 int nxffs_dup(FAR const struct file *oldp, FAR struct file *newp)
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_ASSERTIONS
   FAR struct nxffs_volume_s *volume;
 #endif
   FAR struct nxffs_ofile_s *ofile;
 
-  fvdbg("Dup %p->%p\n", oldp, newp);
+  finfo("Dup %p->%p\n", oldp, newp);
 
   /* Sanity checks */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_ASSERTIONS
   DEBUGASSERT(oldp->f_priv == NULL && oldp->f_inode != NULL);
 
   /* Get the mountpoint private data from the NuttX inode reference in the
    * file structure
    */
 
-  volume = (FAR struct nxffs_volume_s*)oldp->f_inode->i_private;
+  volume = (FAR struct nxffs_volume_s *)oldp->f_inode->i_private;
   DEBUGASSERT(volume != NULL);
 #endif
 
@@ -1138,7 +1126,7 @@ int nxffs_close(FAR struct file *filep)
   FAR struct nxffs_ofile_s *ofile;
   int ret;
 
-  fvdbg("Closing\n");
+  finfo("Closing\n");
 
   /* Sanity checks */
 
@@ -1160,8 +1148,8 @@ int nxffs_close(FAR struct file *filep)
   ret = sem_wait(&volume->exclsem);
   if (ret != OK)
     {
-      ret = -errno;
-      fdbg("ERROR: sem_wait failed: %d\n", ret);
+      ret = -get_errno();
+      ferr("ERROR: sem_wait failed: %d\n", ret);
       goto errout;
     }
 
@@ -1242,7 +1230,7 @@ int nxffs_wrinode(FAR struct nxffs_volume_s *volume,
   ret = nxffs_rdcache(volume, volume->ioblock);
   if (ret < 0)
     {
-      fdbg("ERROR: Failed to read inode header block %d: %d\n",
+      ferr("ERROR: Failed to read inode header block %d: %d\n",
            volume->ioblock, -ret);
       goto errout;
     }
@@ -1281,7 +1269,7 @@ int nxffs_wrinode(FAR struct nxffs_volume_s *volume,
   ret = nxffs_wrcache(volume);
   if (ret < 0)
     {
-      fdbg("ERROR: Failed to write inode header block %d: %d\n",
+      ferr("ERROR: Failed to write inode header block %d: %d\n",
            volume->ioblock, -ret);
     }
 

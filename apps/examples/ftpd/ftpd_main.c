@@ -44,9 +44,10 @@
 #include <debug.h>
 
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
-#include <apps/netutils/uiplib.h>
-#include <apps/netutils/ftpd.h>
+#include "netutils/netlib.h"
+#include "netutils/ftpd.h"
 
 #include "ftpd.h"
 
@@ -96,23 +97,23 @@ static void fptd_netinit(void)
   mac[3] = 0xad;
   mac[4] = 0xbe;
   mac[5] = 0xef;
-  uip_setmacaddr("eth0", mac);
+  netlib_setmacaddr("eth0", mac);
 #endif
 
   /* Set up our host address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_FTPD_IPADDR);
-  uip_sethostaddr("eth0", &addr);
+  netlib_set_ipv4addr("eth0", &addr);
 
   /* Set up the default router address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_FTPD_DRIPADDR);
-  uip_setdraddr("eth0", &addr);
+  netlib_set_dripv4addr("eth0", &addr);
 
   /* Setup the subnet mask */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_FTPD_NETMASK);
-  uip_setnetmask("eth0", &addr);
+  netlib_set_ipv4netmask("eth0", &addr);
 #endif /* CONFIG_EXAMPLES_FTPD_NONETINIT */
 }
 
@@ -220,7 +221,11 @@ int ftpd_daemon(int s_argc, char **s_argv)
  * Name: ftpd_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int ftpd_main(int s_argc, char **s_argv)
+#endif
 {
   /* Check if we have already initialized the network */
 
@@ -255,7 +260,7 @@ int ftpd_main(int s_argc, char **s_argv)
   if (!g_ftpdglob.running)
     {
       printf("Starting the FTP daemon\n");
-      g_ftpdglob.pid = TASK_CREATE("FTP daemon", CONFIG_EXAMPLES_FTPD_PRIO,
+      g_ftpdglob.pid = task_create("FTP daemon", CONFIG_EXAMPLES_FTPD_PRIO,
                                    CONFIG_EXAMPLES_FTPD_STACKSIZE,
                                    ftpd_daemon, NULL);
       if (g_ftpdglob.pid < 0)

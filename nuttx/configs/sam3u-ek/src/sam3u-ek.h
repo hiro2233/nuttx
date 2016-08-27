@@ -51,7 +51,7 @@
 #include "chip/sam_pinmap.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* External Memory Usage ************************************************************/
@@ -212,14 +212,14 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Name: sam_spiinitialize
+ * Name: sam_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the SAM3U-EK board.
  *
  ************************************************************************************/
 
-void weak_function sam_spiinitialize(void);
+void weak_function sam_spidev_initialize(void);
 
 /************************************************************************************
  * Name: sam_hsmciinit
@@ -233,14 +233,6 @@ void weak_function sam_spiinitialize(void);
 int weak_function sam_hsmciinit(void);
 #else
 # define sam_hsmciinit()
-#endif
-
-/************************************************************************************
- * Name: board_led_initialize
- ************************************************************************************/
-
-#ifdef CONFIG_ARCH_LEDS
-void board_led_initialize(void);
 #endif
 
 /************************************************************************************

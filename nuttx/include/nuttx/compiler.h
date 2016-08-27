@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/compiler.h
  *
- *   Copyright (C) 2007-2009, 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2012-2013, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,8 +40,10 @@
  * Included Files
  ****************************************************************************/
 
+#include <nuttx/config.h>
+
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* GCC-specific definitions *************************************************/
@@ -112,7 +114,7 @@
  * indicates that the function should never be inlined.
  */
 
-# define inline_function __attribute__ ((always_inline))
+# define inline_function __attribute__ ((always_inline,no_instrument_function))
 # define noinline_function __attribute__ ((noinline))
 
 /* GCC has does not use storage classes to qualify addressing */
@@ -127,26 +129,44 @@
  */
 
 #if defined(__m32c__)
+/* No I-space access qualifiers */
+
+# define IOBJ
+# define IPTR
+
 /* Select the small, 16-bit addressing model */
 
-# define  CONFIG_SMALL_MEMORY 1
+# define CONFIG_SMALL_MEMORY 1
 
 /* Long and int are not the same size */
 
-# define  CONFIG_LONG_IS_NOT_INT 1
+# define CONFIG_LONG_IS_NOT_INT 1
 
 /* Pointers and int are the same size */
 
 # undef  CONFIG_PTR_IS_NOT_INT
 
 #elif defined(__AVR__)
-/* Select the small, 16-bit addressing model */
+# if defined(CONFIG_AVR_HAS_MEMX_PTR)
+  /* I-space access qualifiers needed by Harvard architecture */
 
-# define  CONFIG_SMALL_MEMORY 1
+#  define IOBJ __flash
+#  define IPTR __memx
+
+# else
+/* No I-space access qualifiers */
+
+#  define IOBJ
+#  define IPTR
+# endif
+
+/* Select the small, 16-bit addressing model (for D-Space) */
+
+# define CONFIG_SMALL_MEMORY 1
 
 /* Long and int are not the same size */
 
-# define  CONFIG_LONG_IS_NOT_INT 1
+# define CONFIG_LONG_IS_NOT_INT 1
 
 /* Pointers and int are the same size */
 
@@ -159,9 +179,14 @@
 #  define CONFIG_HAVE_FARPOINTER 1
 
 #elif defined(__mc68hc1x__)
+/* No I-space access qualifiers */
+
+# define IOBJ
+# define IPTR
+
 /* Select the small, 16-bit addressing model */
 
-# define  CONFIG_SMALL_MEMORY 1
+# define CONFIG_SMALL_MEMORY 1
 
 /* Normally, mc68hc1x code is compiled with the -mshort option
  * which results in a 16-bit integer.  If -mnoshort is defined
@@ -171,22 +196,28 @@
 # if __INT__ == 16
 /* int is 16-bits, long is 32-bits */
 
-#   define  CONFIG_LONG_IS_NOT_INT 1
+#   define CONFIG_LONG_IS_NOT_INT 1
 
-/*  Pointers and int are the same size (16-bits) */
+/* Pointers and int are the same size (16-bits) */
 
 #   undef  CONFIG_PTR_IS_NOT_INT
-#else
+# else
 /* int and long are both 32-bits */
 
 #   undef  CONFIG_LONG_IS_NOT_INT
 
-/*  Pointers and int are NOT the same size */
+/* Pointers and int are NOT the same size */
 
-#   define  CONFIG_PTR_IS_NOT_INT 1
-#endif
+#   define CONFIG_PTR_IS_NOT_INT 1
+# endif
 
 #else
+
+/* No I-space access qualifiers */
+
+# define IOBJ
+# define IPTR
+
 /* Select the large, 32-bit addressing model */
 
 # undef  CONFIG_SMALL_MEMORY
@@ -243,6 +274,7 @@
 # define weak_alias(name, aliasname)
 # define weak_function
 # define weak_const_function
+# define restrict /* REVISIT */
 
 /* SDCC does not support the noreturn or packed attributes */
 
@@ -346,6 +378,11 @@
 # define CONFIG_HAVE_FUNCTIONNAME 1 /* Has __FUNCTION__ */
 # define CONFIG_HAVE_FILENAME     1 /* Has __FILE__ */
 
+/* No I-space access qualifiers */
+
+# define IOBJ
+# define IPTR
+
 /* Attributes
  *
  * The Zilog compiler does not support weak symbols
@@ -355,6 +392,7 @@
 # define weak_alias(name, aliasname)
 # define weak_function
 # define weak_const_function
+# define restrict
 
 /* The Zilog compiler does not support the noreturn, packed, naked attributes */
 
@@ -434,6 +472,45 @@
 
 # define CONFIG_CAN_PASS_STRUCTS 1
 
+/* ICCARM-specific definitions ***********************************************/
+
+#elif defined(__ICCARM__)
+
+# define CONFIG_CPP_HAVE_VARARGS 1 /* Supports variable argument macros */
+# define CONFIG_HAVE_FILENAME 1 /* Has __FILE__ */
+# define CONFIG_HAVE_FLOAT 1
+
+/* Indicate that a local variable is not used */
+
+# define UNUSED(a) ((void)(a))
+
+# define weak_alias(name, aliasname)
+# define weak_function        __weak
+# define weak_const_function
+# define noreturn_function
+# define farcall_function
+# define packed_struct
+# define reentrant_function
+# define naked_function
+# define inline_function
+# define noinline_function
+
+# define FAR
+# define NEAR
+# define DSEG
+# define CODE
+# define IPTR
+
+# define __asm__       asm
+# define __volatile__  volatile
+
+/* For operatots __sfb() and __sfe() */
+
+# pragma section = ".bss"
+# pragma section = ".data"
+# pragma section = ".data_init"
+# pragma section = ".text"
+
 /* Unknown compiler *********************************************************/
 
 #else
@@ -446,6 +523,7 @@
 # define weak_alias(name, aliasname)
 # define weak_function
 # define weak_const_function
+# define restrict
 # define noreturn_function
 # define farcall_function
 # define packed_struct
@@ -473,20 +551,20 @@
 #endif
 
 /****************************************************************************
- * Global Function Prototypes
+ * Public Function Prototypes
  ****************************************************************************/
 
 /****************************************************************************
- * Global Function Prototypes
+ * Public Function Prototypes
  ****************************************************************************/
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
-
 
 #undef EXTERN
 #ifdef __cplusplus

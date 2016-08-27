@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/net/cs89x0.c
  *
- *   Copyright (C) 2009-2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2011, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,18 +45,22 @@
 #include <time.h>
 #include <string.h>
 #include <debug.h>
-#include <wdog.h>
 #include <errno.h>
 
-#include <nuttx/irq.h>
-#include <nuttx/arch.h>
+#include <arpa/inet.h>
 
-#include <nuttx/net/uip/uip.h>
+#include <nuttx/arch.h>
+#include <nuttx/irq.h>
+#include <nuttx/wdog.h>
 #include <nuttx/net/arp.h>
-#include <nuttx/net/uip/uip-arch.h>
+#include <nuttx/net/netdev.h>
+
+#ifdef CONFIG_NET_PKT
+#  include <nuttx/net/pkt.h>
+#endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #error "Under construction -- do not use"
@@ -72,7 +76,6 @@
 /* TX poll delay = 1 seconds. CLK_TCK is the number of clock ticks per second */
 
 #define CS89x0_WDDELAY   (1*CLK_TCK)
-#define CS89x0_POLLHSEC  (1*2)
 
 /* TX timeout = 1 minute */
 
@@ -80,7 +83,7 @@
 
 /* This is a helper pointer for accessing the contents of the Ethernet header */
 
-#define BUF ((struct uip_eth_hdr *)cs89x0->cs_dev.d_buf)
+#define BUF ((struct eth_hdr_s *)cs89x0->cs_dev.d_buf)
 
 /* If there is only one CS89x0 instance, then mapping the CS89x0 IRQ to
  * a driver state instance is trivial.
@@ -116,7 +119,7 @@ static void cs89x0_putppreg(struct cs89x0_driver_s *cs89x0, int addr,
 /* Common TX logic */
 
 static int  cs89x0_transmit(struct cs89x0_driver_s *cs89x0);
-static int  cs89x0_uiptxpoll(struct uip_driver_s *dev);
+static int  cs89x0_txpoll(struct net_driver_s *dev);
 
 /* Interrupt handling */
 
@@ -134,12 +137,12 @@ static void cs89x0_txtimeout(int argc, uint32_t arg, ...);
 
 /* NuttX callback functions */
 
-static int cs89x0_ifup(struct uip_driver_s *dev);
-static int cs89x0_ifdown(struct uip_driver_s *dev);
-static int cs89x0_txavail(struct uip_driver_s *dev);
+static int cs89x0_ifup(struct net_driver_s *dev);
+static int cs89x0_ifdown(struct net_driver_s *dev);
+static int cs89x0_txavail(struct net_driver_s *dev);
 #ifdef CONFIG_NET_IGMP
-static int cs89x0_addmac(struct uip_driver_s *dev, FAR const uint8_t *mac);
-static int cs89x0_rmmac(struct uip_driver_s *dev, FAR const uint8_t *mac);
+static int cs89x0_addmac(struct net_driver_s *dev, FAR const uint8_t *mac);
+static int cs89x0_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
 
 /****************************************************************************
@@ -215,9 +218,9 @@ static uint16_t cs89x0_getppreg(struct cs89x0_driver_s *cs89x0, int addr)
 #endif
     }
 
-    /* When configured in I/O mode, the CS89x0 is accessed through eight, 16-bit
-     * I/O ports that in the host system's I/O space.
-     */
+  /* When configured in I/O mode, the CS89x0 is accessed through eight, 16-bit
+   * I/O ports that in the host system's I/O space.
+   */
 
   else
 #endif
@@ -249,9 +252,9 @@ static void cs89x0_putppreg(struct cs89x0_driver_s *cs89x0, int addr, uint16_t v
 #endif
     }
 
-    /* When configured in I/O mode, the CS89x0 is accessed through eight, 16-bit
-     * I/O ports that in the host system's I/O space.
-     */
+  /* When configured in I/O mode, the CS89x0 is accessed through eight, 16-bit
+   * I/O ports that in the host system's I/O space.
+   */
 
   else
 #endif
@@ -302,16 +305,17 @@ static int cs89x0_transmit(struct cs89x0_driver_s *cs89x0)
 
   /* Setup the TX timeout watchdog (perhaps restarting the timer) */
 
-  (void)wd_start(cs89x0->cs_txtimeout, CS89x0_TXTIMEOUT, cs89x0_txtimeout, 1, (uint32_t)cs89x0);
+  (void)wd_start(cs89x0->cs_txtimeout, CS89x0_TXTIMEOUT, cs89x0_txtimeout,
+                 1, (wdparm_t)cs89x0);
   return OK;
 }
 
 /****************************************************************************
- * Function: cs89x0_uiptxpoll
+ * Function: cs89x0_txpoll
  *
  * Description:
- *   The transmitter is available, check if uIP has any outgoing packets ready
- *   to send.  This is a callback from uip_poll().  uip_poll() may be called:
+ *   The transmitter is available, check if the network has any outgoing packets ready
+ *   to send.  This is a callback from devif_poll().  devif_poll() may be called:
  *
  *   1. When the preceding TX packet send is complete,
  *   2. When the preceding TX packet send timesout and the interface is reset
@@ -327,7 +331,7 @@ static int cs89x0_transmit(struct cs89x0_driver_s *cs89x0)
  *
  ****************************************************************************/
 
-static int cs89x0_uiptxpoll(struct uip_driver_s *dev)
+static int cs89x0_txpoll(struct net_driver_s *dev)
 {
   struct cs89x0_driver_s *cs89x0 = (struct cs89x0_driver_s *)dev->d_private;
 
@@ -337,7 +341,30 @@ static int cs89x0_uiptxpoll(struct uip_driver_s *dev)
 
   if (cs89x0->cs_dev.d_len > 0)
     {
-      arp_out(&cs89x0->cs_dev);
+      /* Look up the destination MAC address and add it to the Ethernet
+       * header.
+       */
+
+#ifdef CONFIG_NET_IPv4
+#ifdef CONFIG_NET_IPv6
+      if (IFF_IS_IPv4(cs89x0->cs_dev.d_flags))
+#endif
+        {
+          arp_out(&cs89x0->cs_dev);
+        }
+#endif /* CONFIG_NET_IPv4 */
+
+#ifdef CONFIG_NET_IPv6
+#ifdef CONFIG_NET_IPv4
+      else
+#endif
+        {
+          neighbor_out(&cs89x0->cs_dev);
+        }
+#endif /* CONFIG_NET_IPv6 */
+
+      /* Send the packet */
+
       cs89x0_transmit(cs89x0);
 
       /* Check if there is room in the CS89x0 to hold another packet. If not,
@@ -370,9 +397,9 @@ static int cs89x0_uiptxpoll(struct uip_driver_s *dev)
  *
  ****************************************************************************/
 
-static void cs89x0_receive(struct cs89x0_driver_s *cs89x0, uint16_t isq)
+static void cs89x0_receive(FAR struct cs89x0_driver_s *cs89x0, uint16_t isq)
 {
-  uint16_t *dest;
+  FAR uint16_t *dest;
   uint16_t rxlength;
   int nbytes;
 
@@ -381,39 +408,39 @@ static void cs89x0_receive(struct cs89x0_driver_s *cs89x0, uint16_t isq)
   rxlength = cs89x0_getreg(PPR_RXLENGTH);
   if ((isq & RX_OK) == 0)
     {
-#ifdef CONFIG_C89x0_STATISTICS
-      cd89x0->cs_stats.rx_errors++;
+#ifdef CONFIG_NETDEV_STATISTICS
+      NETDEV_RXERRORS(&cd89x0->cs_dev);
+
+#if 0
       if ((isq & RX_RUNT) != 0)
         {
-          cd89x0->cs_stats.rx_lengtherrors++;
         }
+
       if ((isq & RX_EXTRA_DATA) != 0)
         {
-          cd89x0->cs_stats.rx_lengtherrors++;
         }
+
       if (isq & RX_CRC_ERROR) != 0)
         {
-          if (!(isq & (RX_EXTRA_DATA|RX_RUNT)))
+          if (!(isq & (RX_EXTRA_DATA | RX_RUNT)))
             {
-              cd89x0->cs_stats.rx_crcerrors++;
             }
         }
+
       if ((isq & RX_DRIBBLE) != 0)
         {
-          cd89x0->cs_stats.rx_frameerrors++;
         }
 #endif
+#endif
+
       return;
     }
 
-  /* Check if the packet is a valid size for the uIP buffer configuration */
+  /* Check if the packet is a valid size for the network buffer configuration */
 
   if (rxlength > ???)
     {
-#ifdef CONFIG_C89x0_STATISTICS
-      cd89x0->cs_stats.rx_errors++;
-      cd89x0->cs_stats.rx_lengtherrors++;
-#endif
+      NETDEV_RXERRORS(&cd89x0->cs_dev);
       return;
     }
 
@@ -421,25 +448,34 @@ static void cs89x0_receive(struct cs89x0_driver_s *cs89x0, uint16_t isq)
    * amount of data in cs89x0->cs_dev.d_len
    */
 
-  dest = (uint16_t*)cs89x0->cs_dev.d_buf;
+  dest = (FAR uint16_t *)cs89x0->cs_dev.d_buf;
   for (nbytes = 0; nbytes < rxlength; nbytes += sizeof(uint16_t))
     {
       *dest++ = cs89x0_getreg(PPR_RXFRAMELOCATION);
     }
 
-#ifdef CONFIG_C89x0_STATISTICS
-  cd89x0->cs_stats.rx_packets++;
+  NETDEV_RXPACKETS(&cd89x0->cs_dev);
+
+#ifdef CONFIG_NET_PKT
+  /* When packet sockets are enabled, feed the frame into the packet tap */
+
+   pkt_input(&cs89x0->cs_dev);
 #endif
+
   /* We only accept IP packets of the configured type and ARP packets */
 
-#ifdef CONFIG_NET_IPv6
-  if (BUF->type == HTONS(UIP_ETHTYPE_IP6))
-#else
-  if (BUF->type == HTONS(UIP_ETHTYPE_IP))
-#endif
+#ifdef CONFIG_NET_IPv4
+  if (BUF->type == HTONS(ETHTYPE_IP))
     {
+      ninfo("IPv4 frame\n");
+      NETDEV_RXIPV4(&priv->cs_dev);
+
+      /* Handle ARP on input then give the IPv4 packet to the network
+       * layer
+       */
+
       arp_ipin(&cs89x0->cs_dev);
-      uip_input(&cs89x0->cs_dev);
+      ipv4_input(&cs89x0->cs_dev);
 
       /* If the above function invocation resulted in data that should be
        * sent out on the network, the field  d_len will set to a value > 0.
@@ -447,22 +483,86 @@ static void cs89x0_receive(struct cs89x0_driver_s *cs89x0, uint16_t isq)
 
       if (cs89x0->cs_dev.d_len > 0)
         {
-          arp_out(&cs89x0->cs_dev);
+          /* Update the Ethernet header with the correct MAC address */
+
+#ifdef CONFIG_NET_IPv6
+          if (IFF_IS_IPv4(cs89x0->cs_dev.d_flags))
+#endif
+            {
+              arp_out(&cs89x0->cs_dev);
+            }
+#ifdef CONFIG_NET_IPv6
+          else
+            {
+              neighbor_out(&s89x0->cs_dev);
+            }
+#endif
+
+          /* And send the packet */
+
           cs89x0_transmit(cs89x0);
         }
     }
-  else if (BUF->type == htons(UIP_ETHTYPE_ARP))
+  else
+#endif
+#ifdef CONFIG_NET_IPv6
+  if (BUF->type == HTONS(ETHTYPE_IP6))
     {
-       arp_arpin(&cs89x0->cs_dev);
+      ninfo("Iv6 frame\n");
+      NETDEV_RXIPV6(&priv->cs_dev);
 
-       /* If the above function invocation resulted in data that should be
-        * sent out on the network, the field  d_len will set to a value > 0.
-        */
+      /* Give the IPv6 packet to the network layer */
 
-       if (cs89x0->cs_dev.d_len > 0)
-         {
-           cs89x0_transmit(cs89x0);
-         }
+      ipv6_input(&cs89x0->cs_dev);
+
+      /* If the above function invocation resulted in data that should be
+       * sent out on the network, the field  d_len will set to a value > 0.
+       */
+
+      if (cs89x0->cs_dev.d_len > 0)
+        {
+          /* Update the Ethernet header with the correct MAC address */
+
+#ifdef CONFIG_NET_IPv4
+          if (IFF_IS_IPv4(cs89x0->cs_dev.d_flags))
+            {
+              arp_out(&cs89x0->cs_dev);
+            }
+          else
+#endif
+#ifdef CONFIG_NET_IPv6
+            {
+              neighbor_out(&cs89x0->cs_dev);
+            }
+#endif
+
+          /* And send the packet */
+
+          cs89x0_transmit(cs89x0);
+        }
+    }
+  else
+#endif
+#ifdef CONFIG_NET_ARP
+  if (BUF->type == htons(ETHTYPE_ARP))
+    {
+      NETDEV_RXARP(&priv->cs_dev);
+      arp_arpin(&cs89x0->cs_dev);
+
+      /* If the above function invocation resulted in data that should be
+       * sent out on the network, the field  d_len will set to a value > 0.
+       */
+
+      if (cs89x0->cs_dev.d_len > 0)
+        {
+          cs89x0_transmit(cs89x0);
+        }
+    }
+  else
+#endif
+    {
+      ninfo("Unrecognized packet type %02x\n", BUF->type);
+      NETDEV_RXDROPPED(&priv->cs_dev);
     }
 }
 
@@ -488,37 +588,39 @@ static void cs89x0_txdone(struct cs89x0_driver_s *cs89x0, uint16_t isq)
    * hold the register address causing the interrupt.  We got here because
    * those bits indicated */
 
-#ifdef CONFIG_C89x0_STATISTICS
-  cd89x0->cs_stats.tx_packets++;
+#ifdef CONFIG_NETDEV_STATISTICS
+  NETDEV_TXPACKETS(&cd89x0->cs_dev);
   if ((isq & ISQ_TXEVENT_TXOK) == 0)
     {
-      cd89x0->cs_stats.tx_errors++;
+      NETDEV_TXERRORS(&cd89x0->cs_dev);
     }
+
+#if 0
   if ((isq & ISQ_TXEVENT_LOSSOFCRS) != 0)
     {
-      cd89x0->cs_stats.tx_carriererrors++;
     }
+
   if ((isq & ISQ_TXEVENT_SQEERROR) != 0)
     {
-      cd89x0->cs_stats.tx_heartbeaterrors++;
     }
+
   if (i(sq & ISQ_TXEVENT_OUTWINDOW) != 0)
     {
-      cd89x0->cs_stats.tx_windowerrors++;
     }
+
   if (isq & TX_16_COL)
     {
-      cd89x0->cs_stats.tx_abortederrors++;
     }
+#endif
 #endif
 
   /* If no further xmits are pending, then cancel the TX timeout */
 
   wd_cancel(cs89x0->cs_txtimeout);
 
-  /* Then poll uIP for new XMIT data */
+  /* Then poll the network for new XMIT data */
 
-  (void)uip_poll(&cs89x0->cs_dev, cs89x0_uiptxpoll);
+  (void)devif_poll(&cs89x0->cs_dev, cs89x0_txpoll);
 }
 
 /****************************************************************************
@@ -577,7 +679,7 @@ static int cs89x0_interrupt(int irq, FAR void *context)
   register struct cs89x0_driver_s *cs89x0 = s89x0_mapirq(irq);
   uint16_t isq;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!cs89x0)
     {
       return -ENODEV;
@@ -588,7 +690,7 @@ static int cs89x0_interrupt(int irq, FAR void *context)
 
   while ((isq = cs89x0_getreg(dev, CS89x0_ISQ_OFFSET)) != 0)
     {
-      nvdbg("ISQ: %04x\n", isq);
+      ninfo("ISQ: %04x\n", isq);
       switch (isq & ISQ_EVENTMASK)
         {
         case ISQ_RXEVENT:
@@ -602,7 +704,7 @@ static int cs89x0_interrupt(int irq, FAR void *context)
         case ISQ_BUFEVENT:
             if ((isq & ISQ_BUFEVENT_TXUNDERRUN) != 0)
               {
-                ndbg("Transmit underrun\n");
+                nerr("ERROR: Transmit underrun\n");
 #ifdef CONFIG_CS89x0_XMITEARLY
                 cd89x0->cs_txunderrun++;
                 if (cd89x0->cs_txunderrun == 3)
@@ -618,15 +720,11 @@ static int cs89x0_interrupt(int irq, FAR void *context)
             break;
 
         case ISQ_RXMISSEVENT:
-#ifdef CONFIG_C89x0_STATISTICS
-            cd89x0->cs_stats.rx_missederrors += (isq >>6);
-#endif
+            NETDEV_RXERRORS(&cd89x0->cs_dev);
             break;
 
         case ISQ_TXCOLEVENT:
-#ifdef CONFIG_C89x0_STATISTICS
-            cd89x0->cs_stats.collisions += (isq >>6);
-#endif
+            NETDEV_TXERRORS(&cd89x0->cs_dev);
             break;
         }
     }
@@ -661,9 +759,9 @@ static void cs89x0_txtimeout(int argc, uint32_t arg, ...)
   /* Then reset the hardware */
 #warning "Missing logic"
 
-  /* Then poll uIP for new XMIT data */
+  /* Then poll the network for new XMIT data */
 
-  (void)uip_poll(&cs89x0->cs_dev, cs89x0_uiptxpoll);
+  (void)devif_poll(&cs89x0->cs_dev, cs89x0_txpoll);
 }
 
 /****************************************************************************
@@ -690,13 +788,14 @@ static void cs89x0_polltimer(int argc, uint32_t arg, ...)
   /* Check if there is room in the send another TXr packet.  */
 #warning "Missing logic"
 
-  /* If so, update TCP timing states and poll uIP for new XMIT data */
+  /* If so, update TCP timing states and poll the network for new XMIT data */
 
-  (void)uip_timer(&cs89x0->cs_dev, cs89x0_uiptxpoll, CS89x0_POLLHSEC);
+  (void)devif_timer(&cs89x0->cs_dev, cs89x0_txpoll);
 
   /* Setup the watchdog poll timer again */
 
-  (void)wd_start(cs89x0->cs_txpoll, CS89x0_WDDELAY, cs89x0_polltimer, 1, arg);
+  (void)wd_start(cs89x0->cs_txpoll, CS89x0_WDDELAY, cs89x0_polltimer, 1,
+                 (wdparm_t)arg);
 }
 
 /****************************************************************************
@@ -716,20 +815,21 @@ static void cs89x0_polltimer(int argc, uint32_t arg, ...)
  *
  ****************************************************************************/
 
-static int cs89x0_ifup(struct uip_driver_s *dev)
+static int cs89x0_ifup(struct net_driver_s *dev)
 {
   struct cs89x0_driver_s *cs89x0 = (struct cs89x0_driver_s *)dev->d_private;
 
-  ndbg("Bringing up: %d.%d.%d.%d\n",
-       dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
-       (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24 );
+  ninfo("Bringing up: %d.%d.%d.%d\n",
+        dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
+        (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24);
 
   /* Initialize the Ethernet interface */
 #warning "Missing logic"
 
   /* Set and activate a timer process */
 
-  (void)wd_start(cs89x0->cs_txpoll, CS89x0_WDDELAY, cs89x0_polltimer, 1, (uint32_t)cs89x0);
+  (void)wd_start(cs89x0->cs_txpoll, CS89x0_WDDELAY, cs89x0_polltimer, 1,
+                 (wdparm_t)cs89x0);
 
   /* Enable the Ethernet interrupt */
 
@@ -754,14 +854,14 @@ static int cs89x0_ifup(struct uip_driver_s *dev)
  *
  ****************************************************************************/
 
-static int cs89x0_ifdown(struct uip_driver_s *dev)
+static int cs89x0_ifdown(struct net_driver_s *dev)
 {
   struct cs89x0_driver_s *cs89x0 = (struct cs89x0_driver_s *)dev->d_private;
   irqstate_t flags;
 
   /* Disable the Ethernet interrupt */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   up_disable_irq(CONFIG_CS89x0_IRQ);
 
   /* Cancel the TX poll timer and TX timeout timers */
@@ -772,7 +872,7 @@ static int cs89x0_ifdown(struct uip_driver_s *dev)
   /* Reset the device */
 
   cs89x0->cs_bifup = false;
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -795,12 +895,12 @@ static int cs89x0_ifdown(struct uip_driver_s *dev)
  *
  ****************************************************************************/
 
-static int cs89x0_txavail(struct uip_driver_s *dev)
+static int cs89x0_txavail(struct net_driver_s *dev)
 {
   struct cs89x0_driver_s *cs89x0 = (struct cs89x0_driver_s *)dev->d_private;
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Ignore the notification if the interface is not yet up */
 
@@ -809,12 +909,12 @@ static int cs89x0_txavail(struct uip_driver_s *dev)
       /* Check if there is room in the hardware to hold another outgoing packet. */
 #warning "Missing logic"
 
-      /* If so, then poll uIP for new XMIT data */
+      /* If so, then poll the network for new XMIT data */
 
-      (void)uip_poll(&cs89x0->cs_dev, cs89x0_uiptxpoll);
+      (void)devif_poll(&cs89x0->cs_dev, cs89x0_txpoll);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -837,7 +937,7 @@ static int cs89x0_txavail(struct uip_driver_s *dev)
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IGMP
-static int cs89x0_addmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
+static int cs89x0_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct cs89x0_driver_s *priv = (FAR struct cs89x0_driver_s *)dev->d_private;
 
@@ -867,7 +967,7 @@ static int cs89x0_addmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IGMP
-static int cs89x0_rmmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
+static int cs89x0_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct cs89x0_driver_s *priv = (FAR struct cs89x0_driver_s *)dev->d_private;
 
@@ -910,7 +1010,7 @@ int cs89x0_initialize(FAR const cs89x0_driver_s *cs89x0, int devno)
 {
   /* Sanity checks -- only performed with debug enabled */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!cs89x0 || (unsigned)devno > CONFIG_CS89x0_NINTERFACES || g_cs89x00[devno])
     {
       return -EINVAL;
@@ -932,26 +1032,26 @@ int cs89x0_initialize(FAR const cs89x0_driver_s *cs89x0, int devno)
 
   /* Initialize the driver structure */
 
-  g_cs89x[devno]           = cs89x0;          /* Used to map IRQ back to instance */
-  cs89x0->cs_dev.d_ifup    = cs89x0_ifup;     /* I/F down callback */
-  cs89x0->cs_dev.d_ifdown  = cs89x0_ifdown;   /* I/F up (new IP address) callback */
-  cs89x0->cs_dev.d_txavail = cs89x0_txavail;  /* New TX data callback */
+  g_cs89x[devno]           = cs89x0;             /* Used to map IRQ back to instance */
+  cs89x0->cs_dev.d_ifup    = cs89x0_ifup;        /* I/F down callback */
+  cs89x0->cs_dev.d_ifdown  = cs89x0_ifdown;      /* I/F up (new IP address) callback */
+  cs89x0->cs_dev.d_txavail = cs89x0_txavail;     /* New TX data callback */
 #ifdef CONFIG_NET_IGMP
-  cs89x0->cs_dev.d_addmac  = cs89x0_addmac;   /* Add multicast MAC address */
-  cs89x0->cs_dev.d_rmmac   = cs89x0_rmmac;    /* Remove multicast MAC address */
+  cs89x0->cs_dev.d_addmac  = cs89x0_addmac;      /* Add multicast MAC address */
+  cs89x0->cs_dev.d_rmmac   = cs89x0_rmmac;       /* Remove multicast MAC address */
 #endif
-  cs89x0->cs_dev.d_private = (void*)cs89x0;   /* Used to recover private state from dev */
+  cs89x0->cs_dev.d_private = (FAR void *)cs89x0; /* Used to recover private state from dev */
 
   /* Create a watchdog for timing polling for and timing of transmisstions */
 
-  cs89x0->cs_txpoll       = wd_create();   /* Create periodic poll timer */
-  cs89x0->cs_txtimeout    = wd_create();   /* Create TX timeout timer */
+  cs89x0->cs_txpoll       = wd_create();         /* Create periodic poll timer */
+  cs89x0->cs_txtimeout    = wd_create();         /* Create TX timeout timer */
 
   /* Read the MAC address from the hardware into cs89x0->cs_dev.d_mac.ether_addr_octet */
 
   /* Register the device with the OS so that socket IOCTLs can be performed */
 
-  (void)netdev_register(&cs89x0->cs_dev);
+  (void)netdev_register(&cs89x0->cs_dev, NET_LL_ETHERNET);
   return OK;
 }
 

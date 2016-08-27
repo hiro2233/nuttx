@@ -41,26 +41,54 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <semaphore.h>
 #include <sched.h>
 #include <errno.h>
 #include <debug.h>
+
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
-#include <apps/netutils/telnetd.h>
-#include <apps/netutils/uiplib.h>
+#include <nuttx/net/telnet.h>
 
-#include "telnetd.h"
+#include "netutils/telnetd.h"
+#include "netutils/netlib.h"
 
 /****************************************************************************
  * Private Types
  ****************************************************************************/
+
+/* This structure represents the overall state of one telnet daemon instance
+ * (Yes, multiple telnet daemons are supported).
+ */
+
+struct telnetd_s
+{
+  int                   port;      /* The port to listen on (in network byte order) */
+  int                   priority;  /* The execution priority of the spawned task, */
+  int                   stacksize; /* The stack size needed by the spawned task */
+  main_t                entry;     /* The entrypoint of the task to spawn when a new
+                                    * connection is accepted. */
+};
+
+/* This structure is used to passed information to telnet daemon when it
+ * started.  It contains global information visable to all telnet daemons.
+ */
+
+struct telnetd_common_s
+{
+  uint8_t               ndaemons;  /* The total number of daemons running */
+  sem_t                 startsem;  /* Enforces one-at-a-time startup */
+  FAR struct telnetd_s *daemon;    /* Describes the new daemon */
+};
 
 /****************************************************************************
  * Private Data
@@ -74,7 +102,7 @@
  * started.
  */
 
-struct telnetd_common_s g_telnetdcommon;
+static struct telnetd_common_s g_telnetdcommon;
 
 /****************************************************************************
  * Public Functions
@@ -99,11 +127,15 @@ static int telnetd_daemon(int argc, char *argv[])
 {
   FAR struct telnetd_s *daemon;
   struct sockaddr_in myaddr;
-#ifdef CONFIG_NET_HAVE_SOLINGER
+  struct telnet_session_s session;
+#ifdef CONFIG_NET_SOLINGER
   struct linger ling;
 #endif
+#ifdef CONFIG_SCHED_HAVE_PARENT
+  struct sigaction sa;
+  sigset_t blockset;
+#endif
   socklen_t addrlen;
-  FAR char *devpath;
   pid_t pid;
   int listensd;
   int acceptsd;
@@ -111,6 +143,8 @@ static int telnetd_daemon(int argc, char *argv[])
 #ifdef CONFIG_NET_HAVE_REUSEADDR
   int optval;
 #endif
+  int ret;
+  int fd;
 
   /* Get daemon startup info */
 
@@ -119,13 +153,45 @@ static int telnetd_daemon(int argc, char *argv[])
   sem_post(&g_telnetdcommon.startsem);
   DEBUGASSERT(daemon != NULL);
 
+#ifdef CONFIG_SCHED_HAVE_PARENT
+  /* Call sigaction with the SA_NOCLDWAIT flag so that we do not transform
+   * children into "zombies" when they terminate:  Child exit status will
+   * not be retained.
+   *
+   * NOTE: If the SA_NOCLDWAIT flag is set when establishing a handler for
+   * SIGCHLD, POSIX.1 leaves it unspecified whether a SIGCHLD signal is
+   * generated when a child process terminates.  On both Linux and NuttX, a
+   * SIGCHLD signal will be generated in this case.
+   */
+
+  sa.sa_handler = SIG_IGN;
+  sa.sa_flags = SA_NOCLDWAIT;
+  if (sigaction(SIGCHLD, &sa, NULL) < 0)
+    {
+      int errval = errno;
+      nerr("ERROR: sigaction failed: %d\n", errval);
+      return -errval;
+    }
+
+  /* Block receipt of the SIGCHLD signal */
+
+  sigemptyset(&blockset);
+  sigaddset(&blockset, SIGCHLD);
+  if (sigprocmask(SIG_BLOCK, &blockset, NULL) < 0)
+    {
+      int errval = errno;
+      nerr("ERROR: sigprocmask failed: %d\n", errval);
+      return -errval;
+    }
+#endif /* CONFIG_SCHED_HAVE_PARENT */
+
   /* Create a new TCP socket to use to listen for connections */
 
   listensd = socket(PF_INET, SOCK_STREAM, 0);
   if (listensd < 0)
     {
       int errval = errno;
-      ndbg("socket failure: %d\n", errval);
+      nerr("ERROR: socket failure: %d\n", errval);
       return -errval;
     }
 
@@ -135,7 +201,7 @@ static int telnetd_daemon(int argc, char *argv[])
   optval = 1;
   if (setsockopt(listensd, SOL_SOCKET, SO_REUSEADDR, (void*)&optval, sizeof(int)) < 0)
     {
-      ndbg("setsockopt SO_REUSEADDR failure: %d\n", errno);
+      nerr("ERROR: setsockopt SO_REUSEADDR failure: %d\n", errno);
       goto errout_with_socket;
     }
 #endif
@@ -148,7 +214,7 @@ static int telnetd_daemon(int argc, char *argv[])
 
   if (bind(listensd, (struct sockaddr*)&myaddr, sizeof(struct sockaddr_in)) < 0)
     {
-      ndbg("bind failure: %d\n", errno);
+      nerr("ERROR: bind failure: %d\n", errno);
       goto errout_with_socket;
     }
 
@@ -156,16 +222,13 @@ static int telnetd_daemon(int argc, char *argv[])
 
   if (listen(listensd, 5) < 0)
     {
-      ndbg("listen failure %d\n", errno);
+      nerr("ERROR: listen failure %d\n", errno);
       goto errout_with_socket;
     }
 
-  /* Now go silent.  Only the lldbg family of debug functions should
-   * be used after this point because these do not depend on stdout
-   * being available.
-   */
+  /* Now go silent. */
 
-#ifndef CONFIG_DEBUG
+#ifndef CONFIG_DEBUG_FEATURES
   close(0);
   close(1);
   close(2);
@@ -175,51 +238,75 @@ static int telnetd_daemon(int argc, char *argv[])
 
   for (;;)
     {
-      nllvdbg("Accepting connections on port %d\n", ntohs(daemon->port));
+      ninfo("Accepting connections on port %d\n", ntohs(daemon->port));
 
       addrlen = sizeof(struct sockaddr_in);
       acceptsd = accept(listensd, (struct sockaddr*)&myaddr, &addrlen);
       if (acceptsd < 0)
         {
-          nlldbg("accept failed: %d\n", errno);
-          goto errout_with_socket;
+          /* Accept failed */
+
+          int errval = errno;
+
+          /* Just continue if a signal was received */
+
+          if (errval == EINTR)
+            {
+              continue;
+            }
+          else
+            {
+              nerr("ERROR: accept failed: %d\n", errval);
+              goto errout_with_socket;
+            }
         }
 
       /* Configure to "linger" until all data is sent when the socket is closed */
 
-#ifdef CONFIG_NET_HAVE_SOLINGER
+#ifdef CONFIG_NET_SOLINGER
       ling.l_onoff  = 1;
       ling.l_linger = 30;     /* timeout is seconds */
       if (setsockopt(acceptsd, SOL_SOCKET, SO_LINGER, &ling, sizeof(struct linger)) < 0)
         {
-          nlldbg("setsockopt failed: %d\n", errno);
+          nerr("ERROR: setsockopt failed: %d\n", errno);
           goto errout_with_acceptsd;
         }
 #endif
 
+      /* Open the Telnet factory */
+
+      fd = open("/dev/telnet", O_RDONLY);
+      if (fd < 0)
+        {
+          nerr("ERROR: open(/dev/telnet) failed: %d\n", errno);
+          goto errout_with_acceptsd;
+        }
+
       /* Create a character device to "wrap" the accepted socket descriptor */
 
-      nllvdbg("Creating the telnet driver\n");
-      devpath = telnetd_driver(acceptsd, daemon);
-      if (devpath < 0)
+      ninfo("Creating the telnet driver\n");
+
+      session.ts_sd         = acceptsd;
+      session.ts_devpath[0] = '\0';
+
+      ret = ioctl(fd, SIOCTELNET, (unsigned long)((uintptr_t)&session));
+      close(fd);
+
+      if (ret < 0)
         {
-          nlldbg("telnetd_driver failed\n");
+          nerr("ERROR: open(/dev/telnet) failed: %d\n", errno);
           goto errout_with_acceptsd;
         }
 
       /* Open the driver */
 
-      nllvdbg("Opening the telnet driver\n");
-      drvrfd = open(devpath, O_RDWR);
+      ninfo("Opening the telnet driver at %s\n", session.ts_devpath);
+      drvrfd = open(session.ts_devpath, O_RDWR);
       if (drvrfd < 0)
         {
-          nlldbg("Failed to open %s: %d\n", devpath, errno);
+          nerr("ERROR: Failed to open %s: %d\n", session.ts_devpath, errno);
           goto errout_with_acceptsd;
         }
-
-      /* We can now free the driver string */
-
-      free(devpath);
 
       /* Use this driver as stdin, stdout, and stderror */
 
@@ -238,12 +325,12 @@ static int telnetd_daemon(int argc, char *argv[])
        * will inherit the new stdin, stdout, and stderr.
        */
 
-      nllvdbg("Starting the telnet session\n");
-      pid = TASK_CREATE("Telnet session", daemon->priority, daemon->stacksize,
+      ninfo("Starting the telnet session\n");
+      pid = task_create("Telnet session", daemon->priority, daemon->stacksize,
                          daemon->entry, NULL);
       if (pid < 0)
         {
-          nlldbg("Failed start the telnet session: %d\n", errno);
+          nerr("ERROR: Failed start the telnet session: %d\n", errno);
           goto errout_with_acceptsd;
         }
 
@@ -312,20 +399,18 @@ int telnetd_start(FAR struct telnetd_config_s *config)
   if (g_telnetdcommon.ndaemons < 1)
     {
       sem_init(&g_telnetdcommon.startsem, 0, 0);
-      sem_init(&g_telnetdcommon.exclsem, 0, 1);
-      g_telnetdcommon.minor = 0;
     }
 
   /* Then start the new daemon */
 
   g_telnetdcommon.daemon = daemon;
-  pid = TASK_CREATE("Telnet daemon", config->d_priority, config->d_stacksize,
+  pid = task_create("Telnet daemon", config->d_priority, config->d_stacksize,
                     telnetd_daemon, NULL);
   if (pid < 0)
     {
       int errval = errno;
       free(daemon);
-      ndbg("Failed to start the telnet daemon: %d\n", errval);
+      nerr("ERROR: Failed to start the telnet daemon: %d\n", errval);
       return -errval;
     }
 

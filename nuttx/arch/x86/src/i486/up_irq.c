@@ -51,13 +51,8 @@
 #include <arch/io.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
-#include "qemu_internal.h"
-
-/****************************************************************************
- * Definitions
- ****************************************************************************/
+#include "qemu.h"
 
 /****************************************************************************
  * Private Function Prototypes
@@ -73,7 +68,7 @@ static inline void up_idtinit(void);
  * Public Data
  ****************************************************************************/
 
-volatile uint32_t *current_regs;
+volatile uint32_t *g_current_regs;
 
 /****************************************************************************
  * Private Data
@@ -268,7 +263,7 @@ void up_irqinitialize(void)
 {
   /* currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  g_current_regs = NULL;
 
   /* Initialize the IDT */
 
@@ -277,7 +272,7 @@ void up_irqinitialize(void)
   /* And finally, enable interrupts */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
-  irqrestore(X86_FLAGS_IF);
+  up_irq_restore(X86_FLAGS_IF);
 #endif
 }
 

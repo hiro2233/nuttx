@@ -55,13 +55,12 @@
 #include <arch/io.h>
 
 #include "chip/chip.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 #ifdef USE_SERIALDRIVER
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -86,7 +85,7 @@ static int  ez80_setup(struct uart_dev_s *dev);
 static void ez80_shutdown(struct uart_dev_s *dev);
 static int  ez80_attach(struct uart_dev_s *dev);
 static void ez80_detach(struct uart_dev_s *dev);
-static int  ez80_interrrupt(int irq, void *context);
+static int  ez80_interrupt(int irq, void *context);
 static int  ez80_ioctl(struct file *filep, int cmd, unsigned long arg);
 static int  ez80_receive(struct uart_dev_s *dev, unsigned int *status);
 static void ez80_rxint(struct uart_dev_s *dev, bool enable);
@@ -97,7 +96,7 @@ static bool ez80_txready(struct uart_dev_s *dev);
 static bool ez80_txempty(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -439,7 +438,7 @@ static int ez80_attach(struct uart_dev_s *dev)
 
   /* Attach the IRQ */
 
-  return irq_attach(priv->irq, ez80_interrrupt);
+  return irq_attach(priv->irq, ez80_interrupt);
 }
 
 /****************************************************************************
@@ -460,7 +459,7 @@ static void ez80_detach(struct uart_dev_s *dev)
 }
 
 /****************************************************************************
- * Name: ez80_interrrupt
+ * Name: ez80_interrupt
  *
  * Description:
  *   This is the UART interrupt handler.  It will be invoked
@@ -472,7 +471,7 @@ static void ez80_detach(struct uart_dev_s *dev)
  *
  ****************************************************************************/
 
-static int ez80_interrrupt(int irq, void *context)
+static int ez80_interrupt(int irq, void *context)
 {
   struct uart_dev_s *dev = NULL;
   struct ez80_dev_s   *priv;
@@ -779,7 +778,7 @@ int up_putc(int ch)
 #else /* USE_SERIALDRIVER */
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #ifdef CONFIG_UART1_SERIAL_CONSOLE
@@ -798,7 +797,7 @@ int up_putc(int ch)
  ****************************************************************************/
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 /****************************************************************************

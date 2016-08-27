@@ -281,7 +281,7 @@ as follows:
   * If LED1, LED2, LED3 are statically on, then NuttX probably failed to boot
     and these LEDs will give you some indication of where the failure was
  ** The normal state is LED3 ON and LED1 faintly glowing.  This faint glow
-    is because of timer interupts that result in the LED being illuminated
+    is because of timer interrupts that result in the LED being illuminated
     on a small proportion of the time.
 *** LED2 may also flicker normally if signals are processed.
 
@@ -337,12 +337,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -389,7 +383,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M4 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   NOTE:  The NuttX toolchain may not include optimizations for Cortex-M4 (ARMv7E-M).
@@ -451,8 +445,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -589,7 +583,7 @@ TWR-K60N512-specific Configuration Options
     CONFIG_KINETIS_CRC      -- Support CRC
     CONFIG_KINETIS_PDB      -- Support the Programmable Delay Block
     CONFIG_KINETIS_PIT      -- Support Programmable Interval Timers
-    CONFIG_ARMV7M_MPU       -- Support the MPU
+    CONFIG_ARM_MPU          -- Support the MPU
 
   Kinetis interrupt priorities (Default is the mid priority).  These should
   not be set because they can cause unhandled, nested interrupts.  All
@@ -611,7 +605,7 @@ TWR-K60N512-specific Configuration Options
 
   PIN Interrupt Support
 
-    CONFIG_GPIO_IRQ          -- Enable pin interrupt support.  Also needs
+    CONFIG_KINETIS_GPIOIRQ   -- Enable pin interrupt support.  Also needs
       one or more of the following:
     CONFIG_KINETIS_PORTAINTS -- Support 32 Port A interrupts
     CONFIG_KINETIS_PORTBINTS -- Support 32 Port B interrupts
@@ -634,9 +628,9 @@ TWR-K60N512-specific Configuration Options
   Kenetis ethernet controller settings
 
     CONFIG_ENET_NRXBUFFERS - Number of RX buffers.  The size of one
-        buffer is determined by CONFIG_NET_BUFSIZE.  Default: 6
+        buffer is determined by CONFIG_NET_ETH_MTU.  Default: 6
     CONFIG_ENET_NTXBUFFERS - Number of TX buffers.  The size of one
-        buffer is determined by CONFIG_NET_BUFSIZE.  Default: 2
+        buffer is determined by CONFIG_NET_ETH_MTU.  Default: 2
     CONFIG_ENET_USEMII - Use MII mode.  Default: RMII mode.
     CONFIG_ENET_PHYADDR - PHY address
 
@@ -666,7 +660,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -693,7 +687,7 @@ Where <subdir> is one of the following:
       CONFIG_FAT_LFN=y                     : FAT long file name support
       CONFIG_FAT_MAXFNAME=32               : Maximum lenght of a long file name
 
-      CONFIG_GPIO_IRQ=y                    : Enable GPIO interrupts
+      CONFIG_KINETIS_GPIOIRQ=y             : Enable GPIO interrupts
       CONFIG_KINETIS_PORTEINTS=y           : Enable PortE GPIO interrupts
 
       CONFIG_SCHED_WORKQUEUE=y             : Enable the NuttX workqueue

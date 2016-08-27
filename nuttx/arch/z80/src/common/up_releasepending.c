@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z80/src/common/up_releasepending.c
  *
- *   Copyright (C) 2007-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,23 +43,13 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/sched.h>
 
 #include "chip/chip.h"
 #include "chip/switch.h"
-#include "os_internal.h"
+#include "sched/sched.h"
+#include "group/group.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -78,19 +68,24 @@
 
 void up_release_pending(void)
 {
-  FAR struct tcb_s *rtcb = (FAR struct tcb_s*)g_readytorun.head;
+  FAR struct tcb_s *rtcb = this_task();
 
-  slldbg("From TCB=%p\n", rtcb);
+  sinfo("From TCB=%p\n", rtcb);
 
-  /* Merge the g_pendingtasks list into the g_readytorun task list */
+  /* Merge the g_pendingtasks list into the ready-to-run task list */
 
   /* sched_lock(); */
   if (sched_mergepending())
     {
-      /* The currently active task has changed!  We will need to
-       * switch contexts.  First check if we are operating in
-       * interrupt context:
+      /* The currently active task has changed!  We will need to switch
+       * contexts.
+       *
+       * Update scheduler parameters.
        */
+
+      sched_suspend_scheduler(rtcb);
+
+      /* Are we operating in interrupt context? */
 
       if (IN_INTERRUPT())
         {
@@ -101,14 +96,18 @@ void up_release_pending(void)
            SAVE_IRQCONTEXT(rtcb);
 
           /* Restore the exception context of the rtcb at the (new) head
-           * of the g_readytorun task list.
+           * of the ready-to-run task list.
            */
 
-          rtcb = (FAR struct tcb_s*)g_readytorun.head;
-          slldbg("New Active Task TCB=%p\n", rtcb);
+          rtcb = this_task();
+
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
 
           /* Then setup so that the context will be performed on exit
-           * from the interrupt.
+           * from the interrupt.  Any necessary address environment
+           * changes will be made when the interrupt returns.
            */
 
           SET_IRQCONTEXT(rtcb);
@@ -123,11 +122,23 @@ void up_release_pending(void)
       else if (!SAVE_USERCONTEXT(rtcb))
         {
           /* Restore the exception context of the rtcb at the (new) head
-           * of the g_readytorun task list.
+           * of the ready-to-run task list.
            */
 
-          rtcb = (FAR struct tcb_s*)g_readytorun.head;
-          slldbg("New Active Task TCB=%p\n", rtcb);
+          rtcb = this_task();
+
+#ifdef CONFIG_ARCH_ADDRENV
+          /* Make sure that the address environment for the previously
+           * running task is closed down gracefully (data caches dump,
+           * MMU flushed) and set up the address environment for the new
+           * thread at the head of the ready-to-run list.
+           */
+
+          (void)group_addrenv(rtcb);
+#endif
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
 
           /* Then switch contexts */
 

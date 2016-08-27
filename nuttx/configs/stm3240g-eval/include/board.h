@@ -2,7 +2,7 @@
  * configs/stm3240g-eval/include/board.h
  * include/arch/board/board.h
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,22 +42,24 @@
  ************************************************************************************/
 
 #include <nuttx/config.h>
+
 #ifndef __ASSEMBLY__
 # include <stdint.h>
 #endif
+
 #include "stm32_rcc.h"
 #include "stm32_sdio.h"
 #include "stm32.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
 /* Four clock sources are available on STM3240G-EVAL evaluation board for
  * STM32F407IGH6 and RTC embedded:
  *
- * X1, 25 MHz crystal for ethernet PHY with socket. It can be removed when clock is
+ * X1, 25 MHz crystal for Ethernet PHY with socket. It can be removed when clock is
  *     provided by MCO pin of the MCU
  * X2, 26 MHz crystal for USB OTG HS PHY
  * X3, 32 kHz crystal for embedded RTC
@@ -159,8 +161,14 @@
  * Note: TIM1,8 are on APB2, others on APB1
  */
 
-#define STM32_TIM18_FREQUENCY   STM32_HCLK_FREQUENCY
-#define STM32_TIM27_FREQUENCY   STM32_HCLK_FREQUENCY
+#define BOARD_TIM1_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM2_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM3_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM4_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM5_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM6_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM7_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM8_FREQUENCY    STM32_HCLK_FREQUENCY
 
 /* SDIO dividers.  Note that slower clocking is required when DMA is disabled
  * in order to avoid RX overrun/TX underrun errors due to delayed responses
@@ -216,7 +224,7 @@
  * way.  The following definitions are used to access individual LEDs.
  */
 
-/* LED index values for use with stm32_setled() */
+/* LED index values for use with board_userled() */
 
 #define BOARD_LED1        0
 #define BOARD_LED2        1
@@ -224,7 +232,7 @@
 #define BOARD_LED4        3
 #define BOARD_NLEDS       4
 
-/* LED bits for use with stm32_setleds() */
+/* LED bits for use with board_userled_all() */
 
 #define BOARD_LED1_BIT    (1 << BOARD_LED1)
 #define BOARD_LED2_BIT    (1 << BOARD_LED2)
@@ -444,7 +452,7 @@
 
 /* DMA Channl/Stream Selections *****************************************************/
 /* Stream selections are arbitrary for now but might become important in the future
- * is we set aside more DMA channels/streams.
+ * if we set aside more DMA channels/streams.
  *
  * SDIO DMA
  *   DMAMAP_SDIO_1 = Channel 4, Stream 3
@@ -462,7 +470,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -481,22 +490,6 @@ extern "C" {
  ************************************************************************************/
 
 void stm32_boardinitialize(void);
-
-/************************************************************************************
- * Name:  stm32_ledinit, stm32_setled, and stm32_setleds
- *
- * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board LEDs.  If
- *   CONFIG_ARCH_LEDS is not defined, then the following interfacesare available to
- *   control the LEDs from user applications.
- *
- ************************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-void stm32_ledinit(void);
-void stm32_setled(int led, bool ledon);
-void stm32_setleds(uint8_t ledset);
-#endif
 
 /************************************************************************************
  * Name:  stm3240g_lcdclear

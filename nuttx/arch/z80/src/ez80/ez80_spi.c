@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z80/src/ez80/ez80_spi.c
  *
- *   Copyright (C) 2009-2010 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2010, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,8 @@
 
 #include <sys/types.h>
 #include <stdint.h>
+#include <semaphore.h>
+#include <assert.h>
 #include <errno.h>
 
 #include <arch/board/board.h>
@@ -55,7 +57,7 @@
 #include "ez80f91_spi.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_CHIP_EZ80F91
@@ -68,9 +70,7 @@
  * Private Function Prototypes
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static int    spi_lock(FAR struct spi_dev_s *dev, bool lock);
-#endif
 static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev,
                 uint32_t frequency);
 static void   spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode);
@@ -86,33 +86,33 @@ static void   spi_recvblock(FAR struct spi_dev_s *dev, FAR uint8_t *buffer,
 
 static const struct spi_ops_s g_spiops =
 {
-#ifndef CONFIG_SPI_OWNBUS
   spi_lock,
-#endif
-  ez80_spiselect,    /* Provided externally by board logic */
+  ez80_spiselect,      /* select: Provided externally by board logic */
   spi_setfrequency,
   spi_setmode,
-  NULL,              /* Variable number of bits not implemented */
-  ez80_spistatus,    /* Provided externally by board logic */
+  NULL,                /* setbits: Variable number of bits not implemented */
+#ifdef CONFIG_SPI_HWFEATURES
+  NULL,                /* hwfeatures: Not supported */
+#endif
+  ez80_spistatus,      /* status: Provided externally by board logic */
 #ifdef CONFIG_SPI_CMDDATA
   ez80_spicmddata,
 #endif
   spi_send,
   spi_sndblock,
   spi_recvblock,
-  0                  /* registercallback not yet implemented */
+  0                    /* registercallback: Not yet implemented */
 };
 
 /* This supports is only a single SPI bus/port.  If you port this to an
- * architecture with multiple SPI busses/ports, then the following must
- * become an array with one 'struct spi_dev_s' instance per bus.
+ * architecture with multiple SPI busses/ports, then (1) you must create
+ * a structure, say ez80_spidev_s, containing both struct spi_dev_s and
+ * the mutual exclusion semaphored, and (2) the following must become an
+ * array with one 'struct spi_dev_s' instance per bus.
  */
 
-static struct spi_dev_s g_spidev = { &g_spiops };
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
+static struct spi_dev_s g_spidev = {&g_spiops};
+static sem_t g_exclsem = SEM_INITIALIZER(1);  /* For mutually exclusive access */
 
 /****************************************************************************
  * Private Functions
@@ -139,14 +139,28 @@ static struct spi_dev_s g_spidev = { &g_spiops };
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 {
-  /* Not implemented */
+  if (lock)
+    {
+      /* Take the semaphore (perhaps waiting) */
 
-  return -ENOSYS;
+      while (sem_wait(&g_exclsem) != 0)
+        {
+          /* The only case that an error should occur here is if the wait
+           * was awakened by a signal.
+           */
+
+          DEBUGASSERT(errno == EINTR);
+        }
+    }
+  else
+    {
+      (void)sem_post(&g_exclsem);
+    }
+
+  return OK;
 }
-#endif
 
 /****************************************************************************
  * Name: spi_setfrequency
@@ -335,7 +349,7 @@ static uint16_t spi_send(FAR struct spi_dev_s *dev, uint16_t wd)
   return spi_transfer((uint8_t)wd);
 }
 
-/*************************************************************************
+/****************************************************************************
  * Name: spi_sndblock
  *
  * Description:
@@ -359,13 +373,12 @@ static void spi_sndblock(FAR struct spi_dev_s *dev, FAR const void *buffer,
                          size_t buflen)
 {
   FAR const uint8_t *ptr = (FAR const uint8_t*)buffer;
-  uint8_t response;
 
   /* Loop while there are bytes remaining to be sent */
 
   while (buflen-- > 0)
     {
-      response = spi_transfer(*ptr++);
+      (void)spi_transfer(*ptr++);
     }
 }
 
@@ -406,7 +419,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t bu
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_spiinitialize
+ * Name: ez80_spibus_initialize
  *
  * Description:
  *   Initialize common parts the selected SPI port.  Initialization of
@@ -427,13 +440,13 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t bu
  *
  ****************************************************************************/
 
-FAR struct spi_dev_s *up_spiinitialize(int port)
+FAR struct spi_dev_s *ez80_spibus_initialize(int port)
 {
   uint8_t regval;
 
   /* Only the SPI1 interface is supported */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (port != 1)
     {
       return NULL;

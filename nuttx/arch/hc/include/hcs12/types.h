@@ -45,7 +45,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -91,14 +91,14 @@ typedef unsigned long long _uint64_t;
 typedef signed short       _intptr_t;
 typedef unsigned short     _uintptr_t;
 
-/* This is the size of the interrupt state save returned by irqsave()*/
+/* This is the size of the interrupt state save returned by up_irq_save()*/
 
 typedef unsigned char      irqstate_t;
 
 #endif /* __ASSEMBLY__ */
 
 /****************************************************************************
- * Global Function Prototypes
+ * Public Function Prototypes
  ****************************************************************************/
 
 #endif /* __ARCH_HC_INCLUDE_HCS12_TYPES_H */

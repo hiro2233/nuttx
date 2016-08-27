@@ -34,8 +34,8 @@
  *
  ****************************************************************************/
 
-#ifndef __ARCH_BOARD_BOARD_H
-#define __ARCH_BOARD_BOARD_H
+#ifndef __CONFIGS_LINCOLN60_INCLUDE_BOARD_H
+#define __CONFIGS_LINCOLN60_INCLUDE_BOARD_H
 
 /****************************************************************************
  * Included Files
@@ -44,12 +44,12 @@
 #include <nuttx/config.h>
 #include <stdbool.h>
 
-#if defined(CONFIG_ARCH_IRQBUTTONS) && defined(CONFIG_GPIO_IRQ)
+#if defined(CONFIG_ARCH_IRQBUTTONS) && defined(CONFIG_LPC17_GPIOIRQ)
 #  include <nuttx/irq.h>
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Clocking ****************************************************************/
@@ -128,6 +128,10 @@
 #define CONFIG_LPC17_FLASH         1
 #define BOARD_FLASHCFG_VALUE       0x0000303a
 
+/* Ethernet configuration */
+
+#define ETH_MCFG_CLKSEL_DIV ETH_MCFG_CLKSEL_DIV20
+
 /* LED definitions *********************************************************/
 /* The Lincoln 60 has 2 LEDs along the bottom of the board. Green or off.
  * If CONFIG_ARCH_LEDS is defined, the LEDs will be controlled as follows
@@ -163,9 +167,14 @@
 #ifdef CONFIG_USBHOST
 #  ifdef GPIO_USB_PWRD
 #    undef  GPIO_USB_PWRD
-#    define GPIO_USB_PWRD    (GPIO_INPUT | GPIO_PORT1 | GPIO_PIN22)
+#    define GPIO_USB_PWRD          (GPIO_INPUT | GPIO_PORT1 | GPIO_PIN22)
 #  endif
 #endif
+
+/* Ethernet PHY */
+
+#define GPIO_ENET_MDC              GPIO_ENET_MDC_1
+#define GPIO_ENET_MDIO             GPIO_ENET_MDIO_1
 
 /****************************************************************************
  * Public Types
@@ -180,7 +189,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -193,24 +203,26 @@ extern "C" {
  * Name: lpc17_boardinitialize
  *
  * Description:
- *   All LPC17xx architectures must provide the following entry point.  This entry point
- *   is called early in the intitialization -- after all memory has been configured
- *   and mapped but before any devices have been initialized.
+ *   All LPC17xx architectures must provide the following entry point.
+ *   This entry point is called early in the initialization -- after all
+ *   memory has been configured and mapped but before any devices have been
+ *   initialized.
  *
  ****************************************************************************/
 
-EXTERN void lpc17_boardinitialize(void);
+void lpc17_boardinitialize(void);
 
 /****************************************************************************
  * Name: lpc17_led
  *
  * Description:
- *   Once the system has booted, these functions can be used to control LEDs 1 & 2
+ *   Once the system has booted, these functions can be used to control
+ *   LEDs 1 & 2
  *
- ************************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-EXTERN void lpc17_led(int lednum, int state);
+void lpc17_led(int lednum, int state);
 #endif
 
 #undef EXTERN
@@ -219,4 +231,4 @@ EXTERN void lpc17_led(int lednum, int state);
 #endif
 
 #endif /* __ASSEMBLY__ */
-#endif  /* __ARCH_BOARD_BOARD_H */
+#endif  /* __CONFIGS_LINCOLN60_INCLUDE_BOARD_H */

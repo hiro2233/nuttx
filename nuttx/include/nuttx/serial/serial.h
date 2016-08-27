@@ -1,7 +1,7 @@
 /************************************************************************************
  * include/nuttx/serial/serial.h
  *
- *   Copyright (C) 2007-2008, 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2008, 2012-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,13 +53,39 @@
 #include <nuttx/fs/fs.h>
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Maximum number of threads than can be waiting for POLL events */
 
 #ifndef CONFIG_SERIAL_NPOLLWAITERS
 #  define CONFIG_SERIAL_NPOLLWAITERS 2
+#endif
+
+/* RX flow control */
+
+#ifndef CONFIG_SERIAL_IFLOWCONTROL
+#  undef CONFIG_SERIAL_IFLOWCONTROL_WATERMARKS
+#endif
+
+#ifndef CONFIG_SERIAL_IFLOWCONTROL_WATERMARKS
+#  undef CONFIG_SERIAL_IFLOWCONTROL_LOWER_WATERMARK
+#  undef CONFIG_SERIAL_IFLOWCONTROL_UPPER_WATERMARK
+#endif
+
+#ifdef CONFIG_SERIAL_IFLOWCONTROL_WATERMARKS
+#  ifndef CONFIG_SERIAL_IFLOWCONTROL_LOWER_WATERMARK
+#    define CONFIG_SERIAL_IFLOWCONTROL_LOWER_WATERMARK 10
+#  endif
+
+#  ifndef CONFIG_SERIAL_IFLOWCONTROL_UPPER_WATERMARK
+#    define CONFIG_SERIAL_IFLOWCONTROL_UPPER_WATERMARK 90
+#  endif
+
+#  if CONFIG_SERIAL_IFLOWCONTROL_LOWER_WATERMARK > \
+      CONFIG_SERIAL_IFLOWCONTROL_UPPER_WATERMARK
+#    warning Lower watermark pct exceeds upper watermark pct
+#  endif
 #endif
 
 /* vtable access helpers */
@@ -78,9 +104,16 @@
 #define uart_send(dev,ch)        dev->ops->send(dev,ch)
 #define uart_receive(dev,s)      dev->ops->receive(dev,s)
 
+#ifdef CONFIG_SERIAL_DMA
+#  define uart_dmasend(dev)      dev->ops->dmasend(dev)
+#  define uart_dmareceive(dev)   dev->ops->dmareceive(dev)
+#  define uart_dmarxfree(dev)    dev->ops->dmarxfree(dev)
+#  define uart_dmatxavail(dev)   dev->ops->dmatxavail(dev)
+#endif
+
 #ifdef CONFIG_SERIAL_IFLOWCONTROL
-#define uart_rxflowcontrol(dev) \
-  (dev->ops->rxflowcontrol && dev->ops->rxflowcontrol(dev))
+#  define uart_rxflowcontrol(dev,n,u) \
+    (dev->ops->rxflowcontrol && dev->ops->rxflowcontrol(dev,n,u))
 #endif
 
 /************************************************************************************
@@ -100,6 +133,17 @@ struct uart_buffer_s
   int16_t          size;   /* The allocated size of the buffer */
   FAR char        *buffer; /* Pointer to the allocated buffer memory */
 };
+
+#ifdef CONFIG_SERIAL_DMA
+struct uart_dmaxfer_s
+{
+  FAR char        *buffer;  /* First DMA buffer */
+  FAR char        *nbuffer; /* Next DMA buffer */
+  size_t           length;  /* Length of first DMA buffer */
+  size_t           nlength; /* Length of next DMA buffer */
+  size_t           nbytes;  /* Bytes actually transferred by DMA from both buffers */
+};
+#endif /* CONFIG_SERIAL_DMA */
 
 /* This structure defines all of the operations providd by the architecture specific
  * logic.  All fields must be provided with non-NULL function pointers by the
@@ -165,9 +209,30 @@ struct uart_ops_s
   CODE bool (*rxavailable)(FAR struct uart_dev_s *dev);
 
 #ifdef CONFIG_SERIAL_IFLOWCONTROL
-  /* Return true if UART activated RX flow control to block more incoming data. */
+  /* Return true if UART activated RX flow control to block more incoming
+   * data.
+   */
 
-  CODE bool (*rxflowcontrol)(FAR struct uart_dev_s *dev);
+  CODE bool (*rxflowcontrol)(FAR struct uart_dev_s *dev,
+                             unsigned int nbuffered, bool upper);
+#endif
+
+#ifdef CONFIG_SERIAL_DMA
+  /* Start transfer bytes from the TX circular buffer using DMA */
+
+  CODE void (*dmasend)(FAR struct uart_dev_s *dev);
+
+  /* Start transfer bytes from the TX circular buffer using DMA */
+
+  CODE void (*dmareceive)(FAR struct uart_dev_s *dev);
+
+  /* Notify DMA that there is free space in the RX buffer */
+
+  CODE void (*dmarxfree)(FAR struct uart_dev_s *dev);
+
+  /* Notify DMA that there is data to be transferred in the TX buffer */
+
+  CODE void (*dmatxavail)(FAR struct uart_dev_s *dev);
 #endif
 
   /* This method will send one byte on the UART */
@@ -215,9 +280,9 @@ struct uart_dev_s
 #endif
   bool                 isconsole;    /* true: This is the serial console */
 
+#ifdef CONFIG_SERIAL_TERMIOS
   /* Terminal control flags */
 
-#ifdef CONFIG_SERIAL_TERMIOS
   tcflag_t             tc_iflag;     /* Input modes */
   tcflag_t             tc_oflag;     /* Output modes */
   tcflag_t             tc_lflag;     /* Local modes */
@@ -236,6 +301,14 @@ struct uart_dev_s
 
   struct uart_buffer_s xmit;         /* Describes transmit buffer */
   struct uart_buffer_s recv;         /* Describes receive buffer */
+
+#ifdef CONFIG_SERIAL_DMA
+
+  /* DMA transfers */
+
+  struct uart_dmaxfer_s dmatx;       /* Describes transmit DMA transfer */
+  struct uart_dmaxfer_s dmarx;       /* Describes receive DMA transfer */
+#endif
 
   /* Driver interface */
 
@@ -354,6 +427,58 @@ void uart_datasent(FAR uart_dev_t *dev);
 
 #ifdef CONFIG_SERIAL_REMOVABLE
 void uart_connected(FAR uart_dev_t *dev, bool connected);
+#endif
+
+/************************************************************************************
+ * Name: uart_xmitchars_dma
+ *
+ * Description:
+ *   Set up to transfer bytes from the TX circular buffer using DMA
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_SERIAL_DMA
+void uart_xmitchars_dma(FAR uart_dev_t *dev);
+#endif
+
+/************************************************************************************
+ * Name: uart_xmitchars_done
+ *
+ * Description:
+ *   Perform operations necessary at the complete of DMA including adjusting the
+ *   TX circular buffer indices and waking up of any threads that may have been
+ *   waiting for space to become available in the TX circular buffer.
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_SERIAL_DMA
+void uart_xmitchars_done(FAR uart_dev_t *dev);
+#endif
+
+/************************************************************************************
+ * Name: uart_recvchars_dma
+ *
+ * Description:
+ *   Set up to receive bytes into the RX circular buffer using DMA
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_SERIAL_DMA
+void uart_recvchars_dma(FAR uart_dev_t *dev);
+#endif
+
+/************************************************************************************
+ * Name: uart_recvchars_done
+ *
+ * Description:
+ *   Perform operations necessary at the complete of DMA including adjusting the
+ *   RX circular buffer indices and waking up of any threads that may have been
+ *   waiting for new data to become available in the RX circular buffer.
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_SERIAL_DMA
+void uart_recvchars_done(FAR uart_dev_t *dev);
 #endif
 
 #undef EXTERN

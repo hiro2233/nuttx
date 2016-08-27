@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/streams.h
  *
- *   Copyright (C) 2009, 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011-2012, 2014-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,8 +33,8 @@
  *
  ****************************************************************************/
 
-#ifndef _INCLUDE_NUTTX_STREAMS_H
-#define _INCLUDE_NUTTX_STREAMS_H
+#ifndef __INCLUDE_NUTTX_STREAMS_H
+#define __INCLUDE_NUTTX_STREAMS_H
 
 /****************************************************************************
  * Included Files
@@ -44,7 +44,7 @@
 #include <stdio.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -54,26 +54,58 @@
 /* These are the generic representations of a streams used by the NuttX */
 
 struct lib_instream_s;
-struct lib_outstream_s;
-
 typedef int  (*lib_getc_t)(FAR struct lib_instream_s *this);
+
+struct lib_outstream_s;
 typedef void (*lib_putc_t)(FAR struct lib_outstream_s *this, int ch);
 typedef int  (*lib_flush_t)(FAR struct lib_outstream_s *this);
 
 struct lib_instream_s
 {
-  lib_getc_t  get;                /* Pointer to function to get one character */
-  int         nget;               /* Total number of characters gotten.  Written
+  lib_getc_t             get;     /* Get one character from the instream */
+  int                    nget;    /* Total number of characters gotten.  Written
                                    * by get method, readable by user */
 };
 
 struct lib_outstream_s
 {
-  lib_putc_t  put;                /* Pointer to function to put one character */
+  lib_putc_t             put;     /* Put one character to the outstream */
 #ifdef CONFIG_STDIO_LINEBUFFER
-  lib_flush_t flush;              /* Pointer to function flush buffered characters */
+  lib_flush_t            flush;   /* Flush any buffered characters in the outstream */
 #endif
-  int         nput;               /* Total number of characters put.  Written
+  int                    nput;    /* Total number of characters put.  Written
+                                   * by put method, readable by user */
+};
+
+/* Seek-able streams */
+
+struct lib_sistream_s;
+typedef int   (*lib_sigetc_t)(FAR struct lib_sistream_s *this);
+typedef off_t (*lib_siseek_t)(FAR struct lib_sistream_s *this, off_t offset,
+                              int whence);
+
+struct lib_sostream_s;
+typedef void  (*lib_soputc_t)(FAR struct lib_sostream_s *this, int ch);
+typedef int   (*lib_soflush_t)(FAR struct lib_sostream_s *this);
+typedef off_t (*lib_soseek_t)(FAR struct lib_sostream_s *this, off_t offset,
+                              int whence);
+
+struct lib_sistream_s
+{
+  lib_sigetc_t           get;     /* Get one character from the instream */
+  lib_siseek_t           seek;    /* Seek to a position in the instream */
+  int                    nget;    /* Total number of characters gotten.  Written
+                                   * by get method, readable by user */
+};
+
+struct lib_sostream_s
+{
+  lib_soputc_t           put;     /* Put one character to the outstream */
+#ifdef CONFIG_STDIO_LINEBUFFER
+  lib_soflush_t          flush;   /* Flush any buffered characters in the outstream */
+#endif
+  lib_soseek_t           seek;    /* Seek a position in the output stream */
+  int                    nput;    /* Total number of characters put.  Written
                                    * by put method, readable by user */
 };
 
@@ -83,14 +115,30 @@ struct lib_meminstream_s
 {
   struct lib_instream_s  public;
   FAR const char        *buffer;  /* Address of first byte in the buffer */
-  int                    buflen;  /* Size of the buffer in bytes */
+  size_t                 buflen;  /* Size of the buffer in bytes */
 };
 
 struct lib_memoutstream_s
 {
   struct lib_outstream_s public;
   FAR char              *buffer;  /* Address of first byte in the buffer */
-  int                    buflen;  /* Size of the buffer in bytes */
+  size_t                 buflen;  /* Size of the buffer in bytes */
+};
+
+struct lib_memsistream_s
+{
+  struct lib_sistream_s  public;
+  FAR const char        *buffer;  /* Address of first byte in the buffer */
+  size_t                 offset;  /* Current buffer offset in bytes */
+  size_t                 buflen;  /* Size of the buffer in bytes */
+};
+
+struct lib_memsostream_s
+{
+  struct lib_sostream_s  public;
+  FAR char              *buffer;  /* Address of first byte in the buffer */
+  size_t                 offset;  /* Current buffer offset in bytes */
+  size_t                 buflen;  /* Size of the buffer in bytes */
 };
 
 /* These are streams that operate on a FILE */
@@ -107,13 +155,19 @@ struct lib_stdoutstream_s
   FAR FILE              *stream;
 };
 
-/* These are streams that operate on a file descriptor */
-
-struct lib_rawoutstream_s
+struct lib_stdsistream_s
 {
-  struct lib_outstream_s public;
-  int                    fd;
+  struct lib_sistream_s  public;
+  FAR FILE              *stream;
 };
+
+struct lib_stdsostream_s
+{
+  struct lib_sostream_s  public;
+  FAR FILE              *stream;
+};
+
+/* These are streams that operate on a file descriptor */
 
 struct lib_rawinstream_s
 {
@@ -121,8 +175,26 @@ struct lib_rawinstream_s
   int                    fd;
 };
 
+struct lib_rawoutstream_s
+{
+  struct lib_outstream_s public;
+  int                    fd;
+};
+
+struct lib_rawsistream_s
+{
+  struct lib_sistream_s  public;
+  int                    fd;
+};
+
+struct lib_rawsostream_s
+{
+  struct lib_sostream_s  public;
+  int                    fd;
+};
+
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 #undef EXTERN
@@ -139,16 +211,18 @@ extern "C"
  ****************************************************************************/
 
 /****************************************************************************
- * Name: lib_meminstream, lib_memoutstream
+ * Name: lib_meminstream, lib_memoutstream, lib_memsistream, lib_memsostream
  *
  * Description:
  *   Initializes a stream for use with a fixed-size memory buffer.
- *   Defined in lib/lib_meminstream.c and lib/lib_memoutstream.c
+ *   Defined in lib/stdio/lib_meminstream.c and lib/stdio/lib_memoutstream.c.
+ *   Seekable versions are defined in lib/stdio/lib_memsistream.c and
+ *   lib/stdio/lib_memsostream.c.
  *
  * Input parameters:
- *   meminstream  - User allocated, uninitialized instance of struct
+ *   memstream    - User allocated, uninitialized instance of struct
  *                  lib_meminstream_s to be initialized.
- *   memoutstream - User allocated, uninitialized instance of struct
+ *   memstream    - User allocated, uninitialized instance of struct
  *                  lib_memoutstream_s to be initialized.
  *   bufstart     - Address of the beginning of the fixed-size memory buffer
  *   buflen       - Size of the fixed-sized memory buffer in bytes
@@ -158,67 +232,78 @@ extern "C"
  *
  ****************************************************************************/
 
-EXTERN void lib_meminstream(FAR struct lib_meminstream_s *meminstream,
-                            FAR const char *bufstart, int buflen);
-EXTERN void lib_memoutstream(FAR struct lib_memoutstream_s *memoutstream,
-                             FAR char *bufstart, int buflen);
+void lib_meminstream(FAR struct lib_meminstream_s *instream,
+                     FAR const char *bufstart, int buflen);
+void lib_memoutstream(FAR struct lib_memoutstream_s *outstream,
+                      FAR char *bufstart, int buflen);
+void lib_memsistream(FAR struct lib_memsistream_s *instream,
+                     FAR const char *bufstart, int buflen);
+void lib_memsostream(FAR struct lib_memsostream_s *outstream,
+                     FAR char *bufstart, int buflen);
 
 /****************************************************************************
  * Name: lib_stdinstream, lib_stdoutstream
  *
  * Description:
  *   Initializes a stream for use with a FILE instance.
- *   Defined in lib/lib_stdinstream.c and lib/lib_stdoutstream.c
+ *   Defined in lib/stdio/lib_stdinstream.c and lib/stdio/lib_stdoutstream.c
  *
  * Input parameters:
- *   stdinstream  - User allocated, uninitialized instance of struct
- *                  lib_stdinstream_s to be initialized.
- *   stdoutstream - User allocated, uninitialized instance of struct
- *                  lib_stdoutstream_s to be initialized.
- *   stream       - User provided stream instance (must have been opened for
- *                  the correct access).
+ *   instream  - User allocated, uninitialized instance of struct
+ *               lib_stdinstream_s to be initialized.
+ *   outstream - User allocated, uninitialized instance of struct
+ *               lib_stdoutstream_s to be initialized.
+ *   stream    - User provided stream instance (must have been opened for
+ *               the correct access).
  *
  * Returned Value:
  *   None (User allocated instance initialized).
  *
  ****************************************************************************/
 
-EXTERN void lib_stdinstream(FAR struct lib_stdinstream_s *stdinstream,
-                            FAR FILE *stream);
-EXTERN void lib_stdoutstream(FAR struct lib_stdoutstream_s *stdoutstream,
-                             FAR FILE *stream);
+void lib_stdinstream(FAR struct lib_stdinstream_s *instream,
+                     FAR FILE *stream);
+void lib_stdoutstream(FAR struct lib_stdoutstream_s *outstream,
+                      FAR FILE *stream);
+void lib_stdsistream(FAR struct lib_stdsistream_s *instream,
+                     FAR FILE *stream);
+void lib_stdsostream(FAR struct lib_stdsostream_s *outstream,
+                     FAR FILE *stream);
 
 /****************************************************************************
- * Name: lib_rawinstream, lib_rawoutstream
+ * Name: lib_rawinstream, lib_rawoutstream, lib_rawsistream, and
+ *       lib_rawsostream,
  *
  * Description:
  *   Initializes a stream for use with a file descriptor.
- *   Defined in lib/lib_rawinstream.c and lib/lib_rawoutstream.c
+ *   Defined in lib/stdio/lib_rawinstream.c and lib/stdio/lib_rawoutstream.c.
+ *   Seekable versions are defined in lib/stdio/lib_rawsistream.c and
+ *   lib/stdio/lib_rawsostream.c
  *
  * Input parameters:
- *   rawinstream  - User allocated, uninitialized instance of struct
- *                  lib_rawinstream_s to be initialized.
- *   rawoutstream - User allocated, uninitialized instance of struct
- *                  lib_rawoutstream_s to be initialized.
- *   fd           - User provided file/socket descriptor (must have been opened
- *                  for the correct access).
+ *   instream  - User allocated, uninitialized instance of struct
+ *               lib_rawinstream_s to be initialized.
+ *   outstream - User allocated, uninitialized instance of struct
+ *               lib_rawoutstream_s to be initialized.
+ *   fd        - User provided file/socket descriptor (must have been opened
+ *               for the correct access).
  *
  * Returned Value:
  *   None (User allocated instance initialized).
  *
  ****************************************************************************/
 
-EXTERN void lib_rawinstream(FAR struct lib_rawinstream_s *rawinstream,
-                            int fd);
-EXTERN void lib_rawoutstream(FAR struct lib_rawoutstream_s *rawoutstream,
-                             int fd);
+void lib_rawinstream(FAR struct lib_rawinstream_s *instream, int fd);
+void lib_rawoutstream(FAR struct lib_rawoutstream_s *outstream, int fd);
+void lib_rawsistream(FAR struct lib_rawsistream_s *instream, int fd);
+void lib_rawsostream(FAR struct lib_rawsostream_s *outstream, int fd);
 
 /****************************************************************************
  * Name: lib_lowinstream, lib_lowoutstream
  *
  * Description:
  *   Initializes a stream for use with low-level, architecture-specific I/O.
- *   Defined in lib/lib_lowinstream.c and lib/lib_lowoutstream.c
+ *   Defined in lib/stdio/lib_lowinstream.c and lib/stdio/lib_lowoutstream.c
  *
  * Input parameters:
  *   lowinstream  - User allocated, uninitialized instance of struct
@@ -232,10 +317,10 @@ EXTERN void lib_rawoutstream(FAR struct lib_rawoutstream_s *rawoutstream,
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LOWGETC
-EXTERN void lib_lowinstream(FAR struct lib_instream_s *lowinstream);
+void lib_lowinstream(FAR struct lib_instream_s *lowinstream);
 #endif
 #ifdef CONFIG_ARCH_LOWPUTC
-EXTERN void lib_lowoutstream(FAR struct lib_outstream_s *lowoutstream);
+void lib_lowoutstream(FAR struct lib_outstream_s *lowoutstream);
 #endif
 
 /****************************************************************************
@@ -245,11 +330,11 @@ EXTERN void lib_lowoutstream(FAR struct lib_outstream_s *lowoutstream);
  *   Initializes NULL streams:
  *
  *   o The stream created by lib_zeroinstream will return an infinitely long
- *     stream of zeroes. Defined in lib/lib_zeroinstream.c
+ *     stream of zeroes. Defined in lib/stdio/lib_zeroinstream.c
  *   o The stream created by lib_nullinstream will return only EOF.
- *     Defined in lib/lib_nullinstream.c
+ *     Defined in lib/stdio/lib_nullinstream.c
  *   o The stream created by lib_nulloutstream will write all data to the
- *     bit-bucket. Defined in lib/lib_nulloutstream.c
+ *     bit-bucket. Defined in lib/stdio/lib_nulloutstream.c
  *
  * Input parameters:
  *   zeroinstream  - User allocated, uninitialized instance of struct
@@ -264,32 +349,95 @@ EXTERN void lib_lowoutstream(FAR struct lib_outstream_s *lowoutstream);
  *
  ****************************************************************************/
 
-EXTERN void lib_zeroinstream(FAR struct lib_instream_s *zeroinstream);
-EXTERN void lib_nullinstream(FAR struct lib_instream_s *nullinstream);
-EXTERN void lib_nulloutstream(FAR struct lib_outstream_s *nulloutstream);
+void lib_zeroinstream(FAR struct lib_instream_s *zeroinstream);
+void lib_nullinstream(FAR struct lib_instream_s *nullinstream);
+void lib_nulloutstream(FAR struct lib_outstream_s *nulloutstream);
 
 /****************************************************************************
- * Name: lib_sylogstream
+ * Name: syslogstream
  *
  * Description:
  *   Initializes a stream for use with the configured syslog interface.
+ *   Only accessible from with the OS SYSLOG logic.
  *
  * Input parameters:
- *   lowoutstream - User allocated, uninitialized instance of struct
- *                  lib_lowoutstream_s to be initialized.
+ *   stream - User allocated, uninitialized instance of struct
+ *            lib_lowoutstream_s to be initialized.
  *
  * Returned Value:
  *   None (User allocated instance initialized).
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SYSLOG
-EXTERN void lib_syslogstream(FAR struct lib_outstream_s *stream);
+void syslogstream(FAR struct lib_outstream_s *stream);
+
+/****************************************************************************
+ * Name: emergstream
+ *
+ * Description:
+ *   Initializes a stream for use with the configured emergency syslog
+ *   interface.  Only accessible from with the OS SYSLOG logic.
+ *
+ * Input parameters:
+ *   stream - User allocated, uninitialized instance of struct
+ *            lib_lowoutstream_s to be initialized.
+ *
+ * Returned Value:
+ *   None (User allocated instance initialized).
+ *
+ ****************************************************************************/
+
+void emergstream(FAR struct lib_outstream_s *stream);
+
+/****************************************************************************
+ * Name: lib_noflush
+ *
+ * Description:
+ *  lib_noflush() provides a common, dummy flush method for output streams
+ *  that are not flushable.  Only used if CONFIG_STDIO_LINEBUFFER is selected.
+ *
+ * Return:
+ *  Always returns OK
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_STDIO_LINEBUFFER
+int lib_noflush(FAR struct lib_outstream_s *stream);
 #endif
+
+/****************************************************************************
+ * Name: lib_snoflush
+ *
+ * Description:
+ *  lib_snoflush() provides a common, dummy flush method for seekable output
+ *  streams that are not flushable.  Only used if CONFIG_STDIO_LINEBUFFER
+ *  is selected.
+ *
+ * Return:
+ *  Always returns OK
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_STDIO_LINEBUFFER
+int lib_snoflush(FAR struct lib_sostream_s *this);
+#endif
+
+/****************************************************************************
+ * Name: lib_sprintf and lib_vsprintf
+ *
+ * Description:
+ *  Stream-oriented versions of sprintf and vsprintf.
+ *
+ ****************************************************************************/
+
+int lib_sprintf(FAR struct lib_outstream_s *obj,
+                FAR const IPTR char *fmt, ...);
+int lib_vsprintf(FAR struct lib_outstream_s *obj,
+                 FAR const IPTR char *src, va_list ap);
 
 #undef EXTERN
 #if defined(__cplusplus)
 }
 #endif
 
-#endif /* _INCLUDE_NUTTX_STREAMS_H */
+#endif /* __INCLUDE_NUTTX_STREAMS_H */

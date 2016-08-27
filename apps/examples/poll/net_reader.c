@@ -43,6 +43,7 @@
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -54,12 +55,15 @@
 #include <debug.h>
 
 #include <net/if.h>
-#include <apps/netutils/uiplib.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
+#include "netutils/netlib.h"
 
 #include "poll_internal.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define IOBUFFER_SIZE 80
@@ -87,7 +91,7 @@ static void net_configure(void)
   uint8_t mac[IFHWADDRLEN];
 #endif
 
-  /* Configure uIP */
+  /* Configure the network */
   /* Many embedded network interfaces must have a software assigned MAC */
 
 #ifdef CONFIG_EXAMPLES_POLL_NOMAC
@@ -97,23 +101,23 @@ static void net_configure(void)
   mac[3] = 0xad;
   mac[4] = 0xbe;
   mac[5] = 0xef;
-  uip_setmacaddr("eth0", mac);
+  netlib_setmacaddr("eth0", mac);
 #endif
 
   /* Set up our host address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_POLL_IPADDR);
-  uip_sethostaddr("eth0", &addr);
+  netlib_set_ipv4addr("eth0", &addr);
 
   /* Set up the default router address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_POLL_DRIPADDR);
-  uip_setdraddr("eth0", &addr);
+  netlib_set_dripv4addr("eth0", &addr);
 
   /* Setup the subnet mask */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_POLL_NETMASK);
-  uip_setnetmask("eth0", &addr);
+  netlib_set_ipv4netmask("eth0", &addr);
 }
 
 /****************************************************************************
@@ -152,23 +156,23 @@ static void net_receive(int sd)
 
       if (ret < 0)
         {
-          message("net_reader: select failed: %d\n", errno);
+          printf("net_reader: select failed: %d\n", errno);
           return;
         }
       else if (ret == 0)
         {
-          message("net_reader: Timeout\n");
+          printf("net_reader: Timeout\n");
         }
       else
         {
-          message("net_reader: Read data from sd=%d\n", sd);
+          printf("net_reader: Read data from sd=%d\n", sd);
           memset(buffer, '?', IOBUFFER_SIZE); /* Just to make sure we really receive something */
           ret = recv(sd, buffer, IOBUFFER_SIZE, 0);
           if (ret < 0)
             {
               if (errno != EINTR)
                 {
-                  message("net_reader: recv failed sd=%d: %d\n", sd, errno);
+                  printf("net_reader: recv failed sd=%d: %d\n", sd, errno);
                   if (errno != EAGAIN)
                     {
                        return;
@@ -177,13 +181,13 @@ static void net_receive(int sd)
             }
           else if (ret == 0)
             {
-              message("net_reader: Client connection lost sd=%d\n", sd);
+              printf("net_reader: Client connection lost sd=%d\n", sd);
               return;
             }
           else
             {
               buffer[ret]='\0';
-              message("net_reader: Read '%s' (%d bytes)\n", buffer, ret);
+              printf("net_reader: Read '%s' (%d bytes)\n", buffer, ret);
 
               /* Echo the data back to the client */
 
@@ -194,7 +198,7 @@ static void net_receive(int sd)
                     {
                       if (errno != EINTR)
                         {
-                           message("net_reader: Send failed sd=%d: %d\n", sd, errno);
+                           printf("net_reader: Send failed sd=%d: %d\n", sd, errno);
                            return;
                         }
                     }
@@ -228,7 +232,7 @@ void *net_reader(pthread_addr_t pvarg)
   socklen_t addrlen;
   int optval;
 
-  /* Configure uIP */
+  /* Configure the network */
 
   net_configure();
 
@@ -237,7 +241,7 @@ void *net_reader(pthread_addr_t pvarg)
   listensd = socket(PF_INET, SOCK_STREAM, 0);
   if (listensd < 0)
     {
-      message("net_reader: socket failure: %d\n", errno);
+      printf("net_reader: socket failure: %d\n", errno);
       goto errout;
     }
 
@@ -246,7 +250,7 @@ void *net_reader(pthread_addr_t pvarg)
   optval = 1;
   if (setsockopt(listensd, SOL_SOCKET, SO_REUSEADDR, (void*)&optval, sizeof(int)) < 0)
     {
-      message("net_reader: setsockopt SO_REUSEADDR failure: %d\n", errno);
+      printf("net_reader: setsockopt SO_REUSEADDR failure: %d\n", errno);
       goto errout_with_listensd;
     }
 
@@ -258,7 +262,7 @@ void *net_reader(pthread_addr_t pvarg)
 
   if (bind(listensd, (struct sockaddr*)&addr, sizeof(struct sockaddr_in)) < 0)
     {
-      message("net_reader: bind failure: %d\n", errno);
+      printf("net_reader: bind failure: %d\n", errno);
       goto errout_with_listensd;
     }
 
@@ -266,7 +270,7 @@ void *net_reader(pthread_addr_t pvarg)
 
   if (listen(listensd, 5) < 0)
     {
-      message("net_reader: listen failure %d\n", errno);
+      printf("net_reader: listen failure %d\n", errno);
       goto errout_with_listensd;
     }
 
@@ -276,33 +280,35 @@ void *net_reader(pthread_addr_t pvarg)
     {
       /* Accept only one connection */
 
-      message("net_reader: Accepting new connections on port %d\n", LISTENER_PORT);
+      printf("net_reader: Accepting new connections on port %d\n", LISTENER_PORT);
       addrlen = sizeof(struct sockaddr_in);
       acceptsd = accept(listensd, (struct sockaddr*)&addr, &addrlen);
       if (acceptsd < 0)
         {
-          message("net_reader: accept failure: %d\n", errno);
+          printf("net_reader: accept failure: %d\n", errno);
           continue;
         }
-      message("net_reader: Connection accepted on sd=%d\n", acceptsd);
+
+      printf("net_reader: Connection accepted on sd=%d\n", acceptsd);
 
       /* Configure to "linger" until all data is sent when the socket is closed */
 
 #ifdef POLL_HAVE_SOLINGER
       ling.l_onoff  = 1;
       ling.l_linger = 30;     /* timeout is seconds */
+
       if (setsockopt(acceptsd, SOL_SOCKET, SO_LINGER, &ling, sizeof(struct linger)) < 0)
         {
-        message("net_reader: setsockopt SO_LINGER failure: %d\n", errno);
-        goto errout_with_acceptsd;
-      }
+          printf("net_reader: setsockopt SO_LINGER failure: %d\n", errno);
+          goto errout_with_acceptsd;
+        }
 #endif
 
       /* Handle incoming messsages on the connection. */
 
       net_receive(acceptsd);
 
-      message("net_reader: Closing sd=%d\n", acceptsd);
+      printf("net_reader: Closing sd=%d\n", acceptsd);
       close(acceptsd);
     }
 

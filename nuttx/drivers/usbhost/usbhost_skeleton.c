@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/usbhost/usbhost_skeleton.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/arch.h>
@@ -94,11 +95,7 @@ struct usbhost_state_s
 {
   /* This is the externally visible portion of the state */
 
-  struct usbhost_class_s  class;
-
-  /* This is an instance of the USB host driver bound to this class instance */
-
-  struct usbhost_driver_s *drvr;
+  struct usbhost_class_s  usbclass;
 
   /* The remainder of the fields are provide to the class driver */
 
@@ -126,13 +123,14 @@ static void usbhost_takesem(sem_t *sem);
 /* Memory allocation services */
 
 static inline FAR struct usbhost_state_s *usbhost_allocclass(void);
-static inline void usbhost_freeclass(FAR struct usbhost_state_s *class);
+static inline void usbhost_freeclass(FAR struct usbhost_state_s *usbclass);
 
 /* Device name management */
 
 static int usbhost_allocdevno(FAR struct usbhost_state_s *priv);
 static void usbhost_freedevno(FAR struct usbhost_state_s *priv);
-static inline void usbhost_mkdevname(FAR struct usbhost_state_s *priv, char *devname);
+static inline void usbhost_mkdevname(FAR struct usbhost_state_s *priv,
+                                     FAR char *devname);
 
 /* Worker thread actions */
 
@@ -141,8 +139,8 @@ static void usbhost_destroy(FAR void *arg);
 /* Helpers for usbhost_connect() */
 
 static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
-                                  FAR const uint8_t *configdesc, int desclen,
-                                  uint8_t funcaddr);
+                                  FAR const uint8_t *configdesc,
+                                  int desclen);
 static inline int usbhost_devinit(FAR struct usbhost_state_s *priv);
 
 /* (Little Endian) Data helpers */
@@ -159,15 +157,14 @@ static inline int usbhost_tfree(FAR struct usbhost_state_s *priv);
 
 /* struct usbhost_registry_s methods */
 
-static struct usbhost_class_s *usbhost_create(FAR struct usbhost_driver_s *drvr,
+static struct usbhost_class_s *usbhost_create(FAR struct usbhost_hubport_s *hport,
                                               FAR const struct usbhost_id_s *id);
 
 /* struct usbhost_class_s methods */
 
-static int usbhost_connect(FAR struct usbhost_class_s *class,
-                           FAR const uint8_t *configdesc, int desclen,
-                           uint8_t funcaddr);
-static int usbhost_disconnected(FAR struct usbhost_class_s *class);
+static int usbhost_connect(FAR struct usbhost_class_s *usbclass,
+                           FAR const uint8_t *configdesc, int desclen);
+static int usbhost_disconnected(FAR struct usbhost_class_s *usbclass);
 
 /* Driver methods -- depend upon the type of NuttX driver interface exported */
 
@@ -175,7 +172,7 @@ static int usbhost_disconnected(FAR struct usbhost_class_s *class);
  * Private Data
  ****************************************************************************/
 
-/* This structure provides the registry entry ID informatino that will  be
+/* This structure provides the registry entry ID information that will  be
  * used to associate the USB class driver to a connected USB device.
  */
 
@@ -221,7 +218,7 @@ static void usbhost_takesem(sem_t *sem)
 
   while (sem_wait(sem) != 0)
     {
-      /* The only case that an error should occr here is if the wait was
+      /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
@@ -253,8 +250,8 @@ static inline FAR struct usbhost_state_s *usbhost_allocclass(void)
   FAR struct usbhost_state_s *priv;
 
   DEBUGASSERT(!up_interrupt_context());
-  priv = (FAR struct usbhost_state_s *)kmalloc(sizeof(struct usbhost_state_s));
-  uvdbg("Allocated: %p\n", priv);;
+  priv = (FAR struct usbhost_state_s *)kmm_malloc(sizeof(struct usbhost_state_s));
+  uinfo("Allocated: %p\n", priv);
   return priv;
 }
 
@@ -265,23 +262,23 @@ static inline FAR struct usbhost_state_s *usbhost_allocclass(void)
  *   Free a class instance previously allocated by usbhost_allocclass().
  *
  * Input Parameters:
- *   class - A reference to the class instance to be freed.
+ *   usbclass - A reference to the class instance to be freed.
  *
  * Returned Values:
  *   None
  *
  ****************************************************************************/
 
-static inline void usbhost_freeclass(FAR struct usbhost_state_s *class)
+static inline void usbhost_freeclass(FAR struct usbhost_state_s *usbclass)
 {
-  DEBUGASSERT(class != NULL);
+  DEBUGASSERT(usbclass != NULL);
 
-  /* Free the class instance (perhaps calling sched_kfree() in case we are
+  /* Free the class instance (perhaps calling sched_kmm_free() in case we are
    * executing from an interrupt handler.
    */
 
-  uvdbg("Freeing: %p\n", class);;
-  kfree(class);
+  uinfo("Freeing: %p\n", usbclass);
+  kmm_free(usbclass);
 }
 
 /****************************************************************************
@@ -297,7 +294,7 @@ static int usbhost_allocdevno(FAR struct usbhost_state_s *priv)
   irqstate_t flags;
   int devno;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   for (devno = 0; devno < 26; devno++)
     {
       uint32_t bitno = 1 << devno;
@@ -305,12 +302,12 @@ static int usbhost_allocdevno(FAR struct usbhost_state_s *priv)
         {
           g_devinuse |= bitno;
           priv->devchar = 'a' + devno;
-          irqrestore(flags);
+          leave_critical_section(flags);
           return OK;
         }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return -EMFILE;
 }
 
@@ -320,13 +317,14 @@ static void usbhost_freedevno(FAR struct usbhost_state_s *priv)
 
   if (devno >= 0 && devno < 26)
     {
-      irqstate_t flags = irqsave();
+      irqstate_t flags = enter_critical_section();
       g_devinuse &= ~(1 << devno);
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 }
 
-static inline void usbhost_mkdevname(FAR struct usbhost_state_s *priv, char *devname)
+static inline void usbhost_mkdevname(FAR struct usbhost_state_s *priv,
+                                     FAR char *devname)
 {
   (void)snprintf(devname, DEV_NAMELEN, DEV_FORMAT, priv->devchar);
 }
@@ -335,7 +333,7 @@ static inline void usbhost_mkdevname(FAR struct usbhost_state_s *priv, char *dev
  * Name: usbhost_destroy
  *
  * Description:
- *   The USB device has been disconnected and the refernce count on the USB
+ *   The USB device has been disconnected and the reference count on the USB
  *   host class instance has gone to 1.. Time to destroy the USB host class
  *   instance.
  *
@@ -350,9 +348,16 @@ static inline void usbhost_mkdevname(FAR struct usbhost_state_s *priv, char *dev
 static void usbhost_destroy(FAR void *arg)
 {
   FAR struct usbhost_state_s *priv = (FAR struct usbhost_state_s *)arg;
+  FAR struct usbhost_hubport_s *hport;
+  FAR struct usbhost_driver_s *drvr;
 
-  DEBUGASSERT(priv != NULL);
-  uvdbg("crefs: %d\n", priv->crefs);
+  DEBUGASSERT(priv != NULL && priv->usbclass.hport != NULL);
+  hport = priv->usbclass.hport;
+
+  DEBUGASSERT(hport->drvr);
+  drvr = hport->drvr;
+
+  uinfo("crefs: %d\n", priv->crefs);
 
   /* Unregister the driver */
 
@@ -364,11 +369,16 @@ static void usbhost_destroy(FAR void *arg)
 
   /* Free any transfer buffers */
 
+  /* Free the function address assigned to this device */
+
+  usbhost_devaddr_destroy(hport, hport->funcaddr);
+  hport->funcaddr = 0;
+
   /* Destroy the semaphores */
 
   /* Disconnect the USB host device */
 
-  DRVR_DISCONNECT(priv->drvr);
+  DRVR_DISCONNECT(drvr, hport);
 
   /* And free the class instance.  Hmmm.. this may execute on the worker
    * thread and the work structure is part of what is getting freed.  That
@@ -390,10 +400,9 @@ static void usbhost_destroy(FAR void *arg)
  *
  * Input Parameters:
  *   priv - The USB host class instance.
- *   configdesc - A pointer to a uint8_t buffer container the configuration descripor.
+ *   configdesc - A pointer to a uint8_t buffer container the configuration
+ *     descriptor.
  *   desclen - The length in bytes of the configuration descriptor.
- *   funcaddr - The USB address of the function containing the endpoint that EP0
- *     controls
  *
  * Returned Values:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
@@ -405,9 +414,9 @@ static void usbhost_destroy(FAR void *arg)
  ****************************************************************************/
 
 static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
-                                  FAR const uint8_t *configdesc, int desclen,
-                                  uint8_t funcaddr)
+                                  FAR const uint8_t *configdesc, int desclen)
 {
+  FAR struct usbhost_hubport_s *hport;
   FAR struct usb_cfgdesc_s *cfgdesc;
   FAR struct usb_desc_s *desc;
   FAR struct usbhost_epdesc_s bindesc;
@@ -416,9 +425,9 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
   uint8_t found = 0;
   int ret;
 
-  DEBUGASSERT(priv != NULL &&
-              configdesc != NULL &&
-              desclen >= sizeof(struct usb_cfgdesc_s));
+  DEBUGASSERT(priv != NULL && priv->usbclass.hport &&
+              configdesc != NULL && desclen >= sizeof(struct usb_cfgdesc_s));
+  hport = priv->usbclass.hport;
 
   /* Verify that we were passed a configuration descriptor */
 
@@ -430,7 +439,7 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
 
   /* Get the total length of the configuration descriptor (little endian).
    * It might be a good check to get the number of interfaces here too.
-  */
+   */
 
   remaining = (int)usbhost_getle16(cfgdesc->totallen);
 
@@ -456,7 +465,7 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
           {
             FAR struct usb_ifdesc_s *ifdesc = (FAR struct usb_ifdesc_s *)configdesc;
 
-            uvdbg("Interface descriptor\n");
+            uinfo("Interface descriptor\n");
             DEBUGASSERT(remaining >= USB_SIZEOF_IFDESC);
 
             /* Save the interface number and mark ONLY the interface found */
@@ -474,7 +483,7 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
           {
             FAR struct usb_epdesc_s *epdesc = (FAR struct usb_epdesc_s *)configdesc;
 
-            uvdbg("Endpoint descriptor\n");
+            uinfo("Endpoint descriptor\n");
             DEBUGASSERT(remaining >= USB_SIZEOF_EPDESC);
 
             /* Check for a bulk endpoint. */
@@ -501,13 +510,13 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
 
                     /* Save the bulk OUT endpoint information */
 
+                    boutdesc.hport        = hport;
                     boutdesc.addr         = epdesc->addr & USB_EP_ADDR_NUMBER_MASK;
                     boutdesc.in           = false;
-                    boutdesc.funcaddr     = funcaddr;
                     boutdesc.xfrtype      = USB_EP_ATTR_XFER_BULK;
                     boutdesc.interval     = epdesc->interval;
                     boutdesc.mxpacketsize = usbhost_getle16(epdesc->mxpacketsize);
-                    uvdbg("Bulk OUT EP addr:%d mxpacketsize:%d\n",
+                    uinfo("Bulk OUT EP addr:%d mxpacketsize:%d\n",
                           boutdesc.addr, boutdesc.mxpacketsize);
                   }
                 else
@@ -524,17 +533,18 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
 
                         return -EINVAL;
                       }
+
                     found |= USBHOST_BINFOUND;
 
                     /* Save the bulk IN endpoint information */
 
+                    bindesc.hport        = hport;
                     bindesc.addr         = epdesc->addr & USB_EP_ADDR_NUMBER_MASK;
                     bindesc.in           = 1;
-                    bindesc.funcaddr     = funcaddr;
                     bindesc.xfrtype      = USB_EP_ATTR_XFER_BULK;
                     bindesc.interval     = epdesc->interval;
                     bindesc.mxpacketsize = usbhost_getle16(epdesc->mxpacketsize);
-                    uvdbg("Bulk IN EP addr:%d mxpacketsize:%d\n",
+                    uinfo("Bulk IN EP addr:%d mxpacketsize:%d\n",
                           bindesc.addr, bindesc.mxpacketsize);
                   }
               }
@@ -566,31 +576,31 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
 
   if (found != USBHOST_ALLFOUND)
     {
-      ulldbg("ERROR: Found IF:%s BIN:%s BOUT:%s\n",
-             (found & USBHOST_IFFOUND) != 0  ? "YES" : "NO",
-             (found & USBHOST_BINFOUND) != 0 ? "YES" : "NO",
-             (found & USBHOST_BOUTFOUND) != 0 ? "YES" : "NO");
+      uerr("ERROR: Found IF:%s BIN:%s BOUT:%s\n",
+           (found & USBHOST_IFFOUND) != 0  ? "YES" : "NO",
+           (found & USBHOST_BINFOUND) != 0 ? "YES" : "NO",
+           (found & USBHOST_BOUTFOUND) != 0 ? "YES" : "NO");
       return -EINVAL;
     }
 
   /* We are good... Allocate the endpoints */
 
-  ret = DRVR_EPALLOC(priv->drvr, &boutdesc, &priv->epout);
-  if (ret != OK)
+  ret = DRVR_EPALLOC(hport->drvr, &boutdesc, &priv->epout);
+  if (ret < 0)
     {
-      udbg("ERROR: Failed to allocate Bulk OUT endpoint\n");
+      uerr("ERROR: Failed to allocate Bulk OUT endpoint\n");
       return ret;
     }
 
-  ret = DRVR_EPALLOC(priv->drvr, &bindesc, &priv->epin);
-  if (ret != OK)
+  ret = DRVR_EPALLOC(hport->drvr, &bindesc, &priv->epin);
+  if (ret < 0)
     {
-      udbg("ERROR: Failed to allocate Bulk IN endpoint\n");
-      (void)DRVR_EPFREE(priv->drvr, priv->epout);
+      uerr("ERROR: Failed to allocate Bulk IN endpoint\n");
+      (void)DRVR_EPFREE(hport->drvr, priv->epout);
       return ret;
     }
 
-  ullvdbg("Endpoints allocated\n");
+  uinfo("Endpoints allocated\n");
   return OK;
 }
 
@@ -630,11 +640,11 @@ static inline int usbhost_devinit(FAR struct usbhost_state_s *priv)
 
   /* Register the driver */
 
-  if (ret == OK)
+  if (ret >= 0)
     {
       char devname[DEV_NAMELEN];
 
-      uvdbg("Register block driver\n");
+      uinfo("Register block driver\n");
       usbhost_mkdevname(priv, devname);
       // ret = register_blockdriver(devname, &g_bops, 0, priv);
     }
@@ -644,7 +654,7 @@ static inline int usbhost_devinit(FAR struct usbhost_state_s *priv)
    * driver has been registerd.
    */
 
-  if (ret == OK)
+  if (ret >= 0)
     {
       usbhost_takesem(&priv->exclsem);
       DEBUGASSERT(priv->crefs >= 2);
@@ -667,7 +677,7 @@ static inline int usbhost_devinit(FAR struct usbhost_state_s *priv)
         {
           /* Ready for normal operation as a block device driver */
 
-          uvdbg("Successfully initialized\n");
+          uinfo("Successfully initialized\n");
           priv->crefs--;
           usbhost_givesem(&priv->exclsem);
         }
@@ -733,7 +743,7 @@ static void usbhost_putle16(uint8_t *dest, uint16_t val)
 
 static inline uint32_t usbhost_getle32(const uint8_t *val)
 {
- /* Little endian means LS halfword first in byte stream */
+  /* Little endian means LS halfword first in byte stream */
 
   return (uint32_t)usbhost_getle16(&val[2]) << 16 | (uint32_t)usbhost_getle16(val);
 }
@@ -778,8 +788,13 @@ static void usbhost_putle32(uint8_t *dest, uint32_t val)
 
 static inline int usbhost_talloc(FAR struct usbhost_state_s *priv)
 {
-  DEBUGASSERT(priv && priv->tbuffer == NULL);
-  return DRVR_ALLOC(priv->drvr, &priv->tbuffer, &priv->tbuflen);
+  FAR struct usbhost_hubport_s *hport;
+
+  DEBUGASSERT(priv != NULL && priv->usbclass.hport != NULL &&
+              priv->tbuffer == NULL);
+  hport = priv->usbclass.hport;
+
+  return DRVR_ALLOC(hport->drvr, &priv->tbuffer, &priv->tbuflen);
 }
 
 /****************************************************************************
@@ -799,16 +814,19 @@ static inline int usbhost_talloc(FAR struct usbhost_state_s *priv)
 
 static inline int usbhost_tfree(FAR struct usbhost_state_s *priv)
 {
+  FAR struct usbhost_hubport_s *hport;
   int result = OK;
-  DEBUGASSERT(priv);
+
+  DEBUGASSERT(priv != NULL && priv->usbclass.hport != NULL);
 
   if (priv->tbuffer)
     {
-      DEBUGASSERT(priv->drvr);
-      result         = DRVR_FREE(priv->drvr, priv->tbuffer);
+      hport          = priv->usbclass.hport;
+      result         = DRVR_FREE(hport->drvr, priv->tbuffer);
       priv->tbuffer = NULL;
       priv->tbuflen = 0;
     }
+
   return result;
 }
 
@@ -828,9 +846,7 @@ static inline int usbhost_tfree(FAR struct usbhost_state_s *priv)
  *   USB ports and multiple USB devices simultaneously connected.
  *
  * Input Parameters:
- *   drvr - An instance of struct usbhost_driver_s that the class
- *     implementation will "bind" to its state structure and will
- *     subsequently use to communicate with the USB host driver.
+ *   hport - The hub hat manages the new class instance.
  *   id - In the case where the device supports multiple base classes,
  *     subclasses, or protocols, this specifies which to configure for.
  *
@@ -838,12 +854,12 @@ static inline int usbhost_tfree(FAR struct usbhost_state_s *priv)
  *   On success, this function will return a non-NULL instance of struct
  *   usbhost_class_s that can be used by the USB host driver to communicate
  *   with the USB host class.  NULL is returned on failure; this function
- *   will fail only if the drvr input parameter is NULL or if there are
+ *   will fail only if the hport input parameter is NULL or if there are
  *   insufficient resources to create another USB host class instance.
  *
  ****************************************************************************/
 
-static FAR struct usbhost_class_s *usbhost_create(FAR struct usbhost_driver_s *drvr,
+static FAR struct usbhost_class_s *usbhost_create(FAR struct usbhost_hubport_s *hport,
                                                   FAR const struct usbhost_id_s *id)
 {
   FAR struct usbhost_state_s *priv;
@@ -863,24 +879,21 @@ static FAR struct usbhost_class_s *usbhost_create(FAR struct usbhost_driver_s *d
         {
          /* Initialize class method function pointers */
 
-          priv->class.connect      = usbhost_connect;
-          priv->class.disconnected = usbhost_disconnected;
+          priv->usbclass.hport        = hport;
+          priv->usbclass.connect      = usbhost_connect;
+          priv->usbclass.disconnected = usbhost_disconnected;
 
           /* The initial reference count is 1... One reference is held by the driver */
 
-          priv->crefs              = 1;
+          priv->crefs = 1;
 
-          /* Initialize semphores (this works okay in the interrupt context) */
+          /* Initialize semaphores (this works okay in the interrupt context) */
 
           sem_init(&priv->exclsem, 0, 1);
 
-          /* Bind the driver to the storage class instance */
-
-          priv->drvr               = drvr;
-
           /* Return the instance of the USB class driver */
 
-          return &priv->class;
+          return &priv->usbclass;
         }
     }
 
@@ -906,11 +919,11 @@ static FAR struct usbhost_class_s *usbhost_create(FAR struct usbhost_driver_s *d
  *   descriptor to the class so that the class may initialize properly
  *
  * Input Parameters:
- *   class - The USB host class entry previously obtained from a call to create().
- *   configdesc - A pointer to a uint8_t buffer container the configuration descripor.
+ *   usbclass - The USB host class entry previously obtained from a call to
+ *     create().
+ *   configdesc - A pointer to a uint8_t buffer container the configuration
+ *     descriptor.
  *   desclen - The length in bytes of the configuration descriptor.
- *   funcaddr - The USB address of the function containing the endpoint that EP0
- *     controls
  *
  * Returned Values:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
@@ -927,11 +940,10 @@ static FAR struct usbhost_class_s *usbhost_create(FAR struct usbhost_driver_s *d
  *
  ****************************************************************************/
 
-static int usbhost_connect(FAR struct usbhost_class_s *class,
-                           FAR const uint8_t *configdesc, int desclen,
-                           uint8_t funcaddr)
+static int usbhost_connect(FAR struct usbhost_class_s *usbclass,
+                           FAR const uint8_t *configdesc, int desclen)
 {
-  FAR struct usbhost_state_s *priv = (FAR struct usbhost_state_s *)class;
+  FAR struct usbhost_state_s *priv = (FAR struct usbhost_state_s *)usbclass;
   int ret;
 
   DEBUGASSERT(priv != NULL &&
@@ -940,19 +952,19 @@ static int usbhost_connect(FAR struct usbhost_class_s *class,
 
   /* Parse the configuration descriptor to get the endpoints */
 
-  ret = usbhost_cfgdesc(priv, configdesc, desclen, funcaddr);
-  if (ret != OK)
+  ret = usbhost_cfgdesc(priv, configdesc, desclen);
+  if (ret < 0)
     {
-      udbg("usbhost_cfgdesc() failed: %d\n", ret);
+      uerr("ERROR: usbhost_cfgdesc() failed: %d\n", ret);
     }
   else
     {
       /* Now configure the device and register the NuttX driver */
 
       ret = usbhost_devinit(priv);
-      if (ret != OK)
+      if (ret < 0)
         {
-          udbg("usbhost_devinit() failed: %d\n", ret);
+          uerr("ERROR: usbhost_devinit() failed: %d\n", ret);
         }
     }
 
@@ -969,7 +981,7 @@ static int usbhost_connect(FAR struct usbhost_class_s *class,
  *   been disconnected.
  *
  * Input Parameters:
- *   class - The USB host class entry previously obtained from a call to
+ *   usbclass - The USB host class entry previously obtained from a call to
  *     create().
  *
  * Returned Values:
@@ -981,9 +993,9 @@ static int usbhost_connect(FAR struct usbhost_class_s *class,
  *
  ****************************************************************************/
 
-static int usbhost_disconnected(struct usbhost_class_s *class)
+static int usbhost_disconnected(struct usbhost_class_s *usbclass)
 {
-  FAR struct usbhost_state_s *priv = (FAR struct usbhost_state_s *)class;
+  FAR struct usbhost_state_s *priv = (FAR struct usbhost_state_s *)usbclass;
   irqstate_t flags;
 
   DEBUGASSERT(priv != NULL);
@@ -992,7 +1004,7 @@ static int usbhost_disconnected(struct usbhost_class_s *class)
    * longer available.
    */
 
-  flags              = irqsave();
+  flags              = enter_critical_section();
   priv->disconnected = true;
 
   /* Now check the number of references on the class instance.  If it is one,
@@ -1001,7 +1013,7 @@ static int usbhost_disconnected(struct usbhost_class_s *class)
    * block driver.
    */
 
-  ullvdbg("crefs: %d\n", priv->crefs);
+  uinfo("crefs: %d\n", priv->crefs);
   if (priv->crefs == 1)
     {
       /* Destroy the class instance.  If we are executing from an interrupt
@@ -1013,7 +1025,7 @@ static int usbhost_disconnected(struct usbhost_class_s *class)
         {
           /* Destroy the instance on the worker thread. */
 
-          uvdbg("Queuing destruction: worker %p->%p\n", priv->work.worker, usbhost_destroy);
+          uinfo("Queuing destruction: worker %p->%p\n", priv->work.worker, usbhost_destroy);
           DEBUGASSERT(priv->work.worker == NULL);
           (void)work_queue(HPWORK, &priv->work, usbhost_destroy, priv, 0);
        }
@@ -1025,7 +1037,7 @@ static int usbhost_disconnected(struct usbhost_class_s *class)
         }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 

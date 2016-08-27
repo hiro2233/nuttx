@@ -82,6 +82,8 @@ $(COBJS): %$(OBJEXT): %.c
 	$(call ARCHIVE, $(BIN), $(OBJS))
 	$(Q) touch .built
 
+install:
+
 context:
 
 .depend: Makefile $(SRCS)
@@ -99,3 +101,5 @@ distclean: clean
 	$(call DELFILE, .depend)
 
 -include Make.dep
+.PHONY: preconfig
+preconfig:

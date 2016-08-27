@@ -35,70 +35,27 @@
 
 -include $(TOPDIR)/Make.defs
 
-CFLAGS		+= -I$(TOPDIR)/sched
-
-ASRCS		=
-AOBJS		= $(ASRCS:.S=$(OBJEXT))
-
-CSRCS		= up_boot.c up_spi.c
+ASRCS =
+CSRCS = k60_boot.c k60_spi.c
 
 ifeq ($(CONFIG_ARCH_LEDS),y)
-CSRCS		+= up_leds.c
+CSRCS += k60_leds.c
 endif
 
 ifeq ($(CONFIG_ARCH_BUTTONS),y)
-CSRCS		+= up_buttons.c
+CSRCS += k60_buttons.c
 endif
 
-ifeq ($(CONFIG_NSH_ARCHINIT),y)
-CSRCS		+= up_nsh.c
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+CSRCS += k60_appinit.c
 endif
 
 ifeq ($(CONFIG_USBDEV),y)
-CSRCS		+= up_usbdev.c
+CSRCS += k60_usbdev.c
 endif
 
 ifeq ($(CONFIG_USBMSC),y)
-CSRCS		+= up_usbmsc.c
+CSRCS += k60_usbmsc.c
 endif
 
-COBJS		= $(CSRCS:.c=$(OBJEXT))
-
-SRCS		= $(ASRCS) $(CSRCS)
-OBJS		= $(AOBJS) $(COBJS)
-
-ARCH_SRCDIR	= $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(WINTOOL),y)
-  CFLAGS	+= -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/armv7-m}"
-else
-  CFLAGS	+= -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/armv7-m
-endif
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

@@ -47,7 +47,7 @@
 #include "csvparser.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -94,6 +94,7 @@ static const char *check_funcptr(const char *type)
     {
       return str + 2;
     }
+
   return NULL;
 }
 
@@ -104,6 +105,7 @@ static const char *check_array(const char *type)
     {
       return str;
     }
+
   return NULL;
 }
 
@@ -114,7 +116,8 @@ static void print_formalparm(FILE *stream, const char *argtype, int parmno)
 
   /* Function pointers and array formal parameter types are a little more work */
 
-  if ((part2 = check_funcptr(argtype)) != NULL || (part2 = check_array(argtype)) != NULL)
+  if ((part2 = check_funcptr(argtype)) != NULL ||
+      (part2 = check_array(argtype)) != NULL)
     {
       len = part2 - argtype;
       (void)fwrite(argtype, 1, len, stream);
@@ -240,7 +243,11 @@ static void generate_proxy(int nparms)
       nformal = nparms;
     }
 
-  fprintf(stream, "#include <%s>\n", g_parm[HEADER_INDEX]);
+  if (g_parm[HEADER_INDEX] && strlen(g_parm[HEADER_INDEX]) > 0)
+    {
+      fprintf(stream, "#include <%s>\n", g_parm[HEADER_INDEX]);
+    }
+
   fprintf(stream, "#include <syscall.h>\n\n");
 
   if (g_parm[COND_INDEX][0] != '\0')
@@ -276,6 +283,7 @@ static void generate_proxy(int nparms)
             {
               fprintf(stream, ", ");
             }
+
           print_formalparm(stream, formal, i+1);
         }
     }
@@ -420,7 +428,13 @@ static void generate_stub(int nparms)
   fprintf(stream, "/* Auto-generated %s stub file -- do not edit */\n\n", g_parm[0]);
   fprintf(stream, "#include <nuttx/config.h>\n");
   fprintf(stream, "#include <stdint.h>\n");
-  fprintf(stream, "#include <%s>\n\n", g_parm[HEADER_INDEX]);
+
+  if (g_parm[HEADER_INDEX] && strlen(g_parm[HEADER_INDEX]) > 0)
+    {
+      fprintf(stream, "#include <%s>\n", g_parm[HEADER_INDEX]);
+    }
+
+  putc('\n', stream);
 
   if (g_parm[COND_INDEX][0] != '\0')
     {
@@ -500,7 +514,7 @@ static void generate_stub(int nparms)
             {
               /* Always pass six arguments */
 
-              for (j = i+1; j <=6; j++)
+              for (j = i+1; j <= 6; j++)
                 {
                   fprintf(stream, ", parm%d", j);
                 }

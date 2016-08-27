@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/nx/nxfonts.h
  *
- *   Copyright (C) 2008, 2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008, 2009, 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,8 +50,8 @@
 /****************************************************************************
  * Pre-processor definitions
  ****************************************************************************/
-/* Select the default font.  If no fonts are selected, then a compilation error
- * is likely down the road.
+/* Select the default font.  If no fonts are selected, then a compilation
+ * error is likely down the road.
  */
 
 /* Sans serif fonts */
@@ -112,6 +112,82 @@
 
 #elif defined(CONFIG_NXFONT_SERIF38X49B)
 # define NXFONT_DEFAULT FONTID_SERIF38X49B
+
+/* Pixel fonts */
+
+#elif defined(CONFIG_NXFONT_PIXEL_UNICODE)
+# define NXFONT_DEFAULT FONTID_PIXEL_UNICODE
+
+#elif defined(CONFIG_NXFONT_PIXEL_LCD_MACHINE)
+# define NXFONT_DEFAULT FONTID_PIXEL_LCD_MACHINE
+
+/* X11 misc fixed fonts */
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_4X6)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_4X6
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_5X7)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_5X7
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_5X8)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_5X8
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_6X9)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_6X9
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_6X10)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_6X10
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_6X12)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_6X12
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_6X13)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_6X13
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_6X13B)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_6X13B
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_6X13O)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_6X13O
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_7X13)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_7X13
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_7X13B)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_7X13B
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_7X13O)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_7X13O
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_7X14)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_7X14
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_7X14B)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_7X14B
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_8X13)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_8X13
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_8X13B)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_8X13B
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_8X13O)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_8X13O
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_9X15)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_9X15
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_9X15B)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_9X15B
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_9X18)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_9X18
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_9X18B)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_9X18B
+
+#elif defined(CONFIG_NXFONT_X11_MISC_FIXED_10X20)
+# define NXFONT_DEFAULT CONFIG_NXFONT_X11_MISC_FIXED_10X20
 
 /* Mono-space fonts */
 
@@ -211,6 +287,106 @@ enum nx_fontid_e
 #ifdef CONFIG_NXFONT_SERIF38X49B
   , FONTID_SERIF38X49B = 13      /* The 38x49 serif bold font */
 #endif
+
+/* Pixel fonts */
+
+#ifdef CONFIG_NXFONT_PIXEL_UNICODE
+  , FONTID_PIXEL_UNICODE = 19      /* Pixel UniCode font */
+#endif
+
+#ifdef CONFIG_NXFONT_PIXEL_LCD_MACHINE
+  , FONTID_PIXEL_LCD_MACHINE = 20  /* Pixel lcd machine font */
+#endif
+
+/* X11 misc fixed fonts */
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_4X6
+  , FONTID_X11_MISC_FIXED_4X6 = 21      /* X11 misc fixed 4x6 */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_5X7
+  , FONTID_X11_MISC_FIXED_5X7 = 22      /* X11 misc fixed 5x7 */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_5X8
+  , FONTID_X11_MISC_FIXED_5X8 = 23      /* X11 misc fixed 5x8 */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_6X9
+  , FONTID_X11_MISC_FIXED_6X9 = 24      /* X11 misc fixed 6x9 */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_6X10
+  , FONTID_X11_MISC_FIXED_6X10 = 25     /* X11 misc fixed 6x10 */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_6X12
+  , FONTID_X11_MISC_FIXED_6X12 = 26     /* X11 misc fixed 6x12 */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_6X13
+  , FONTID_X11_MISC_FIXED_6X13 = 27     /* X11 misc fixed 6x13 */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_6X13B
+  , FONTID_X11_MISC_FIXED_6X13B = 28    /* X11 misc fixed 6x13b */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_6X13O
+  , FONTID_X11_MISC_FIXED_6X13O = 29    /* X11 misc fixed 6x13o */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_7X13
+  , FONTID_X11_MISC_FIXED_7X13 = 30     /* X11 misc fixed 7x13 */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_7X13B
+  , FONTID_X11_MISC_FIXED_7X13B = 31    /* X11 misc fixed 7x13b */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_7X13O
+  , FONTID_X11_MISC_FIXED_7X13O = 32    /* X11 misc fixed 7x13o */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_7X14
+  , FONTID_X11_MISC_FIXED_7X14 = 33     /* X11 misc fixed 7x14 */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_7X14B
+  , FONTID_X11_MISC_FIXED_7X14B = 34    /* X11 misc fixed 7x14b */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_8X13
+  , FONTID_X11_MISC_FIXED_8X13 = 35     /* X11 misc fixed 8x13 */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_8X13B
+  , FONTID_X11_MISC_FIXED_8X13B = 36    /* X11 misc fixed 8x13b */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_8X13O
+  , FONTID_X11_MISC_FIXED_8X13O = 37    /* X11 misc fixed 8x13o */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_9X15
+  , FONTID_X11_MISC_FIXED_9X15 = 38     /* X11 misc fixed 9x15 */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_9X15B
+  , FONTID_X11_MISC_FIXED_9X15B = 39    /* X11 misc fixed 9x15b */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_9X18
+  , FONTID_X11_MISC_FIXED_9X18 = 40     /* X11 misc fixed 9x18 */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_9X18B
+  , FONTID_X11_MISC_FIXED_9X18B = 41    /* X11 misc fixed 9x18b */
+#endif
+
+#ifdef CONFIG_NXFONT_X11_MISC_FIXED_10X20
+  , FONTID_X11_MISC_FIXED_10X20 = 42    /* X11 misc fixed 10x20 */
+#endif
 };
 
 /* This structures provides the metrics for one glyph */
@@ -274,7 +450,8 @@ struct nx_fontpackage_s
 #undef EXTERN
 #if defined(__cplusplus)
 # define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 # define EXTERN extern
 #endif
@@ -295,7 +472,7 @@ extern "C" {
  *
  ****************************************************************************/
 
-EXTERN NXHANDLE nxf_getfonthandle(enum nx_fontid_e fontid);
+NXHANDLE nxf_getfonthandle(enum nx_fontid_e fontid);
 
 /****************************************************************************
  * Name: nxf_getfontset
@@ -308,7 +485,7 @@ EXTERN NXHANDLE nxf_getfonthandle(enum nx_fontid_e fontid);
  *
  ****************************************************************************/
 
-EXTERN FAR const struct nx_font_s *nxf_getfontset(NXHANDLE handle);
+FAR const struct nx_font_s *nxf_getfontset(NXHANDLE handle);
 
 /****************************************************************************
  * Name: nxf_getbitmap
@@ -325,8 +502,7 @@ EXTERN FAR const struct nx_font_s *nxf_getfontset(NXHANDLE handle);
  *
  ****************************************************************************/
 
-EXTERN FAR const struct nx_fontbitmap_s *
-  nxf_getbitmap(NXHANDLE handle, uint16_t ch);
+FAR const struct nx_fontbitmap_s *nxf_getbitmap(NXHANDLE handle, uint16_t ch);
 
 /****************************************************************************
  * Name: nxf_convert_*bpp
@@ -349,34 +525,34 @@ EXTERN FAR const struct nx_fontbitmap_s *
  *
  ****************************************************************************/
 
-EXTERN int nxf_convert_1bpp(FAR uint8_t *dest, uint16_t height,
-                            uint16_t width, uint16_t stride,
-                            FAR const struct nx_fontbitmap_s *bm,
-                            nxgl_mxpixel_t color);
-EXTERN int nxf_convert_2bpp(FAR uint8_t *dest, uint16_t height,
-                            uint16_t width, uint16_t stride,
-                            FAR const struct nx_fontbitmap_s *bm,
-                            nxgl_mxpixel_t color);
-EXTERN int nxf_convert_4bpp(FAR uint8_t *dest, uint16_t height,
-                            uint16_t width, uint16_t stride,
-                            FAR const struct nx_fontbitmap_s *bm,
-                            nxgl_mxpixel_t color);
-EXTERN int nxf_convert_8bpp(FAR uint8_t *dest, uint16_t height,
-                            uint16_t width, uint16_t stride,
-                            FAR const struct nx_fontbitmap_s *bm,
-                            nxgl_mxpixel_t color);
-EXTERN int nxf_convert_16bpp(FAR uint16_t *dest, uint16_t height,
-                             uint16_t width, uint16_t stride,
-                             FAR const struct nx_fontbitmap_s *bm,
-                             nxgl_mxpixel_t color);
-EXTERN int nxf_convert_24bpp(FAR uint32_t *dest, uint16_t height,
-                             uint16_t width, uint16_t stride,
-                             FAR const struct nx_fontbitmap_s *bm,
-                             nxgl_mxpixel_t color);
-EXTERN int nxf_convert_32bpp(FAR uint32_t *dest, uint16_t height,
-                             uint16_t width, uint16_t stride,
-                             FAR const struct nx_fontbitmap_s *bm,
-                             nxgl_mxpixel_t color);
+int nxf_convert_1bpp(FAR uint8_t *dest, uint16_t height,
+                     uint16_t width, uint16_t stride,
+                     FAR const struct nx_fontbitmap_s *bm,
+                     nxgl_mxpixel_t color);
+int nxf_convert_2bpp(FAR uint8_t *dest, uint16_t height,
+                     uint16_t width, uint16_t stride,
+                     FAR const struct nx_fontbitmap_s *bm,
+                     nxgl_mxpixel_t color);
+int nxf_convert_4bpp(FAR uint8_t *dest, uint16_t height,
+                     uint16_t width, uint16_t stride,
+                     FAR const struct nx_fontbitmap_s *bm,
+                     nxgl_mxpixel_t color);
+int nxf_convert_8bpp(FAR uint8_t *dest, uint16_t height,
+                     uint16_t width, uint16_t stride,
+                     FAR const struct nx_fontbitmap_s *bm,
+                     nxgl_mxpixel_t color);
+int nxf_convert_16bpp(FAR uint16_t *dest, uint16_t height,
+                      uint16_t width, uint16_t stride,
+                      FAR const struct nx_fontbitmap_s *bm,
+                      nxgl_mxpixel_t color);
+int nxf_convert_24bpp(FAR uint32_t *dest, uint16_t height,
+                      uint16_t width, uint16_t stride,
+                      FAR const struct nx_fontbitmap_s *bm,
+                      nxgl_mxpixel_t color);
+int nxf_convert_32bpp(FAR uint32_t *dest, uint16_t height,
+                      uint16_t width, uint16_t stride,
+                      FAR const struct nx_fontbitmap_s *bm,
+                      nxgl_mxpixel_t color);
 
 #undef EXTERN
 #if defined(__cplusplus)

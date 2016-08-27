@@ -42,13 +42,13 @@
 #include <stdint.h>
 #include <debug.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 
 #include "up_arch.h"
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -76,10 +76,10 @@ void modifyreg8(unsigned int addr, uint8_t clearbits, uint8_t setbits)
   irqstate_t flags;
   uint8_t    regval;
 
-  flags   = irqsave();
+  flags   = enter_critical_section();
   regval  = getreg8(addr);
   regval &= ~clearbits;
   regval |= setbits;
   putreg8(regval, addr);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }

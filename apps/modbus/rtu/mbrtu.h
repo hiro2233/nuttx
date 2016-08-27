@@ -1,5 +1,7 @@
-/*
- * FreeModbus Libary: A portable Modbus implementation for Modbus ASCII/RTU.
+/****************************************************************************
+ * apps/modbus/rtu/mbrtu.h
+ *
+ * FreeModbus Library: A portable Modbus implementation for Modbus ASCII/RTU.
  * Copyright (c) 2006 Christian Walter <wolti@sil.at>
  * All rights reserved.
  *
@@ -25,27 +27,49 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * File: $Id: mbrtu.h,v 1.9 2006/12/07 22:10:34 wolti Exp $
- */
+ ****************************************************************************/
 
-#ifndef _MB_RTU_H
-#define _MB_RTU_H
-
-#ifdef __cplusplus
-PR_BEGIN_EXTERN_C
-#endif
-    eMBErrorCode eMBRTUInit( uint8_t slaveAddress, uint8_t ucPort, speed_t ulBaudRate,
-                             eMBParity eParity );
-void            eMBRTUStart( void );
-void            eMBRTUStop( void );
-eMBErrorCode    eMBRTUReceive( uint8_t * pucRcvAddress, uint8_t ** pucFrame, uint16_t * pusLength );
-eMBErrorCode    eMBRTUSend( uint8_t slaveAddress, const uint8_t * pucFrame, uint16_t usLength );
-bool            xMBRTUReceiveFSM( void );
-bool            xMBRTUTransmitFSM( void );
-bool            xMBRTUTimerT15Expired( void );
-bool            xMBRTUTimerT35Expired( void );
+#ifndef __APPS_MODBUS_RTU_MBRTU_H
+#define __APPS_MODBUS_RTU_MBRTU_H
 
 #ifdef __cplusplus
-PR_END_EXTERN_C
+extern "C"
+{
 #endif
+
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
+
+eMBErrorCode eMBRTUInit(uint8_t slaveAddress, uint8_t ucPort,
+                        speed_t ulBaudRate, eMBParity eParity);
+void eMBRTUStart(void);
+void eMBRTUStop(void);
+eMBErrorCode eMBRTUReceive(uint8_t *pucRcvAddress, uint8_t **pucFrame,
+                           uint16_t *pusLength);
+eMBErrorCode eMBRTUSend(uint8_t slaveAddress, const uint8_t *pucFrame,
+                        uint16_t usLength);
+bool xMBRTUReceiveFSM(void);
+bool xMBRTUTransmitFSM(void);
+bool xMBRTUTimerT15Expired(void);
+bool xMBRTUTimerT35Expired(void);
+
+#if defined(CONFIG_RTU_ASCII_MASTER)
+eMBErrorCode eMBMasterRTUInit(uint8_t ucPort, speed_t ulBaudRate,
+                              eMBParity eParity);
+void eMBMasterRTUStart(void);
+void eMBMasterRTUStop(void);
+eMBErrorCode eMBMasterRTUReceive(uint8_t *pucRcvAddress, uint8_t **pucFrame,
+                                 uint16_t *pusLength);
+eMBErrorCode eMBMasterRTUSend(uint8_t slaveAddress, const uint8_t *pucFrame,
+                              uint16_t usLength);
+bool xMBMasterRTUReceiveFSM(void);
+bool xMBMasterRTUTransmitFSM(void);
+bool xMBMasterRTUTimerExpired(void);
 #endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __APPS_MODBUS_RTU_MBRTU_H */

@@ -43,6 +43,7 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -54,12 +55,15 @@
 #include <debug.h>
 
 #include <net/if.h>
-#include <apps/netutils/uiplib.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
+#include "netutils/netlib.h"
 
 #include "poll_internal.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define IOBUFFER_SIZE 80
@@ -92,7 +96,7 @@ struct net_listener_s
 
 static bool net_closeclient(struct net_listener_s *nls, int sd)
 {
-  message("net_listener: Closing host side connection sd=%d\n", sd);
+  printf("net_listener: Closing host side connection sd=%d\n", sd);
   close(sd);
   FD_CLR(sd, &nls->master);
 
@@ -121,13 +125,13 @@ static inline bool net_incomingdata(struct net_listener_s *nls, int sd)
   for (;;)
 #endif
     {
-      message("net_listener: Read data from sd=%d\n", sd);
+      printf("net_listener: Read data from sd=%d\n", sd);
       ret = recv(sd, nls->buffer, IOBUFFER_SIZE, 0);
       if (ret < 0)
         {
           if (errno != EINTR)
             {
-              message("net_listener: recv failed sd=%d: %d\n", sd, errno);
+              printf("net_listener: recv failed sd=%d: %d\n", sd, errno);
               if (errno != EAGAIN)
                 {
                   net_closeclient(nls, sd);
@@ -137,14 +141,14 @@ static inline bool net_incomingdata(struct net_listener_s *nls, int sd)
         }
       else if (ret == 0)
         {
-          message("net_listener: Client connection lost sd=%d\n", sd);
+          printf("net_listener: Client connection lost sd=%d\n", sd);
           net_closeclient(nls, sd);
           return false;
         }
       else
         {
           nls->buffer[ret]='\0';
-          message("poll_listener: Read '%s' (%d bytes)\n", nls->buffer, ret);
+          printf("poll_listener: Read '%s' (%d bytes)\n", nls->buffer, ret);
 
           /* Echo the data back to the client */
 
@@ -155,7 +159,7 @@ static inline bool net_incomingdata(struct net_listener_s *nls, int sd)
                 {
                   if (errno != EINTR)
                     {
-                       message("net_listener: Send failed sd=%d: %d\n", sd, errno);
+                       printf("net_listener: Send failed sd=%d: %d\n", sd, errno);
                        net_closeclient(nls, sd);
                        return false;
                     }
@@ -185,12 +189,12 @@ static inline bool net_connection(struct net_listener_s *nls)
   for (;;)
 #endif
     {
-      message("net_listener: Accepting new connection on sd=%d\n", nls->listensd);
+      printf("net_listener: Accepting new connection on sd=%d\n", nls->listensd);
 
       sd = accept(nls->listensd, NULL, NULL);
       if (sd < 0)
         {
-          message("net_listener: accept failed: %d\n", errno);
+          printf("net_listener: accept failed: %d\n", errno);
 
           if (errno != EINTR)
             {
@@ -201,7 +205,7 @@ static inline bool net_connection(struct net_listener_s *nls)
         {
           /* Add the new connection to the master set */
 
-          message("net_listener: Connection accepted for sd=%d\n", sd);
+          printf("net_listener: Connection accepted for sd=%d\n", sd);
 
           FD_SET(sd, &nls->master);
           if (sd > nls->mxsd)
@@ -225,11 +229,11 @@ static inline bool net_mksocket(struct net_listener_s *nls)
 
   /* Create a listening socket */
 
-  message("net_listener: Initializing listener socket\n");
+  printf("net_listener: Initializing listener socket\n");
   nls->listensd = socket(AF_INET, SOCK_STREAM, 0);
   if (nls->listensd < 0)
     {
-      message("net_listener: socket failed: %d\n", errno);
+      printf("net_listener: socket failed: %d\n", errno);
       return false;
     }
 
@@ -239,7 +243,7 @@ static inline bool net_mksocket(struct net_listener_s *nls)
   ret = setsockopt(nls->listensd, SOL_SOCKET,  SO_REUSEADDR, (char*)&value, sizeof(int));
   if (ret < 0)
     {
-      message("net_listener: setsockopt failed: %d\n", errno);
+      printf("net_listener: setsockopt failed: %d\n", errno);
       close(nls->listensd);
       return false;
     }
@@ -250,7 +254,7 @@ static inline bool net_mksocket(struct net_listener_s *nls)
   ret = ioctl(nls->listensd, FIONBIO, (char *)&value);
   if (ret < 0)
     {
-      message("net_listener: ioctl failed: %d\n", errno);
+      printf("net_listener: ioctl failed: %d\n", errno);
       close(nls->listensd);
       return false;
     }
@@ -265,7 +269,7 @@ static inline bool net_mksocket(struct net_listener_s *nls)
   ret = bind(nls->listensd, (struct sockaddr *)&nls->addr, sizeof(struct sockaddr_in));
   if (ret < 0)
     {
-      message("net_listener: bind failed: %d\n", errno);
+      printf("net_listener: bind failed: %d\n", errno);
       close(nls->listensd);
       return false;
     }
@@ -275,7 +279,7 @@ static inline bool net_mksocket(struct net_listener_s *nls)
   ret = listen(nls->listensd, 32);
   if (ret < 0)
     {
-      message("net_listener: bind failed: %d\n", errno);
+      printf("net_listener: bind failed: %d\n", errno);
       close(nls->listensd);
       return false;
     }
@@ -294,7 +298,7 @@ static void net_configure(void)
   uint8_t mac[IFHWADDRLEN];
 #endif
 
-  /* Configure uIP */
+  /* Configure the network */
   /* Many embedded network interfaces must have a software assigned MAC */
 
 #ifdef CONFIG_EXAMPLES_POLL_NOMAC
@@ -304,23 +308,23 @@ static void net_configure(void)
   mac[3] = 0xad;
   mac[4] = 0xbe;
   mac[5] = 0xef;
-  uip_setmacaddr("eth0", mac);
+  netlib_setmacaddr("eth0", mac);
 #endif
 
   /* Set up our host address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_POLL_IPADDR);
-  uip_sethostaddr("eth0", &addr);
+  netlib_set_ipv4addr("eth0", &addr);
 
   /* Set up the default router address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_POLL_DRIPADDR);
-  uip_setdraddr("eth0", &addr);
+  netlib_set_dripv4addr("eth0", &addr);
 
   /* Setup the subnet mask */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_POLL_NETMASK);
-  uip_setnetmask("eth0", &addr);
+  netlib_set_ipv4netmask("eth0", &addr);
 }
 
 /****************************************************************************
@@ -339,7 +343,7 @@ void *net_listener(pthread_addr_t pvarg)
   int ret;
   int i;
 
-  /* Configure uIP */
+  /* Configure the network */
 
   net_configure();
 
@@ -370,12 +374,12 @@ void *net_listener(pthread_addr_t pvarg)
     {
       /* Wait on select */
 
-      message("net_listener: Calling select(), listener sd=%d\n", nls.listensd);
+      printf("net_listener: Calling select(), listener sd=%d\n", nls.listensd);
       memcpy(&nls.working, &nls.master, sizeof(fd_set));
       ret = select(nls.mxsd + 1, (FAR fd_set*)&nls.working, (FAR fd_set*)NULL, (FAR fd_set*)NULL, &timeout);
       if (ret < 0)
         {
-          message("net_listener: select failed: %d\n", errno);
+          printf("net_listener: select failed: %d\n", errno);
           break;
         }
 
@@ -383,7 +387,7 @@ void *net_listener(pthread_addr_t pvarg)
 
       if (ret == 0)
         {
-          message("net_listener: Timeout\n");
+          printf("net_listener: Timeout\n");
           continue;
         }
 
@@ -398,7 +402,7 @@ void *net_listener(pthread_addr_t pvarg)
             {
               /* Yes, is it our listener? */
 
-              message("net_listener: Activity on sd=%d\n", i);
+              printf("net_listener: Activity on sd=%d\n", i);
 
               nsds--;
               if (i == nls.listensd)

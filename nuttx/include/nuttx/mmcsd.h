@@ -43,7 +43,7 @@
 #include <nuttx/config.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -57,7 +57,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -77,7 +78,7 @@ extern "C" {
  ****************************************************************************/
 
 struct sdio_dev_s; /* See nuttx/sdio.h */
-EXTERN int mmcsd_slotinitialize(int minor, FAR struct sdio_dev_s *dev);
+int mmcsd_slotinitialize(int minor, FAR struct sdio_dev_s *dev);
 
 /****************************************************************************
  * Name: mmcsd_spislotinitialize
@@ -91,13 +92,14 @@ EXTERN int mmcsd_slotinitialize(int minor, FAR struct sdio_dev_s *dev);
  *   slotno - The slot number to use.  This is only meaningful for architectures
  *     that support multiple MMC/SD slots.  This value must be in the range
  *     {0, ..., CONFIG_MMCSD_NSLOTS}.
- *   spi - And instance of an SPI interface obtained by called
- *     up_spiinitialize() with the appropriate port number (see spi.h)
+ *   spi - And instance of an SPI interface obtained by called the
+ *     approprite xyz_spibus_initialize() function for the MCU "xyz" with
+ *     the appropriate port number.
  *
  ****************************************************************************/
 
 struct spi_dev_s; /* See nuttx/spi/spi.h */
-EXTERN int mmcsd_spislotinitialize(int minor, int slotno, FAR struct spi_dev_s *spi);
+int mmcsd_spislotinitialize(int minor, int slotno, FAR struct spi_dev_s *spi);
 
 #undef EXTERN
 #if defined(__cplusplus)

@@ -47,7 +47,7 @@
 #include "lpc31_ioconfig.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* Configuration ************************************************************/
 
@@ -82,7 +82,7 @@
 #  undef CONFIG_USBHOST_TRACE
 #endif
 
-#if !defined(CONFIG_SYSTEM_USBMONITOR) || !defined(CONFIG_USBHOST_TRACE)
+#if !defined(CONFIG_USBMONITOR) || !defined(CONFIG_USBHOST_TRACE)
 #  undef HAVE_USBMONITOR
 #endif
 
@@ -145,14 +145,14 @@ void lpc31_meminitialize(void);
 #endif
 
 /************************************************************************************
- * Name: lpc31_spiinitialize
+ * Name: lpc31_spidev_intialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the LPC-H3131 board.
  *
  ************************************************************************************/
 
-void weak_function lpc31_spiinitialize(void);
+void weak_function lpc31_spidev_intialize(void);
 
 /************************************************************************************
  * Name: lpc31_usbdev_initialize
@@ -204,16 +204,6 @@ int lpc31_usbhost_initialize(void);
 #ifdef HAVE_MMCSD
 int lpc31_mmcsd_initialize(int slot, int minor)
 #endif
-
-/****************************************************************************
- * Name: board_led_initialize
- *
- * Description:
- *   Configure LEDs.  LEDs are left in the OFF state.
- *
- ****************************************************************************/
-
-void board_led_initialize(void);
 
 #endif /* __ASSEMBLY__ */
 #endif /* __CONFIGS_OLIMEX_LPC_H3131_SRC_LPC_H3131_H */

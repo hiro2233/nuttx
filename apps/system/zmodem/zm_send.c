@@ -63,7 +63,7 @@
 #include <crc32.h>
 
 #include <nuttx/ascii.h>
-#include <apps/zmodem.h>
+#include "system/zmodem.h"
 
 #include "zm.h"
 
@@ -1716,7 +1716,7 @@ int zms_send(ZMSHANDLE handle, FAR const char *filename,
    * irrecoverable error is detected or until the file is sent correctly.
    */
 
- return zm_datapump(&pzms->cmn);
+  return zm_datapump(&pzms->cmn);
 }
 
 /****************************************************************************

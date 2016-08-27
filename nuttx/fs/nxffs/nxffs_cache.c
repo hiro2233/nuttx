@@ -58,7 +58,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -98,7 +98,7 @@ int nxffs_rdcache(FAR struct nxffs_volume_s *volume, off_t block)
       nxfrd = MTD_BREAD(volume->mtd, block, 1, volume->cache);
       if (nxfrd != 1)
         {
-          fdbg("ERROR: Read block %d failed: %d\n", block, nxfrd);
+          ferr("ERROR: Read block %d failed: %d\n", block, nxfrd);
           return -EIO;
         }
 
@@ -133,7 +133,7 @@ int nxffs_wrcache(FAR struct nxffs_volume_s *volume)
   nxfrd = MTD_BWRITE(volume->mtd, volume->cblock, 1, volume->cache);
   if (nxfrd != 1)
     {
-      fdbg("ERROR: Write block %d failed: %d\n", volume->cblock, nxfrd);
+      ferr("ERROR: Write block %d failed: %d\n", volume->cblock, nxfrd);
       return -EIO;
     }
 
@@ -195,7 +195,7 @@ off_t nxffs_iotell(FAR struct nxffs_volume_s *volume)
  *   over bad blocks and block headers as necessary.
  *
  * Input Parameters:
- *   volume - Describes the NXFFS volume.  The paramters ioblock and iooffset
+ *   volume - Describes the NXFFS volume.  The parameters ioblock and iooffset
  *     in the volume structure determine the behavior of nxffs_getc().
  *   reserve - If less than this much space is available at the end of the
  *     block, then skip to the next block.
@@ -225,7 +225,7 @@ int nxffs_getc(FAR struct nxffs_volume_s *volume, uint16_t reserve)
           off_t nextblock = volume->ioblock + 1;
           if (nextblock >= volume->nblocks)
             {
-              fvdbg("End of FLASH encountered\n");
+              finfo("End of FLASH encountered\n");
               return -ENOSPC;
             }
 
@@ -249,7 +249,7 @@ int nxffs_getc(FAR struct nxffs_volume_s *volume, uint16_t reserve)
 #ifndef CONFIG_NXFFS_NAND
           /* Read errors are fatal */
 
-          fdbg("ERROR: Failed to read valid data into cache: %d\n", ret);
+          ferr("ERROR: Failed to read valid data into cache: %d\n", ret);
           return ret;
 #else
           /* A read error occurred.  This probably means that we are
@@ -258,7 +258,7 @@ int nxffs_getc(FAR struct nxffs_volume_s *volume, uint16_t reserve)
            * block.
            */
 
-          fdbg("ERROR: Failed to read valid data into cache: %d\n", ret);
+          ferr("ERROR: Failed to read valid data into cache: %d\n", ret);
 #endif
         }
     }

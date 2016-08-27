@@ -47,7 +47,7 @@
 #include "up_arch.h"
 
 #include "chip.h"
-#include "pic32mx-internal.h"
+#include "pic32mx.h"
 #include "pic32mx-bmx.h"
 #include "pic32mx-che.h"
 
@@ -86,11 +86,11 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Global Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -162,7 +162,7 @@ static inline void pic32mx_cache(void)
   putreg32(regval, PIC32MX_CHE_CON);
 #endif
 
-  /* Enable cache on KSEG 0 in the CP0 CONFIG register*/
+  /* Enable cache on KSEG 0 in the CP0 CONFIG register */
 
   asm("\tmfc0 %0,$16,0\n" :  "=r"(regval));
   regval &= ~CP0_CONFIG_K23_MASK;
@@ -193,7 +193,7 @@ void pic32mx_lowinit(void)
 
   /* Enable caching */
 
-  pic32mx_cache();;
+  pic32mx_cache();
 
   /* Initialize a console (probably a serial console) */
 

@@ -51,6 +51,8 @@
 #  include "sam3u_gpio.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM3X) || defined(CONFIG_ARCH_CHIP_SAM3A)
 #  include "sam3x_gpio.h"
+#elif defined(CONFIG_ARCH_CHIP_SAM4CM)
+#  include "sam4cm_gpio.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM4E)
 #  include "sam4e_gpio.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM4L)
@@ -62,35 +64,24 @@
 #endif
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Configuration ********************************************************************/
 
 #if defined(CONFIG_SAM34_GPIOA_IRQ) || defined(CONFIG_SAM34_GPIOB_IRQ) || \
-    defined(CONFIG_SAM34_GPIOC_IRQ)
+    defined(CONFIG_SAM34_GPIOC_IRQ) || defined(CONFIG_SAM34_GPIOD_IRQ) || \
+    defined(CONFIG_SAM34_GPIOE_IRQ) || defined(CONFIG_SAM34_GPIOF_IRQ)
 #  define CONFIG_SAM34_GPIO_IRQ 1
 #else
 #  undef CONFIG_SAM34_GPIO_IRQ
 #endif
 
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_GPIO
-#endif
-
 /************************************************************************************
- * Public Types
- ************************************************************************************/
-
-/************************************************************************************
- * Inline Functions
+ * Public Function Prototypes
  ************************************************************************************/
 
 #ifndef __ASSEMBLY__
-
-/************************************************************************************
- * Public Data
- ************************************************************************************/
 
 #undef EXTERN
 #if defined(__cplusplus)
@@ -100,10 +91,6 @@ extern "C"
 #else
 #define EXTERN extern
 #endif
-
-/************************************************************************************
- * Public Function Prototypes
- ************************************************************************************/
 
 /************************************************************************************
  * Name: sam_gpioirqinitialize
@@ -199,7 +186,7 @@ void sam_gpioirqdisable(int irq);
  *
  ************************************************************************************/
 
-#ifdef CONFIG_DEBUG_GPIO
+#ifdef CONFIG_DEBUG_GPIO_INFO
 int sam_dumpgpio(uint32_t pinset, const char *msg);
 #else
 #  define sam_dumpgpio(p,m)

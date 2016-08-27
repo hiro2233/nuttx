@@ -1,9 +1,10 @@
-/************************************************************************************
+/****************************************************************************
  * arch/drivers/analog/ad5410.c
  *
+ *   Copyright (C) 2010, 2016 Gregory Nutt. All rights reserved.
  *   Copyright (C) 2011 Li Zhuoyi. All rights reserved.
  *   Author: Li Zhuoyi <lzyy.cn@gmail.com>
- *   History: 0.1 2011-08-05 initial version
+ *           Gregory Nutt <gnutt@nuttx.org>
  *
  * This file is a part of NuttX:
  *
@@ -36,7 +37,7 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
@@ -74,15 +75,19 @@
 /****************************************************************************
  * ad_private Types
  ****************************************************************************/
+
 struct up_dev_s
 {
-    int devno;
-    FAR struct spi_dev_s  *spi;      /* Cached SPI device reference */
+  int devno;
+  FAR struct spi_dev_s  *spi;      /* Cached SPI device reference */
 };
 
 /****************************************************************************
  * ad_private Function Prototypes
  ****************************************************************************/
+
+static void dac_lock(FAR struct spi_dev_s *spi);
+static void dac_unlock(FAR struct spi_dev_s *spi);
 
 /* DAC methods */
 
@@ -100,80 +105,159 @@ static int  dac_interrupt(int irq, void *context);
 
 static const struct dac_ops_s g_dacops =
 {
-    .ao_reset =dac_reset,
-    .ao_setup = dac_setup,
-    .ao_shutdown = dac_shutdown,
-    .ao_txint = dac_txint,
-    .ao_send = dac_send,
-    .ao_ioctl = dac_ioctl,
+  .ao_reset    = dac_reset,
+  .ao_setup    = dac_setup,
+  .ao_shutdown = dac_shutdown,
+  .ao_txint    = dac_txint,
+  .ao_send     = dac_send,
+  .ao_ioctl    = dac_ioctl,
 };
 
 static struct up_dev_s g_dacpriv;
+
 static struct dac_dev_s g_dacdev =
 {
-    .ad_ops = &g_dacops,
-	.ad_priv= &g_dacpriv,
+  .ad_ops      = &g_dacops,
+  .ad_priv     = &g_dacpriv,
 };
 
 /****************************************************************************
  * ad_private Functions
  ****************************************************************************/
 
-/* Reset the DAC device.  Called early to initialize the hardware. This
-* is called, before ao_setup() and on error conditions.
-*/
+/****************************************************************************
+ * Name: dac_lock
+ *
+ * Description:
+ *   Lock and configure the SPI bus.
+ *
+ ****************************************************************************/
+
+static void dac_lock(FAR struct spi_dev_s *spi)
+{
+  (void)SPI_LOCK(spi, true);
+  SPI_SETMODE(spi, SPIDEV_MODE0);
+  SPI_SETBITS(spi, 8);
+  (void)SPI_HWFEATURES(spi, 0);
+  SPI_SETFREQUENCY(spi, 400000);
+}
+
+/****************************************************************************
+ * Name: dac_unlock
+ *
+ * Description:
+ *   Unlock the SPI bus.
+ *
+ ****************************************************************************/
+
+static void dac_unlock(FAR struct spi_dev_s *spi)
+{
+  (void)SPI_LOCK(spi, false);
+}
+
+/****************************************************************************
+ * Name: dac_reset
+ *
+ * Description:
+ *   Reset the DAC device.  Called early to initialize the hardware. This
+ *   is called, before ao_setup() and on error conditions.
+ *
+ ****************************************************************************/
+
 static void dac_reset(FAR struct dac_dev_s *dev)
 {
-
 }
 
-/* Configure the DAC. This method is called the first time that the DAC
-* device is opened.  This will occur when the port is first opened.
-* This setup includes configuring and attaching DAC interrupts.  Interrupts
-* are all disabled upon return.
-*/
+/****************************************************************************
+ * Name: dac_setup
+ *
+ * Description:
+ *   Configure the DAC. This method is called the first time that the DAC
+ *   device is opened.  This will occur when the port is first opened.
+ *   This setup includes configuring and attaching DAC interrupts.  Interrupts
+ *   are all disabled upon return.
+ *
+ ****************************************************************************/
+
 static int  dac_setup(FAR struct dac_dev_s *dev)
 {
-    FAR struct up_dev_s *priv = (FAR struct up_dev_s *)dev->ad_priv;
-    FAR struct spi_dev_s *spi = priv->spi;
-	SPI_SELECT(spi, priv->devno, true);
-	SPI_SEND(spi,AD5410_REG_CMD);
-	SPI_SEND(spi,(AD5410_CMD_OUTEN|AD5410_CMD_420MA)>>8);
-	SPI_SEND(spi,AD5410_CMD_OUTEN|AD5410_CMD_420MA);
-	SPI_SELECT(spi, priv->devno, false);
-    return OK;
+  FAR struct up_dev_s *priv = (FAR struct up_dev_s *)dev->ad_priv;
+  FAR struct spi_dev_s *spi = priv->spi;
+
+  dac_lock(spi);
+
+  SPI_SELECT(spi, priv->devno, true);
+  SPI_SEND(spi, AD5410_REG_CMD);
+  SPI_SEND(spi, (AD5410_CMD_OUTEN | AD5410_CMD_420MA) >> 8);
+  SPI_SEND(spi, AD5410_CMD_OUTEN | AD5410_CMD_420MA);
+  SPI_SELECT(spi, priv->devno, false);
+
+  dac_unlock(spi);
+  return OK;
 }
 
-/* Disable the DAC.  This method is called when the DAC device is closed.
-* This method reverses the operation the setup method.
-*/
+/****************************************************************************
+ * Name: dac_shutdown
+ *
+ * Description:
+ *   Disable the DAC.  This method is called when the DAC device is closed.
+ *   This method reverses the operation the setup method.
+ *
+ ****************************************************************************/
+
 static void dac_shutdown(FAR struct dac_dev_s *dev)
 {
 }
 
-/* Call to enable or disable TX interrupts */
+/****************************************************************************
+ * Name: dac_txint
+ *
+ * Description:
+ *   Call to enable or disable TX interrupts
+ *
+ ****************************************************************************/
+
 static void dac_txint(FAR struct dac_dev_s *dev, bool enable)
 {
 }
 
-static int  dac_send(FAR struct dac_dev_s *dev, FAR struct dac_msg_s *msg)
+/****************************************************************************
+ * Name: dac_send
+ *
+ * Description:
+ *
+ ****************************************************************************/
+
+static int dac_send(FAR struct dac_dev_s *dev, FAR struct dac_msg_s *msg)
 {
-    FAR struct up_dev_s *priv = (FAR struct up_dev_s *)dev->ad_priv;
-    FAR struct spi_dev_s *spi = priv->spi;
-	SPI_SELECT(spi, priv->devno, true);
-	SPI_SEND(spi,AD5410_REG_WR);
-	SPI_SEND(spi,(uint8_t)(msg->am_data>>24));
-	SPI_SEND(spi,(uint8_t)(msg->am_data>>16));
-	SPI_SELECT(spi, priv->devno, false);
-	dac_txdone(&g_dacdev);
-	return 0;
+  FAR struct up_dev_s *priv = (FAR struct up_dev_s *)dev->ad_priv;
+  FAR struct spi_dev_s *spi = priv->spi;
+
+  dac_lock(spi);
+
+  SPI_SELECT(spi,  priv->devno,  true);
+  SPI_SEND(spi, AD5410_REG_WR);
+  SPI_SEND(spi, (uint8_t)(msg->am_data >> 24));
+  SPI_SEND(spi, (uint8_t)(msg->am_data >> 16));
+  SPI_SELECT(spi, priv->devno, false);
+
+  dac_unlock(spi);
+  dac_txdone(&g_dacdev);
+  return 0;
 }
 
-/* All ioctl calls will be routed through this method */
-static int  dac_ioctl(FAR struct dac_dev_s *dev, int cmd, unsigned long arg)
+/****************************************************************************
+ * Name: dac_ioctl
+ *
+ * Description:
+ *  All ioctl calls will be routed through this method
+ *
+ ****************************************************************************/
+
+static int dac_ioctl(FAR struct dac_dev_s *dev, int cmd, unsigned long arg)
 {
-    dbg("Fix me:Not Implemented\n");
-    return 0;
+  _err("ERROR: Fix me; Not Implemented\n");
+  return 0;
 }
 
 /****************************************************************************
@@ -187,19 +271,20 @@ static int  dac_ioctl(FAR struct dac_dev_s *dev, int cmd, unsigned long arg)
  *   Initialize the selected DAC port
  *
  * Input Parameter:
- *   Port number (for hardware that has mutiple DAC interfaces)
+ *   Port number (for hardware that has multiple DAC interfaces)
  *
  * Returned Value:
- *   Valid ad5410 device structure reference on succcess; a NULL on failure
+ *   Valid ad5410 device structure reference on success; a NULL on failure
  *
  ****************************************************************************/
 
-FAR struct dac_dev_s *up_ad5410initialize(FAR struct spi_dev_s *spi, unsigned int devno)
+FAR struct dac_dev_s *up_ad5410initialize(FAR struct spi_dev_s *spi,
+                                          unsigned int devno)
 {
-    FAR struct up_dev_s *priv = (FAR struct up_dev_s *)g_dacdev.ad_priv;
-	priv->spi=spi;
-	priv->devno=devno;
-	return &g_dacdev;
+  FAR struct up_dev_s *priv = (FAR struct up_dev_s *)g_dacdev.ad_priv;
+
+  priv->spi   = spi;
+  priv->devno = devno;
+  return &g_dacdev;
 }
 #endif
-

@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/sim/src/up_touchscreen.c
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,8 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
+#include <nuttx/board.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/arch.h>
 #include <nuttx/fs/fs.h>
@@ -192,7 +194,7 @@ static void up_notify(FAR struct up_dev_s *priv)
    * that the read data is available.
    */
 
-  ivdbg("contact=%d nwaiters=%d\n", priv->sample.contact, priv->nwaiters);
+  iinfo("contact=%d nwaiters=%d\n", priv->sample.contact, priv->nwaiters);
   if (priv->nwaiters > 0)
     {
       /* After posting this semaphore, we need to exit because the touchscreen
@@ -215,7 +217,7 @@ static void up_notify(FAR struct up_dev_s *priv)
       if (fds)
         {
           fds->revents |= POLLIN;
-          ivdbg("Report events: %02x\n", fds->revents);
+          iinfo("Report events: %02x\n", fds->revents);
           sem_post(fds->sem);
         }
     }
@@ -233,7 +235,7 @@ static int up_sample(FAR struct up_dev_s *priv,
 
   /* Is there new touchscreen sample data available? */
 
-  ivdbg("penchange=%d contact=%d id=%d\n",
+  iinfo("penchange=%d contact=%d id=%d\n",
         priv->penchange, sample->contact, priv->id);
 
   if (priv->penchange)
@@ -242,7 +244,7 @@ static int up_sample(FAR struct up_dev_s *priv,
        * sampled data.
        */
 
-      memcpy(sample, &priv->sample, sizeof(struct up_sample_s ));
+      memcpy(sample, &priv->sample, sizeof(struct up_sample_s));
 
       /* Now manage state transitions */
 
@@ -261,7 +263,7 @@ static int up_sample(FAR struct up_dev_s *priv,
        }
 
       priv->penchange = false;
-      ivdbg("penchange=%d contact=%d id=%d\n",
+      iinfo("penchange=%d contact=%d id=%d\n",
              priv->penchange, priv->sample.contact, priv->id);
 
       ret = OK;
@@ -289,7 +291,7 @@ static int up_waitsample(FAR struct up_dev_s *priv,
    */
 
   sched_lock();
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Now release the semaphore that manages mutually exclusive access to
    * the device structure.  This may cause other tasks to become ready to
@@ -306,11 +308,11 @@ static int up_waitsample(FAR struct up_dev_s *priv,
     {
       /* Wait for a change in the touchscreen state */
 
-      ivdbg("Waiting...\n");
+      iinfo("Waiting...\n");
       priv->nwaiters++;
       ret = sem_wait(&priv->waitsem);
       priv->nwaiters--;
-      ivdbg("Awakened...\n");
+      iinfo("Awakened...\n");
 
       if (ret < 0)
         {
@@ -337,7 +339,7 @@ errout:
    * have pre-emption disabled.
    */
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   /* Restore pre-emption.  We might get suspended here but that is okay
    * because we already have our sample.  Note:  this means that if there
@@ -355,7 +357,7 @@ errout:
 
 static int up_open(FAR struct file *filep)
 {
-  ivdbg("Opening...\n");
+  iinfo("Opening...\n");
   return OK;
 }
 
@@ -365,7 +367,7 @@ static int up_open(FAR struct file *filep)
 
 static int up_close(FAR struct file *filep)
 {
-  ivdbg("Closing...\n");
+  iinfo("Closing...\n");
   return OK;
 }
 
@@ -381,7 +383,7 @@ static ssize_t up_read(FAR struct file *filep, FAR char *buffer, size_t len)
   struct up_sample_s         sample;
   int                        ret;
 
-  ivdbg("len=%d\n", len);
+  iinfo("len=%d\n", len);
 
   DEBUGASSERT(filep);
   inode = filep->f_inode;
@@ -478,7 +480,7 @@ static ssize_t up_read(FAR struct file *filep, FAR char *buffer, size_t len)
   ret = SIZEOF_TOUCH_SAMPLE_S(1);
 
 errout:
-  ivdbg("Returning %d\n", ret);
+  iinfo("Returning %d\n", ret);
   sem_post(&priv->devsem);
   return ret;
 }
@@ -493,7 +495,7 @@ static int up_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   FAR struct up_dev_s *priv;
   int                       ret;
 
-  ivdbg("cmd: %d arg: %ld\n", cmd, arg);
+  iinfo("cmd: %d arg: %ld\n", cmd, arg);
   DEBUGASSERT(filep);
   inode = filep->f_inode;
 
@@ -537,7 +539,7 @@ static int up_poll(FAR struct file *filep, FAR struct pollfd *fds,
   int                  ret;
   int                  i;
 
-  ivdbg("setup: %d\n", (int)setup);
+  iinfo("setup: %d\n", (int)setup);
   DEBUGASSERT(filep && fds);
   inode = filep->f_inode;
 
@@ -625,7 +627,7 @@ errout:
  ****************************************************************************/
 
 /****************************************************************************
- * Name: arch_tcinitialize
+ * Name: board_tsc_setup
  *
  * Description:
  *   Configure the simulated touchscreen.  This will register the driver as
@@ -640,13 +642,13 @@ errout:
  *
  ****************************************************************************/
 
-int arch_tcinitialize(int minor)
+int board_tsc_setup(int minor)
 {
-  FAR struct up_dev_s *priv = ( FAR struct up_dev_s *)&g_simtouchscreen;
+  FAR struct up_dev_s *priv = (FAR struct up_dev_s *)&g_simtouchscreen;
   char devname[DEV_NAMELEN];
   int ret;
 
-  ivdbg("minor: %d\n", minor);
+  iinfo("minor: %d\n", minor);
 
   /* Debug-only sanity checks */
 
@@ -663,12 +665,12 @@ int arch_tcinitialize(int minor)
   /* Register the device as an input device */
 
   (void)snprintf(devname, DEV_NAMELEN, DEV_FORMAT, minor);
-  ivdbg("Registering %s\n", devname);
+  iinfo("Registering %s\n", devname);
 
   ret = register_driver(devname, &up_fops, 0666, priv);
   if (ret < 0)
     {
-      idbg("register_driver() failed: %d\n", ret);
+      ierr("ERROR: register_driver() failed: %d\n", ret);
       goto errout_with_priv;
     }
 
@@ -687,7 +689,7 @@ errout_with_priv:
 }
 
 /****************************************************************************
- * Name: arch_tcuninitialize
+ * Name: board_tsc_teardown
  *
  * Description:
  *   Uninitialized the simulated touchscreen
@@ -700,9 +702,9 @@ errout_with_priv:
  *
  ****************************************************************************/
 
-void arch_tcuninitialize(void)
+void board_tsc_teardown(void)
 {
-  FAR struct up_dev_s *priv = ( FAR struct up_dev_s *)&g_simtouchscreen;
+  FAR struct up_dev_s *priv = (FAR struct up_dev_s *)&g_simtouchscreen;
   char devname[DEV_NAMELEN];
   int ret;
 
@@ -727,15 +729,15 @@ void arch_tcuninitialize(void)
 
   g_eventloop = 0;
 
-  /* Un-register the device*/
+  /* Un-register the device */
 
   (void)snprintf(devname, DEV_NAMELEN, DEV_FORMAT, priv->minor);
-  ivdbg("Un-registering %s\n", devname);
+  iinfo("Un-registering %s\n", devname);
 
   ret = unregister_driver(devname);
   if (ret < 0)
     {
-      idbg("uregister_driver() failed: %d\n", ret);
+      ierr("ERROR: uregister_driver() failed: %d\n", ret);
     }
 
   /* Clean up any resources.  Ouch!  While we are holding the semaphore? */
@@ -753,8 +755,8 @@ int up_buttonevent(int x, int y, int buttons)
   FAR struct up_dev_s *priv = (FAR struct up_dev_s *)&g_simtouchscreen;
   bool                 pendown;  /* true: pen is down */
 
-  ivdbg("x=%d y=%d buttons=%02x\n", x, y, buttons);
-  ivdbg("contact=%d nwaiters=%d\n", priv->sample.contact, priv->nwaiters);
+  iinfo("x=%d y=%d buttons=%02x\n", x, y, buttons);
+  iinfo("contact=%d nwaiters=%d\n", priv->sample.contact, priv->nwaiters);
 
   /* Any button press will count as pendown. */
 

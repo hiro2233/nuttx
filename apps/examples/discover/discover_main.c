@@ -2,7 +2,7 @@
  * examples/discover/discover_main.c
  *
  *   Copyright (C) 2012 Max Holtzberg. All rights reserved.
- *   Copyright (C) 2008, 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008, 2011-2012, 2015 Gregory Nutt. All rights reserved.
  *
  *   Authors: Max Holtzberg <mh@uvc.de>
  *            Gregory Nutt <gnutt@nuttx.org>
@@ -48,11 +48,11 @@
 #include <debug.h>
 
 #include <net/if.h>
-#include <nuttx/net/uip/uip.h>
+#include <netinet/in.h>
 #include <nuttx/net/arp.h>
 
-#include <apps/netutils/uiplib.h>
-#include <apps/netutils/discover.h>
+#include "netutils/netlib.h"
+#include "netutils/discover.h"
 
 #ifdef CONFIG_EXAMPLES_DISCOVER_DHCPC
 #  include <arpa/inet.h>
@@ -65,8 +65,7 @@
 /* DHCPC may be used in conjunction with any other feature (or not) */
 
 #ifdef CONFIG_EXAMPLES_DISCOVER_DHCPC
-#  include <apps/netutils/dnsclient.h>
-#  include <apps/netutils/dhcpc.h>
+#  include "netutils/dhcpc.h"
 #endif
 
 /****************************************************************************
@@ -85,7 +84,11 @@
  * discover_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int discover_main(int argc, char *argv[])
+#endif
 {
   /* If this task is excecutated as an NSH built-in function, then the
    * network has already been configured by NSH's start-up logic.
@@ -109,7 +112,7 @@ int discover_main(int argc, char *argv[])
   mac[3] = 0xad;
   mac[4] = 0xbe;
   mac[5] = 0xef;
-  uip_setmacaddr("eth0", mac);
+  netlib_setmacaddr("eth0", mac);
 #endif
 
   /* Set up our host address */
@@ -119,26 +122,22 @@ int discover_main(int argc, char *argv[])
 #else
   addr.s_addr = HTONL(CONFIG_EXAMPLES_DISCOVER_IPADDR);
 #endif
-  uip_sethostaddr("eth0", &addr);
+  netlib_set_ipv4addr("eth0", &addr);
 
   /* Set up the default router address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_DISCOVER_DRIPADDR);
-  uip_setdraddr("eth0", &addr);
+  netlib_set_dripv4addr("eth0", &addr);
 
   /* Setup the subnet mask */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_DISCOVER_NETMASK);
-  uip_setnetmask("eth0", &addr);
+  netlib_set_ipv4netmask("eth0", &addr);
 
 #ifdef CONFIG_EXAMPLES_DISCOVER_DHCPC
-  /* Set up the resolver */
-
-  dns_bind();
-
   /* Get the MAC address of the NIC */
 
-  uip_getmacaddr("eth0", mac);
+  netlib_getmacaddr("eth0", mac);
 
   /* Set up the DHCPC modules */
 
@@ -153,21 +152,21 @@ int discover_main(int argc, char *argv[])
     {
       struct dhcpc_state ds;
       (void)dhcpc_request(handle, &ds);
-      uip_sethostaddr("eth1", &ds.ipaddr);
+      netlib_set_ipv4addr("eth0", &ds.ipaddr);
 
       if (ds.netmask.s_addr != 0)
         {
-          uip_setnetmask("eth0", &ds.netmask);
+          netlib_set_ipv4netmask("eth0", &ds.netmask);
         }
 
       if (ds.default_router.s_addr != 0)
         {
-          uip_setdraddr("eth0", &ds.default_router);
+          netlib_set_dripv4addr("eth0", &ds.default_router);
         }
 
       if (ds.dnsaddr.s_addr != 0)
         {
-          dns_setserver(&ds.dnsaddr);
+          netlib_set_ipv4dnsaddr(&ds.dnsaddr);
         }
 
       dhcpc_close(handle);
@@ -179,7 +178,7 @@ int discover_main(int argc, char *argv[])
 
   if (discover_start(NULL) < 0)
     {
-      ndbg("Could not start discover daemon.\n");
+      nerr("ERROR: Could not start discover daemon.\n");
       return ERROR;
     }
 

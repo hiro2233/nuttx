@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/olimex-lpc-h3131/src/lpc31_leds.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,52 +43,29 @@
 #include <stdbool.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
 #include "up_arch.h"
 #include "up_internal.h"
-#include "lpc31_internal.h"
+#include "lpc31.h"
 
 #include "lpc_h3131.h"
-
-/****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg  lldbg
-#  define ledvdbg llvdbg
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_led_initialize
+ * Name: board_autoled_initialize
  *
  * Description:
  *   Configure LEDs.  LEDs are left in the OFF state.
  *
  ****************************************************************************/
 
-void board_led_initialize(void)
+void board_autoled_initialize(void)
 {
   /* Turn off both LEDs */
 
@@ -97,7 +74,7 @@ void board_led_initialize(void)
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  *
  * Description:
  *   Select the "logical" ON state:
@@ -118,7 +95,7 @@ void board_led_initialize(void)
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   switch (led)
     {
@@ -143,7 +120,7 @@ void board_led_on(int led)
 #endif
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  *
  * Description:
  *   Select the "logical" OFF state:
@@ -164,7 +141,7 @@ void board_led_on(int led)
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   switch (led)
     {
@@ -181,7 +158,7 @@ void board_led_off(int led)
 #endif
 
 /************************************************************************************
- * Name:  lpc31_setled, and lpc31_setleds
+ * Name:  board_userled_initialize, board_userled, and board_userled_all
  *
  * Description:
  *   These interfaces allow user control of the board LEDs.
@@ -195,7 +172,12 @@ void board_led_off(int led)
  *
  ************************************************************************************/
 
-void lpc31_setled(int led, bool ledon)
+void board_userled_initialize(void)
+{
+  /* All initialization performed in board_autoled_initialize() */
+}
+
+void board_userled(int led, bool ledon)
 {
   uint32_t bit;
 
@@ -225,10 +207,10 @@ void lpc31_setled(int led, bool ledon)
     }
 }
 
-void lpc31_setleds(uint8_t ledset)
+void board_userled_all(uint8_t ledset)
 {
 #ifndef CONFIG_ARCH_LEDS
-  lpc31_setled(BOARD_LED1, (ledset & BOARD_LED1_BIT) != 0);
+  board_userled(BOARD_LED1, (ledset & BOARD_LED1_BIT) != 0);
 #endif
-  lpc31_setled(BOARD_LED2, (ledset & BOARD_LED2_BIT) != 0);
+  board_userled(BOARD_LED2, (ledset & BOARD_LED2_BIT) != 0);
 }

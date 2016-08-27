@@ -76,7 +76,7 @@
 #  endif
 
 #else
-#  error "Unsupport pixel format"
+#  error "Unsupported pixel format"
 #endif
 
 /********************************************************************************************
@@ -180,7 +180,7 @@ static const nxgl_mxpixel_t g_lut[IMAGE_NLUTCODES] =
 
 #  endif
 #else
-# error "Unsupport pixel format"
+# error "Unsupported pixel format"
 #endif
 
 #if CONFIG_EXAMPLES_NXIMAGE_BPP == 24
@@ -1074,7 +1074,7 @@ static const struct pix_run_s g_nuttx[] =
   { 75,   0}, {  1,   5}, {  2,   4}, {  1,   3}, {  1, 163}, {  1,   6}, {  1,   4}, {  1,   5},  /* Row 158 */
   { 77,   0},
   { 76,   0}, {  1,   5}, {  4,   4}, {  1,   5}, { 78,   0}                                       /* Row 159 */
- };
+};
 
 #elif CONFIG_EXAMPLES_NXIMAGE_BPP == 16
 
@@ -3458,7 +3458,7 @@ static const struct pix_run_s g_nuttx[] =
 
 #  endif
 #else
-# error "Unsupport pixel format"
+# error "Unsupported pixel format"
 #endif
 
 /********************************************************************************************
@@ -3635,7 +3635,7 @@ nxgl_mxpixel_t nximage_avgcolor(nxgl_mxpixel_t color1, nxgl_mxpixel_t color2)
   color1 = r1 << 5 | g1 << 2 | b1;
 
 #else
-# error "Unsupport pixel format"
+# error "Unsupported pixel format"
 #endif
 
   return color1;

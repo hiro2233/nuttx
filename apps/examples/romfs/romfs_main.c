@@ -69,12 +69,12 @@
 #include <dirent.h>
 #include <errno.h>
 
-#include <nuttx/fs/ramdisk.h>
+#include <nuttx/drivers/ramdisk.h>
 
 #include "romfs_testdir.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Configuration settings */
@@ -307,7 +307,8 @@ static void checkfile(const char *path, struct node_s *node)
     }
   else if (nbytesread != node->size)
     {
-      printf("  -- ERROR: Read %d bytes, expected %d\n", nbytesread, node->size);
+      printf("  -- ERROR: Read %ld bytes, expected %lu\n",
+             (long)nbytesread, (unsigned long)node->size);
       g_nerrors++;
     }
   else if (memcmp(g_scratchbuffer, node->u.filecontent, node->size) != 0)
@@ -455,7 +456,11 @@ static void checkdirectories(struct node_s *entry)
  * Name: romfs_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int romfs_main(int argc, char *argv[])
+#endif
 {
    int  ret;
 

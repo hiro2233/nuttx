@@ -57,7 +57,7 @@
 
 #include <nuttx/wireless/nrf24l01.h>
 
-#include <apps/readline.h>
+#include "system/readline.h"
 
 #ifdef CONFIG_DISABLE_POLL
 #  error The poll interface is required for the nRF24L01 terminal example. You must disable config option DISABLE_POLL.
@@ -260,7 +260,11 @@ void usage(void)
  * Public Functions
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int nrf24l01_term_main(int argc, char *argv[])
+#endif
 {
   int ret;
   bool quit = false;

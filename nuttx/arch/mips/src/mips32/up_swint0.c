@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/mips/src/mips32/up_swint0.c
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,32 +53,6 @@
 #include "up_internal.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-/* Configuration ************************************************************/
-
-/* Debug ********************************************************************/
-/* Debug output from this file may interfere with context switching!  To get
- * debug output you must enabled the following in your NuttX configuration:
- *
- * CONFIG_DEBUG and CONFIG_DEBUG_SYSCALL
- */
-
-#ifdef CONFIG_DEBUG_SYSCALL
-# define swidbg(format, ...) lldbg(format, ##__VA_ARGS__)
-#else
-# define swidbg(x...)
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
-
-/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
@@ -86,28 +60,28 @@
  * Name: up_registerdump
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_SYSCALL
+#ifdef CONFIG_DEBUG_SYSCALL_INFO
 static void up_registerdump(const uint32_t *regs)
 {
-  swidbg("MFLO:%08x MFHI:%08x EPC:%08x STATUS:%08x\n",
-         regs[REG_MFLO], regs[REG_MFHI], regs[REG_EPC], regs[REG_STATUS]);
-  swidbg("AT:%08x V0:%08x V1:%08x A0:%08x A1:%08x A2:%08x A3:%08x\n",
-         regs[REG_AT], regs[REG_V0], regs[REG_V1], regs[REG_A0],
-         regs[REG_A1], regs[REG_A2], regs[REG_A3]);
-  swidbg("T0:%08x T1:%08x T2:%08x T3:%08x T4:%08x T5:%08x T6:%08x T7:%08x\n",
-         regs[REG_T0], regs[REG_T1], regs[REG_T2], regs[REG_T3],
-         regs[REG_T4], regs[REG_T5], regs[REG_T6], regs[REG_T7]);
-  swidbg("S0:%08x S1:%08x S2:%08x S3:%08x S4:%08x S5:%08x S6:%08x S7:%08x\n",
-         regs[REG_S0], regs[REG_S1], regs[REG_S2], regs[REG_S3],
-         regs[REG_S4], regs[REG_S5], regs[REG_S6], regs[REG_S7]);
+  svcinfo("MFLO:%08x MFHI:%08x EPC:%08x STATUS:%08x\n",
+          regs[REG_MFLO], regs[REG_MFHI], regs[REG_EPC], regs[REG_STATUS]);
+  svcinfo("AT:%08x V0:%08x V1:%08x A0:%08x A1:%08x A2:%08x A3:%08x\n",
+          regs[REG_AT], regs[REG_V0], regs[REG_V1], regs[REG_A0],
+          regs[REG_A1], regs[REG_A2], regs[REG_A3]);
+  svcinfo("T0:%08x T1:%08x T2:%08x T3:%08x T4:%08x T5:%08x T6:%08x T7:%08x\n",
+          regs[REG_T0], regs[REG_T1], regs[REG_T2], regs[REG_T3],
+          regs[REG_T4], regs[REG_T5], regs[REG_T6], regs[REG_T7]);
+  svcinfo("S0:%08x S1:%08x S2:%08x S3:%08x S4:%08x S5:%08x S6:%08x S7:%08x\n",
+          regs[REG_S0], regs[REG_S1], regs[REG_S2], regs[REG_S3],
+          regs[REG_S4], regs[REG_S5], regs[REG_S6], regs[REG_S7]);
 #ifdef MIPS32_SAVE_GP
-  swidbg("T8:%08x T9:%08x GP:%08x SP:%08x FP:%08x RA:%08x\n",
-         regs[REG_T8], regs[REG_T9], regs[REG_GP], regs[REG_SP],
-         regs[REG_FP], regs[REG_RA]);
+  svcinfo("T8:%08x T9:%08x GP:%08x SP:%08x FP:%08x RA:%08x\n",
+          regs[REG_T8], regs[REG_T9], regs[REG_GP], regs[REG_SP],
+          regs[REG_FP], regs[REG_RA]);
 #else
-  swidbg("T8:%08x T9:%08x SP:%08x FP:%08x RA:%08x\n",
-         regs[REG_T8], regs[REG_T9], regs[REG_SP], regs[REG_FP],
-         regs[REG_RA]);
+  svcinfo("T8:%08x T9:%08x SP:%08x FP:%08x RA:%08x\n",
+          regs[REG_T8], regs[REG_T9], regs[REG_SP], regs[REG_FP],
+          regs[REG_RA]);
 #endif
 }
 #else
@@ -122,7 +96,7 @@ static void up_registerdump(const uint32_t *regs)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_KERNEL
 static void dispatch_syscall(void) naked_function;
 static void dispatch_syscall(void)
 {
@@ -157,18 +131,18 @@ static void dispatch_syscall(void)
 
 int up_swint0(int irq, FAR void *context)
 {
-  uint32_t *regs = (uint32_t*)context;
+  uint32_t *regs = (uint32_t *)context;
   uint32_t cause;
 
-  DEBUGASSERT(regs && regs == current_regs);
+  DEBUGASSERT(regs && regs == g_current_regs);
 
   /* Software interrupt 0 is invoked with REG_A0 (REG_R4) = system call
    * command and REG_A1-3 and REG_T0-2 (REG_R5-10) = variable number of
    * arguments depending on the system call.
    */
 
-#ifdef CONFIG_DEBUG_SYSCALL
-  swidbg("Entry: regs: %p cmd: %d\n", regs, regs[REG_R4]);
+#ifdef CONFIG_DEBUG_SYSCALL_INFO
+  svcinfo("Entry: regs: %p cmd: %d\n", regs, regs[REG_R4]);
   up_registerdump(regs);
 #endif
 
@@ -185,16 +159,16 @@ int up_swint0(int irq, FAR void *context)
        *   R4 = SYS_restore_context
        *   R5 = restoreregs
        *
-       * In this case, we simply need to set current_regs to restore register
-       * area referenced in the saved R1. context == current_regs is the normal
-       * exception return.  By setting current_regs = context[R1], we force
+       * In this case, we simply need to set g_current_regs to restore register
+       * area referenced in the saved R1. context == g_current_regs is the normal
+       * exception return.  By setting g_current_regs = context[R1], we force
        * the return to the saved context referenced in R1.
        */
 
       case SYS_restore_context:
         {
           DEBUGASSERT(regs[REG_A1] != 0);
-          current_regs = (uint32_t*)regs[REG_A1];
+          g_current_regs = (uint32_t *)regs[REG_A1];
         }
         break;
 
@@ -210,15 +184,15 @@ int up_swint0(int irq, FAR void *context)
        *
        * In this case, we save the context registers to the save register
        * area reference by the saved contents of R5 and then set
-       * current_regs to to the save register area referenced by the saved
+       * g_current_regs to to the save register area referenced by the saved
        * contents of R6.
        */
 
       case SYS_switch_context:
         {
           DEBUGASSERT(regs[REG_A1] != 0 && regs[REG_A2] != 0);
-          up_copystate((uint32_t*)regs[REG_A1], regs);
-          current_regs = (uint32_t*)regs[REG_A2];
+          up_copystate((uint32_t *)regs[REG_A1], regs);
+          g_current_regs = (uint32_t *)regs[REG_A2];
         }
         break;
 
@@ -234,7 +208,7 @@ int up_swint0(int irq, FAR void *context)
        * unprivileged thread mode.
        */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_KERNEL
       case SYS_syscall_return:
         {
           struct tcb_s *rtcb = sched_self();
@@ -248,7 +222,7 @@ int up_swint0(int irq, FAR void *context)
            * the original mode.
            */
 
-          current_regs[REG_EPC] = rtcb->xcp.syscall[index].sysreturn;
+          g_current_regs[REG_EPC] = rtcb->xcp.syscall[index].sysreturn;
 #error "Missing logic -- need to restore the original mode"
           rtcb->xcp.nsyscalls   = index;
         }
@@ -262,13 +236,13 @@ int up_swint0(int irq, FAR void *context)
 
       default:
         {
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_KERNEL
           FAR struct tcb_s *rtcb = sched_self();
           int index = rtcb->xcp.nsyscalls;
 
           /* Verify that the SYS call number is within range */
 
-          DEBUGASSERT(current_regs[REG_A0] < SYS_maxsyscall);
+          DEBUGASSERT(g_current_regs[REG_A0] < SYS_maxsyscall);
 
           /* Make sure that we got here that there is a no saved syscall
            * return address.  We cannot yet handle nested system calls.
@@ -287,9 +261,9 @@ int up_swint0(int irq, FAR void *context)
 
           /* Offset R0 to account for the reserved values */
 
-          current_regs[REG_R0] -= CONFIG_SYS_RESERVED;
+          g_current_regs[REG_R0] -= CONFIG_SYS_RESERVED;
 #else
-          slldbg("ERROR: Bad SYS call: %d\n", regs[REG_A0]);
+          svcerr("ERROR: Bad SYS call: %d\n", regs[REG_A0]);
 #endif
         }
         break;
@@ -297,21 +271,27 @@ int up_swint0(int irq, FAR void *context)
 
   /* Report what happened.  That might difficult in the case of a context switch */
 
-#ifdef CONFIG_DEBUG_SYSCALL
-  if (regs != current_regs)
+#ifdef CONFIG_DEBUG_SYSCALL_INFO
+  if (regs != g_current_regs)
     {
-      swidbg("SWInt Return: Context switch!\n");
-      up_registerdump((const uint32_t*)current_regs);
+      svcinfo("SWInt Return: Context switch!\n");
+      up_registerdump((const uint32_t *)g_current_regs);
     }
   else
     {
-      swidbg("SWInt Return: %d\n", regs[REG_V0]);
+      svcinfo("SWInt Return: %d\n", regs[REG_V0]);
     }
 #endif
 
-  /* Clear the pending software interrupt 0 in the PIC32 interrupt block */
+  /* Clear the pending software interrupt 0 in the PIC32 interrupt block.
+   * REVISIT:  Does this PIC32 logic really have to be in the MIPS32 code?
+   */
 
+#if defined(CONFIG_ARCH_CHIP_PIC32MX)
   up_clrpend_irq(PIC32MX_IRQSRC_CS0);
+#elif defined(CONFIG_ARCH_CHIP_PIC32MZ)
+  up_clrpend_irq(PIC32MZ_IRQ_CS0);
+#endif
 
   /* And reset the software interrupt bit in the MIPS CAUSE register */
 

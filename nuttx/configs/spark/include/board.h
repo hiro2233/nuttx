@@ -2,7 +2,7 @@
  * configs/spark/include/board.h
  * include/arch/board/board.h
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *            Librae <librae8226@gmail.com>
  *
@@ -43,15 +43,19 @@
  ************************************************************************************/
 
 #include <nuttx/config.h>
+
 #ifndef __ASSEMBLY__
 # include <stdint.h>
 #endif
+
+#include <nuttx/board.h>
+
 #include "stm32_rcc.h"
 #include "stm32_sdio.h"
 #include "stm32.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
@@ -94,14 +98,14 @@
 #define STM32_RCC_CFGR_PPRE1    RCC_CFGR_PPRE1_HCLKd2
 #define STM32_PCLK1_FREQUENCY   (STM32_HCLK_FREQUENCY/2)
 
-/* APB1 timers 2-4 will be twice PCLK1 (I presume the remaining will receive PCLK1) */
+/* APB1 timers 2-7 will be twice PCLK1 */
 
 #define STM32_APB1_TIM2_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 #define STM32_APB1_TIM3_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 #define STM32_APB1_TIM4_CLKIN   (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM5_CLKIN   (STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM6_CLKIN   (STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM7_CLKIN   (STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM5_CLKIN   (2*STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM6_CLKIN   (2*STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM7_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 
 /* USB divider -- Divide PLL clock by 1.5 */
 
@@ -111,8 +115,14 @@
  * otherwise frequency is 2xAPBx.
  * Note: TIM1,8 are on APB2, others on APB1 */
 
-#define STM32_TIM18_FREQUENCY   STM32_HCLK_FREQUENCY
-#define STM32_TIM27_FREQUENCY   STM32_HCLK_FREQUENCY
+#define BOARD_TIM1_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM2_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM3_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM4_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM5_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM6_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM7_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM8_FREQUENCY    STM32_HCLK_FREQUENCY
 
 /* SDIO dividers.  Note that slower clocking is required when DMA is disabled
  * in order to avoid RX overrun/TX underrun errors due to delayed responses
@@ -149,7 +159,7 @@
  * way.  The following definitions are used to access individual LEDs.
  */
 
-/* LED index values for use with stm32_setled() */
+/* LED index values for use with board_userled() */
 
 #define BOARD_LED1           0    /* Tied to LED_USR */
 #define BOARD_LED2           1    /* Tied to LED_RGB RED */
@@ -162,7 +172,7 @@
 #define BOARD_RGB_LED_GREEN  BOARD_LED4
 #define BOARD_RGB_LED_BLUE   BOARD_LED2
 
-/* LED bits for use with stm32_setleds() */
+/* LED bits for use with board_userled_all() */
 
 #define BOARD_USR_LED_BIT    (1 << BOARD_USR_LED_BLUE)
 #define BOARD_RED_LED_BIT    (1 << BOARD_RGB_LED_RED)
@@ -223,23 +233,6 @@ extern "C"
  ************************************************************************************/
 
 /************************************************************************************
- * Name:  board_led_initialize, up_setled, and up_setleds
- *
- * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board LEDs.  If
- *   CONFIG_ARCH_LEDS is not defined, then the following interfacesare available to
- *   control the LEDs from user applications.
- *
- ************************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-#undef board_led_initialize // Remove macro definition to reuse name
-void board_led_initialize(void);
-void up_setled(int led, bool ledon);
-void up_setleds(uint8_t ledset, uint8_t led_states_set);
-#endif
-
-/************************************************************************************
  * Name: stm32_boardinitialize
  *
  * Description:
@@ -250,25 +243,6 @@ void up_setleds(uint8_t ledset, uint8_t led_states_set);
  ************************************************************************************/
 
 void stm32_boardinitialize(void);
-
-/************************************************************************************
- * Name: nsh_archinitialize
- *
- * Description:
- *   Perform architecture specific initialization for NSH.
- *
- *   CONFIG_NSH_ARCHINIT=y :
- *     Called from the NSH library
- *
- *   CONFIG_BOARD_INITIALIZE=y, CONFIG_NSH_LIBRARY=y, &&
- *   CONFIG_NSH_ARCHINIT=n:
- *     Called from board_initialize().
- *
- ************************************************************************************/
-
-#ifdef CONFIG_NSH_LIBRARY
-int nsh_archinitialize(void);
-#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

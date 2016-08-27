@@ -33,64 +33,17 @@
 #
 ############################################################################
 
--include $(TOPDIR)/.config
 -include $(TOPDIR)/Make.defs
-include $(APPDIR)/Make.defs
 
 # Pipe Example
 
-ASRCS		=
-CSRCS		= pipe_main.c transfer_test.c interlock_test.c redirect_test.c
+APPNAME = pipe
 
-AOBJS		= $(ASRCS:.S=$(OBJEXT))
-COBJS		= $(CSRCS:.c=$(OBJEXT))
+ASRCS =
+CSRCS = transfer_test.c interlock_test.c redirect_test.c
+MAINSRC = pipe_main.c
 
-SRCS		= $(ASRCS) $(CSRCS)
-OBJS		= $(AOBJS) $(COBJS)
+CONFIG_XYZ_PROGNAME ?= pipe$(EXEEXT)
+PROGNAME = $(CONFIG_XYZ_PROGNAME)
 
-ifeq ($(CONFIG_WINDOWS_NATIVE),y)
-  BIN		= ..\..\libapps$(LIBEXT)
-else
-ifeq ($(WINTOOL),y)
-  BIN		= ..\\..\\libapps$(LIBEXT)
-else
-  BIN		= ../../libapps$(LIBEXT)
-endif
-endif
-
-ROOTDEPPATH	= --dep-path .
-
-# Common build
-
-VPATH		=
-
-all: .built
-.PHONY: clean depend distclean
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-.built: $(OBJS)
-	$(call ARCHIVE, $(BIN), $(OBJS))
-	@touch .built
-
-context:
-
-.depend: Makefile $(SRCS)
-	@$(MKDEP) $(ROOTDEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make.dep
-	@touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, .built)
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(APPDIR)/Application.mk

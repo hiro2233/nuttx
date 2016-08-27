@@ -53,7 +53,7 @@
 #include <arch/chip/irq.h>
 
 /* Include AVR architecture-specific IRQ definitions (including register
- * save structure and irqsave()/irqrestore() macros
+ * save structure and up_irq_save()/up_irq_restore() functions).
  */
 
 #ifdef CONFIG_ARCH_FAMILY_AVR32
@@ -63,7 +63,7 @@
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -75,7 +75,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -85,7 +85,8 @@
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

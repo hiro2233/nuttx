@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/stm32f429i-disco/src/stm32_userleds.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -55,22 +55,6 @@
 #ifndef CONFIG_ARCH_LEDS
 
 /****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg  lldbg
-#  define ledvdbg llvdbg
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
-
-/****************************************************************************
  * Private Data
  ****************************************************************************/
 /* This array maps an LED number to GPIO pin configuration */
@@ -87,8 +71,10 @@ static uint32_t g_ledcfg[BOARD_NLEDS] =
 /* LED Power Management */
 
 #ifdef CONFIG_PM
-static void led_pm_notify(struct pm_callback_s *cb, enum pm_state_e pmstate);
-static int led_pm_prepare(struct pm_callback_s *cb, enum pm_state_e pmstate);
+static void led_pm_notify(struct pm_callback_s *cb, int domain,
+                          enum pm_state_e pmstate);
+static int led_pm_prepare(struct pm_callback_s *cb, int domain,
+                          enum pm_state_e pmstate);
 #endif
 
 
@@ -118,7 +104,8 @@ static struct pm_callback_s g_ledscb =
  ****************************************************************************/
 
 #ifdef CONFIG_PM
-static void led_pm_notify(struct pm_callback_s *cb , enum pm_state_e pmstate)
+static void led_pm_notify(struct pm_callback_s *cb, int domain,
+                          enum pm_state_e pmstate)
 {
   switch (pmstate)
     {
@@ -173,7 +160,8 @@ static void led_pm_notify(struct pm_callback_s *cb , enum pm_state_e pmstate)
  ****************************************************************************/
 
 #ifdef CONFIG_PM
-static int led_pm_prepare(struct pm_callback_s *cb , enum pm_state_e pmstate)
+static int led_pm_prepare(struct pm_callback_s *cb, int domain,
+                          enum pm_state_e pmstate)
 {
   /* No preparation to change power modes is required by the LEDs driver.
    * We always accept the state change by returning OK.
@@ -188,10 +176,10 @@ static int led_pm_prepare(struct pm_callback_s *cb , enum pm_state_e pmstate)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: stm32_ledinit
+ * Name: board_userled_initialize
  ****************************************************************************/
 
-void stm32_ledinit(void)
+void board_userled_initialize(void)
 {
    /* Configure LED1-4 GPIOs for output */
 
@@ -200,10 +188,10 @@ void stm32_ledinit(void)
 }
 
 /****************************************************************************
- * Name: stm32_setled
+ * Name: board_userled
  ****************************************************************************/
 
-void stm32_setled(int led, bool ledon)
+void board_userled(int led, bool ledon)
 {
   if ((unsigned)led < BOARD_NLEDS)
     {
@@ -212,10 +200,10 @@ void stm32_setled(int led, bool ledon)
 }
 
 /****************************************************************************
- * Name: stm32_setleds
+ * Name: board_userled_all
  ****************************************************************************/
 
-void stm32_setleds(uint8_t ledset)
+void board_userled_all(uint8_t ledset)
 {
   stm32_gpiowrite(GPIO_LED1, (ledset & BOARD_LED1_BIT) == 0);
   stm32_gpiowrite(GPIO_LED2, (ledset & BOARD_LED2_BIT) == 0);
@@ -233,7 +221,7 @@ void stm32_ledpminitialize(void)
   int ret = pm_register(&g_ledscb);
   if (ret != OK)
   {
-      board_led_on(LED_ASSERTION);
+      board_autoled_on(LED_ASSERTION);
     }
 }
 #endif /* CONFIG_PM */

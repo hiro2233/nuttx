@@ -51,7 +51,7 @@
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* ISR and IRQ numbers */
@@ -193,6 +193,15 @@ struct xcptcontext
 
 #ifndef __ASSEMBLY__
 
+/* Name: up_irq_save, up_irq_restore, and friends.
+ *
+ * NOTE: This function should never be called from application code and,
+ * as a general rule unless you really know what you are doing, this
+ * function should not be called directly from operation system code either:
+ * Typically, the wrapper functions, enter_critical_section() and
+ * leave_critical section(), are probably what you really want.
+ */
+
 /* Get the current FLAGS register contents */
 
 static inline irqstate_t irqflags()
@@ -213,46 +222,46 @@ static inline irqstate_t irqflags()
  * if the X86_FLAGS_IF is set by sti, then interrupts are enable.
  */
 
-static inline bool irqdisabled(irqstate_t flags)
+static inline bool up_irq_disabled(irqstate_t flags)
 {
   return ((flags & X86_FLAGS_IF) == 0);
 }
 
-static inline bool irqenabled(irqstate_t flags)
+static inline bool up_irq_enabled(irqstate_t flags)
 {
   return ((flags & X86_FLAGS_IF) != 0);
 }
 
 /* Disable interrupts unconditionally */
 
-static inline void irqdisable(void)
+static inline void up_irq_disable(void)
 {
   asm volatile("cli": : :"memory");
 }
 
 /* Enable interrupts unconditionally */
 
-static inline void irqenable(void)
+static inline void up_irq_enable(void)
 {
   asm volatile("sti": : :"memory");
 }
 
 /* Disable interrupts, but return previous interrupt state */
 
-static inline irqstate_t irqsave(void)
+static inline irqstate_t up_irq_save(void)
 {
   irqstate_t flags = irqflags();
-  irqdisable();
+  up_irq_disable();
   return flags;
 }
 
 /* Conditionally disable interrupts */
 
-static inline void irqrestore(irqstate_t flags)
+static inline void up_irq_restore(irqstate_t flags)
 {
-  if (irqenabled(flags))
+  if (up_irq_enabled(flags))
     {
-      irqenable();
+      up_irq_enable();
     }
 }
 
@@ -263,7 +272,7 @@ static inline void system_call3(unsigned int nbr, uintptr_t parm1,
 }
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -272,7 +281,8 @@ static inline void system_call3(unsigned int nbr, uintptr_t parm1,
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

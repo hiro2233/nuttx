@@ -1,7 +1,7 @@
 /****************************************************************************
  * libc/stdio/lib_meminstream.c
  *
- *   Copyright (C) 2007-2009, 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011-2012, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@
 
 #include <assert.h>
 
-#include "lib_internal.h"
+#include "libc.h"
 
 /****************************************************************************
  * Private Functions
@@ -82,23 +82,21 @@ static int meminstream_getc(FAR struct lib_instream_s *this)
  *   Initializes a stream for use with a fixed-size memory buffer.
  *
  * Input parameters:
- *   meminstream - User allocated, uninitialized instance of struct
+ *   instream    - User allocated, uninitialized instance of struct
  *                 lib_meminstream_s to be initialized.
  *   bufstart    - Address of the beginning of the fixed-size memory buffer
  *   buflen      - Size of the fixed-sized memory buffer in bytes
  *
  * Returned Value:
- *   None (meminstream initialized).
+ *   None (instream initialized).
  *
  ****************************************************************************/
 
-void lib_meminstream(FAR struct lib_meminstream_s *meminstream,
+void lib_meminstream(FAR struct lib_meminstream_s *instream,
                      FAR const char *bufstart, int buflen)
 {
-  meminstream->public.get  = meminstream_getc;
-  meminstream->public.nget = 0;          /* Will be buffer index */
-  meminstream->buffer      = bufstart;   /* Start of buffer */
-  meminstream->buflen      = buflen;     /* Length of the buffer */
+  instream->public.get  = meminstream_getc;
+  instream->public.nget = 0;          /* Will be buffer index */
+  instream->buffer      = bufstart;   /* Start of buffer */
+  instream->buflen      = buflen;     /* Length of the buffer */
 }
-
-

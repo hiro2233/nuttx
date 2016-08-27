@@ -33,8 +33,8 @@
  *
  ************************************************************************************/
 
-#ifndef _ARCH_ARM_SRC_LPC214X_SPI_H
-#define _ARCH_ARM_SRC_LPC214X_SPI_H
+#ifndef __ARCH_ARM_SRC_LPC214X_LPC214X_SPI_H
+#define __ARCH_ARM_SRC_LPC214X_LPC214X_SPI_H
 
 /************************************************************************************
  * Included Files
@@ -43,7 +43,7 @@
 #include "chip.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Register address definitions *****************************************************/
@@ -163,4 +163,22 @@
  * Public Function Prototypes
  ************************************************************************************/
 
-#endif  /* _ARCH_ARM_SRC_LPC214X_SPI_H */
+struct spi_dev_s; /* Forward reference */
+
+/****************************************************************************
+ * Name: lpc214x_spibus_initialize
+ *
+ * Description:
+ *   Initialize the selected SPI port
+ *
+ * Input Parameter:
+ *   Port number (for hardware that has mutiple SPI interfaces)
+ *
+ * Returned Value:
+ *   Valid SPI device structre reference on succcess; a NULL on failure
+ *
+ ****************************************************************************/
+
+FAR struct spi_dev_s *lpc214x_spibus_initialize(int port);
+
+#endif  /* __ARCH_ARM_SRC_LPC214X_LPC214X_SPI_H */

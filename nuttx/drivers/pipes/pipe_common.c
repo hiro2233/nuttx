@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/pipes/pipe_common.c
  *
- *   Copyright (C) 2008-2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -54,13 +55,14 @@
 
 #include <nuttx/kmalloc.h>
 #include <nuttx/fs/fs.h>
-#if CONFIG_DEBUG
+#include <nuttx/fs/ioctl.h>
+#ifdef CONFIG_DEBUG_FEATURES
 #  include <nuttx/arch.h>
 #endif
 
 #include "pipe_common.h"
 
-#if CONFIG_DEV_PIPE_SIZE > 0
+#ifdef CONFIG_PIPES
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -77,18 +79,10 @@
 #endif
 
 /****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
 static void pipecommon_semtake(sem_t *sem);
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -98,7 +92,7 @@ static void pipecommon_semtake(sem_t *sem);
  * Name: pipecommon_semtake
  ****************************************************************************/
 
-static void pipecommon_semtake(sem_t *sem)
+static void pipecommon_semtake(FAR sem_t *sem)
 {
   while (sem_wait(sem) != 0)
     {
@@ -106,7 +100,7 @@ static void pipecommon_semtake(sem_t *sem)
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      ASSERT(get_errno() == EINTR);
     }
 }
 
@@ -115,19 +109,34 @@ static void pipecommon_semtake(sem_t *sem)
  ****************************************************************************/
 
 #ifndef CONFIG_DISABLE_POLL
-static void pipecommon_pollnotify(FAR struct pipe_dev_s *dev, pollevent_t eventset)
+static void pipecommon_pollnotify(FAR struct pipe_dev_s *dev,
+                                  pollevent_t eventset)
 {
   int i;
 
+  if (eventset & POLLERR)
+    {
+      eventset &= ~(POLLOUT | POLLIN);
+    }
+
   for (i = 0; i < CONFIG_DEV_PIPE_NPOLLWAITERS; i++)
     {
-      struct pollfd *fds = dev->d_fds[i];
+      FAR struct pollfd *fds = dev->d_fds[i];
+
       if (fds)
         {
-          fds->revents |= (fds->events & eventset);
+          fds->revents |= eventset & (fds->events | POLLERR | POLLHUP);
+
+          if ((fds->revents & (POLLOUT | POLLHUP)) == (POLLOUT | POLLHUP))
+            {
+              /* POLLOUT and POLLHUP are mutually exclusive. */
+
+              fds->revents &= ~POLLOUT;
+            }
+
           if (fds->revents != 0)
             {
-              fvdbg("Report events: %02x\n", fds->revents);
+              finfo("Report events: %02x\n", fds->revents);
               sem_post(fds->sem);
             }
         }
@@ -145,13 +154,15 @@ static void pipecommon_pollnotify(FAR struct pipe_dev_s *dev, pollevent_t events
  * Name: pipecommon_allocdev
  ****************************************************************************/
 
-FAR struct pipe_dev_s *pipecommon_allocdev(void)
+FAR struct pipe_dev_s *pipecommon_allocdev(size_t bufsize)
 {
- struct pipe_dev_s *dev;
+  FAR struct pipe_dev_s *dev;
+
+  DEBUGASSERT(bufsize <= CONFIG_DEV_PIPE_MAXSIZE);
 
   /* Allocate a private structure to manage the pipe */
 
-  dev = (struct pipe_dev_s *)kmalloc(sizeof(struct pipe_dev_s));
+  dev = (FAR struct pipe_dev_s *)kmm_malloc(sizeof(struct pipe_dev_s));
   if (dev)
     {
       /* Initialize the private structure */
@@ -160,6 +171,8 @@ FAR struct pipe_dev_s *pipecommon_allocdev(void)
       sem_init(&dev->d_bfsem, 0, 1);
       sem_init(&dev->d_rdsem, 0, 0);
       sem_init(&dev->d_wrsem, 0, 0);
+
+      dev->d_bufsize = bufsize;
     }
 
   return dev;
@@ -171,10 +184,10 @@ FAR struct pipe_dev_s *pipecommon_allocdev(void)
 
 void pipecommon_freedev(FAR struct pipe_dev_s *dev)
 {
-   sem_destroy(&dev->d_bfsem);
-   sem_destroy(&dev->d_rdsem);
-   sem_destroy(&dev->d_wrsem);
-   kfree(dev);
+  sem_destroy(&dev->d_bfsem);
+  sem_destroy(&dev->d_rdsem);
+  sem_destroy(&dev->d_wrsem);
+  kmm_free(dev);
 }
 
 /****************************************************************************
@@ -183,18 +196,12 @@ void pipecommon_freedev(FAR struct pipe_dev_s *dev)
 
 int pipecommon_open(FAR struct file *filep)
 {
-  struct inode      *inode = filep->f_inode;
-  struct pipe_dev_s *dev   = inode->i_private;
-  int                sval;
-  int                ret;
+  FAR struct inode      *inode = filep->f_inode;
+  FAR struct pipe_dev_s *dev   = inode->i_private;
+  int                    sval;
+  int                    ret;
 
-  /* Some sanity checking */
-#if CONFIG_DEBUG
-  if (!dev)
-    {
-       return -EBADF;
-    }
-#endif
+  DEBUGASSERT(dev != NULL);
 
   /* Make sure that we have exclusive access to the device structure.  The
    * sem_wait() call should fail only if we are awakened by a signal.
@@ -203,16 +210,19 @@ int pipecommon_open(FAR struct file *filep)
   ret = sem_wait(&dev->d_bfsem);
   if (ret != OK)
     {
-      fdbg("sem_wait failed: %d\n", errno);
-      DEBUGASSERT(errno > 0);
-      return -errno;
+      ferr("ERROR: sem_wait failed: %d\n", get_errno());
+      DEBUGASSERT(get_errno() > 0);
+      return -get_errno();
     }
 
-  /* If this the first reference on the device, then allocate the buffer */
+  /* If this the first reference on the device, then allocate the buffer.
+   * In the case of policy 1, the buffer already be present when the pipe
+   * is first opened.
+   */
 
-  if (dev->d_refs == 0)
+  if (dev->d_refs == 0 && dev->d_buffer == NULL)
     {
-      dev->d_buffer = (uint8_t*)kmalloc(CONFIG_DEV_PIPE_SIZE);
+      dev->d_buffer = (FAR uint8_t *)kmm_malloc(dev->d_bufsize);
       if (!dev->d_buffer)
         {
           (void)sem_post(&dev->d_bfsem);
@@ -224,7 +234,7 @@ int pipecommon_open(FAR struct file *filep)
 
   dev->d_refs++;
 
-  /* If opened for writing, increment the count of writers on on the pipe instance */
+  /* If opened for writing, increment the count of writers on the pipe instance */
 
   if ((filep->f_oflags & O_WROK) != 0)
     {
@@ -243,11 +253,24 @@ int pipecommon_open(FAR struct file *filep)
         }
     }
 
-  /* If opened for read-only, then wait for at least one writer on the pipe */
+  /* If opened for reading, increment the count of reader on on the pipe instance */
+
+  if ((filep->f_oflags & O_RDOK) != 0)
+    {
+      dev->d_nreaders++;
+    }
+
+  /* If opened for read-only, then wait for either (1) at least one writer
+   * on the pipe (policy == 0), or (2) until there is buffered data to be
+   * read (policy == 1).
+   */
 
   sched_lock();
   (void)sem_post(&dev->d_bfsem);
-  if ((filep->f_oflags & O_RDWR) == O_RDONLY && dev->d_nwriters < 1)
+
+  if ((filep->f_oflags & O_RDWR) == O_RDONLY &&  /* Read-only */
+      dev->d_nwriters < 1 &&                     /* No writers on the pipe */
+      dev->d_wrndx == dev->d_rdndx)              /* Buffer is empty */
     {
       /* NOTE: d_rdsem is normally used when the read logic waits for more
        * data to be written.  But until the first writer has opened the
@@ -265,9 +288,9 @@ int pipecommon_open(FAR struct file *filep)
            * a signal.
            */
 
-          fdbg("sem_wait failed: %d\n", errno);
-          DEBUGASSERT(errno > 0);
-          ret = -errno;
+          ferr("ERROR: sem_wait failed: %d\n", get_errno());
+          DEBUGASSERT(get_errno() > 0);
+          ret = -get_errno();
 
           /* Immediately close the pipe that we just opened */
 
@@ -285,17 +308,11 @@ int pipecommon_open(FAR struct file *filep)
 
 int pipecommon_close(FAR struct file *filep)
 {
-  struct inode      *inode = filep->f_inode;
-  struct pipe_dev_s *dev   = inode->i_private;
-  int                sval;
+  FAR struct inode      *inode = filep->f_inode;
+  FAR struct pipe_dev_s *dev   = inode->i_private;
+  int                    sval;
 
-  /* Some sanity checking */
-#if CONFIG_DEBUG
-  if (!dev)
-    {
-       return -EBADF;
-    }
-#endif
+  DEBUGASSERT(dev && dev->d_refs > 0);
 
   /* Make sure that we have exclusive access to the device structure.
    * NOTE: close() is supposed to return EINTR if interrupted, however
@@ -304,15 +321,17 @@ int pipecommon_close(FAR struct file *filep)
 
   pipecommon_semtake(&dev->d_bfsem);
 
+  /* Decrement the number of references on the pipe.  Check if there are
+   * still outstanding references to the pipe.
+   */
+
   /* Check if the decremented reference count would go to zero */
 
-  if (dev->d_refs > 1)
+  if (--dev->d_refs > 0)
     {
-      /* No.. then just decrement the reference count */
-
-      dev->d_refs--;
-
-      /* If opened for writing, decrement the count of writers on on the pipe instance */
+      /* No more references.. If opened for writing, decrement the count of
+       * writers on the pipe instance.
+       */
 
       if ((filep->f_oflags & O_WROK) != 0)
         {
@@ -326,14 +345,42 @@ int pipecommon_close(FAR struct file *filep)
                 {
                   sem_post(&dev->d_rdsem);
                 }
+
+              /* Inform poll readers that other end closed. */
+
+              pipecommon_pollnotify(dev, POLLHUP);
+            }
+        }
+
+      /* If opened for reading, decrement the count of readers on the pipe
+       * instance.
+       */
+
+      if ((filep->f_oflags & O_RDOK) != 0)
+        {
+          if (--dev->d_nreaders <= 0)
+            {
+              if (PIPE_IS_POLICY_0(dev->d_flags))
+                {
+                  /* Inform poll writers that other end closed. */
+
+                  pipecommon_pollnotify(dev, POLLERR);
+                }
             }
         }
     }
-  else
-    {
-      /* Yes... deallocate the buffer */
 
-      kfree(dev->d_buffer);
+  /* What is the buffer management policy?  Do we free the buffer when the
+   * last client closes the pipe policy 0, or when the buffer becomes empty.
+   * In the latter case, the buffer data will remain valid and can be
+   * obtained when the pipe is re-opened.
+   */
+
+  else if (PIPE_IS_POLICY_0(dev->d_flags) || dev->d_wrndx == dev->d_rdndx)
+    {
+      /* Policy 0 or the buffer is empty ... deallocate the buffer now. */
+
+      kmm_free(dev->d_buffer);
       dev->d_buffer = NULL;
 
       /* And reset all counts and indices */
@@ -342,7 +389,20 @@ int pipecommon_close(FAR struct file *filep)
       dev->d_rdndx    = 0;
       dev->d_refs     = 0;
       dev->d_nwriters = 0;
-   }
+      dev->d_nreaders = 0;
+
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+      /* If, in addition, we have been unlinked, then also need to free the
+       * device structure as well to prevent a memory leak.
+       */
+
+      if (PIPE_IS_UNLINKED(dev->d_flags))
+        {
+          pipecommon_freedev(dev);
+          return OK;
+        }
+#endif
+    }
 
   sem_post(&dev->d_bfsem);
   return OK;
@@ -354,22 +414,21 @@ int pipecommon_close(FAR struct file *filep)
 
 ssize_t pipecommon_read(FAR struct file *filep, FAR char *buffer, size_t len)
 {
-  struct inode      *inode  = filep->f_inode;
-  struct pipe_dev_s *dev    = inode->i_private;
+  FAR struct inode      *inode  = filep->f_inode;
+  FAR struct pipe_dev_s *dev    = inode->i_private;
 #ifdef CONFIG_DEV_PIPEDUMP
-  FAR uint8_t       *start  = (uint8_t*)buffer;
+  FAR uint8_t           *start  = (FAR uint8_t *)buffer;
 #endif
-  ssize_t            nread  = 0;
-  int                sval;
-  int                ret;
+  ssize_t                nread  = 0;
+  int                    sval;
+  int                    ret;
 
-  /* Some sanity checking */
-#if CONFIG_DEBUG
-  if (!dev)
+  DEBUGASSERT(dev);
+
+  if (len == 0)
     {
-      return -ENODEV;
+      return 0;
     }
-#endif
 
   /* Make sure that we have exclusive access to the device structure */
 
@@ -405,7 +464,7 @@ ssize_t pipecommon_read(FAR struct file *filep, FAR char *buffer, size_t len)
       ret = sem_wait(&dev->d_rdsem);
       sched_unlock();
 
-      if (ret < 0  || sem_wait(&dev->d_bfsem) < 0)
+      if (ret < 0 || sem_wait(&dev->d_bfsem) < 0)
         {
           return ERROR;
         }
@@ -414,13 +473,14 @@ ssize_t pipecommon_read(FAR struct file *filep, FAR char *buffer, size_t len)
   /* Then return whatever is available in the pipe (which is at least one byte) */
 
   nread = 0;
-  while (nread < len && dev->d_wrndx != dev->d_rdndx)
+  while ((size_t)nread < len && dev->d_wrndx != dev->d_rdndx)
     {
       *buffer++ = dev->d_buffer[dev->d_rdndx];
-      if (++dev->d_rdndx >= CONFIG_DEV_PIPE_SIZE)
+      if (++dev->d_rdndx >= dev->d_bufsize)
         {
           dev->d_rdndx = 0;
         }
+
       nread++;
     }
 
@@ -444,39 +504,37 @@ ssize_t pipecommon_read(FAR struct file *filep, FAR char *buffer, size_t len)
  * Name: pipecommon_write
  ****************************************************************************/
 
-ssize_t pipecommon_write(FAR struct file *filep, FAR const char *buffer, size_t len)
+ssize_t pipecommon_write(FAR struct file *filep, FAR const char *buffer,
+                         size_t len)
 {
-  struct inode      *inode    = filep->f_inode;
-  struct pipe_dev_s *dev      = inode->i_private;
-  ssize_t            nwritten = 0;
-  ssize_t            last;
-  int                nxtwrndx;
-  int                sval;
+  FAR struct inode      *inode    = filep->f_inode;
+  FAR struct pipe_dev_s *dev      = inode->i_private;
+  ssize_t                nwritten = 0;
+  ssize_t                last;
+  int                    nxtwrndx;
+  int                    sval;
 
-  /* Some sanity checking */
+  DEBUGASSERT(dev);
+  pipe_dumpbuffer("To PIPE:", (FAR uint8_t *)buffer, len);
 
-#if CONFIG_DEBUG
-  if (!dev)
+  if (len == 0)
     {
-      return -ENODEV;
+      return 0;
     }
-#endif
-
-  pipe_dumpbuffer("To PIPE:", (uint8_t*)buffer, len);
 
   /* At present, this method cannot be called from interrupt handlers.  That is
    * because it calls sem_wait (via pipecommon_semtake below) and sem_wait cannot
    * be called from interrupt level.  This actually happens fairly commonly
-   * IF dbg() is called from interrupt handlers and stdout is being redirected
+   * IF [a-z]err() is called from interrupt handlers and stdout is being redirected
    * via a pipe.  In that case, the debug output will try to go out the pipe
-   * (interrupt handlers should use the lldbg() APIs).
+   * (interrupt handlers should use the  _err() APIs).
    *
    * On the other hand, it would be very valuable to be able to feed the pipe
    * from an interrupt handler!  TODO:  Consider disabling interrupts instead
-   * of taking semaphores so that pipes can be written from interupt handlers
+   * of taking semaphores so that pipes can be written from interrupt handlers
    */
 
-  DEBUGASSERT(up_interrupt_context() == false)
+  DEBUGASSERT(up_interrupt_context() == false);
 
   /* Make sure that we have exclusive access to the device structure */
 
@@ -488,12 +546,12 @@ ssize_t pipecommon_write(FAR struct file *filep, FAR const char *buffer, size_t 
   /* Loop until all of the bytes have been written */
 
   last = 0;
-  for (;;)
+  for (; ; )
     {
       /* Calculate the write index AFTER the next byte is written */
 
       nxtwrndx = dev->d_wrndx + 1;
-      if (nxtwrndx >= CONFIG_DEV_PIPE_SIZE)
+      if (nxtwrndx >= dev->d_bufsize)
         {
           nxtwrndx = 0;
         }
@@ -509,7 +567,8 @@ ssize_t pipecommon_write(FAR struct file *filep, FAR const char *buffer, size_t 
 
           /* Is the write complete? */
 
-          if (++nwritten >= len)
+          nwritten++;
+          if ((size_t)nwritten >= len)
             {
               /* Yes.. Notify all of the waiting readers that more data is available */
 
@@ -541,6 +600,7 @@ ssize_t pipecommon_write(FAR struct file *filep, FAR const char *buffer, size_t 
                   sem_post(&dev->d_rdsem);
                 }
             }
+
           last = nwritten;
 
           /* If O_NONBLOCK was set, then return partial bytes written or EGAIN */
@@ -551,6 +611,7 @@ ssize_t pipecommon_write(FAR struct file *filep, FAR const char *buffer, size_t 
                 {
                   nwritten = -EAGAIN;
                 }
+
               sem_post(&dev->d_bfsem);
               return nwritten;
             }
@@ -581,14 +642,7 @@ int pipecommon_poll(FAR struct file *filep, FAR struct pollfd *fds,
   int                    ret      = OK;
   int                    i;
 
-  /* Some sanity checking */
-
-#if CONFIG_DEBUG
-  if (!dev || !fds)
-    {
-      return -ENODEV;
-    }
-#endif
+  DEBUGASSERT(dev && fds);
 
   /* Are we setting up the poll?  Or tearing it down? */
 
@@ -630,13 +684,14 @@ int pipecommon_poll(FAR struct file *filep, FAR struct pollfd *fds,
         }
       else
         {
-          nbytes = (CONFIG_DEV_PIPE_SIZE-1) + dev->d_wrndx - dev->d_rdndx;
+          nbytes = (dev->d_bufsize - 1) + dev->d_wrndx - dev->d_rdndx;
         }
 
-      /* Notify the POLLOUT event if the pipe is not full */
+      /* Notify the POLLOUT event if the pipe is not full, but only if
+       * there is readers. */
 
       eventset = 0;
-      if (nbytes < (CONFIG_DEV_PIPE_SIZE-1))
+      if (nbytes < (dev->d_bufsize - 1))
         {
           eventset |= POLLOUT;
         }
@@ -648,6 +703,22 @@ int pipecommon_poll(FAR struct file *filep, FAR struct pollfd *fds,
           eventset |= POLLIN;
         }
 
+      /* Notify the POLLHUP event if the pipe is empty and no writers */
+
+      if (nbytes == 0 && dev->d_nwriters <= 0)
+        {
+          eventset |= POLLHUP;
+        }
+
+      /* Change POLLOUT to POLLERR, if no readers and policy 0. */
+
+      if ((eventset | POLLOUT) &&
+          PIPE_IS_POLICY_0(dev->d_flags) &&
+          dev->d_nreaders <= 0)
+        {
+          eventset |= POLLERR;
+        }
+
       if (eventset)
         {
           pipecommon_pollnotify(dev, eventset);
@@ -657,9 +728,9 @@ int pipecommon_poll(FAR struct file *filep, FAR struct pollfd *fds,
     {
       /* This is a request to tear down the poll. */
 
-      struct pollfd **slot = (struct pollfd **)fds->priv;
+      FAR struct pollfd **slot = (FAR struct pollfd **)fds->priv;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
       if (!slot)
         {
           ret              = -EIO;
@@ -679,4 +750,139 @@ errout:
 }
 #endif
 
-#endif /* CONFIG_DEV_PIPE_SIZE > 0 */
+/****************************************************************************
+ * Name: pipecommon_ioctl
+ ****************************************************************************/
+
+int pipecommon_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
+{
+  FAR struct inode      *inode = filep->f_inode;
+  FAR struct pipe_dev_s *dev   = inode->i_private;
+  int                    ret   = -EINVAL;
+
+#ifdef CONFIG_DEBUG_FEATURES
+  /* Some sanity checking */
+
+  if (dev == NULL)
+    {
+       return -EBADF;
+    }
+#endif
+
+  pipecommon_semtake(&dev->d_bfsem);
+
+  switch (cmd)
+    {
+      case PIPEIOC_POLICY:
+        {
+          if (arg != 0)
+            {
+              PIPE_POLICY_1(dev->d_flags);
+            }
+          else
+            {
+              PIPE_POLICY_0(dev->d_flags);
+            }
+
+          ret = OK;
+        }
+        break;
+
+      case FIONWRITE:  /* Number of bytes waiting in send queue */
+      case FIONREAD:   /* Number of bytes available for reading */
+        {
+          int count;
+
+          /* Determine the number of bytes written to the buffer.  This is,
+           * of course, also the number of bytes that may be read from the
+           * buffer.
+           *
+           *   d_rdndx - index to remove next byte from the buffer
+           *   d_wrndx - Index to next location to add a byte to the buffer.
+           */
+
+          if (dev->d_wrndx < dev->d_rdndx)
+            {
+              count = (dev->d_bufsize - dev->d_rdndx) + dev->d_wrndx;
+            }
+          else
+            {
+              count = dev->d_wrndx - dev->d_rdndx;
+            }
+
+          *(FAR int *)((uintptr_t)arg) = count;
+          ret = 0;
+        }
+        break;
+
+      /* Free space in buffer */
+
+      case FIONSPACE:
+        {
+          int count;
+
+          /* Determine the number of bytes free in the buffer.
+           *
+           *   d_rdndx - index to remove next byte from the buffer
+           *   d_wrndx - Index to next location to add a byte to the buffer.
+           */
+
+          if (dev->d_wrndx < dev->d_rdndx)
+            {
+              count = (dev->d_rdndx - dev->d_wrndx) - 1;
+            }
+          else
+            {
+              count = ((dev->d_bufsize - dev->d_wrndx) + dev->d_rdndx) - 1;
+            }
+
+          *(FAR int *)((uintptr_t)arg) = count;
+          ret = 0;
+        }
+        break;
+
+      default:
+        break;
+    }
+
+  sem_post(&dev->d_bfsem);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: pipecommon_unlink
+ ****************************************************************************/
+
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+int pipecommon_unlink(FAR struct inode *inode)
+{
+  FAR struct pipe_dev_s *dev;
+
+  DEBUGASSERT(inode && inode->i_private);
+  dev = (FAR struct pipe_dev_s *)inode->i_private;
+
+  /* Mark the pipe unlinked */
+
+  PIPE_UNLINK(dev->d_flags);
+
+  /* Are the any open references to the driver? */
+
+  if (dev->d_refs == 0)
+    {
+      /* No.. free the buffer (if there is one) */
+
+      if (dev->d_buffer)
+        {
+          kmm_free(dev->d_buffer);
+        }
+
+      /* And free the device structure. */
+
+      pipecommon_freedev(dev);
+    }
+
+  return OK;
+}
+#endif
+
+#endif /* CONFIG_PIPES */

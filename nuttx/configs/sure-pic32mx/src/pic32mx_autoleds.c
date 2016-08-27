@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/sure-pic32mx/src/pic32mx_leds.c
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,20 +43,21 @@
 #include <stdbool.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
 #include "up_arch.h"
 #include "up_internal.h"
 
-#include "pic32mx-internal.h"
+#include "pic32mx.h"
 #include "pic32mx-ioport.h"
 #include "sure-pic32mx.h"
 
 #ifdef CONFIG_ARCH_LEDS
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* LED Configuration ********************************************************/
 /* The Sure PIC32MX board has five LEDs.  One (D4, lablel "Power") is not
@@ -85,22 +86,6 @@
 #define LED_ON  1
 #define LED_NC  2
 
-/* Debug ********************************************************************/
-
-#if defined(CONFIG_DEBUG) && defined(CONFIG_DEBUG_LEDS)
-#  define leddbg  lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define ledvdbg lldbg
-#  else
-#    define ledvdbg(x...)
-#  endif
-#else
-#  undef CONFIG_DEBUG_LEDS
-#  undef CONFIG_DEBUG_VERBOSE
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
-
 /****************************************************************************
  * Private types
  ****************************************************************************/
@@ -113,7 +98,7 @@ struct led_setting_s
   uint8_t error  : 2;
 };
 
- /****************************************************************************
+/****************************************************************************
  * Private Data
  ****************************************************************************/
 
@@ -142,10 +127,10 @@ static const struct led_setting_s g_ledoffvalues[LED_NVALUES] =
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_setleds
+ * Name: pic32mx_setleds
  ****************************************************************************/
 
-void up_setleds(FAR const struct led_setting_s *setting)
+static void pic32mx_setleds(FAR const struct led_setting_s *setting)
 {
   if (setting->usb != LED_NC)
     {
@@ -173,10 +158,10 @@ void up_setleds(FAR const struct led_setting_s *setting)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: pic32mx_ledinit
+ * Name: pic32mx_led_initialize
  ****************************************************************************/
 
-void pic32mx_ledinit(void)
+void pic32mx_led_initialize(void)
 {
   /* Configure output pins */
 
@@ -187,26 +172,26 @@ void pic32mx_ledinit(void)
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  ****************************************************************************/
 
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   if (led < LED_NVALUES)
     {
-      up_setleds(&g_ledonvalues[led]);
+      pic32mx_setleds(&g_ledonvalues[led]);
     }
 }
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  ****************************************************************************/
 
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   if (led < LED_NVALUES)
     {
-      up_setleds(&g_ledoffvalues[led]);
+      pic32mx_setleds(&g_ledoffvalues[led]);
     }
 }
 #endif /* CONFIG_ARCH_LEDS */

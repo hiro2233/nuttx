@@ -139,8 +139,8 @@
 #define SST25_DUMMY                 0xa5
 
 /* Chip Geometries ******************************************************************/
-/* SST25VF512 capacity is 512Kbit (64Kbit x 8)   =  64Kb (8Kb x 8)*/
-/* SST25VF010 capacity is 1Mbit   (128Kbit x 8)  = 128Kb (16Kb x 8*/
+/* SST25VF512 capacity is 512Kbit (64Kbit x 8)   =  64Kb (8Kb x 8) */
+/* SST25VF010 capacity is 1Mbit   (128Kbit x 8)  = 128Kb (16Kb x 8 */
 /* SST25VF520 capacity is 2Mbit   (256Kbit x 8)  = 256Kb (32Kb x 8) */
 /* SST25VF540 capacity is 4Mbit   (512Kbit x 8)  = 512Kb (64Kb x 8) */
 /* SST25VF080 capacity is 8Mbit   (1024Kbit x 8) =   1Mb (128Kb x 8) */
@@ -199,7 +199,7 @@ struct sst25_dev_s
 
 #if defined(CONFIG_SST25_SECTOR512) && !defined(CONFIG_SST25_READONLY)
   uint8_t               flags;       /* Buffered sector flags */
-  uint16_t              esectno;     /* Erase sector number in the cache*/
+  uint16_t              esectno;     /* Erase sector number in the cache */
   FAR uint8_t          *sector;      /* Allocated sector data */
 #endif
 };
@@ -286,6 +286,7 @@ static void sst25_lock(FAR struct spi_dev_s *dev)
 
   SPI_SETMODE(dev, CONFIG_SST25_SPIMODE);
   SPI_SETBITS(dev, 8);
+  (void)SPI_HWFEATURES(dev, 0);
   (void)SPI_SETFREQUENCY(dev, CONFIG_SST25_SPIFREQUENCY);
 }
 
@@ -308,7 +309,7 @@ static inline int sst25_readid(struct sst25_dev_s *priv)
   uint16_t memory;
   uint16_t capacity;
 
-  fvdbg("priv: %p\n", priv);
+  finfo("priv: %p\n", priv);
 
   /* Lock the SPI bus, configure the bus, and select this FLASH part. */
 
@@ -327,7 +328,7 @@ static inline int sst25_readid(struct sst25_dev_s *priv)
   SPI_SELECT(priv->dev, SPIDEV_FLASH, false);
   sst25_unlock(priv->dev);
 
-  fvdbg("manufacturer: %02x memory: %02x capacity: %02x\n",
+  finfo("manufacturer: %02x memory: %02x capacity: %02x\n",
         manufacturer, memory, capacity);
 
   /* Check for a valid manufacturer and memory type */
@@ -395,34 +396,6 @@ static uint8_t sst25_waitwritecomplete(struct sst25_dev_s *priv)
 {
   uint8_t status;
 
-  /* Are we the only device on the bus? */
-
-#ifdef CONFIG_SPI_OWNBUS
-
-  /* Select this FLASH part */
-
-  SPI_SELECT(priv->dev, SPIDEV_FLASH, true);
-
-  /* Send "Read Status Register (RDSR)" command */
-
-  (void)SPI_SEND(priv->dev, SST25_RDSR);
-
-  /* Loop as long as the memory is busy with a write cycle */
-
-  do
-    {
-      /* Send a dummy byte to generate the clock needed to shift out the status */
-
-      status = SPI_SEND(priv->dev, SST25_DUMMY);
-    }
-  while ((status & SST25_SR_BUSY) != 0);
-
-  /* Deselect the FLASH */
-
-  SPI_SELECT(priv->dev, SPIDEV_FLASH, false);
-
-#else
-
   /* Loop as long as the memory is busy with a write cycle */
 
   do
@@ -458,7 +431,6 @@ static uint8_t sst25_waitwritecomplete(struct sst25_dev_s *priv)
 #endif
     }
   while ((status & SST25_SR_BUSY) != 0);
-#endif
 
   return status;
 }
@@ -514,7 +486,7 @@ static void sst25_sectorerase(struct sst25_dev_s *priv, off_t sector)
 {
   off_t address = sector << priv->sectorshift;
 
-  fvdbg("sector: %08lx\n", (long)sector);
+  finfo("sector: %08lx\n", (long)sector);
 
   /* Wait for any preceding write or erase operation to complete. */
 
@@ -551,7 +523,7 @@ static void sst25_sectorerase(struct sst25_dev_s *priv, off_t sector)
 
 static inline int sst25_chiperase(struct sst25_dev_s *priv)
 {
-  fvdbg("priv: %p\n", priv);
+  finfo("priv: %p\n", priv);
 
   /* Wait for any preceding write or erase operation to complete. */
 
@@ -565,7 +537,7 @@ static inline int sst25_chiperase(struct sst25_dev_s *priv)
 
   sst25_cmd(priv, SST25_CE);
 
-  fvdbg("Return: OK\n");
+  finfo("Return: OK\n");
   return OK;
 }
 
@@ -578,12 +550,13 @@ static void sst25_byteread(FAR struct sst25_dev_s *priv, FAR uint8_t *buffer,
 {
   uint8_t status;
 
-  fvdbg("address: %08lx nbytes: %d\n", (long)address, (int)nbytes);
+  finfo("address: %08lx nbytes: %d\n", (long)address, (int)nbytes);
 
   /* Wait for any preceding write or erase operation to complete. */
 
   status = sst25_waitwritecomplete(priv);
-  DEBUGASSERT((status & (SST25_SR_WEL|SST25_SR_BP_MASK|SST25_SR_AAI)) == 0);
+  DEBUGASSERT((status & (SST25_SR_WEL | SST25_SR_BP_MASK | SST25_SR_AAI)) == 0);
+  UNUSED(status);
 
   /* Select this FLASH part */
 
@@ -628,7 +601,7 @@ static void sst25_bytewrite(struct sst25_dev_s *priv, FAR const uint8_t *buffer,
 {
   uint8_t status;
 
-  fvdbg("address: %08lx nwords: %d\n", (long)address, (int)nbytes);
+  finfo("address: %08lx nwords: %d\n", (long)address, (int)nbytes);
   DEBUGASSERT(priv && buffer);
 
   /* Write each byte individually */
@@ -642,7 +615,7 @@ static void sst25_bytewrite(struct sst25_dev_s *priv, FAR const uint8_t *buffer,
           /* Wait for any preceding write or erase operation to complete. */
 
           status = sst25_waitwritecomplete(priv);
-          DEBUGASSERT((status & (SST25_SR_WEL|SST25_SR_BP_MASK|SST25_SR_AAI)) == 0);
+          DEBUGASSERT((status & (SST25_SR_WEL | SST25_SR_BP_MASK | SST25_SR_AAI)) == 0);
 
           /* Enable write access to the FLASH */
 
@@ -690,7 +663,7 @@ static void sst25_wordwrite(struct sst25_dev_s *priv, FAR const uint8_t *buffer,
   size_t nwords = (nbytes + 1) >> 1;
   uint8_t status;
 
-  fvdbg("address: %08lx nwords: %d\n", (long)address, (int)nwords);
+  finfo("address: %08lx nwords: %d\n", (long)address, (int)nwords);
   DEBUGASSERT(priv && buffer);
 
   /* Loop until all of the bytes have been written */
@@ -714,7 +687,7 @@ static void sst25_wordwrite(struct sst25_dev_s *priv, FAR const uint8_t *buffer,
        * we are finished.
        */
 
-      if (nwords <= 0)
+      if (nwords < 1)
         {
           return;
         }
@@ -722,7 +695,8 @@ static void sst25_wordwrite(struct sst25_dev_s *priv, FAR const uint8_t *buffer,
       /* Wait for any preceding write or erase operation to complete. */
 
       status = sst25_waitwritecomplete(priv);
-      DEBUGASSERT((status & (SST25_SR_WEL|SST25_SR_BP_MASK|SST25_SR_AAI)) == 0);
+      DEBUGASSERT((status & (SST25_SR_WEL | SST25_SR_BP_MASK | SST25_SR_AAI)) == 0);
+      UNUSED(status);
 
       /* Enable write access to the FLASH */
 
@@ -753,7 +727,9 @@ static void sst25_wordwrite(struct sst25_dev_s *priv, FAR const uint8_t *buffer,
       /* Wait for the preceding write to complete. */
 
       status = sst25_waitwritecomplete(priv);
-      DEBUGASSERT((status & (SST25_SR_WEL|SST25_SR_BP_MASK|SST25_SR_AAI)) == (SST25_SR_WEL|SST25_SR_AAI));
+      DEBUGASSERT((status & (SST25_SR_WEL | SST25_SR_BP_MASK | SST25_SR_AAI)) ==
+                  (SST25_SR_WEL | SST25_SR_AAI));
+      UNUSED(status);
 
       /* Decrement the word count and advance the write position */
 
@@ -790,7 +766,9 @@ static void sst25_wordwrite(struct sst25_dev_s *priv, FAR const uint8_t *buffer,
           /* Wait for the preceding write to complete. */
 
           status = sst25_waitwritecomplete(priv);
-          DEBUGASSERT((status & (SST25_SR_WEL|SST25_SR_BP_MASK|SST25_SR_AAI)) == (SST25_SR_WEL|SST25_SR_AAI));
+          DEBUGASSERT((status & (SST25_SR_WEL | SST25_SR_BP_MASK | SST25_SR_AAI)) ==
+                      (SST25_SR_WEL | SST25_SR_AAI));
+          UNUSED(status);
 
           /* Decrement the word count and advance the write position */
 
@@ -856,7 +834,7 @@ static FAR uint8_t *sst25_cacheread(struct sst25_dev_s *priv, off_t sector)
 
   shift    = priv->sectorshift - SST25_SECTOR_SHIFT;
   esectno  = sector >> shift;
-  fvdbg("sector: %ld esectno: %d shift=%d\n", sector, esectno, shift);
+  finfo("sector: %ld esectno: %d shift=%d\n", sector, esectno, shift);
 
   /* Check if the requested erase block is already in the cache */
 
@@ -912,7 +890,7 @@ static void sst25_cacheerase(struct sst25_dev_s *priv, off_t sector)
   if (!IS_ERASED(priv))
     {
       off_t esectno  = sector >> (priv->sectorshift - SST25_SECTOR_SHIFT);
-      fvdbg("sector: %ld esectno: %d\n", sector, esectno);
+      finfo("sector: %ld esectno: %d\n", sector, esectno);
 
       sst25_sectorerase(priv, esectno);
       SET_ERASED(priv);
@@ -954,7 +932,7 @@ static void sst25_cachewrite(FAR struct sst25_dev_s *priv, FAR const uint8_t *bu
       if (!IS_ERASED(priv))
         {
           off_t esectno  = sector >> (priv->sectorshift - SST25_SECTOR_SHIFT);
-          fvdbg("sector: %ld esectno: %d\n", sector, esectno);
+          finfo("sector: %ld esectno: %d\n", sector, esectno);
 
           sst25_sectorerase(priv, esectno);
           SET_ERASED(priv);
@@ -989,7 +967,7 @@ static int sst25_erase(FAR struct mtd_dev_s *dev, off_t startblock, size_t nbloc
   FAR struct sst25_dev_s *priv = (FAR struct sst25_dev_s *)dev;
   size_t blocksleft = nblocks;
 
-  fvdbg("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+  finfo("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 
   /* Lock access to the SPI bus until we complete the erase */
 
@@ -1028,7 +1006,7 @@ static ssize_t sst25_bread(FAR struct mtd_dev_s *dev, off_t startblock, size_t n
 #ifdef CONFIG_SST25_SECTOR512
   ssize_t nbytes;
 
-  fvdbg("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+  finfo("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 
   /* On this device, we can handle the block read just like the byte-oriented read */
 
@@ -1043,7 +1021,7 @@ static ssize_t sst25_bread(FAR struct mtd_dev_s *dev, off_t startblock, size_t n
   FAR struct sst25_dev_s *priv = (FAR struct sst25_dev_s *)dev;
   ssize_t nbytes;
 
-  fvdbg("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+  finfo("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 
   /* On this device, we can handle the block read just like the byte-oriented read */
 
@@ -1069,7 +1047,7 @@ static ssize_t sst25_bwrite(FAR struct mtd_dev_s *dev, off_t startblock, size_t 
 #else
   FAR struct sst25_dev_s *priv = (FAR struct sst25_dev_s *)dev;
 
-  fvdbg("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+  finfo("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 
   /* Lock the SPI bus and write all of the pages to FLASH */
 
@@ -1099,7 +1077,7 @@ static ssize_t sst25_read(FAR struct mtd_dev_s *dev, off_t offset, size_t nbytes
 {
   FAR struct sst25_dev_s *priv = (FAR struct sst25_dev_s *)dev;
 
-  fvdbg("offset: %08lx nbytes: %d\n", (long)offset, (int)nbytes);
+  finfo("offset: %08lx nbytes: %d\n", (long)offset, (int)nbytes);
 
   /* Lock the SPI bus and select this FLASH part */
 
@@ -1107,7 +1085,7 @@ static ssize_t sst25_read(FAR struct mtd_dev_s *dev, off_t offset, size_t nbytes
   sst25_byteread(priv, buffer, offset, nbytes);
   sst25_unlock(priv->dev);
 
-  fvdbg("return nbytes: %d\n", (int)nbytes);
+  finfo("return nbytes: %d\n", (int)nbytes);
   return nbytes;
 }
 
@@ -1120,7 +1098,7 @@ static int sst25_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
   FAR struct sst25_dev_s *priv = (FAR struct sst25_dev_s *)dev;
   int ret = -EINVAL; /* Assume good command with bad parameters */
 
-  fvdbg("cmd: %d \n", cmd);
+  finfo("cmd: %d \n", cmd);
 
   switch (cmd)
     {
@@ -1149,7 +1127,7 @@ static int sst25_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
 #endif
               ret               = OK;
 
-              fvdbg("blocksize: %d erasesize: %d neraseblocks: %d\n",
+              finfo("blocksize: %d erasesize: %d neraseblocks: %d\n",
                     geo->blocksize, geo->erasesize, geo->neraseblocks);
             }
         }
@@ -1171,7 +1149,7 @@ static int sst25_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
         break;
     }
 
-  fvdbg("return %d\n", ret);
+  finfo("return %d\n", ret);
   return ret;
 }
 
@@ -1194,7 +1172,7 @@ FAR struct mtd_dev_s *sst25_initialize(FAR struct spi_dev_s *dev)
   FAR struct sst25_dev_s *priv;
   int ret;
 
-  fvdbg("dev: %p\n", dev);
+  finfo("dev: %p\n", dev);
 
   /* Allocate a state structure (we allocate the structure instead of using
    * a fixed, static allocation so that we can handle multiple FLASH devices.
@@ -1203,11 +1181,11 @@ FAR struct mtd_dev_s *sst25_initialize(FAR struct spi_dev_s *dev)
    * to be extended to handle multiple FLASH parts on the same SPI bus.
    */
 
-  priv = (FAR struct sst25_dev_s *)kzalloc(sizeof(struct sst25_dev_s));
+  priv = (FAR struct sst25_dev_s *)kmm_zalloc(sizeof(struct sst25_dev_s));
   if (priv)
     {
       /* Initialize the allocated structure. (unsupported methods were
-       * nullified by kzalloc).
+       * nullified by kmm_zalloc).
        */
 
       priv->mtd.erase  = sst25_erase;
@@ -1228,9 +1206,9 @@ FAR struct mtd_dev_s *sst25_initialize(FAR struct spi_dev_s *dev)
         {
           /* Unrecognized! Discard all of that work we just did and return NULL */
 
-          fdbg("Unrecognized\n");
-          kfree(priv);
-          priv = NULL;
+          ferr("ERROR: Unrecognized\n");
+          kmm_free(priv);
+          return NULL;
         }
       else
         {
@@ -1243,13 +1221,13 @@ FAR struct mtd_dev_s *sst25_initialize(FAR struct spi_dev_s *dev)
 #ifdef CONFIG_SST25_SECTOR512        /* Simulate a 512 byte sector */
           /* Allocate a buffer for the erase block cache */
 
-          priv->sector = (FAR uint8_t *)kmalloc(1 << priv->sectorshift);
+          priv->sector = (FAR uint8_t *)kmm_malloc(1 << priv->sectorshift);
           if (!priv->sector)
             {
               /* Allocation failed! Discard all of that work we just did and return NULL */
 
-              fdbg("Allocation failed\n");
-              kfree(priv);
+              ferr("ERROR: Allocation failed\n");
+              kmm_free(priv);
               priv = NULL;
             }
 #endif
@@ -1264,6 +1242,6 @@ FAR struct mtd_dev_s *sst25_initialize(FAR struct spi_dev_s *dev)
 
   /* Return the implementation-specific state structure as the MTD device */
 
-  fvdbg("Return %p\n", priv);
+  finfo("Return %p\n", priv);
   return (FAR struct mtd_dev_s *)priv;
 }

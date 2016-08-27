@@ -109,11 +109,11 @@
 
 static uint32_t lpc31_ns2clk(uint32_t ns, uint32_t hclk2)
 {
- /* delay (ns) * hclk (Hz) / scale (ns/sec) = cycles
-  *
-  * Example: ns=80, hclk2=90000000
-  * clocks = 80 * 90000000 / 1000000000 + 1 = 8 (actual 7.2 cycles)
-  */
+  /* delay (ns) * hclk (Hz) / scale (ns/sec) = cycles
+   *
+   * Example: ns=80, hclk2=90000000
+   * clocks = 80 * 90000000 / 1000000000 + 1 = 8 (actual 7.2 cycles)
+   */
 
   uint64_t tmp = (uint64_t)ns * (uint64_t)hclk2 / 1000000000ull;
   if (tmp > 0)
@@ -137,7 +137,6 @@ static uint32_t lpc31_ns2clk(uint32_t ns, uint32_t hclk2)
 
 static inline void lpc31_sdraminitialize(void)
 {
-  uint32_t tmp;
   uint32_t regval;
 
   /* These run-time calculations can be reduced dramatically if hclk is
@@ -254,7 +253,7 @@ static inline void lpc31_sdraminitialize(void)
    * 16bit mode
    */
 
-  tmp = getreg32(LPC31_EXTSDRAM0_VSECTION | (0x23 << 12));
+  (void)getreg32(LPC31_EXTSDRAM0_VSECTION | (0x23 << 12));
 
   /* Select normal operating mode */
 

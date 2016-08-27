@@ -186,10 +186,14 @@ Toolchains
 
   C32 Toolchain Options:
 
-    CONFIG_PIC32MX_MICROCHIPW      - MicroChip full toolchain for Windows
-    CONFIG_PIC32MX_MICROCHIPL      - MicroChip full toolchain for Linux
-    CONFIG_PIC32MX_MICROCHIPW_LITE - MicroChip "Lite" toolchain for Windows
-    CONFIG_PIC32MX_MICROCHIPL_LITE - MicroChip "Lite" toolchain for Linux
+    CONFIG_MIPS32_TOOLCHAIN_MICROCHIPW      - MicroChip full toolchain for Windows
+    CONFIG_MIPS32_TOOLCHAIN_MICROCHIPL      - MicroChip full toolchain for Linux
+    CONFIG_MIPS32_TOOLCHAIN_MICROCHIPW_LITE - MicroChip "Lite" toolchain for Windows
+    CONFIG_MIPS32_TOOLCHAIN_MICROCHIPL_LITE - MicroChip "Lite" toolchain for Linux
+    CONFIG_MIPS32_TOOLCHAIN_PINGUINOL       - Pinquino toolchain for Linux
+    CONFIG_MIPS32_TOOLCHAIN_PINGUINOW       - Pinquino toolchain for Windows
+    CONFIG_MIPS32_TOOLCHAIN_MICROCHIPOPENL  - Microchip open toolchain for Linux
+    CONFIG_MIPS32_TOOLCHAIN_GNU_ELF         - General mips-elf toolchain for Linux
 
   NOTE:  The "Lite" versions of the toolchain does not support C++.  Also
   certain optimization levels are not supported by the "Lite" toolchain.
@@ -229,7 +233,7 @@ Toolchains
   well. This toolchain can be downloded from the Pinguino website:
   http://wiki.pinguino.cc/index.php/Main_Page#Download . There is some general
   information about using the Pinguino mips-elf toolchain in this thread:
-  http://tech.groups.yahoo.com/group/nuttx/message/1821
+  https://groups.yahoo.com/neo/groups/nuttx/conversations/messages/1821
 
   See also configs/mirtoo/README.txt.  There is an experimental (untested)
   configuration for the Mirtoo platform in that directory.
@@ -256,7 +260,7 @@ Toolchains
 
   Even then, there are more warnings from the linker and some undefined symbols
   for non-NuttX code that resides in the unused Microchip libraries.  See this
-  email thread at http://tech.groups.yahoo.com/group/nuttx/message/1458 for more
+  email thread at https://groups.yahoo.com/neo/groups/nuttx/conversations/messages/1458 for more
   information.  You will have to solve at least this undefined symbol problem if
   you want to used the XC32 toolchain.
 
@@ -282,12 +286,6 @@ Toolchains
        make clean_context all
 
      An alias in your .bashrc file might make that less painful.
-
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
 
 Loading NuttX with PICkit2
 ==========================
@@ -586,7 +584,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.

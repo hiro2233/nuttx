@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/bch/bchlib_teardown.c
  *
- *   Copyright (C) 2008-2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2011, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,23 +47,7 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/fs/fs.h>
 
-#include "bch_internal.h"
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
+#include "bch.h"
 
 /****************************************************************************
  * Public Functions
@@ -103,11 +87,11 @@ int bchlib_teardown(FAR void *handle)
 
   if (bch->buffer)
     {
-      kfree(bch->buffer);
+      kmm_free(bch->buffer);
     }
 
   sem_destroy(&bch->sem);
-  kfree(bch);
+  kmm_free(bch);
   return OK;
 }
 

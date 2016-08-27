@@ -50,12 +50,12 @@
 
 #include <stdbool.h>
 
-#if defined(CONFIG_ARCH_IRQBUTTONS) && defined(CONFIG_GPIO_IRQ)
+#if defined(CONFIG_ARCH_IRQBUTTONS) && defined(CONFIG_LPC17_GPIOIRQ)
 #  include <nuttx/irq.h>
 #endif
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* Clocking *************************************************************************/
 /* NOTE:  The following definitions require lpc17_syscon.h.  It is not included here
@@ -146,13 +146,13 @@
  * LED2            -- Connected to P0[21]
  */
 
-/* LED index values for use with lpc17_setled() */
+/* LED index values for use with board_userled() */
 
 #define BOARD_LED1                0
 #define BOARD_LED2                1
 #define BOARD_NLEDS               2
 
-/* LED bits for use with lpc17_setleds() */
+/* LED bits for use with board_userled_all() */
 
 #define BOARD_LED1_BIT            (1 << BOARD_LED1)
 #define BOARD_LED2_BIT            (1 << BOARD_LED2)

@@ -2,7 +2,8 @@
  * configs/stm32f429i-disco/src/stm32_spi.c
  *
  *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ *   Authors: Gregory Nutt <gnutt@nuttx.org>
+ *            Marco Krahl <ocram.lhark@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -53,47 +54,29 @@
 #include "stm32f429i-disco.h"
 
 #if defined(CONFIG_STM32_SPI1) || defined(CONFIG_STM32_SPI2) || defined(CONFIG_STM32_SPI3) ||\
-	defined(CONFIG_STM32_SPI4) || defined(CONFIG_STM32_SPI5)
+    defined(CONFIG_STM32_SPI4) || defined(CONFIG_STM32_SPI5)
 
 /************************************************************************************
- * Definitions
+ * Private Data
  ************************************************************************************/
 
-/* Enables debug output from this file (needs CONFIG_DEBUG too) */
-
-#undef SPI_DEBUG   /* Define to enable debug */
-#undef SPI_VERBOSE /* Define to enable verbose debug */
-
-#ifdef SPI_DEBUG
-#  define spidbg  lldbg
-#  ifdef SPI_VERBOSE
-#    define spivdbg lldbg
-#  else
-#    define spivdbg(x...)
-#  endif
-#else
-#  undef SPI_VERBOSE
-#  define spidbg(x...)
-#  define spivdbg(x...)
+#ifdef CONFIG_STM32_SPI5
+FAR struct spi_dev_s *g_spidev5 = NULL;
 #endif
-
-/************************************************************************************
- * Private Functions
- ************************************************************************************/
 
 /************************************************************************************
  * Public Functions
  ************************************************************************************/
 
 /************************************************************************************
- * Name: stm32_spiinitialize
+ * Name: stm32_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the stm32f429i-disco board.
  *
  ************************************************************************************/
 
-void weak_function stm32_spiinitialize(void)
+void weak_function stm32_spidev_initialize(void)
 {
 #ifdef CONFIG_STM32_SPI5
   (void)stm32_configgpio(GPIO_CS_MEMS);    /* MEMS chip select */
@@ -113,7 +96,7 @@ void weak_function stm32_spiinitialize(void)
  *   The external functions, stm32_spi1/2/3select and stm32_spi1/2/3status must be
  *   provided by board-specific logic.  They are implementations of the select
  *   and status methods of the SPI interface defined by struct spi_ops_s (see
- *   include/nuttx/spi/spi.h). All other methods (including up_spiinitialize())
+ *   include/nuttx/spi/spi.h). All other methods (including stm32_spibus_initialize())
  *   are provided by common STM32 logic.  To use this common SPI logic on your
  *   board:
  *
@@ -122,9 +105,9 @@ void weak_function stm32_spiinitialize(void)
  *   2. Provide stm32_spi1/2/3select() and stm32_spi1/2/3status() functions in your
  *      board-specific logic.  These functions will perform chip selection and
  *      status operations using GPIOs in the way your board is configured.
- *   3. Add a calls to up_spiinitialize() in your low level application
+ *   3. Add a calls to stm32_spibus_initialize() in your low level application
  *      initialization logic
- *   4. The handle returned by up_spiinitialize() may then be used to bind the
+ *   4. The handle returned by stm32_spibus_initialize() may then be used to bind the
  *      SPI driver to higher level logic (e.g., calling
  *      mmcsd_spislotinitialize(), for example, will bind the SPI driver to
  *      the SPI MMC/SD driver).
@@ -134,7 +117,7 @@ void weak_function stm32_spiinitialize(void)
 #ifdef CONFIG_STM32_SPI1
 void stm32_spi1select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  spidbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
 }
 
 uint8_t stm32_spi1status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
@@ -146,7 +129,7 @@ uint8_t stm32_spi1status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 #ifdef CONFIG_STM32_SPI2
 void stm32_spi2select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  spidbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
 }
 
 uint8_t stm32_spi2status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
@@ -158,7 +141,7 @@ uint8_t stm32_spi2status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 #ifdef CONFIG_STM32_SPI3
 void stm32_spi3select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  spidbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
 }
 
 uint8_t stm32_spi3status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
@@ -187,9 +170,9 @@ uint8_t stm32_spi4status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 #ifdef CONFIG_STM32_SPI5
 void stm32_spi5select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  spidbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
 
-#if defined(CONFIG_STM32_LTDC)
+#if defined(CONFIG_STM32F429I_DISCO_ILI9341)
   if (devid == SPIDEV_DISPLAY)
     {
       stm32_gpiowrite(GPIO_CS_LCD, !selected);
@@ -263,16 +246,15 @@ int stm32_spi4cmddata(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool cmd)
 #ifdef CONFIG_STM32_SPI5
 int stm32_spi5cmddata(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool cmd)
 {
-#if defined(CONFIG_STM32_LTDC)
+#if defined(CONFIG_STM32F429I_DISCO_ILI9341)
   if (devid == SPIDEV_DISPLAY)
     {
-      /* "This is the Data/Command control pad which determines whether the
+      /*  This is the Data/Command control pad which determines whether the
        *  data bits are data or a command.
        */
 
-# if defined(CONFIG_STM32_LTDC)
       (void)stm32_gpiowrite(GPIO_LCD_DC, !cmd);
-# endif
+
       return OK;
     }
 #endif
@@ -283,4 +265,36 @@ int stm32_spi5cmddata(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool cmd)
 
 #endif /* CONFIG_SPI_CMDDATA */
 
-#endif /* CONFIG_STM32_SPI1 || CONFIG_STM32_SPI2 */
+/****************************************************************************
+ * Name: stm32_spi5initialize
+ *
+ * Description:
+ *   Initialize the selected SPI port.
+ *   As long as the method stm32_spibus_initialize recognized the initialized state of
+ *   the spi device by the spi enable flag of the cr1 register, it isn't safe to
+ *   disable the spi device outside of the nuttx spi interface structure. But
+ *   this has to be done as long as the nuttx spi interface doesn't support
+ *   bidirectional data transfer for multiple devices share one spi bus. This
+ *   wrapper does nothing else than store the initialized state of the spi
+ *   device after the first initializing and should be used by each driver who
+ *   shares the spi5 bus.
+ *
+ * Input Parameter:
+ *
+ * Returned Value:
+ *   Valid SPI device structure reference on success; a NULL on failure
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_STM32_SPI5
+FAR struct spi_dev_s *stm32_spi5initialize(void)
+{
+  if (!g_spidev5)
+    {
+      g_spidev5 = stm32_spibus_initialize(5);
+    }
+
+  return g_spidev5;
+}
+#endif
+#endif /* CONFIG_STM32_SPI1 || ... CONFIG_STM32_SPI5 */

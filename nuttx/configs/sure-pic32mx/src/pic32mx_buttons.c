@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/sure-pic32mx/src/pic32mx_buttons.c
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,12 +43,13 @@
 #include <stdbool.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
 #include "up_arch.h"
 
-#include "pic32mx-internal.h"
+#include "pic32mx.h"
 #include "pic32mx-ioport.h"
 #include "pic32mx-adc.h"
 #include "sure-pic32mx.h"
@@ -56,7 +57,7 @@
 #ifdef CONFIG_ARCH_BUTTONS
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* The Sure DB_DP11215 PIC32 Storage Demo Board has three buttons.
  *
@@ -211,12 +212,14 @@ xcpt_t board_button_irq(int id, xcpt_t irqhandler)
 
   if (id < NUM_BUTTONS)
     {
+      pic32mx_gpioirqdisable(g_buttoncn[id]);
       oldhandler = pic32mx_gpioattach(g_buttonset[id], g_buttoncn[id], irqhandler);
-      if (irqbuttron)
+      if (irqhandler != NULL)
         {
           pic32mx_gpioirqenable(g_buttoncn[id]);
         }
     }
+
   return oldhandler;
 }
 #endif

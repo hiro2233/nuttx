@@ -42,13 +42,12 @@
 
 #include <stdint.h>
 #include <time.h>
-#include <wdog.h>
 #include <debug.h>
 
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/arp.h>
+#include <nuttx/wdog.h>
+#include <nuttx/net/netconfig.h>
 
-#include "net_internal.h"
+#include <arp/arp.h>
 
 #ifdef CONFIG_NET_ARP
 
@@ -89,7 +88,7 @@ static WDOG_ID g_arptimer;           /* ARP timer */
  *
  ****************************************************************************/
 
-static void arptimer_poll(int argc, uint32_t arg, ...)
+static void arptimer_poll(int argc, wdparm_t arg, ...)
 {
   /* Call the ARP timer function every 10 seconds. */
 
@@ -105,11 +104,11 @@ static void arptimer_poll(int argc, uint32_t arg, ...)
  ****************************************************************************/
 
 /****************************************************************************
- * Function: arp_timer_init
+ * Function: arp_timer_initialize
  *
  * Description:
- *   Initialized the 10 second timer that is need by uIP to age ARP
- *   associations
+ *   Initialized the 10 second timer that is need by the ARP logic in order
+ *   to age ARP address associations
  *
  * Parameters:
  *   None
@@ -122,12 +121,12 @@ static void arptimer_poll(int argc, uint32_t arg, ...)
  *
  ****************************************************************************/
 
-void arp_timer_init(void)
+void arp_timer_initialize(void)
 {
   /* Create and start the ARP timer */
 
   g_arptimer = wd_create();
- (void)wd_start(g_arptimer, ARPTIMER_WDINTERVAL, arptimer_poll, 0);
+  (void)wd_start(g_arptimer, ARPTIMER_WDINTERVAL, arptimer_poll, 0);
 }
 
 #endif /* CONFIG_NET_ARP */

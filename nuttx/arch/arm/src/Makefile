@@ -1,7 +1,7 @@
 ############################################################################
 # arch/arm/src/Makefile
 #
-#   Copyright (C) 2007-2009, 2011-2012 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2007-2009, 2011-2012, 2014-2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -34,29 +34,41 @@
 ############################################################################
 
 -include $(TOPDIR)/Make.defs
--include chip/Make.defs
+-include chip$(DELIM)Make.defs
 
-ifeq ($(CONFIG_ARCH_CORTEXA5),y)   # Cortex-A5 is ARMv7-A
+ifeq ($(CONFIG_ARCH_CORTEXA5),y)        # Cortex-A5 is ARMv7-A
 ARCH_SUBDIR = armv7-a
-else
-ifeq ($(CONFIG_ARCH_CORTEXA8),y)   # Cortex-A8 is ARMv7-A
+else ifeq ($(CONFIG_ARCH_CORTEXA8),y)   # Cortex-A8 is ARMv7-A
 ARCH_SUBDIR = armv7-a
-else
-ifeq ($(CONFIG_ARCH_CORTEXM3),y)   # Cortex-M3 is ARMv7-M
+else ifeq ($(CONFIG_ARCH_CORTEXA9),y)   # Cortex-A9 is ARMv7-A
+ARCH_SUBDIR = armv7-a
+else ifeq ($(CONFIG_ARCH_CORTEXR4),y)   # Cortex-R4 is ARMv7-R
+ARCH_SUBDIR = armv7-r
+else ifeq ($(CONFIG_ARCH_CORTEXR4F),y)  # Cortex-R4F is ARMv7-R
+ARCH_SUBDIR = armv7-r
+else ifeq ($(CONFIG_ARCH_CORTEXR5),y)   # Cortex-R5 is ARMv7-R
+ARCH_SUBDIR = armv7-r
+else ifeq ($(CONFIG_ARCH_CORTEXR5F),y)  # Cortex-R5F is ARMv7-R
+ARCH_SUBDIR = armv7-r
+else ifeq ($(CONFIG_ARCH_CORTEXR7),y)   # Cortex-R7 is ARMv7-R
+ARCH_SUBDIR = armv7-r
+else ifeq ($(CONFIG_ARCH_CORTEXR7F),y)  # Cortex-R7F is ARMv7-R
+ARCH_SUBDIR = armv7-r
+else ifeq ($(CONFIG_ARCH_CORTEXM3),y)   # Cortex-M3 is ARMv7-M
 ARCH_SUBDIR = armv7-m
-else
-ifeq ($(CONFIG_ARCH_CORTEXM4),y)   # Cortex-M4 is ARMv7E-M
+else ifeq ($(CONFIG_ARCH_CORTEXM4),y)   # Cortex-M4 is ARMv7E-M
 ARCH_SUBDIR = armv7-m
-else
-ifeq ($(CONFIG_ARCH_CORTEXM0),y)   # Cortex-M0 is ARMv6-M
+else ifeq ($(CONFIG_ARCH_CORTEXM7),y)   # Cortex-M4 is ARMv7E-M
+ARCH_SUBDIR = armv7-m
+else ifeq ($(CONFIG_ARCH_CORTEXM0),y)   # Cortex-M0 is ARMv6-M
 ARCH_SUBDIR = armv6-m
-else
+else                                    # ARM9, ARM7TDMI
 ARCH_SUBDIR = arm
 endif
-endif
-endif
-endif
-endif
+
+CPPFLAGS += $(EXTRADEFINES)
+CFLAGS += $(EXTRADEFINES)
+CXXFLAGS += $(EXTRADEFINES)
 
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
   ARCH_SRCDIR = $(TOPDIR)\arch\$(CONFIG_ARCH)\src
@@ -85,6 +97,7 @@ endif
 # The "head" object
 
 HEAD_OBJ = $(HEAD_ASRC:.S=$(OBJEXT))
+STARTUP_OBJS ?= $(HEAD_OBJ)
 
 # Flat build or kernel-mode objects
 
@@ -113,6 +126,11 @@ UBIN = libuarch$(LIBEXT)
 BIN  = libarch$(LIBEXT)
 
 LDFLAGS += $(ARCHSCRIPT)
+
+# Override in Make.defs if linker is not 'ld'
+
+LDSTARTGROUP ?= --start-group
+LDENDGROUP ?= --end-group
 
 EXTRA_LIBS ?=
 EXTRA_LIBPATHS ?=
@@ -154,9 +172,17 @@ VPATH += chip
 VPATH += common
 VPATH += $(ARCH_SUBDIR)
 
+ifeq ($(CONFIG_ARM_TOOLCHAIN_IAR),y)
+  VPATH += chip$(DELIM)iar
+  VPATH += $(ARCH_SUBDIR)$(DELIM)iar
+else # ifeq ($(CONFIG_ARM_TOOLCHAIN_GNU),y)
+  VPATH += chip$(DELIM)gnu
+  VPATH += $(ARCH_SUBDIR)$(DELIM)gnu
+endif
+
 all: $(HEAD_OBJ) $(BIN)
 
-.PHONY: board/libboard$(LIBEXT)
+.PHONY: board$(DELIM)libboard$(LIBEXT)
 
 $(AOBJS) $(UAOBJS) $(HEAD_OBJ): %$(OBJEXT): %.S
 	$(call ASSEMBLE, $<, $@)
@@ -170,37 +196,37 @@ $(BIN) $(KBIN): $(OBJS)
 $(UBIN): $(UOBJS)
 	$(call ARCHIVE, $@, $(UOBJS))
 
-board/libboard$(LIBEXT):
+board$(DELIM)libboard$(LIBEXT):
 	$(Q) $(MAKE) -C board TOPDIR="$(TOPDIR)" libboard$(LIBEXT) EXTRADEFINES=$(EXTRADEFINES)
 
-nuttx$(EXEEXT): $(HEAD_OBJ) board/libboard$(LIBEXT)
+nuttx$(EXEEXT): $(HEAD_OBJ) board$(DELIM)libboard$(LIBEXT)
 	$(Q) echo "LD: nuttx"
 	$(Q) $(LD) --entry=__start $(LDFLAGS) $(LIBPATHS) $(EXTRA_LIBPATHS) \
 		-o $(NUTTX) $(HEAD_OBJ) $(EXTRA_OBJS) \
-		--start-group $(LDLIBS) $(EXTRA_LIBS) $(LIBGCC) --end-group
+		$(LDSTARTGROUP) $(LDLIBS) $(EXTRA_LIBS) $(LIBGCC) $(LDENDGROUP)
 ifneq ($(CONFIG_WINDOWS_NATIVE),y)
 	$(Q) $(NM) $(NUTTX) | \
 	grep -v '\(compiled\)\|\(\$(OBJEXT)$$\)\|\( [aUw] \)\|\(\.\.ng$$\)\|\(LASH[RL]DI\)' | \
-	sort > $(TOPDIR)/System.map
+	sort > $(TOPDIR)$(DELIM)System.map
 endif
 
 # This is part of the top-level export target
 # Note that there may not be a head object if layout is handled
 # by the linker configuration.
 
-export_head: board/libboard$(LIBEXT) $(HEAD_OBJ)
-ifneq ($(HEAD_OBJ),)
-	$(Q) if [ -d "$(EXPORT_DIR)/startup" ]; then \
-		cp -f $(HEAD_OBJ) "$(EXPORT_DIR)/startup"; \
+export_startup: board$(DELIM)libboard$(LIBEXT) $(STARTUP_OBJS)
+ifneq ($(STARTUP_OBJS),)
+	$(Q) if [ -d "$(EXPORT_DIR)$(DELIM)startup" ]; then \
+		cp -f $(STARTUP_OBJS) "$(EXPORT_DIR)$(DELIM)startup$(DELIM)."; \
 	 else \
-		echo "$(EXPORT_DIR)/startup does not exist"; \
+		echo "$(EXPORT_DIR)$(DELIM)startup does not exist"; \
 	exit 1; \
 	fi
 endif
 
 # Dependencies
 
-.depend: Makefile chip/Make.defs $(SRCS)
+.depend: Makefile chip$(DELIM)Make.defs $(SRCS)
 ifeq ($(BOARDMAKE),y)
 	$(Q) $(MAKE) -C board TOPDIR="$(TOPDIR)" depend
 endif

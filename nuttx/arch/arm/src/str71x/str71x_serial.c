@@ -55,12 +55,11 @@
 #include "chip.h"
 #include "up_arch.h"
 #include "up_internal.h"
-#include "os_internal.h"
 
-#include "str71x_internal.h"
+#include "str71x.h"
 
 /****************************************************************************
- * Pre-procesor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Some sanity checks *******************************************************/
@@ -105,22 +104,22 @@
 #    define CONSOLE_DEV   g_uart0port     /* UART0 is console */
 #  endif
 #  define TTYS0_DEV       g_uart0port     /* UART0 is tty0 */
-#  if CONFIG_STR71X_UART1
+#  if defined(CONFIG_STR71X_UART1)
 #    define TTYS1_DEV     g_uart1port     /* UART1 is tty1 */
-#    if CONFIG_STR71X_UART2
+#    if defined(CONFIG_STR71X_UART2)
 #      define TTYS2_DEV   g_uart2port     /* UART2 is tty2 */
-#      if CONFIG_STR71X_UART3
+#      if defined(CONFIG_STR71X_UART3)
 #        define TTYS3_DEV g_uart3port     /* UART3 is tty3 */
 #      endif
-#    elif CONFIG_STR71X_UART3
+#    elif defined(CONFIG_STR71X_UART3)
 #      define TTYS2_DEV   g_uart3port     /* UART3 is tty2 */
 #    endif
-#  elif CONFIG_STR71X_UART2
+#  elif defined(CONFIG_STR71X_UART2)
 #    define TTYS1_DEV   g_uart2port       /* UART2 is tty1 */
-#    if CONFIG_STR71X_UART3
+#    if defined(CONFIG_STR71X_UART3)
 #      define TTYS2_DEV g_uart3port       /* UART3 is tty2 */
 #    endif
-#  elif CONFIG_STR71X_UART3
+#  elif defined(CONFIG_STR71X_UART3)
 #    define TTYS1_DEV   g_uart3port       /* UART3 is tty1 */
 #  endif
 #elif defined(CONFIG_UART1_SERIAL_CONSOLE)
@@ -133,18 +132,18 @@
 #    define TTYS1_DEV     g_uart0port     /* UART0 is tty1 */
 #    if CONFIG_STR71X_UART2
 #      define TTYS2_DEV   g_uart2port     /* UART2 is tty2 */
-#      if CONFIG_STR71X_UART3
+#      if defined(CONFIG_STR71X_UART3)
 #        define TTYS3_DEV g_uart3port     /* UART3 is tty3 */
 #      endif
-#    elif CONFIG_STR71X_UART3
+#    elif defined(CONFIG_STR71X_UART3)
 #      define TTYS2_DEV   g_uart3port     /* UART3 is tty2 */
 #    endif
 #  elif CONFIG_STR71X_UART2
 #    define TTYS1_DEV   g_uart2port       /* UART2 is tty1 */
-#    if CONFIG_STR71X_UART3
+#    if defined(CONFIG_STR71X_UART3)
 #      define TTYS2_DEV g_uart3port       /* UART3 is tty2 */
 #    endif
-#  elif CONFIG_STR71X_UART3
+#  elif defined(CONFIG_STR71X_UART3)
 #    define TTYS1_DEV   g_uart3port       /* UART3 is tty1 */
 #  endif
 #elif defined(CONFIG_UART2_SERIAL_CONSOLE)
@@ -155,20 +154,20 @@
 #  define TTYS0_DEV       g_uart2port     /* UART2 is tty0 */
 #  if CONFIG_STR71X_UART0
 #    define TTYS1_DEV     g_uart0port     /* UART0 is tty1 */
-#    if CONFIG_STR71X_UART1
+#    if defined(CONFIG_STR71X_UART1)
 #      define TTYS2_DEV   g_uart1port     /* UART1 is tty2 */
-#      if CONFIG_STR71X_UART3
+#      if defined(CONFIG_STR71X_UART3)
 #        define TTYS3_DEV g_uart3port     /* UART3 is tty3 */
 #      endif
-#    elif CONFIG_STR71X_UART3
+#    elif defined(CONFIG_STR71X_UART3)
 #      define TTYS2_DEV   g_uart3port     /* UART3 is tty2 */
 #    endif
-#  elif CONFIG_STR71X_UART1
+#  elif defined(CONFIG_STR71X_UART1)
 #    define TTYS1_DEV   g_uart1port       /* UART1 is tty1 */
-#    if CONFIG_STR71X_UART3
+#    if defined(CONFIG_STR71X_UART3)
 #      define TTYS2_DEV g_uart3port       /* UART3 is tty2 */
 #    endif
-#  elif CONFIG_STR71X_UART3
+#  elif defined(CONFIG_STR71X_UART3)
 #    define TTYS1_DEV   g_uart3port       /* UART3 is tty1 */
 #  endif
 #elif defined(CONFIG_UART3_SERIAL_CONSOLE)
@@ -179,20 +178,20 @@
 #  define TTYS0_DEV       g_uart3port     /* UART3 is tty0 */
 #  if CONFIG_STR71X_UART0
 #    define TTYS1_DEV     g_uart0port     /* UART0 is tty1 */
-#    if CONFIG_STR71X_UART1
+#    if defined(CONFIG_STR71X_UART1)
 #      define TTYS2_DEV   g_uart1port     /* UART1 is tty2 */
-#      if CONFIG_STR71X_UART2
+#      if defined(CONFIG_STR71X_UART2)
 #        define TTYS3_DEV g_uart2port     /* UART2 is tty3 */
 #      endif
-#    elif CONFIG_STR71X_UART2
+#    elif defined(CONFIG_STR71X_UART2)
 #      define TTYS2_DEV   g_uart2port     /* UART2 is tty2 */
 #    endif
-#  elif CONFIG_STR71X_UART1
+#  elif defined(CONFIG_STR71X_UART1)
 #    define TTYS1_DEV   g_uart1port       /* UART1 is tty1 */
-#    if CONFIG_STR71X_UART2
+#    if defined(CONFIG_STR71X_UART2)
 #      define TTYS2_DEV g_uart2port       /* UART2 is tty2 */
 #    endif
-#  elif CONFIG_STR71X_UART2
+#  elif defined(CONFIG_STR71X_UART2)
 #    define TTYS1_DEV   g_uart2port       /* UART2 is tty1 */
 #  endif
 #else
@@ -266,7 +265,7 @@ static bool up_txready(struct uart_dev_s *dev);
 static bool up_txempty(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -511,7 +510,7 @@ static inline void up_waittxnotfull(struct up_dev_s *priv)
 static int up_setup(struct uart_dev_s *dev)
 {
 #ifndef CONFIG_SUPPRESS_UART_CONFIG
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint32_t divisor;
   uint32_t baud;
   uint16_t cr;
@@ -524,7 +523,7 @@ static int up_setup(struct uart_dev_s *dev)
 
   /* Get mode setting */
 
-  cr = STR71X_UARTCR_RUN|STR71X_UARTCR_RXENABLE|STR71X_UARTCR_FIFOENABLE;
+  cr = STR71X_UARTCR_RUN | STR71X_UARTCR_RXENABLE | STR71X_UARTCR_FIFOENABLE;
 
   if (priv->bits == 7)
     {
@@ -593,7 +592,7 @@ static int up_setup(struct uart_dev_s *dev)
 
 static void up_shutdown(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_disableuartint(priv, NULL);
 }
 
@@ -614,7 +613,7 @@ static void up_shutdown(struct uart_dev_s *dev)
 
 static int up_attach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   int ret;
 
   /* Attach and enable the IRQ */
@@ -622,18 +621,18 @@ static int up_attach(struct uart_dev_s *dev)
   ret = irq_attach(priv->irq, up_interrupt);
   if (ret == OK)
     {
-       /* Enable the interrupt (RX and TX interrupts are still disabled
-        * in the UART
-        */
+      /* Enable the interrupt (RX and TX interrupts are still disabled
+       * in the UART
+       */
 
-       up_enable_irq(priv->irq);
+      up_enable_irq(priv->irq);
 
 #ifdef CONFIG_ARCH_IRQPRIO
-       /* Set the uart interrupt priority (the default value is one) */
+      /* Set the uart interrupt priority (the default value is one) */
 
-       up_prioritize_irq(priv->irq, CONFIG_UART_PRI);
-    }
+      up_prioritize_irq(priv->irq, CONFIG_UART_PRI);
 #endif
+    }
 
   return ret;
 }
@@ -650,7 +649,7 @@ static int up_attach(struct uart_dev_s *dev)
 
 static void up_detach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_disable_irq(priv->irq);
   irq_detach(priv->irq);
 }
@@ -707,7 +706,7 @@ static int up_interrupt(int irq, void *context)
       PANIC();
     }
 
-  priv = (struct up_dev_s*)dev->priv;
+  priv = (struct up_dev_s *)dev->priv;
   DEBUGASSERT(priv && dev);
 
   /* Loop until there are no characters to be transferred or,
@@ -728,10 +727,10 @@ static int up_interrupt(int irq, void *context)
       if ((priv->sr  & RXAVAILABLE_BITS) != 0 && /* Data available in Rx FIFO */
           (priv->ier & RXENABLE_BITS)    != 0)   /* Rx FIFO interrupts enabled */
         {
-           /* Rx buffer not empty ... process incoming bytes */
+          /* Rx buffer not empty ... process incoming bytes */
 
-           uart_recvchars(dev);
-           handled = true;
+          uart_recvchars(dev);
+          handled = true;
         }
 
       /* Handle outgoing, transmit bytes */
@@ -739,10 +738,10 @@ static int up_interrupt(int irq, void *context)
       if ((priv->sr & STR71X_UARTSR_TF)    == 0 && /* Tx FIFO not full */
           (priv->ier & STR71X_UARTIER_THE) != 0)   /* Tx Half empty interrupt enabled */
         {
-           /* Tx FIFO not full ... process outgoing bytes */
+          /* Tx FIFO not full ... process outgoing bytes */
 
-           uart_xmitchars(dev);
-           handled = true;
+          uart_xmitchars(dev);
+          handled = true;
         }
     }
 
@@ -770,7 +769,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 #ifdef CONFIG_SERIAL_TIOCSERGSTRUCT
     case TIOCSERGSTRUCT:
       {
-         struct up_dev_s *user = (struct up_dev_s*)arg;
+         struct up_dev_s *user = (struct up_dev_s *)arg;
          if (!user)
            {
              ret = -EINVAL;
@@ -803,7 +802,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
 static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint16_t rxbufr;
 
   rxbufr  = up_serialin(priv, STR71X_UART_RXBUFR_OFFSET);
@@ -821,7 +820,7 @@ static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 
 static void up_rxint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   if (enable)
     {
       /* Receive an interrupt when the Rx FIFO is half full (or if a timeout
@@ -849,7 +848,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
 
 static bool up_rxavailable(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   return ((up_serialin(priv, STR71X_UART_SR_OFFSET) & RXAVAILABLE_BITS) != 0);
 }
 
@@ -863,7 +862,7 @@ static bool up_rxavailable(struct uart_dev_s *dev)
 
 static void up_send(struct uart_dev_s *dev, int ch)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_serialout(priv, STR71X_UART_TXBUFR_OFFSET, (uint16_t)ch);
 }
 
@@ -877,7 +876,7 @@ static void up_send(struct uart_dev_s *dev, int ch)
 
 static void up_txint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   if (enable)
     {
       /* Set to receive an interrupt when the TX fifo is half emptied */
@@ -905,7 +904,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
 
 static bool up_txready(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   return ((up_serialin(priv, STR71X_UART_SR_OFFSET) & STR71X_UARTSR_TF) == 0);
 }
 
@@ -919,7 +918,7 @@ static bool up_txready(struct uart_dev_s *dev)
 
 static bool up_txempty(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   return ((up_serialin(priv, STR71X_UART_SR_OFFSET) & STR71X_UARTSR_TE) != 0);
 }
 
@@ -1006,7 +1005,7 @@ void up_serialinit(void)
 int up_putc(int ch)
 {
 #ifdef HAVE_CONSOLE
-  struct up_dev_s *priv = (struct up_dev_s*)CONSOLE_DEV.priv;
+  struct up_dev_s *priv = (struct up_dev_s *)CONSOLE_DEV.priv;
   uint16_t ier;
 
   up_disableuartint(priv, &ier);

@@ -56,13 +56,14 @@
 #endif /* __ASSEMBLY__ */
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

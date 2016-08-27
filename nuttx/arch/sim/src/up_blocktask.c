@@ -1,7 +1,7 @@
 /****************************************************************************
- * up_blocktask.c
+ * arch/sim/src/up_blocktask.c
  *
- *   Copyright (C) 2007-2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,21 +44,10 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/sched.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -86,7 +75,7 @@
 
 void up_block_task(struct tcb_s *tcb, tstate_t task_state)
 {
-  struct tcb_s *rtcb = (struct tcb_s*)g_readytorun.head;
+  FAR struct tcb_s *rtcb = this_task();
   bool switch_needed;
 
   /* Verify that the context switch can be performed */
@@ -94,7 +83,7 @@ void up_block_task(struct tcb_s *tcb, tstate_t task_state)
   ASSERT((tcb->task_state >= FIRST_READY_TO_RUN_STATE) &&
          (tcb->task_state <= LAST_READY_TO_RUN_STATE));
 
-  sdbg("Blocking TCB=%p\n", tcb);
+  //sinfo("Blocking TCB=%p\n", tcb);
 
   /* Remove the tcb task from the ready-to-run list.  If we
    * are blocking the task at the head of the task list (the
@@ -109,7 +98,7 @@ void up_block_task(struct tcb_s *tcb, tstate_t task_state)
 
   sched_addblocked(tcb, (tstate_t)task_state);
 
-  /* If there are any pending tasks, then add them to the g_readytorun
+  /* If there are any pending tasks, then add them to the ready-to-run
    * task list now
    */
 
@@ -122,19 +111,23 @@ void up_block_task(struct tcb_s *tcb, tstate_t task_state)
 
   if (switch_needed)
     {
+      /* Update scheduler parameters */
+
+      sched_suspend_scheduler(rtcb);
+
       /* Copy the exception context into the TCB at the (old) head of the
-       * g_readytorun Task list. if up_setjmp returns a non-zero
+       * ready-to-run Task list. if up_setjmp returns a non-zero
        * value, then this is really the previously running task restarting!
        */
 
       if (!up_setjmp(rtcb->xcp.regs))
         {
           /* Restore the exception context of the rtcb at the (new) head
-           * of the g_readytorun task list.
+           * of the ready-to-run task list.
            */
 
-          rtcb = (struct tcb_s*)g_readytorun.head;
-          sdbg("New Active Task TCB=%p\n", rtcb);
+          rtcb = this_task();
+          sinfo("New Active Task TCB=%p\n", rtcb);
 
           /* The way that we handle signals in the simulation is kind of
            * a kludge.  This would be unsafe in a truly multi-threaded, interrupt
@@ -143,10 +136,14 @@ void up_block_task(struct tcb_s *tcb, tstate_t task_state)
 
           if (rtcb->xcp.sigdeliver)
             {
-              sdbg("Delivering signals TCB=%p\n", rtcb);
+              sinfo("Delivering signals TCB=%p\n", rtcb);
               ((sig_deliver_t)rtcb->xcp.sigdeliver)(rtcb);
               rtcb->xcp.sigdeliver = NULL;
             }
+
+          /* Reset scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
 
           /* Then switch contexts */
 

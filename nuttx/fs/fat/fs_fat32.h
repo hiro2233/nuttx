@@ -52,7 +52,7 @@
 #include <nuttx/fs/dirent.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -271,11 +271,15 @@
 #define FSTYPE_FAT16        1
 #define FSTYPE_FAT32        2
 
-/* File buffer flags */
+/* File buffer flags (ff_bflags) */
 
 #define FFBUFF_VALID        1
 #define FFBUFF_DIRTY        2
 #define FFBUFF_MODIFIED     4
+
+/* Mount status flags (ff_bflags) */
+
+#define UMOUNT_FORCED       8
 
 /****************************************************************************
  * These offset describe the FSINFO sector
@@ -491,7 +495,7 @@
 #  define LDIR_GETWCHAR6(p)        fat_getuint16(UBYTE_PTR(p,LDIR_WCHAR6_11))
 #  define LDIR_GETWCHAR7(p)        fat_getuint16(UBYTE_PTR(p,LDIR_WCHAR6_11+2))
 #  define LDIR_GETWCHAR8(p)        fat_getuint16(UBYTE_PTR(p,LDIR_WCHAR6_11+4))
-#  define LDIR_GETWCHAR8(p)        fat_getuint16(UBYTE_PTR(p,LDIR_WCHAR6_11+6))
+#  define LDIR_GETWCHAR9(p)        fat_getuint16(UBYTE_PTR(p,LDIR_WCHAR6_11+6))
 #  define LDIR_GETWCHAR10(p)       fat_getuint16(UBYTE_PTR(p,LDIR_WCHAR6_11+8))
 #  define LDIR_GETWCHAR11(p)       fat_getuint16(UBYTE_PTR(p,LDIR_WCHAR6_11+10))
 #  define LDIR_GETWCHAR12(p)       fat_getuint16(UBYTE_PTR(p,LDIR_WCHAR12_13))
@@ -546,7 +550,7 @@
 #  define LDIR_PUTWCHAR6(p)        fat_putuint16(UBYTE_PTR(p,LDIR_WCHAR6_11),v)
 #  define LDIR_PUTWCHAR7(p)        fat_putuint16(UBYTE_PTR(p,LDIR_WCHAR6_11+2),v)
 #  define LDIR_PUTWCHAR8(p)        fat_putuint16(UBYTE_PTR(p,LDIR_WCHAR6_11+4),v)
-#  define LDIR_PUTWCHAR8(p)        fat_putuint16(UBYTE_PTR(p,LDIR_WCHAR6_11+6),v)
+#  define LDIR_PUTWCHAR9(p)        fat_putuint16(UBYTE_PTR(p,LDIR_WCHAR6_11+6),v)
 #  define LDIR_PUTWCHAR10(p)       fat_putuint16(UBYTE_PTR(p,LDIR_WCHAR6_11+8),v)
 #  define LDIR_PUTWCHAR11(p)       fat_putuint16(UBYTE_PTR(p,LDIR_WCHAR6_11+10),v)
 #  define LDIR_PUTWCHAR12(p)       fat_putuint16(UBYTE_PTR(p,LDIR_WCHAR12_13),v)
@@ -701,8 +705,8 @@
 #  define fat_io_alloc(s)  fat_dma_alloc(s)
 #  define fat_io_free(m,s) fat_dma_free(m,s)
 #else
-#  define fat_io_alloc(s)  kmalloc(s)
-#  define fat_io_free(m,s) kfree(m)
+#  define fat_io_alloc(s)  kmm_malloc(s)
+#  define fat_io_free(m,s) kmm_free(m)
 #endif
 
 /****************************************************************************
@@ -753,7 +757,7 @@ struct fat_mountpt_s
 struct fat_file_s
 {
   struct fat_file_s *ff_next;      /* Retained in a singly linked list */
-  uint8_t  ff_bflags;              /* The file buffer flags */
+  uint8_t  ff_bflags;              /* The file buffer/mount flags */
   uint8_t  ff_oflags;              /* Flags provided when file was opened */
   uint8_t  ff_sectorsincluster;    /* Sectors remaining in cluster */
   uint16_t ff_dirindex;            /* Index into ff_dirsector to directory entry */
@@ -766,7 +770,7 @@ struct fat_file_s
   uint8_t *ff_buffer;              /* File buffer (for partial sector accesses) */
 };
 
-/* This structure holds the sequency of directory entries used by one
+/* This structure holds the sequence of directory entries used by one
  * file element (directory or file).  For short file names, this is
  * single diretory entry.  But for long file names, the is a sequence
  * of directory entries.  Long directory name entries appear in reverse
@@ -843,7 +847,7 @@ struct fat_dirinfo_s
 #endif
 
 /****************************************************************************
- * Global Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************

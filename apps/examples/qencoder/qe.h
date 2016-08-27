@@ -43,78 +43,29 @@
 #include <nuttx/config.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
-/* Configuration ************************************************************/
-/* CONFIG_NSH_BUILTIN_APPS - Build the QE test as an NSH built-in function.
- *  Default: Built as a standalone problem
- * CONFIG_EXAMPLES_QENCODER_DEVPATH - The path to the QE device. Default:
- *  /dev/qe0
- * CONFIG_EXAMPLES_QENCODER_NSAMPLES - If CONFIG_NSH_BUILTIN_APPS
- *   is defined, then the number of samples is provided on the command line
- *   and this value is ignored.  Otherwise, this number of samples is
- *   collected and the program terminates.  Default:  Samples are collected
- *   indefinitely.
- * CONFIG_EXAMPLES_QENCODER_DELAY - This value provides the delay (in
- *   milliseonds) between each sample.  If CONFIG_NSH_BUILTIN_APPS
- *   is defined, then this value is the default delay if no other delay is
- *   provided on the command line.  Default:  100 milliseconds
- */
-
-#ifndef CONFIG_QENCODER
-#  error "QE device support is not enabled (CONFIG_QENCODER)"
-#endif
-
-#ifndef CONFIG_EXAMPLES_QENCODER_DEVPATH
-#  define CONFIG_EXAMPLES_QENCODER_DEVPATH "/dev/qe0"
-#endif
-
-#ifndef CONFIG_EXAMPLES_QENCODER_DELAY
-#  define CONFIG_EXAMPLES_QENCODER_DELAY 100
-#endif
-
-/* Debug ********************************************************************/
-
-#ifdef CONFIG_CPP_HAVE_VARARGS
-#  ifdef CONFIG_DEBUG
-#    define message(...) syslog(__VA_ARGS__)
-#    define msgflush()
-#  else
-#    define message(...) printf(__VA_ARGS__)
-#    define msgflush() fflush(stdout)
-#  endif
-#else
-#  ifdef CONFIG_DEBUG
-#    define message syslog
-#    define msgflush()
-#  else
-#    define message printf
-#    define msgflush() fflush(stdout)
-#  endif
-#endif
 
 /****************************************************************************
  * Public Types
  ****************************************************************************/
 
-#ifdef CONFIG_NSH_BUILTIN_APPS
 struct qe_example_s
 {
   bool         initialized; /* True: QE devices have been initialized */
-  bool         reset;       /* True: set the count back to zero */
   FAR char    *devpath;     /* Path to the QE device */
+#ifdef CONFIG_NSH_BUILTIN_APPS
+  bool         reset;       /* True: set the count back to zero */
   unsigned int nloops;      /* Collect this number of samples */
   unsigned int delay;       /* Delay this number of seconds between samples */
-};
 #endif
+};
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
-#ifdef CONFIG_NSH_BUILTIN_APPS
 extern struct qe_example_s g_qeexample;
-#endif
 
 /****************************************************************************
  * Public Function Prototypes

@@ -46,10 +46,10 @@
 #include "mpu.h"
 #include "stm32_mpuinit.h"
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_ARMV7M_MPU)
+#if defined(CONFIG_BUILD_PROTECTED) && defined(CONFIG_ARM_MPU)
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #ifndef MAX
@@ -95,10 +95,10 @@ void stm32_mpuinitialize(void)
 
   /* Configure user flash and SRAM space */
 
-  mpu_userflash(USERSPACE->us_textstart,
-                USERSPACE->us_textend - USERSPACE->us_textstart);
+  mpu_user_flash(USERSPACE->us_textstart,
+                 USERSPACE->us_textend - USERSPACE->us_textstart);
 
-  mpu_userintsram(datastart, dataend - datastart);
+  mpu_user_intsram(datastart, dataend - datastart);
 
   /* Then enable the MPU */
 
@@ -117,8 +117,8 @@ void stm32_mpuinitialize(void)
 
 void stm32_mpu_uheap(uintptr_t start, size_t size)
 {
-  mpu_userintsram(start, size);
+  mpu_user_intsram(start, size);
 }
 
-#endif /* CONFIG_NUTTX_KERNEL && CONFIG_ARMV7M_MPU */
+#endif /* CONFIG_BUILD_PROTECTED && CONFIG_ARM_MPU */
 

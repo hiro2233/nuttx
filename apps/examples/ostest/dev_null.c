@@ -74,6 +74,7 @@ int dev_null(void)
       close(fd);
       return -1;
     }
+
   printf("dev_null: Read %d bytes from /dev/null\n", nbytes);
 
   nbytes = write(fd, buffer, 1024);
@@ -83,6 +84,7 @@ int dev_null(void)
       close(fd);
       return -1;
     }
+
   printf("dev_null: Wrote %d bytes to /dev/null\n", nbytes);
 
   close(fd);

@@ -59,7 +59,7 @@
 #ifdef CONFIG_INPUT_ADS7843E
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 
@@ -71,8 +71,8 @@
 #  error "Touchscreen support requires CONFIG_LPC17_SSP1"
 #endif
 
-#ifndef CONFIG_GPIO_IRQ
-#  error "Touchscreen support requires CONFIG_GPIO_IRQ"
+#ifndef CONFIG_LPC17_GPIOIRQ
+#  error "Touchscreen support requires CONFIG_LPC17_GPIOIRQ"
 #endif
 
 #ifndef CONFIG_ADS7843E_FREQUENCY
@@ -175,7 +175,7 @@ static int tsc_attach(FAR struct ads7843e_config_s *state, xcpt_t handler)
 
 static void tsc_enable(FAR struct ads7843e_config_s *state, bool enable)
 {
-  ivdbg("enable:%d\n", enable);
+  iinfo("enable:%d\n", enable);
   if (enable)
     {
       /* Enable PENIRQ interrupts.  NOTE: The pin interrupt is enabled from worker thread
@@ -217,17 +217,17 @@ static bool tsc_busy(FAR struct ads7843e_config_s *state)
 
 #else /* XPT2046_NO_BUSY */
 
-#if defined(CONFIG_DEBUG_INPUT) && defined(CONFIG_DEBUG_VERBOSE)
+#if defined(CONFIG_DEBUG_INPUT) && defined(CONFIG_DEBUG_INFO)
   static bool last = (bool)-1;
 #endif
 
   /* REVISIT:  This might need to be inverted */
 
   bool busy = lpc17_gpioread(GPIO_TC_BUSY);
-#if defined(CONFIG_DEBUG_INPUT) && defined(CONFIG_DEBUG_VERBOSE)
+#if defined(CONFIG_DEBUG_INPUT) && defined(CONFIG_DEBUG_INFO)
   if (busy != last)
     {
-      ivdbg("busy:%d\n", busy);
+      iinfo("busy:%d\n", busy);
       last = busy;
     }
 #endif
@@ -245,7 +245,7 @@ static bool tsc_pendown(FAR struct ads7843e_config_s *state)
    */
 
   bool pendown = !lpc17_gpioread(GPIO_TC_PENIRQ);
-  ivdbg("pendown:%d\n", pendown);
+  iinfo("pendown:%d\n", pendown);
   return pendown;
 }
 
@@ -254,7 +254,7 @@ static bool tsc_pendown(FAR struct ads7843e_config_s *state)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: arch_tcinitialize
+ * Name: board_tsc_setup
  *
  * Description:
  *   Each board that supports a touchscreen device must provide this
@@ -271,13 +271,13 @@ static bool tsc_pendown(FAR struct ads7843e_config_s *state)
  *
  ****************************************************************************/
 
-int arch_tcinitialize(int minor)
+int board_tsc_setup(int minor)
 {
   static bool initialized = false;
   FAR struct spi_dev_s *dev;
   int ret;
 
-  idbg("initialized:%d minor:%d\n", initialized, minor);
+  iinfo("initialized:%d minor:%d\n", initialized, minor);
   DEBUGASSERT(minor == 0);
 
   /* Since there is no uninitialized logic, this initialization can be
@@ -298,10 +298,10 @@ int arch_tcinitialize(int minor)
 
       /* Get an instance of the SPI interface */
 
-      dev = lpc17_sspinitialize(CONFIG_ADS7843E_SPIDEV);
+      dev = lpc17_sspbus_initialize(CONFIG_ADS7843E_SPIDEV);
       if (!dev)
         {
-          idbg("Failed to initialize SPI bus %d\n", CONFIG_ADS7843E_SPIDEV);
+          ierr("ERROR: Failed to initialize SPI bus %d\n", CONFIG_ADS7843E_SPIDEV);
           return -ENODEV;
         }
 
@@ -310,7 +310,7 @@ int arch_tcinitialize(int minor)
       ret = ads7843e_register(dev, &g_tscinfo, CONFIG_ADS7843E_DEVMINOR);
       if (ret < 0)
         {
-          idbg("Failed to register touchscreen device minor=%d\n",
+          ierr("ERROR: Failed to register touchscreen device minor=%d\n",
                CONFIG_ADS7843E_DEVMINOR);
        /* up_spiuninitialize(dev); */
           return -ENODEV;
@@ -323,7 +323,7 @@ int arch_tcinitialize(int minor)
 }
 
 /****************************************************************************
- * Name: arch_tcuninitialize
+ * Name: board_tsc_teardown
  *
  * Description:
  *   Each board that supports a touchscreen device must provide this function.
@@ -338,7 +338,7 @@ int arch_tcinitialize(int minor)
  *
  ****************************************************************************/
 
-void arch_tcuninitialize(void)
+void board_tsc_teardown(void)
 {
   /* No support for un-initializing the touchscreen XPT2046 device yet */
 }

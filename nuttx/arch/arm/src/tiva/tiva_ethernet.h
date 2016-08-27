@@ -1,4 +1,4 @@
-/************************************************************************************
+/****************************************************************************
  * arch/arm/src/tiva/tiva_ethernet.h
  *
  *   Copyright (C) 2009-2010, 2013-2014 Gregory Nutt. All rights reserved.
@@ -31,42 +31,44 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
 #ifndef __ARCH_ARM_SRC_TIVA_TIVA_ETHERNET_H
 #define __ARCH_ARM_SRC_TIVA_TIVA_ETHERNET_H
 
-/************************************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
 #include "chip.h"
 
-#if TIVA_NETHCONTROLLERS > 1
-
-/************************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- ************************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************************
+/****************************************************************************
  * Public Types
- ************************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************************
+/****************************************************************************
  * Inline Functions
- ************************************************************************************/
+ ****************************************************************************/
 
 #ifndef __ASSEMBLY__
 
-/************************************************************************************
+/****************************************************************************
  * Public Data
- ************************************************************************************/
+ ****************************************************************************/
 
+#undef EXTERN
 #if defined(__cplusplus)
+#define EXTERN extern "C"
 extern "C"
 {
+#else
+#define EXTERN extern
 #endif
 
 /****************************************************************************
@@ -77,10 +79,10 @@ extern "C"
  * Function: tiva_ethinitialize
  *
  * Description:
- *   Initialize the Ethernet driver for one interface.  If the Stellaris chip
- *   supports multiple Ethernet controllers, then bould specific logic
+ *   Initialize the Ethernet driver for one interface.  If the Tiva/Stellaris
+ *   chip supports multiple Ethernet controllers, then board specific logic
  *   must implement up_netinitialize() and call this function to initialize
- *   the desiresed interfaces.
+ *   the desired interfaces.
  *
  * Parameters:
  *   None
@@ -92,12 +94,29 @@ extern "C"
  *
  ****************************************************************************/
 
+#if TIVA_NETHCONTROLLERS > 1
 int tiva_ethinitialize(int intf);
+#endif
 
+/****************************************************************************
+ * Name: tiva_ethernetmac
+ *
+ * Description:
+ *   For the Ethernet Eval Kits, the MAC address will be stored in the non-
+ *   volatile USER0 and USER1 registers.  If CONFIG_TIVA_BOARDMAC is defined,
+ *   this function will obtain the MAC address from these registers.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_TIVA_BOARDMAC
+struct ether_addr;
+void tiva_ethernetmac(struct ether_addr *ethaddr);
+#endif
+
+#undef EXTERN
 #if defined(__cplusplus)
 }
 #endif
 
 #endif /* __ASSEMBLY__ */
-#endif /* TIVA_NETHCONTROLLERS > 1 */
 #endif /* __ARCH_ARM_SRC_TIVA_TIVA_ETHERNET_H */

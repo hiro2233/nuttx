@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/include/ftpd.h
+ * apps/netutils/ftpd/ftpd.h
  *
  *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -184,7 +184,8 @@ struct ftpd_protocol_s
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

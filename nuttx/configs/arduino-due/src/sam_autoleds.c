@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/arduino-due/src/sam_autoleds.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,16 +43,20 @@
 #include <stdbool.h>
 #include <debug.h>
 
-#include <arch/board/board.h>
+#include <nuttx/board.h>
 
 #include "chip.h"
 #include "sam_gpio.h"
 #include "arduino-due.h"
 
+/* The board.h file may override pin configurations defined in sam_pinmap.h */
+
+#include <arch/board/board.h>
+
 #ifdef CONFIG_ARCH_LEDS
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /*  There are three user-controllable LEDs on board the Arduino Due board:
  *
@@ -87,39 +91,19 @@
  *
  * Thus if LED L is statically on, NuttX has successfully booted and is,
  * apparently, running normmally.  If LED RX is glowing, then NuttX is
- * handling interupts (and also signals and assertions).  If TX is flashing
+ * handling interrupts (and also signals and assertions).  If TX is flashing
  * at approximately 2Hz, then a fatal error has been detected and the system
  */
-
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg  lldbg
-#  define ledvdbg llvdbg
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_led_initialize
+ * Name: board_autoled_initialize
  ****************************************************************************/
 
-void board_led_initialize(void)
+void board_autoled_initialize(void)
 {
   /* Configure RX and TX LED GPIOs for output */
 
@@ -129,10 +113,10 @@ void board_led_initialize(void)
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  ****************************************************************************/
 
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   switch (led)
     {
@@ -178,10 +162,10 @@ void board_led_on(int led)
 }
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  ****************************************************************************/
 
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   switch (led)
     {

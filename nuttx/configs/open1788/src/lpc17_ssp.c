@@ -58,56 +58,30 @@
     defined(CONFIG_LPC17_SSP2)
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
-
-/* Debug ********************************************************************/
-
-#ifdef CONFIG_DEBUG_SPI
-#  define sspdbg  lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define sspvdbg lldbg
-#  else
-#    define sspvdbg(x...)
-#  endif
-#else
-#  define sspdbg(x...)
-#  define sspvdbg(x...)
-#endif
 
 /* Dump GPIO registers */
 
-#ifdef CONFIG_DEBUG_VERBOSE
+#ifdef CONFIG_DEBUG_GPIO_INFO
 #  define ssp_dumpgpio(p,m) lpc17_dumpgpio(p,m)
 #else
 #  define ssp_dumpgpio(p,m)
 #endif
 
 /****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: open1788_sspinitialize
+ * Name: open1788_sspdev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the LPC1766-STK.
  *
  ****************************************************************************/
 
-void weak_function open1788_sspinitialize(void)
+void weak_function open1788_sspdev_initialize(void)
 {
   /* Configure the SSP0 chip select GPIOs. */
 
@@ -137,7 +111,7 @@ void weak_function open1788_sspinitialize(void)
  *   The external functions, lpc17_ssp0/1/2select and lpc17_ssp0/1/2status
  *   must be provided by board-specific logic.  They are implementations of the select
  *   and status methods of the SPI interface defined by struct spi_ops_s (see
- *   include/nuttx/spi/spi.h). All other methods (including lpc17_sspinitialize())
+ *   include/nuttx/spi/spi.h). All other methods (including lpc17_sspbus_initialize())
  *   are provided by common LPC17xx logic.  To use this common SPI logic on your
  *   board:
  *
@@ -146,9 +120,9 @@ void weak_function open1788_sspinitialize(void)
  *   2. Provide lpc17_ssp0/1/2select() and lpc17_ssp0/1/2status() functions
  *      in your board-specific logic.  These functions will perform chip selection
  *      and status operations using GPIOs in the way your board is configured.
- *   3. Add a calls to lpc17_sspinitialize() in your low level application
+ *   3. Add a calls to lpc17_sspbus_initialize() in your low level application
  *      initialization logic
- *   4. The handle returned by lpc17_sspinitialize() may then be used to bind the
+ *   4. The handle returned by lpc17_sspbus_initialize() may then be used to bind the
  *      SPI driver to higher level logic (e.g., calling
  *      mmcsd_spislotinitialize(), for example, will bind the SPI driver to
  *      the SPI MMC/SD driver).
@@ -158,12 +132,12 @@ void weak_function open1788_sspinitialize(void)
 #ifdef CONFIG_LPC17_SSP0
 void  lpc17_ssp0select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  sspdbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
 }
 
 uint8_t lpc17_ssp0status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
-  sspdbg("Returning nothing\n");
+  spiinfo("Returning nothing\n");
   return 0;
 }
 #endif
@@ -171,7 +145,7 @@ uint8_t lpc17_ssp0status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 #ifdef CONFIG_LPC17_SSP1
 void  lpc17_ssp1select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  sspdbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
   if (devid == SPIDEV_TOUCHSCREEN)
     {
       /* Assert/de-assert the CS pin to the touchscreen */
@@ -184,7 +158,7 @@ void  lpc17_ssp1select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool sel
 
 uint8_t lpc17_ssp1status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
-  sspdbg("Returning nothing\n");
+  spiinfo("Returning nothing\n");
   return 0;
 }
 #endif
@@ -192,12 +166,12 @@ uint8_t lpc17_ssp1status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 #ifdef CONFIG_LPC17_SSP2
 void  lpc17_ssp2select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  sspdbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
 }
 
 uint8_t lpc17_ssp2status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
-  sspdbg("Returning nothing\n");
+  spiinfo("Returning nothing\n");
   return 0;
 }
 #endif

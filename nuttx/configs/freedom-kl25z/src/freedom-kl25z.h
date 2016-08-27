@@ -46,7 +46,7 @@
 #include <stdint.h>
 
 /****************************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************************************/
 /* Configuration ************************************************************************************/
 
@@ -103,14 +103,14 @@
  ****************************************************************************************************/
 
 /****************************************************************************************************
- * Name: kl_spiinitialize
+ * Name: kl_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the Freedom KL25Z board.
  *
  ****************************************************************************************************/
 
-void weak_function kl_spiinitialize(void);
+void weak_function kl_spidev_initialize(void);
 
 /****************************************************************************************************
  * Name: kl_usbinitialize
@@ -126,7 +126,7 @@ void weak_function kl_usbinitialize(void);
 #endif
 
 /****************************************************************************************************
- * Name: kl_ledinit
+ * Name: kl_led_initialize
  *
  * Description:
  *   Initialize the on-board LED
@@ -134,7 +134,7 @@ void weak_function kl_usbinitialize(void);
  ****************************************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void kl_ledinit(void);
+void kl_led_initialize(void);
 #endif
 
 

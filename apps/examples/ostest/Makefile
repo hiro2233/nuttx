@@ -1,7 +1,7 @@
 ############################################################################
 # apps/examples/ostest/Makefile
 #
-#   Copyright (C) 2007-2012 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2007-2012, 2014 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -33,131 +33,91 @@
 #
 ############################################################################
 
--include $(TOPDIR)/.config
 -include $(TOPDIR)/Make.defs
-include $(APPDIR)/Make.defs
 
 # ostest built-in application info
 
-APPNAME		= ostest
-PRIORITY	= SCHED_PRIORITY_DEFAULT
-STACKSIZE	= 2048
+APPNAME = ostest
+PRIORITY = SCHED_PRIORITY_DEFAULT
+STACKSIZE = 2048
 
 # NuttX OS Test
 
-ASRCS		=
-CSRCS		= ostest_main.c dev_null.c restart.c
+ASRCS =
+CSRCS = dev_null.c restart.c
+MAINSRC = ostest_main.c
 
 ifeq ($(CONFIG_ARCH_FPU),y)
-CSRCS		+= fpu.c
+CSRCS += fpu.c
+endif
+
+ifeq ($(CONFIG_TLS),y)
+CSRCS += tls.c
+endif
+
+ifeq ($(CONFIG_EXAMPLES_OSTEST_AIO),y)
+CSRCS += aio.c
 endif
 
 ifeq ($(CONFIG_SCHED_WAITPID),y)
-CSRCS		+= waitpid.c
+CSRCS += waitpid.c
 endif
 
 ifneq ($(CONFIG_DISABLE_PTHREAD),y)
-CSRCS		+= cancel.c cond.c mutex.c sem.c barrier.c
-ifneq ($(CONFIG_RR_INTERVAL),0)
-CSRCS		+= roundrobin.c
-endif # CONFIG_RR_INTERVAL
+CSRCS += cancel.c cond.c mutex.c sem.c semtimed.c barrier.c
+
+ifeq ($(CONFIG_FS_NAMED_SEMAPHORES),y)
+CSRCS += nsem.c
+endif
+
 ifeq ($(CONFIG_MUTEX_TYPES),y)
-CSRCS		+= rmutex.c
-endif # CONFIG_MUTEX_TYPES
+CSRCS += rmutex.c
+endif
+
+ifneq ($(CONFIG_RR_INTERVAL),0)
+CSRCS += roundrobin.c
+endif
+
+ifeq ($(CONFIG_SCHED_SPORADIC),y)
+CSRCS += sporadic.c
+endif
 endif # CONFIG_DISABLE_PTHREAD
 
 ifneq ($(CONFIG_DISABLE_SIGNALS),y)
-CSRCS		+= sighand.c
+CSRCS += sigprocmask.c sighand.c signest.c
 ifneq ($(CONFIG_DISABLE_PTHREAD),y)
-ifneq ($(CONFIG_DISABLE_CLOCK),y)
-CSRCS		+= timedwait.c
-endif # CONFIG_DISABLE_CLOCK
+CSRCS += timedwait.c
 endif # CONFIG_DISABLE_PTHREAD
 endif # CONFIG_DISABLE_SIGNALS
 
 ifneq ($(CONFIG_DISABLE_MQUEUE),y)
 ifneq ($(CONFIG_DISABLE_PTHREAD),y)
-CSRCS		+= mqueue.c
-ifneq ($(CONFIG_DISABLE_CLOCK),y)
-CSRCS		+= timedmqueue.c
-endif # CONFIG_DISABLE_CLOCK
+CSRCS += mqueue.c timedmqueue.c
 endif # CONFIG_DISABLE_PTHREAD
 endif # CONFIG_DISABLE_MQUEUE
 
 ifneq ($(CONFIG_DISABLE_POSIX_TIMERS),y)
-CSRCS		+= posixtimer.c
+CSRCS += posixtimer.c
+ifeq ($(CONFIG_SIG_EVTHREAD),y)
+CSRCS += sigev_thread.c
+endif
 endif
 
 ifeq ($(CONFIG_ARCH_HAVE_VFORK),y)
 ifeq ($(CONFIG_SCHED_WAITPID),y)
-CSRCS		+= vfork.c
+CSRCS += vfork.c
 endif
 endif
 
 ifneq ($(CONFIG_DISABLE_SIGNALS),y)
 ifneq ($(CONFIG_DISABLE_PTHREAD),y)
 ifeq ($(CONFIG_PRIORITY_INHERITANCE),y)
-CSRCS		+= prioinherit.c
+CSRCS += prioinherit.c
 endif # CONFIG_PRIORITY_INHERITANCE
 endif # CONFIG_DISABLE_PTHREAD
 endif # CONFIG_DISABLE_SIGNALS
 
-AOBJS		= $(ASRCS:.S=$(OBJEXT))
-COBJS		= $(CSRCS:.c=$(OBJEXT))
+CONFIG_XYZ_PROGNAME ?= ostest$(EXEEXT)
+PROGNAME = $(CONFIG_XYZ_PROGNAME)
 
-SRCS		= $(ASRCS) $(CSRCS)
-OBJS		= $(AOBJS) $(COBJS)
-
-ifeq ($(CONFIG_WINDOWS_NATIVE),y)
-  BIN		= ..\..\libapps$(LIBEXT)
-else
-ifeq ($(WINTOOL),y)
-  BIN		= ..\\..\\libapps$(LIBEXT)
-else
-  BIN		= ../../libapps$(LIBEXT)
-endif
-endif
-
-ROOTDEPPATH	= --dep-path .
-
-# Common build
-
-VPATH		=
-
-all: .built
-.PHONY: clean depend distclean
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-.built: $(OBJS)
-	$(call ARCHIVE, $(BIN), $(OBJS))
-	@touch .built
-
-ifeq ($(CONFIG_NSH_BUILTIN_APPS),y)
-$(BUILTIN_REGISTRY)$(DELIM)$(APPNAME)_main.bdat: $(DEPCONFIG) Makefile
-	$(call REGISTER,$(APPNAME),$(PRIORITY),$(STACKSIZE),$(APPNAME)_main)
-
-context: $(BUILTIN_REGISTRY)$(DELIM)$(APPNAME)_main.bdat
-else
-context:
-endif
-
-.depend: Makefile $(SRCS)
-	@$(MKDEP) $(ROOTDEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make.dep
-	@touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, .built)
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(APPDIR)/Application.mk

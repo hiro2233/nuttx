@@ -1,7 +1,7 @@
 /****************************************************************************
  * apps/nshlib/nsh.h
  *
- *   Copyright (C) 2007-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,7 +57,7 @@
 #include <nuttx/usb/usbdev_trace.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 /* The background commands require pthread support */
@@ -100,14 +100,100 @@
  * hold temporary files must be provided.
  */
 
-#if defined(CONFIG_NSH_CMDPARMS) && !defined(CONFIG_NSH_TMPDIR)
-#  define CONFIG_NSH_TMPDIR "/tmp"
+#if defined(CONFIG_NSH_CMDPARMS) && !defined(CONFIG_LIBC_TMPDIR)
+#  define CONFIG_LIBC_TMPDIR "/tmp"
+#endif
+
+/* Networking support.  Make sure that all non-boolean configuration
+ * settings have some value.
+ */
+
+#ifndef CONFIG_NSH_IPADDR
+#  define CONFIG_NSH_IPADDR    0x0a000002
+#endif
+
+#ifndef CONFIG_NSH_DRIPADDR
+#  define CONFIG_NSH_DRIPADDR  0x0a000001
+#endif
+
+#ifndef CONFIG_NSH_NETMASK
+#  define CONFIG_NSH_NETMASK   0xffffff00
+#endif
+
+#ifndef CONFIG_NSH_DNSIPADDR
+#  define CONFIG_NSH_DNSIPADDR CONFIG_NSH_DRIPADDR
+#endif
+
+#ifndef CONFIG_NSH_MACADDR
+#  define CONFIG_NSH_MACADDR   0x00e0deadbeef
+#endif
+
+#if !defined(CONFIG_NSH_NETINIT_THREAD) || !defined(CONFIG_ARCH_PHY_INTERRUPT) || \
+    !defined(CONFIG_NETDEV_PHY_IOCTL) || !defined(CONFIG_NET_UDP) || \
+     defined(CONFIG_DISABLE_SIGNALS)
+#  undef CONFIG_NSH_NETINIT_MONITOR
+#endif
+
+#ifndef CONFIG_NSH_NETINIT_RETRYMSEC
+#  define CONFIG_NSH_NETINIT_RETRYMSEC 2000
+#endif
+
+#ifndef CONFIG_NSH_NETINIT_SIGNO
+#  define CONFIG_NSH_NETINIT_SIGNO 18
+#endif
+
+#ifndef CONFIG_NSH_NETINIT_THREAD_STACKSIZE
+#  define CONFIG_NSH_NETINIT_THREAD_STACKSIZE 1568
+#endif
+
+#ifndef CONFIG_NSH_NETINIT_THREAD_PRIORITY
+#  define CONFIG_NSH_NETINIT_THREAD_PRIORITY 100
+#endif
+
+/* Some networking commands do not make sense unless there is a network
+ * device.  There might not be a network device if, for example, only Unix
+ * domain sockets were enable.
+ */
+
+#if !defined(CONFIG_NET_ETHERNET) && !defined(CONFIG_NET_LOOPBACK) && \
+    !defined(CONFIG_NET_SLIP) && !defined(CONFIG_NET_TUN)
+  /* No link layer protocol is a good indication that there is no network
+   * device.
+   */
+
+#  undef CONFIG_NSH_DISABLE_IFUPDOWN
+#  undef CONFIG_NSH_DISABLE_IFCONFIG
+#  define CONFIG_NSH_DISABLE_IFUPDOWN 1
+#  define CONFIG_NSH_DISABLE_IFCONFIG 1
 #endif
 
 /* Telnetd requires networking support */
 
 #ifndef CONFIG_NET
 #  undef CONFIG_NSH_TELNET
+#endif
+
+/* get and put require TFTP client support */
+
+#ifndef CONFIG_NETUTILS_TFTPC
+#  undef  CONFIG_NSH_DISABLE_PUT
+#  undef  CONFIG_NSH_DISABLE_GET
+#  define CONFIG_NSH_DISABLE_PUT 1
+#  define CONFIG_NSH_DISABLE_GET 1
+#endif
+
+/* wget depends on web client support */
+
+#ifndef CONFIG_NETUTILS_WEBCLIENT
+#  undef  CONFIG_NSH_DISABLE_WGET
+#  define CONFIG_NSH_DISABLE_WGET 1
+#endif
+
+/* mksmartfs depends on smartfs and mksmartfs support */
+
+#if !defined(CONFIG_FS_SMARTFS) || !defined(CONFIG_FSUTILS_MKSMARTFS)
+#  undef  CONFIG_NSH_DISABLE_MKSMARTFS
+#  define CONFIG_NSH_DISABLE_MKSMARTFS 1
 #endif
 
 /* One front end must be defined */
@@ -146,19 +232,53 @@
 
 #ifdef HAVE_USB_CONSOLE
 
-/* The default USB console device minor number is 0*/
+/* The default USB console device minor number is 0 */
 
 #  ifndef CONFIG_NSH_USBDEV_MINOR
 #    define CONFIG_NSH_USBDEV_MINOR 0
 #  endif
 
-/* The default console device is always /dev/console */
+/* The default USB serial console device */
 
 #  ifndef CONFIG_NSH_USBCONDEV
-#    define CONFIG_NSH_USBCONDEV "/dev/console"
+#    if defined(CONFIG_CDCACM)
+#      define CONFIG_NSH_USBCONDEV "/dev/ttyACM0"
+#    elif defined(CONFIG_PL2303)
+#      define CONFIG_NSH_USBCONDEV "/dev/ttyUSB0"
+#    else
+#      define CONFIG_NSH_USBCONDEV "/dev/console"
+#    endif
 #  endif
 
 #endif /* HAVE_USB_CONSOLE */
+
+/* If a USB keyboard device is selected for NSH input then we need to handle
+ * some special start-up conditions.
+ */
+
+#undef HAVE_USB_KEYBOARD
+
+/* Check pre-requisites */
+
+#if !defined(CONFIG_USBHOST) || !defined(CONFIG_USBHOST_HIDKBD) || \
+    defined(HAVE_USB_CONSOLE)
+#  undef CONFIG_NSH_USBKBD
+#endif
+
+/* Check default settings */
+
+#if defined(CONFIG_NSH_USBKBD)
+
+/* Check for a USB HID keyboard in the configuration */
+
+#  define HAVE_USB_KEYBOARD 1
+
+/* The default keyboard device is /dev/kbda */
+
+#  ifndef NSH_USBKBD_DEVNAME
+#    define NSH_USBKBD_DEVNAME "/dev/kbda"
+#  endif
+#endif /* HAVE_USB_KEYBOARD */
 
 /* USB trace settings */
 
@@ -227,9 +347,9 @@
  * If CONFIG_NSH_TELNET_LOGIN is defined, then these additional
  * options may be specified:
  *
- * CONFIG_NSH_TELNET_USERNAME - Login user name.  Default: "admin"
- * CONFIG_NSH_TELNET_PASSWORD - Login password:  Default: "nuttx"
- * CONFIG_NSH_TELNET_FAILCOUNT - Number of login retry attempts.
+ * CONFIG_NSH_LOGIN_USERNAME - Login user name.  Default: "admin"
+ * CONFIG_NSH_LOGIN_PASSWORD - Login password:  Default: "Administrator"
+ * CONFIG_NSH_LOGIN_FAILCOUNT - Number of login retry attempts.
  *   Default 3.
  */
 
@@ -255,16 +375,16 @@
 
 #ifdef CONFIG_NSH_TELNET_LOGIN
 
-#  ifndef CONFIG_NSH_TELNET_USERNAME
-#    define CONFIG_NSH_TELNET_USERNAME  "admin"
+#  ifndef CONFIG_NSH_LOGIN_USERNAME
+#    define CONFIG_NSH_LOGIN_USERNAME  "admin"
 #  endif
 
-#  ifndef CONFIG_NSH_TELNET_PASSWORD
-#    define CONFIG_NSH_TELNET_PASSWORD  "nuttx"
+#  ifndef CONFIG_NSH_LOGIN_PASSWORD
+#    define CONFIG_NSH_LOGIN_PASSWORD  "nuttx"
 #  endif
 
-#  ifndef CONFIG_NSH_TELNET_FAILCOUNT
-#    define CONFIG_NSH_TELNET_FAILCOUNT 3
+#  ifndef CONFIG_NSH_LOGIN_FAILCOUNT
+#    define CONFIG_NSH_LOGIN_FAILCOUNT 3
 #  endif
 
 #endif /* CONFIG_NSH_TELNET_LOGIN */
@@ -428,7 +548,6 @@
 /* Define to enable dumping of all input/output buffers */
 
 #undef CONFIG_NSH_TELNETD_DUMPBUFFER
-#undef CONFIG_NSH_FULLPATH
 
 /* Make sure that the home directory is defined */
 
@@ -448,7 +567,22 @@
  * large as PATH_MAX.
  */
 
-#if CONFIG_NFILE_DESCRIPTORS > 0
+#define NSH_HAVE_IOBUFFER 1
+
+#if CONFIG_NFILE_DESCRIPTORS <= 0
+#  undef NSH_HAVE_IOBUFFER
+#endif
+
+/* The I/O buffer is needed for the ls, cp, and ps commands.  It is also
+ * needed if the platform supplied MOTD is configured.
+ */
+
+#if defined(CONFIG_NSH_DISABLE_LS) && defined(CONFIG_NSH_DISABLE_CP) && \
+    defined(CONFIG_NSH_DISABLE_PS) && !defined(CONFIG_NSH_PLATFORM_MOTD)
+#  undef NSH_HAVE_IOBUFFER
+#endif
+
+#ifdef NSH_HAVE_IOBUFFER
 #  ifdef CONFIG_NSH_FILEIOSIZE
 #    if CONFIG_NSH_FILEIOSIZE > (PATH_MAX + 1)
 #      define IOBUFFERSIZE CONFIG_NSH_FILEIOSIZE
@@ -458,17 +592,102 @@
 #  else
 #    define IOBUFFERSIZE 1024
 #  endif
-# else
-#    define IOBUFFERSIZE (PATH_MAX + 1)
+#else
+#  define IOBUFFERSIZE (PATH_MAX + 1)
 #endif
 
-/* Certain commands are not availalbe in a kernel build because they depend
- * on interfaces that are not exported by the kernel.
+/* Certain commands are not available in a kernel builds because they depend
+ * on interfaces that are not exported by the kernel.  These are actually
+ * bugs that need to be fixed but for now the commands are simply disabled.
+ * There are three classes of fixes required:
+ *
+ * - Some of these interfaces are inherently internal to the OS (such as
+ *   sched_foreach and foreach_mountpoint) and should never be made
+ *   available to user applications as OS interfaces.  For these, the long
+ *   range solution to restoring the functionality will be to support procfs
+ *   entries the provide the necessary interfaces.
+ * - Other interfaces are more standard and for these there probably should
+ *   be new system calls to support the OS interface.  Such interfaces
+ *   include things like ps, mkfatfs, and mkrd.
+ * - Other interfaces simply need to be moved out of the OS and into the C
+ *   library where they will become accessible to application code.  Such
+ *   interfaces include mkfatfs.
  */
 
-#ifdef CONFIG_NUTTX_KERNEL
-#  undef CONFIG_NSH_DISABLE_DF
+#if defined(CONFIG_BUILD_PROTECTED) || defined(CONFIG_BUILD_KERNEL)
+#  undef  CONFIG_NSH_DISABLE_DF          /* 'df' depends on foreach_mountpoint */
 #  define CONFIG_NSH_DISABLE_DF 1
+#  undef  CONFIG_NSH_DISABLE_MKFATFS     /* 'mkfatfs' depends on mkfatfs interface */
+#  define CONFIG_NSH_DISABLE_MKFATFS 1
+#  undef  CONFIG_NSH_DISABLE_MKRD        /* 'mkrd' depends on ramdisk_register */
+#  define CONFIG_NSH_DISABLE_MKRD 1
+#endif
+
+/* Certain commands/features are only available if the procfs file system is
+ * enabled.
+ */
+
+#if !defined(CONFIG_FS_PROCFS) || defined(CONFIG_FS_PROCFS_EXCLUDE_NET)
+#  undef  CONFIG_NSH_DISABLE_IFCONFIG    /* 'ifconfig' depends on network procfs */
+#  define CONFIG_NSH_DISABLE_IFCONFIG 1
+
+#  undef  CONFIG_NSH_DISABLE_IFUPDOWN    /* 'ifup/down' depend on network procfs */
+#  define CONFIG_NSH_DISABLE_IFUPDOWN 1
+#endif
+
+#if !defined(CONFIG_FS_PROCFS) || defined(CONFIG_FS_PROCFS_EXCLUDE_PROCESS)
+#  undef  CONFIG_NSH_DISABLE_PS          /* 'ps' depends on process procfs */
+#  define CONFIG_NSH_DISABLE_PS 1
+#endif
+
+#define NSH_HAVE_CPULOAD  1
+#if !defined(CONFIG_FS_PROCFS) || defined(CONFIG_FS_PROCFS_EXCLUDE_CPULOAD) || \
+    !defined(CONFIG_SCHED_CPULOAD) || defined(CONFIG_NSH_DISABLE_PS)
+#  undef NSH_HAVE_CPULOAD
+#endif
+
+/* Suppress unused file utilities */
+
+#define NSH_HAVE_CATFILE          1
+#define NSH_HAVE_READFILE         1
+#define NSH_HAVE_FOREACH_DIRENTRY 1
+#define NSH_HAVE_TRIMDIR          1
+#define NSH_HAVE_TRIMSPACES       1
+
+#if CONFIG_NFILE_DESCRIPTORS <= 0
+#  undef NSH_HAVE_CATFILE
+#  undef NSH_HAVE_READFILE
+#  undef NSH_HAVE_FOREACH_DIRENTRY
+#  undef NSH_HAVE_TRIMDIR
+#endif
+
+/* nsh_catfile used by cat, ifconfig, ifup/down */
+
+#if defined(CONFIG_NSH_DISABLE_CAT) && defined(CONFIG_NSH_DISABLE_IFCONFIG) && \
+    defined(CONFIG_NSH_DISABLE_IFUPDOWN)
+#  undef NSH_HAVE_CATFILE
+#endif
+
+/* nsh_readfile used by ps command */
+
+#if defined(CONFIG_NSH_DISABLE_PS)
+#  undef NSH_HAVE_READFILE
+#endif
+
+/* nsh_foreach_direntry used by the ls and ps commands */
+
+#if defined(CONFIG_NSH_DISABLE_LS) && defined(CONFIG_NSH_DISABLE_PS)
+#  undef NSH_HAVE_FOREACH_DIRENTRY
+#endif
+
+#if defined(CONFIG_NSH_DISABLE_CP)
+#  undef NSH_HAVE_TRIMDIR
+#endif
+
+/* nsh_trimspaces used by the set and ps commands */
+
+#if defined(CONFIG_NSH_DISABLE_SET) && defined(CONFIG_NSH_DISABLE_PS)
+#  undef NSH_HAVE_TRIMSPACES
 #endif
 
 /****************************************************************************
@@ -562,16 +781,32 @@ struct nsh_parser_s
 #endif
 };
 
+/* This is the general form of a command handler */
+
 struct nsh_vtbl_s; /* Defined in nsh_console.h */
-typedef int (*cmd_t)(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+typedef CODE int (*nsh_cmd_t)(FAR struct nsh_vtbl_s *vtbl, int argc,
+                              FAR char **argv);
+
+/* This is the form of a callback from nsh_foreach_direntry() */
+
+struct dirent;     /* Defined in dirent.h */
+typedef CODE int (*nsh_direntry_handler_t)(FAR struct nsh_vtbl_s *vtbl,
+                                           FAR const char *dirpath,
+                                           FAR struct dirent *entryp,
+                                           FAR void *pvarg);
 
 /****************************************************************************
  * Public Data
  ****************************************************************************/
 
 extern const char g_nshgreeting[];
+#if defined(CONFIG_NSH_MOTD) && !defined(CONFIG_NSH_PLATFORM_MOTD)
+extern const char g_nshmotd[];
+#endif
+#ifdef CONFIG_NSH_LOGIN
 #if defined(CONFIG_NSH_TELNET_LOGIN) && defined(CONFIG_NSH_TELNET)
 extern const char g_telnetgreeting[];
+#endif
 extern const char g_userprompt[];
 extern const char g_passwordprompt[];
 extern const char g_loginsuccess[];
@@ -579,7 +814,7 @@ extern const char g_badcredentials[];
 extern const char g_loginfailure[];
 #endif
 extern const char g_nshprompt[];
-extern const char g_nshsyntax[];
+extern const char g_fmtsyntax[];
 extern const char g_fmtargrequired[];
 extern const char g_fmtnomatching[];
 extern const char g_fmtarginvalid[];
@@ -608,7 +843,7 @@ int nsh_romfsetc(void);
 #  define nsh_romfsetc() (-ENOSYS)
 #endif
 
-#ifdef CONFIG_NET
+#ifdef CONFIG_NSH_NETINIT
 int nsh_netinit(void);
 #else
 #  define nsh_netinit() (-ENOSYS)
@@ -632,10 +867,9 @@ int nsh_loginscript(FAR struct nsh_vtbl_s *vtbl);
 
 /* Architecture-specific initialization */
 
-#ifdef CONFIG_NSH_ARCHINIT
-int nsh_archinitialize(void);
-#else
-#  define nsh_archinitialize() (-ENOSYS)
+#if defined(CONFIG_NSH_ARCHINIT) && !defined(CONFIG_LIB_BOARDCTL)
+#  warning CONFIG_NSH_ARCHINIT is set, but CONFIG_LIB_BOARDCTL is not
+#  undef CONFIG_NSH_ARCHINIT
 #endif
 
 /* Basic session and message handling */
@@ -643,6 +877,27 @@ int nsh_archinitialize(void);
 struct console_stdio_s;
 int nsh_session(FAR struct console_stdio_s *pstate);
 int nsh_parse(FAR struct nsh_vtbl_s *vtbl, char *cmdline);
+
+/****************************************************************************
+ * Name: nsh_login
+ *
+ * Description:
+ *   Prompt the user for a username and password.  Return a failure if valid
+ *   credentials are not returned (after some retries.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_NSH_CONSOLE_LOGIN
+#  if CONFIG_NFILE_DESCRIPTORS > 0
+int nsh_login(FAR struct console_stdio_s *pstate);
+#  else
+int nsh_stdlogin(FAR struct console_stdio_s *pstate);
+#  endif
+#endif
+
+#ifdef CONFIG_NSH_TELNET_LOGIN
+int nsh_telnetlogin(FAR struct console_stdio_s *pstate);
+#endif
 
 /* Application interface */
 
@@ -680,8 +935,14 @@ void nsh_usbtrace(void);
 
 /* Shell command handlers */
 
+#ifndef CONFIG_NSH_DISABLE_BASENAME
+  int cmd_basename(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#endif
 #if !defined(CONFIG_NSH_DISABLESCRIPT) && !defined(CONFIG_NSH_DISABLE_LOOPS)
   int cmd_break(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#endif
+#ifndef CONFIG_NSH_DISABLE_DIRNAME
+  int cmd_dirname(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #endif
 #ifndef CONFIG_NSH_DISABLE_ECHO
   int cmd_echo(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
@@ -701,6 +962,9 @@ void nsh_usbtrace(void);
 #ifndef CONFIG_NSH_DISABLE_FREE
   int cmd_free(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #endif
+#ifndef CONFIG_NSH_DISABLE_TIME
+  int cmd_time(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#endif
 #ifndef CONFIG_NSH_DISABLE_PS
   int cmd_ps(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #endif
@@ -708,15 +972,21 @@ void nsh_usbtrace(void);
   int cmd_xd(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #endif
 
+#if defined(CONFIG_MODULE) && !defined(CONFIG_NSH_DISABLE_MODCMDS)
+int cmd_insmod(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+int cmd_rmmod(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#if defined(CONFIG_FS_PROCFS) && !defined(CONFIG_FS_PROCFS_EXCLUDE_MODULE)
+int cmd_lsmod(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#endif
+#endif
+
 #if !defined(CONFIG_NSH_DISABLESCRIPT) && !defined(CONFIG_NSH_DISABLE_TEST)
   int cmd_test(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
   int cmd_lbracket(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #endif
 
-#ifndef CONFIG_DISABLE_CLOCK
-#  if defined (CONFIG_RTC) && !defined(CONFIG_NSH_DISABLE_DATE)
-   int cmd_date(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
-#  endif
+#ifndef CONFIG_NSH_DISABLE_DATE
+  int cmd_date(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #endif
 
 #if CONFIG_NFILE_DESCRIPTORS > 0
@@ -738,7 +1008,7 @@ void nsh_usbtrace(void);
 #  ifndef CONFIG_NSH_DISABLE_LS
       int cmd_ls(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #  endif
-#  if defined(CONFIG_SYSLOG) && defined(CONFIG_RAMLOG_SYSLOG) && !defined(CONFIG_NSH_DISABLE_DMESG)
+#  if defined(CONFIG_RAMLOG_SYSLOG) && !defined(CONFIG_NSH_DISABLE_DMESG)
       int cmd_dmesg(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #  endif
 #  if CONFIG_NFILE_STREAMS > 0 && !defined(CONFIG_NSH_DISABLESCRIPT)
@@ -763,10 +1033,14 @@ void nsh_usbtrace(void);
 # endif /* CONFIG_NFILE_STREAMS && NSH_HAVE_DIROPTS */
 
 # ifndef CONFIG_DISABLE_MOUNTPOINT
-#   ifndef CONFIG_NSH_DISABLE_LOSETUP
+#   if defined(CONFIG_DEV_LOOP) && !defined(CONFIG_NSH_DISABLE_LOSETUP)
        int cmd_losetup(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #   endif
-#   ifndef CONFIG_NSH_DISABLE_MKFIFO
+#   if defined(CONFIG_SMART_DEV_LOOP) && !defined(CONFIG_NSH_DISABLE_LOSMART)
+       int cmd_losmart(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#   endif
+#   if defined(CONFIG_PIPES) && CONFIG_DEV_FIFO_SIZE > 0 && \
+      !defined(CONFIG_NSH_DISABLE_MKFIFO)
        int cmd_mkfifo(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #   endif
 #   ifdef CONFIG_FS_READABLE
@@ -790,11 +1064,23 @@ void nsh_usbtrace(void);
          int cmd_mkfatfs(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #     endif
 #   endif /* CONFIG_FS_FAT */
-#   ifdef CONFIG_FS_SMARTFS
+#   if defined(CONFIG_FS_SMARTFS) && defined(CONFIG_FSUTILS_MKSMARTFS)
 #     ifndef CONFIG_NSH_DISABLE_MKSMARTFS
          int cmd_mksmartfs(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #     endif
 #   endif /* CONFIG_FS_SMARTFS */
+#   if defined(CONFIG_NSH_LOGIN_PASSWD) && defined(CONFIG_FS_WRITABLE) && \
+      !defined(CONFIG_FSUTILS_PASSWD_READONLY)
+#     ifndef CONFIG_NSH_DISABLE_USERADD
+         int cmd_useradd(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#     endif
+#     ifndef CONFIG_NSH_DISABLE_USERDEL
+         int cmd_userdel(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#     endif
+#     ifndef CONFIG_NSH_DISABLE_PASSWD
+         int cmd_passwd(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#     endif
+#   endif
 # endif /* !CONFIG_DISABLE_MOUNTPOINT */
 # if !defined(CONFIG_DISABLE_ENVIRON)
 #   ifndef CONFIG_NSH_DISABLE_CD
@@ -807,6 +1093,9 @@ void nsh_usbtrace(void);
 #endif /* CONFIG_NFILE_DESCRIPTORS */
 
 #if defined(CONFIG_NET)
+#  if defined(CONFIG_NET_ARP) && !defined(CONFIG_NSH_DISABLE_ARP)
+      int cmd_arp(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#  endif
 #  if defined(CONFIG_NET_ROUTE) && !defined(CONFIG_NSH_DISABLE_ADDROUTE)
       int cmd_addroute(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #  endif
@@ -832,9 +1121,15 @@ void nsh_usbtrace(void);
 #    endif
 #  endif
 #  if defined(CONFIG_NET_ICMP) && defined(CONFIG_NET_ICMP_PING) && \
-     !defined(CONFIG_DISABLE_CLOCK) && !defined(CONFIG_DISABLE_SIGNALS)
+     !defined(CONFIG_DISABLE_SIGNALS)
 #    ifndef CONFIG_NSH_DISABLE_PING
         int cmd_ping(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#    endif
+#  endif
+#  if defined(CONFIG_NET_ICMPv6) && defined(CONFIG_NET_ICMPv6_PING) && \
+     !defined(CONFIG_DISABLE_SIGNALS)
+#    ifndef CONFIG_NSH_DISABLE_PING6
+        int cmd_ping6(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #    endif
 #  endif
 #  if defined(CONFIG_NET_UDP) && CONFIG_NFILE_DESCRIPTORS > 0
@@ -848,6 +1143,28 @@ void nsh_usbtrace(void);
 #    endif
 #  endif
 #endif /* CONFIG_NET */
+
+#if defined(CONFIG_LIBC_NETDB) && defined(CONFIG_NETDB_DNSCLIENT) && \
+   !defined(CONFIG_NSH_DISABLE_NSLOOKUP)
+   int cmd_nslookup(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#endif
+
+#if defined(CONFIG_BOARDCTL_POWEROFF) && !defined(CONFIG_NSH_DISABLE_POWEROFF)
+   int cmd_poweroff(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#endif
+
+#if defined(CONFIG_BOARDCTL_RESET) && !defined(CONFIG_NSH_DISABLE_REBOOT)
+   int cmd_reboot(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#endif
+
+#if (defined(CONFIG_BOARDCTL_POWEROFF) || defined(CONFIG_BOARDCTL_RESET)) && \
+    !defined(CONFIG_NSH_DISABLE_SHUTDOWN)
+   int cmd_shutdown(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#endif
+
+#ifndef CONFIG_NSH_DISABLE_UNAME
+   int cmd_uname(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
+#endif
 
 #ifndef CONFIG_DISABLE_ENVIRON
 #  ifndef CONFIG_NSH_DISABLE_SET
@@ -892,6 +1209,159 @@ void nsh_usbtrace(void);
 #  ifndef CONFIG_NSH_DISABLE_URLENCODE
       int cmd_urldecode(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv);
 #  endif
+#endif
+
+/****************************************************************************
+ * Name: nsh_extmatch_count
+ *
+ * Description:
+ *   This support function is used to provide support for realine tab-
+ *   completion logic  nsh_extmatch_count() counts the number of matching
+ *   nsh command names
+ *
+ * Input Parameters:
+ *   name    - A point to the name containing the name to be matched.
+ *   matches - A table is size CONFIG_READLINE_MAX_EXTCMDS that can
+ *             be used to remember matching name indices.
+ *   namelen - The lenght of the name to match
+ *
+ * Returned Values:
+ *   The number commands that match to the first namelen characters.
+ *
+ ****************************************************************************/
+
+#if defined(CONFIG_NSH_READLINE) && defined(CONFIG_READLINE_TABCOMPLETION) && \
+    defined(CONFIG_READLINE_HAVE_EXTMATCH)
+int nsh_extmatch_count(FAR char *name, FAR int *matches, int namelen);
+#endif
+
+/****************************************************************************
+ * Name: nsh_extmatch_getname
+ *
+ * Description:
+ *   This support function is used to provide support for realine tab-
+ *   completion logic  nsh_extmatch_getname() will return the full command
+ *   string from an index that was previously saved by nsh_exmatch_count().
+ *
+ * Input Parameters:
+ *   index - The index of the command name to be returned.
+ *
+ * Returned Values:
+ *   The numb
+ *
+ ****************************************************************************/
+
+#if defined(CONFIG_NSH_READLINE) && defined(CONFIG_READLINE_TABCOMPLETION) && \
+    defined(CONFIG_READLINE_HAVE_EXTMATCH)
+FAR const char *nsh_extmatch_getname(int index);
+#endif
+
+/****************************************************************************
+ * Name: nsh_catfile
+ *
+ * Description:
+ *   Dump the contents of a file to the current NSH terminal.
+ *
+ * Input Paratemets:
+ *   vtbl     - The console vtable
+ *   cmd      - NSH command name to use in error reporting
+ *   filepath - The full path to the file to be dumped
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -1 (ERROR) on failure.
+ *
+ ****************************************************************************/
+
+#ifdef NSH_HAVE_CATFILE
+int nsh_catfile(FAR struct nsh_vtbl_s *vtbl, FAR const char *cmd,
+                FAR const char *filepath);
+#endif
+
+/****************************************************************************
+ * Name: nsh_readfile
+ *
+ * Description:
+ *   Read a small file into a user-provided buffer.  The data is assumed to
+ *   be a string and is guaranteed to be NUL-termined.  An error occurs if
+ *   the file content (+terminator)  will not fit into the provided 'buffer'.
+ *
+ * Input Paramters:
+ *   vtbl     - The console vtable
+ *   cmd      - NSH command name to use in error reporting
+ *   filepath - The full path to the file to be read
+ *   buffer   - The user-provided buffer into which the file is read.
+ *   buflen   - The size of the user provided buffer
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success; -1 (ERROR) is returned on any
+ *   failure to read the fil into the buffer.
+ *
+ ****************************************************************************/
+
+#ifdef NSH_HAVE_READFILE
+int nsh_readfile(FAR struct nsh_vtbl_s *vtbl, FAR const char *cmd,
+                 FAR const char *filepath, FAR char *buffer, size_t buflen);
+#endif
+
+/****************************************************************************
+ * Name: nsh_foreach_direntry
+ *
+ * Description:
+ *    Call the provided 'handler' for each entry found in the directory at
+ *    'dirpath'.
+ *
+ * Input Parameters
+ *   vtbl     - The console vtable
+ *   cmd      - NSH command name to use in error reporting
+ *   dirpath  - The full path to the directory to be traversed
+ *   handler  - The handler to be called for each entry of the directory
+ *   pvarg    - User provided argument to be passed to the 'handler'
+ *
+ * Returned Value:
+ *   Zero (OK) returned on success; -1 (ERROR) returned on failure.
+ *
+ ****************************************************************************/
+
+#ifdef NSH_HAVE_FOREACH_DIRENTRY
+int nsh_foreach_direntry(FAR struct nsh_vtbl_s *vtbl, FAR const char *cmd,
+                         FAR const char *dirpath,
+                         nsh_direntry_handler_t handler, void *pvarg);
+#endif
+
+/****************************************************************************
+ * Name: nsh_trimdir
+ *
+ * Description:
+ *   Skip any trailing '/' characters (unless it is also the leading '/')
+ *
+ * Input Parmeters:
+ *   dirpath - The directory path to be trimmed.  May be modified!
+ *
+ * Returned value:
+ *   None
+ *
+ ****************************************************************************/
+
+#ifdef NSH_HAVE_TRIMDIR
+void nsh_trimdir(FAR char *dirpath);
+#endif
+
+/****************************************************************************
+ * Name: nsh_trimspaces
+ *
+ * Description:
+ *   Trim any leading or trailing spaces from a string.
+ *
+ * Input Parmeters:
+ *   str - The sring to be trimmed.  May be modified!
+ *
+ * Returned value:
+ *   The new string pointer.
+ *
+ ****************************************************************************/
+
+#ifdef NSH_HAVE_TRIMSPACES
+FAR char *nsh_trimspaces(FAR char *str);
 #endif
 
 #endif /* __APPS_NSHLIB_NSH_H */

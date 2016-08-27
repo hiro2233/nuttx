@@ -52,7 +52,7 @@
 #include "stm32ldiscovery.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* Configuration *******************************************************************/
 /* Check if we have a timer configured for quadrature encoder -- assume YES. */
@@ -118,34 +118,6 @@
 
 #ifdef HAVE_QENCODER
 
-/* Debug ***************************************************************************/
-/* Non-standard debug that may be enabled just for testing the quadrature encoder */
-
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_QENCODER
-#endif
-
-#ifdef CONFIG_DEBUG_QENCODER
-#  define qedbg                 dbg
-#  define qelldbg               lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define qevdbg              vdbg
-#    define qellvdbg            llvdbg
-#  else
-#    define qevdbg(x...)
-#    define qellvdbg(x...)
-#  endif
-#else
-#  define qedbg(x...)
-#  define qelldbg(x...)
-#  define qevdbg(x...)
-#  define qellvdbg(x...)
-#endif
-
-/************************************************************************************
- * Private Functions
- ************************************************************************************/
-
 /************************************************************************************
  * Public Functions
  ************************************************************************************/
@@ -170,11 +142,11 @@ int qe_devinit(void)
     {
       /* Initialize a quadrature encoder interface. */
 
-      qevdbg("Initializing the quadrature encoder using TIM%d\n", TIMID);
+      sninfo("Initializing the quadrature encoder using TIM%d\n", TIMID);
       ret = stm32_qeinitialize("/dev/qe0", TIMID);
       if (ret < 0)
         {
-          qedbg("stm32_qeinitialize failed: %d\n", ret);
+          snerr("ERROR: stm32_qeinitialize failed: %d\n", ret);
           return ret;
         }
 

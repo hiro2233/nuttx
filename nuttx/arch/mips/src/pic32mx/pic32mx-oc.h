@@ -48,7 +48,7 @@
 #if CHIP_NOC > 0
 
 /************************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* Register Offsets *****************************************************************/
 
@@ -196,7 +196,8 @@
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

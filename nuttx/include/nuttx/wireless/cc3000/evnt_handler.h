@@ -1,4 +1,4 @@
-/*****************************************************************************
+/****************************************************************************
 *
 *  evnt_handler.h  - CC3000 Host Driver Implementation.
 *  Copyright (C) 2011 Texas Instruments Incorporated - http://www.ti.com/
@@ -109,7 +109,8 @@ typedef struct _bsd_gethostbyname_return_t
  ****************************************************************************/
 
 #ifdef  __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 extern unsigned long socket_active_status;

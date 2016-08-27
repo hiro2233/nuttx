@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/armv7-a/arm_dataabort.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,34 +44,13 @@
 
 #include <nuttx/irq.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 
 #ifdef CONFIG_PAGING
 #  include <nuttx/page.h>
 #  include "arm.h"
 #endif
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/* Output debug info if stack dump is selected -- even if
- * debug is not selected.
- */
-
-#ifdef CONFIG_ARCH_STACKDUMP
-# undef  lldbg
-# define lldbg lowsyslog
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -100,18 +79,17 @@
  ****************************************************************************/
 
 #ifdef CONFIG_PAGING
-
 uint32_t *arm_dataabort(uint32_t *regs, uint32_t dfar, uint32_t dfsr)
 {
-  DFAR struct tcb_s *tcb = (DFAR struct tcb_s *)g_readytorun.head;
+  struct tcb_s *tcb = this_task();
   uint32_t *savestate;
 
-  /* Save the saved processor context in current_regs where it can be accessed
+  /* Save the saved processor context in CURRENT_REGS where it can be accessed
    * for register dumps and possibly context switching.
    */
 
-  savestate    = (uint32_t*)current_regs;
-  current_regs = regs;
+  savestate    = (uint32_t *)CURRENT_REGS;
+  CURRENT_REGS = regs;
 
   /* In the NuttX on-demand paging implementation, only the read-only, .text
    * section is paged.  However, the ARM compiler generated PC-relative data
@@ -126,7 +104,7 @@ uint32_t *arm_dataabort(uint32_t *regs, uint32_t dfar, uint32_t dfsr)
    * fatal error.
    */
 
-  pglldbg("DFSR: %08x DFAR: %08x\n", dfsr, dfar);
+  pginfo("DFSR: %08x DFAR: %08x\n", dfsr, dfar);
   if ((dfsr & FSR_MASK) != FSR_PAGE)
     {
       goto segfault;
@@ -137,7 +115,7 @@ uint32_t *arm_dataabort(uint32_t *regs, uint32_t dfar, uint32_t dfsr)
    * (It has not yet been saved in the register context save area).
    */
 
-  pgllvdbg("VBASE: %08x VEND: %08x\n", PG_PAGED_VBASE, PG_PAGED_VEND);
+  pginfo("VBASE: %08x VEND: %08x\n", PG_PAGED_VBASE, PG_PAGED_VEND);
   if (dfar < PG_PAGED_VBASE || dfar >= PG_PAGED_VEND)
     {
       goto segfault;
@@ -165,16 +143,16 @@ uint32_t *arm_dataabort(uint32_t *regs, uint32_t dfar, uint32_t dfsr)
 
   pg_miss();
 
-  /* Restore the previous value of current_regs.  NULL would indicate that
+  /* Restore the previous value of CURRENT_REGS.  NULL would indicate that
    * we are no longer in an interrupt handler.  It will be non-NULL if we
    * are returning from a nested interrupt.
    */
 
-  current_regs = savestate;
+  CURRENT_REGS = savestate;
   return regs;
 
 segfault:
-  lldbg("Data abort. PC: %08x DFAR: %08x DFSR: %08x\n",
+  _alert("Data abort. PC: %08x DFAR: %08x DFSR: %08x\n",
         regs[REG_PC], dfar, dfsr);
   PANIC();
   return regs; /* To keep the compiler happy */
@@ -184,15 +162,15 @@ segfault:
 
 uint32_t *arm_dataabort(uint32_t *regs, uint32_t dfar, uint32_t dfsr)
 {
-  /* Save the saved processor context in current_regs where it can be accessed
+  /* Save the saved processor context in CURRENT_REGS where it can be accessed
    * for register dumps and possibly context switching.
    */
 
-  current_regs = regs;
+  CURRENT_REGS = regs;
 
   /* Crash -- possibly showing diagnostic debug information. */
 
-  lldbg("Data abort. PC: %08x DFAR: %08x DFSR: %08x\n",
+  _alert("Data abort. PC: %08x DFAR: %08x DFSR: %08x\n",
         regs[REG_PC], dfar, dfsr);
   PANIC();
   return regs; /* To keep the compiler happy */

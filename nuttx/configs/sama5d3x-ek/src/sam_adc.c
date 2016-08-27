@@ -1,5 +1,5 @@
 /************************************************************************************
- * configs/sama5d3x-ek/src/up_adc.c
+ * configs/sama5d3x-ek/src/sam_adc.c
  *
  *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -42,6 +42,7 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <nuttx/analog/adc.h>
 
 #include "sam_adc.h"
@@ -50,7 +51,7 @@
 #ifdef CONFIG_ADC
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* Configuration ********************************************************************/
 
@@ -67,7 +68,7 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Name: adc_devinit
+ * Name: board_adc_setup
  *
  * Description:
  *   All STM32 architectures must provide the following interface to work with
@@ -75,7 +76,7 @@
  *
  ************************************************************************************/
 
-int adc_devinit(void)
+int board_adc_setup(void)
 {
 #ifdef CONFIG_SAMA5_ADC
   static bool initialized = false;
@@ -91,7 +92,7 @@ int adc_devinit(void)
       adc = sam_adc_initialize();
       if (adc == NULL)
         {
-          adbg("ERROR: Failed to get ADC interface\n");
+          aerr("ERROR: Failed to get ADC interface\n");
           return -ENODEV;
         }
 
@@ -100,7 +101,7 @@ int adc_devinit(void)
       ret = adc_register("/dev/adc0", adc);
       if (ret < 0)
         {
-          adbg("adc_register failed: %d\n", ret);
+          aerr("ERROR: adc_register failed: %d\n", ret);
           return ret;
         }
 

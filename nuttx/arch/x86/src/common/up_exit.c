@@ -1,7 +1,7 @@
 /****************************************************************************
  * common/up_exit.c
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013-2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,20 +43,22 @@
 #include <debug.h>
 #include <nuttx/arch.h>
 
-#include "os_internal.h"
-#include "up_internal.h"
-
 #ifdef CONFIG_DUMP_ON_EXIT
 #include <nuttx/fs/fs.h>
 #endif
+
+#include "task/task.h"
+#include "sched/sched.h"
+#include "group/group.h"
+#include "up_internal.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-/****************************************************************************
- * Private Data
- ****************************************************************************/
+#ifndef CONFIG_DEBUG_SCHED_INFO
+#  undef CONFIG_DUMP_ON_EXIT
+#endif
 
 /****************************************************************************
  * Private Functions
@@ -72,7 +74,7 @@
  *
  ****************************************************************************/
 
-#if defined(CONFIG_DUMP_ON_EXIT) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_DUMP_ON_EXIT
 static void _up_dumponexit(FAR struct tcb_s *tcb, FAR void *arg)
 {
 #if CONFIG_NFILE_DESCRIPTORS > 0
@@ -83,8 +85,8 @@ static void _up_dumponexit(FAR struct tcb_s *tcb, FAR void *arg)
   int i;
 #endif
 
-  sdbg("  TCB=%p name=%s pid=%d\n", tcb, tcb->argv[0], tcb->pid);
-  sdbg("    priority=%d state=%d\n", tcb->sched_priority, tcb->task_state);
+  sinfo("  TCB=%p name=%s pid=%d\n", tcb, tcb->argv[0], tcb->pid);
+  sinfo("    priority=%d state=%d\n", tcb->sched_priority, tcb->task_state);
 
 #if CONFIG_NFILE_DESCRIPTORS > 0
   filelist = tcb->group->tg_filelist;
@@ -93,8 +95,8 @@ static void _up_dumponexit(FAR struct tcb_s *tcb, FAR void *arg)
       struct inode *inode = filelist->fl_files[i].f_inode;
       if (inode)
         {
-          sdbg("      fd=%d refcount=%d\n",
-               i, inode->i_crefs);
+          sinfo("      fd=%d refcount=%d\n",
+                i, inode->i_crefs);
         }
     }
 #endif
@@ -107,11 +109,11 @@ static void _up_dumponexit(FAR struct tcb_s *tcb, FAR void *arg)
       if (filep->fs_fd >= 0)
         {
 #if CONFIG_STDIO_BUFFER_SIZE > 0
-          sdbg("      fd=%d nbytes=%d\n",
-               filep->fs_fd,
-               filep->fs_bufpos - filep->fs_bufstart);
+          sinfo("      fd=%d nbytes=%d\n",
+                filep->fs_fd,
+                filep->fs_bufpos - filep->fs_bufstart);
 #else
-          sdbg("      fd=%d\n", filep->fs_fd);
+          sinfo("      fd=%d\n", filep->fs_fd);
 #endif
         }
     }
@@ -142,12 +144,12 @@ void _exit(int status)
    * task is started.
    */
 
-  (void)irqsave();
+  (void)up_irq_save();
 
-  slldbg("TCB=%p exiting\n", g_readytorun.head);
+  sinfo("TCB=%p exiting\n", this_task());
 
-#if defined(CONFIG_DUMP_ON_EXIT) && defined(CONFIG_DEBUG)
-  slldbg("Other tasks:\n");
+#ifdef CONFIG_DUMP_ON_EXIT
+  sinfo("Other tasks:\n");
   sched_foreach(_up_dumponexit, NULL);
 #endif
 
@@ -159,7 +161,17 @@ void _exit(int status)
    * head of the list.
    */
 
-  tcb = (struct tcb_s*)g_readytorun.head;
+  tcb = this_task();
+
+#ifdef CONFIG_ARCH_ADDRENV
+  /* Make sure that the address environment for the previously running
+   * task is closed down gracefully (data caches dump, MMU flushed) and
+   * set up the address environment for the new thread at the head of
+   * the ready-to-run list.
+   */
+
+  (void)group_addrenv(tcb);
+#endif
 
   /* Then switch contexts */
 

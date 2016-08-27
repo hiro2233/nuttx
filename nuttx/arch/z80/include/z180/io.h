@@ -1,8 +1,7 @@
 /****************************************************************************
  * arch/z80/include/z80/io.h
- * arch/chip/io.h
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,7 +57,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -68,13 +67,14 @@
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
 
-EXTERN void outp(char p, char c);
-EXTERN char inp(char p);
+void outp(char p, char c);
+char inp(char p);
 
 #undef EXTERN
 #ifdef __cplusplus

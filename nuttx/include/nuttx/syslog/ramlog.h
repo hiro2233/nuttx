@@ -2,7 +2,7 @@
  * include/nuttx/syslog/ramlog.h
  * The RAM logging driver
  *
- *   Copyright (C) 2012, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,7 @@
  ****************************************************************************/
 /* The RAM logging driver is a driver that was intended to support debugging
  * output (syslogging) when the normal serial output is not available.  For
- * example, if you are using a telnet or USB serial console, the debug
+ * example, if you are using a Telnet or USB serial console, the debug
  * output will get lost.
  *
  * The RAM logging  driver is similar to a pipe in that it saves the
@@ -59,7 +59,7 @@
 #ifdef CONFIG_RAMLOG
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 /* CONFIG_RAMLOG - Enables the RAM logging feature
@@ -70,27 +70,22 @@
  *   in that case, console output from non-Telnet threads will go to the
  *   circular buffer and can be viewed using the NSH 'dmesg' command.
  * CONFIG_RAMLOG_SYSLOG - Use the RAM logging device for the syslogging
- *   interface.  If this feature is enabled (along with CONFIG_SYSLOG),
- *   then all debug output (only) will be re-directed to the circular
- *   buffer in RAM.  This RAM log can be view from NSH using the 'dmesg'
- *   command.  NOTE:  Unlike the limited, generic character driver SYSLOG
- *   device, the RAMLOG *can* be used to generate debug output from interrupt
- *   level handlers.
+ *   interface.  If this feature is enabled then all debug output (only)
+ *   will be re-directed to the circular buffer in RAM.  This RAM log can
+ *   be viewied from NSH using the 'dmesg' command.  NOTE:  Unlike the
+ *   limited, generic character driver SYSLOG device, the RAMLOG *can* be
+ *   used to generate debug output from interrupt level handlers.
  * CONFIG_RAMLOG_NPOLLWAITERS - The number of threads than can be waiting
  *   for this driver on poll().  Default: 4
  *
  * If CONFIG_RAMLOG_CONSOLE or CONFIG_RAMLOG_SYSLOG is selected, then the
  * following may also be provided:
  *
- * CONFIG_RAMLOG_CONSOLE_BUFSIZE - Size of the console RAM log.  Default: 1024
+ * CONFIG_RAMLOG_BUFSIZE - Size of the console RAM log.  Default: 1024
  */
 
 #ifndef CONFIG_DEV_CONSOLE
 #  undef CONFIG_RAMLOG_CONSOLE
-#endif
-
-#ifndef CONFIG_SYSLOG
-#  undef CONFIG_RAMLOG_SYSLOG
 #endif
 
 #if defined(CONFIG_RAMLOG_SYSLOG) && !defined(CONFIG_SYSLOG_DEVPATH)
@@ -101,23 +96,8 @@
 #  define CONFIG_RAMLOG_NPOLLWAITERS 4
 #endif
 
-#ifndef CONFIG_SYSLOG
-#  undef CONFIG_RAMLOG_SYSLOG
-#endif
-
-#ifndef CONFIG_RAMLOG_CONSOLE_BUFSIZE
-#  define CONFIG_RAMLOG_CONSOLE_BUFSIZE 1024
-#endif
-
-/* The normal behavior of the RAM log when used as a SYSLOG is to return
- * end-of-file if there is no data in the RAM log (rather than blocking until
- * data is available).  That allows you to 'cat' the SYSLOG with no ill
- * consequences.
- */
-
-#ifdef CONFIG_SYSLOG
-#  undef CONFIG_RAMLOG_NONBLOCKING
-#  define CONFIG_RAMLOG_NONBLOCKING 1
+#ifndef CONFIG_RAMLOG_BUFSIZE
+#  define CONFIG_RAMLOG_BUFSIZE 1024
 #endif
 
 /* When used as a console or syslogging device, the RAM log will pre-pend
@@ -137,7 +117,8 @@
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -162,8 +143,7 @@ extern "C" {
  ****************************************************************************/
 
 #if !defined(CONFIG_RAMLOG_CONSOLE) && !defined(CONFIG_RAMLOG_SYSLOG)
-EXTERN int ramlog_register(FAR const char *devpath, FAR char *buffer,
-                           size_t buflen);
+int ramlog_register(FAR const char *devpath, FAR char *buffer, size_t buflen);
 #endif
 
 /****************************************************************************
@@ -179,11 +159,11 @@ EXTERN int ramlog_register(FAR const char *devpath, FAR char *buffer,
  ****************************************************************************/
 
 #ifdef CONFIG_RAMLOG_CONSOLE
-EXTERN int ramlog_consoleinit(void);
+int ramlog_consoleinit(void);
 #endif
 
 /****************************************************************************
- * Name: ramlog_sysloginit
+ * Name: ramlog_syslog_channel
  *
  * Description:
  *   Create the RAM logging device and register it at the specified path.
@@ -195,7 +175,19 @@ EXTERN int ramlog_consoleinit(void);
  ****************************************************************************/
 
 #ifdef CONFIG_RAMLOG_SYSLOG
-EXTERN int ramlog_sysloginit(void);
+int ramlog_syslog_channel(void);
+#endif
+
+/****************************************************************************
+ * Name: ramlog_putc
+ *
+ * Description:
+ *   This is the low-level system logging interface.
+ *
+ ****************************************************************************/
+
+#if defined(CONFIG_RAMLOG_CONSOLE) || defined(CONFIG_RAMLOG_SYSLOG)
+int ramlog_putc(int ch);
 #endif
 
 #undef EXTERN

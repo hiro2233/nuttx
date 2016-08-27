@@ -58,7 +58,7 @@ endif
 
 ARCHCPUFLAGS		= -mcpu=m16c -fno-builtin
 ARCHPICFLAGS		= -fpic
-ARCHWARNINGS		= -Wall -Wstrict-prototypes -Wshadow
+ARCHWARNINGS		= -Wall -Wstrict-prototypes -Wshadow -Wundef
 ARCHDEFINES		=
 ARCHINCLUDES		= -I. -isystem $(TOPDIR)/include
 ARCHSCRIPT		= -T$(TOPDIR)/configs/$(CONFIG_ARCH_BOARD)/ostest/ld.script
@@ -68,6 +68,7 @@ CFLAGS			= $(ARCHWARNINGS) $(ARCHOPTIMIZATION) \
 CPPFLAGS		= $(ARCHINCLUDES) $(ARCHDEFINES) $(EXTRADEFINES)
 AFLAGS			= $(CFLAGS) -D__ASSEMBLY__
 
+ASMEXT			= .S
 OBJEXT			= .o
 LIBEXT			= .a
 EXEEXT			=
@@ -76,10 +77,10 @@ ifeq ($(CONFIG_DEBUG_SYMBOLS),y)
   LDFLAGS		+= -g
 endif
 
-MKDEP			= $(TOPDIR)/tools/mkdeps.sh
+MKDEP			= $(TOPDIR)/tools/mkdeps$(HOSTEXEEXT)
 
 HOSTCC			= gcc
 HOSTINCLUDES		= -I.
-HOSTCFLAGS		= -Wall -Wstrict-prototypes -Wshadow -g -pipe
+HOSTCFLAGS		= -Wall -Wstrict-prototypes -Wshadow -Wundef -g -pipe
 HOSTLDFLAGS		=
 

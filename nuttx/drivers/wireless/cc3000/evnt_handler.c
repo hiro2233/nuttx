@@ -1,6 +1,7 @@
-/*****************************************************************************
- *  evnt_handler.c  - CC3000 Host Driver Implementation.
- *  Copyright (C) 2011 Texas Instruments Incorporated - http://www.ti.com/
+/****************************************************************************
+ *  drivers/wireless/cc3000/evnt_handler.c  - CC3000 Host Driver Implementation.
+ *
+ *    Copyright (C) 2011 Texas Instruments Incorporated - http://www.ti.com/
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions
@@ -30,11 +31,11 @@
  *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
-/******************************************************************************
+/****************************************************************************
  * Included Files
- ******************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
@@ -51,9 +52,9 @@
 #include "cc3000drv.h"
 #include <nuttx/wireless/cc3000/netapp.h>
 
-/*****************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- *****************************************************************************/
+ ****************************************************************************/
 
 #define FLOW_CONTROL_EVENT_HANDLE_OFFSET           (0)
 #define FLOW_CONTROL_EVENT_BLOCK_MODE_OFFSET       (1)
@@ -103,23 +104,23 @@
 #define GET_SCAN_RESULTS_FRAME_TIME_OFFSET         (10)
 #define GET_SCAN_RESULTS_SSID_MAC_LENGTH           (38)
 
-/*****************************************************************************
+/****************************************************************************
  * Public Data
- *****************************************************************************/
+ ****************************************************************************/
 
 unsigned long socket_active_status = SOCKET_STATUS_INIT_VAL;
 
-/*****************************************************************************
+/****************************************************************************
  * Private Function Prototypes
- *****************************************************************************/
+ ****************************************************************************/
 
 static long hci_event_unsol_flowcontrol_handler(char *pEvent);
 static void update_socket_active_status(char *resp_params);
 
-/*****************************************************************************
+/****************************************************************************
  * Public Functions
- *****************************************************************************/
-/*****************************************************************************
+ ****************************************************************************/
+/****************************************************************************
  * Name: hci_unsol_handle_patch_request
  *
  * Description:
@@ -131,7 +132,7 @@ static void update_socket_active_status(char *resp_params);
  * Returned Value:
  *   None
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 void hci_unsol_handle_patch_request(char *event_hdr)
 {
@@ -208,7 +209,7 @@ void hci_unsol_handle_patch_request(char *event_hdr)
     }
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: hci_event_handler
  *
  * Description:
@@ -223,7 +224,7 @@ void hci_unsol_handle_patch_request(char *event_hdr)
  * Returned Value:
  *   None
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 uint8_t *hci_event_handler(void *pRetParams, uint8_t *from, uint8_t *fromlen)
 {
@@ -237,7 +238,8 @@ uint8_t *hci_event_handler(void *pRetParams, uint8_t *from, uint8_t *fromlen)
 
   while (1)
     {
-      if (tSLInformation.usEventOrDataReceived != 0) {
+      if (tSLInformation.usEventOrDataReceived != 0)
+        {
           pucReceivedData = (tSLInformation.pucReceivedData);
 
           if (*pucReceivedData == HCI_TYPE_EVNT)
@@ -258,7 +260,7 @@ uint8_t *hci_event_handler(void *pRetParams, uint8_t *from, uint8_t *fromlen)
                 {
                   STREAM_TO_UINT8(pucReceivedData, HCI_DATA_LENGTH_OFFSET, usLength);
 
-                  switch(usReceivedEventOpcode)
+                  switch (usReceivedEventOpcode)
                     {
                     case HCI_CMND_READ_BUFFER_SIZE:
                       {
@@ -449,37 +451,37 @@ uint8_t *hci_event_handler(void *pRetParams, uint8_t *from, uint8_t *fromlen)
 
                       /* Read IP address */
 
-                      STREAM_TO_STREAM(RecvParams,RetParams,NETAPP_IPCONFIG_IP_LENGTH);
+                      STREAM_TO_STREAM(RecvParams, RetParams, NETAPP_IPCONFIG_IP_LENGTH);
                       RecvParams += 4;
 
                       /* Read subnet */
 
-                      STREAM_TO_STREAM(RecvParams,RetParams,NETAPP_IPCONFIG_IP_LENGTH);
+                      STREAM_TO_STREAM(RecvParams, RetParams, NETAPP_IPCONFIG_IP_LENGTH);
                       RecvParams += 4;
 
                       /* Read default GW */
 
-                      STREAM_TO_STREAM(RecvParams,RetParams,NETAPP_IPCONFIG_IP_LENGTH);
+                      STREAM_TO_STREAM(RecvParams, RetParams, NETAPP_IPCONFIG_IP_LENGTH);
                       RecvParams += 4;
 
                       /* Read DHCP server */
 
-                      STREAM_TO_STREAM(RecvParams,RetParams,NETAPP_IPCONFIG_IP_LENGTH);
+                      STREAM_TO_STREAM(RecvParams, RetParams, NETAPP_IPCONFIG_IP_LENGTH);
                       RecvParams += 4;
 
                       /* Read DNS server */
 
-                      STREAM_TO_STREAM(RecvParams,RetParams,NETAPP_IPCONFIG_IP_LENGTH);
+                      STREAM_TO_STREAM(RecvParams, RetParams, NETAPP_IPCONFIG_IP_LENGTH);
                       RecvParams += 4;
 
                       /* Read Mac address */
 
-                      STREAM_TO_STREAM(RecvParams,RetParams,NETAPP_IPCONFIG_MAC_LENGTH);
+                      STREAM_TO_STREAM(RecvParams, RetParams, NETAPP_IPCONFIG_MAC_LENGTH);
                       RecvParams += 6;
 
                       /* Read SSID */
 
-                      STREAM_TO_STREAM(RecvParams,RetParams,NETAPP_IPCONFIG_SSID_LENGTH);
+                      STREAM_TO_STREAM(RecvParams, RetParams, NETAPP_IPCONFIG_SSID_LENGTH);
                       break;
 
                     default:
@@ -552,7 +554,7 @@ uint8_t *hci_event_handler(void *pRetParams, uint8_t *from, uint8_t *fromlen)
   return NULL;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: hci_unsol_event_handler
  *
  * Description:
@@ -565,7 +567,7 @@ uint8_t *hci_event_handler(void *pRetParams, uint8_t *from, uint8_t *fromlen)
  *   1 if event supported and handled
  *   0 if event is not supported
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 long hci_unsol_event_handler(char *event_hdr)
 {
@@ -574,11 +576,16 @@ long hci_unsol_event_handler(char *event_hdr)
   unsigned long NumberOfReleasedPackets;
   unsigned long NumberOfSentPackets;
 
-  STREAM_TO_UINT16(event_hdr, HCI_EVENT_OPCODE_OFFSET,event_type);
+  STREAM_TO_UINT16(event_hdr, HCI_EVENT_OPCODE_OFFSET, event_type);
+
+  if (event_type == HCI_EVNT_PATCHES_REQ)
+    {
+      hci_unsol_handle_patch_request(event_hdr);
+    }
 
   if (event_type & HCI_EVNT_UNSOL_BASE)
     {
-      switch(event_type)
+      switch (event_type)
         {
         case HCI_EVNT_DATA_UNSOL_FREE_BUFF:
           {
@@ -602,7 +609,7 @@ long hci_unsol_event_handler(char *event_hdr)
 
   if (event_type & HCI_EVNT_WLAN_UNSOL_BASE)
     {
-      switch(event_type)
+      switch (event_type)
         {
         case HCI_EVNT_WLAN_KEEPALIVE:
         case HCI_EVNT_WLAN_UNSOL_CONNECT:
@@ -618,34 +625,34 @@ long hci_unsol_event_handler(char *event_hdr)
 
         case HCI_EVNT_WLAN_UNSOL_DHCP:
           {
-            uint8_t  params[NETAPP_IPCONFIG_MAC_OFFSET + 1];  // extra byte is for the status
+            uint8_t  params[NETAPP_IPCONFIG_MAC_OFFSET + 1];  /* Extra byte is for the status */
             uint8_t *recParams = params;
 
-            data = (char*)(event_hdr) + HCI_EVENT_HEADER_SIZE;
+            data = (FAR char *)(event_hdr) + HCI_EVENT_HEADER_SIZE;
 
             /* Read IP address */
 
-            STREAM_TO_STREAM(data,recParams,NETAPP_IPCONFIG_IP_LENGTH);
+            STREAM_TO_STREAM(data, recParams, NETAPP_IPCONFIG_IP_LENGTH);
             data += 4;
 
             /* Read subnet */
 
-            STREAM_TO_STREAM(data,recParams,NETAPP_IPCONFIG_IP_LENGTH);
+            STREAM_TO_STREAM(data, recParams, NETAPP_IPCONFIG_IP_LENGTH);
             data += 4;
 
             /* Read default GW */
 
-            STREAM_TO_STREAM(data,recParams,NETAPP_IPCONFIG_IP_LENGTH);
+            STREAM_TO_STREAM(data, recParams, NETAPP_IPCONFIG_IP_LENGTH);
             data += 4;
 
             /* Read DHCP server */
 
-            STREAM_TO_STREAM(data,recParams,NETAPP_IPCONFIG_IP_LENGTH);
+            STREAM_TO_STREAM(data, recParams, NETAPP_IPCONFIG_IP_LENGTH);
             data += 4;
 
             /* Read DNS server */
 
-            STREAM_TO_STREAM(data,recParams,NETAPP_IPCONFIG_IP_LENGTH);
+            STREAM_TO_STREAM(data, recParams, NETAPP_IPCONFIG_IP_LENGTH);
 
             /* Read the status */
 
@@ -661,7 +668,7 @@ long hci_unsol_event_handler(char *event_hdr)
         case HCI_EVNT_WLAN_ASYNC_PING_REPORT:
           {
             netapp_pingreport_args_t params;
-            data = (char*)(event_hdr) + HCI_EVENT_HEADER_SIZE;
+            data = (FAR char *)(event_hdr) + HCI_EVENT_HEADER_SIZE;
             STREAM_TO_UINT32(data, NETAPP_PING_PACKETS_SENT_OFFSET, params.packets_sent);
             STREAM_TO_UINT32(data, NETAPP_PING_PACKETS_RCVD_OFFSET, params.packets_received);
             STREAM_TO_UINT32(data, NETAPP_PING_MIN_RTT_OFFSET, params.min_round_time);
@@ -677,6 +684,14 @@ long hci_unsol_event_handler(char *event_hdr)
 
         case HCI_EVNT_BSD_TCP_CLOSE_WAIT:
           {
+            int sockfd;
+
+            data = (FAR char *)(event_hdr) + HCI_EVENT_HEADER_SIZE;
+            STREAM_TO_UINT32(data, NETAPP_PING_PACKETS_SENT_OFFSET, sockfd);
+            data += 4;
+
+            (void)cc3000_remote_closed_socket(sockfd);
+
             if (tSLInformation.sWlanCB)
               {
                 tSLInformation.sWlanCB(event_type, NULL, 0);
@@ -700,7 +715,7 @@ long hci_unsol_event_handler(char *event_hdr)
       long status;
 
       pArg = M_BSD_RESP_PARAMS_OFFSET(event_hdr);
-      STREAM_TO_UINT32(pArg, BSD_RSP_PARAMS_STATUS_OFFSET,status);
+      STREAM_TO_UINT32(pArg, BSD_RSP_PARAMS_STATUS_OFFSET, status);
 
       if (ERROR_SOCKET_INACTIVE == status)
         {
@@ -724,7 +739,7 @@ long hci_unsol_event_handler(char *event_hdr)
   return 0;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: hci_unsolicited_event_handler
  *
  * Description:
@@ -737,7 +752,7 @@ long hci_unsol_event_handler(char *event_hdr)
  * Returned Value:
  *   ESUCCESS if successful, EFAIL if an error occurred
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 long hci_unsolicited_event_handler(void)
 {
@@ -769,7 +784,7 @@ long hci_unsolicited_event_handler(void)
   return res;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: set_socket_active_status
  *
  * Description:
@@ -783,7 +798,7 @@ long hci_unsolicited_event_handler(void)
  * Returned Value:
  *   None
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 void set_socket_active_status(long Sd, long Status)
 {
@@ -794,7 +809,7 @@ void set_socket_active_status(long Sd, long Status)
     }
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: hci_event_unsol_flowcontrol_handler
  *
  * Description:
@@ -808,16 +823,16 @@ void set_socket_active_status(long Sd, long Status)
  * Returned Value:
  *   ESUCCESS if successful, EFAIL if an error occurred
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 long hci_event_unsol_flowcontrol_handler(char *pEvent)
 {
   long temp, value;
   uint16_t i;
-  uint16_t  pusNumberOfHandles=0;
+  uint16_t  pusNumberOfHandles = 0;
   char *pReadPayload;
 
-  STREAM_TO_UINT16((char *)pEvent,HCI_EVENT_HEADER_SIZE,pusNumberOfHandles);
+  STREAM_TO_UINT16((char *)pEvent, HCI_EVENT_HEADER_SIZE, pusNumberOfHandles);
   pReadPayload = ((char *)pEvent +
                   HCI_EVENT_HEADER_SIZE + sizeof(pusNumberOfHandles));
   temp = 0;
@@ -835,7 +850,7 @@ long hci_event_unsol_flowcontrol_handler(char *pEvent)
   return(ESUCCESS);
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: get_socket_active_status
  *
  * Description:
@@ -847,7 +862,7 @@ long hci_event_unsol_flowcontrol_handler(char *pEvent)
  * Returned Value:
  *   Current status of the socket.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 long get_socket_active_status(long Sd)
 {
@@ -860,7 +875,7 @@ long get_socket_active_status(long Sd)
   return SOCKET_STATUS_INACTIVE;
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: update_socket_active_status
  *
  * Description:
@@ -872,14 +887,14 @@ long get_socket_active_status(long Sd)
  * Returned Value:
  *   Current status of the socket.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 void update_socket_active_status(char *resp_params)
 {
   long status, sd;
 
-  STREAM_TO_UINT32(resp_params, BSD_RSP_PARAMS_SOCKET_OFFSET,sd);
-  STREAM_TO_UINT32(resp_params, BSD_RSP_PARAMS_STATUS_OFFSET,status);
+  STREAM_TO_UINT32(resp_params, BSD_RSP_PARAMS_SOCKET_OFFSET, sd);
+  STREAM_TO_UINT32(resp_params, BSD_RSP_PARAMS_STATUS_OFFSET, status);
 
   if (ERROR_SOCKET_INACTIVE == status)
     {
@@ -887,7 +902,7 @@ void update_socket_active_status(char *resp_params)
     }
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: SimpleLinkWaitEvent
  *
  * Description:
@@ -901,7 +916,7 @@ void update_socket_active_status(char *resp_params)
  * Returned Value:
  *   None
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 void SimpleLinkWaitEvent(uint16_t opcode, void *pRetParams)
 {
@@ -910,40 +925,41 @@ void SimpleLinkWaitEvent(uint16_t opcode, void *pRetParams)
    */
 
   tSLInformation.usRxEventOpcode = opcode;
-  nllvdbg("Looking for opcode 0x%x\n",opcode);
+  ninfo("Looking for opcode 0x%x\n", opcode);
   uint16_t event_type;
 
   do
     {
-      nllvdbg("cc3000_wait\n");
+      ninfo("cc3000_wait\n");
       tSLInformation.pucReceivedData = cc3000_wait();
       tSLInformation.usEventOrDataReceived = 1;
-      STREAM_TO_UINT16((char *)tSLInformation.pucReceivedData, HCI_EVENT_OPCODE_OFFSET,event_type);
+      STREAM_TO_UINT16((FAR char *)tSLInformation.pucReceivedData,
+                       HCI_EVENT_OPCODE_OFFSET, event_type);
 
       if (*tSLInformation.pucReceivedData == HCI_TYPE_EVNT)
         {
-          nllvdbg("Evtn:0x%x\n",event_type);
+          ninfo("Evtn:0x%x\n", event_type);
         }
 
       if (event_type != opcode)
         {
           if (hci_unsolicited_event_handler() == 1)
             {
-              nllvdbg("Processed Event  0x%x want 0x%x\n",event_type, opcode);
+              ninfo("Processed Event  0x%x want 0x%x\n", event_type, opcode);
             }
         }
       else
         {
-          nllvdbg("Processing opcode 0x%x\n",opcode);
+          ninfo("Processing opcode 0x%x\n", opcode);
           hci_event_handler(pRetParams, 0, 0);
         }
     }
   while (tSLInformation.usRxEventOpcode != 0);
 
-  nllvdbg("Done for opcode 0x%x\n",opcode);
+  ninfo("Done for opcode 0x%x\n", opcode);
 }
 
-/*****************************************************************************
+/****************************************************************************
  * Name: SimpleLinkWaitData
  *
  * Description:
@@ -958,7 +974,7 @@ void SimpleLinkWaitEvent(uint16_t opcode, void *pRetParams)
  * Returned Value:
  *   None
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 void SimpleLinkWaitData(uint8_t *pBuf, uint8_t *from, uint8_t *fromlen)
 {
@@ -966,7 +982,7 @@ void SimpleLinkWaitData(uint8_t *pBuf, uint8_t *from, uint8_t *fromlen)
    * after the end of current transaction, i.e. only after data will be received
    */
 
-  nllvdbg("Looking for Data\n");
+  ninfo("Looking for Data\n");
   uint16_t event_type;
   uint16_t opcode = tSLInformation.usRxEventOpcode;
 
@@ -984,15 +1000,15 @@ void SimpleLinkWaitData(uint8_t *pBuf, uint8_t *from, uint8_t *fromlen)
       else
         {
           STREAM_TO_UINT16((char *)tSLInformation.pucReceivedData, HCI_EVENT_OPCODE_OFFSET, event_type);
-          nllvdbg("Evtn:0x%x\n", event_type);
+          ninfo("Evtn:0x%x\n", event_type);
 
           if (hci_unsolicited_event_handler() == 1)
             {
-              nllvdbg("Processed Event  0x%x want Data! Opcode 0x%x\n", event_type, opcode);
+              ninfo("Processed Event  0x%x want Data! Opcode 0x%x\n", event_type, opcode);
             }
           else
             {
-              nllvdbg("!!!!!opcode 0x%x\n",opcode);
+              ninfo("!!!!!opcode 0x%x\n", opcode);
             }
 
           UNUSED(event_type);
@@ -1000,6 +1016,6 @@ void SimpleLinkWaitData(uint8_t *pBuf, uint8_t *from, uint8_t *fromlen)
     }
   while (*tSLInformation.pucReceivedData == HCI_TYPE_EVNT);
 
-  nllvdbg("Done for Data 0x%x\n", opcode);
+  ninfo("Done for Data 0x%x\n", opcode);
   UNUSED(opcode);
 }

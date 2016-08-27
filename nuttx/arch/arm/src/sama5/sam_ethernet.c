@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sama5/sam_ethernet.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -88,7 +88,7 @@ static inline void up_gmac_initialize(void)
   ret = sam_gmac_initialize();
   if (ret < 0)
     {
-      nlldbg("ERROR: sam_gmac_initialize failed: %d\n", ret);
+      nerr("ERROR: sam_gmac_initialize failed: %d\n", ret);
     }
 }
 #else
@@ -109,7 +109,7 @@ static inline void up_gmac_initialize(void)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SAMA5_EMAC
+#if defined(CONFIG_SAMA5_EMACA)
 static inline void up_emac_initialize(void)
 {
   int ret;
@@ -119,8 +119,33 @@ static inline void up_emac_initialize(void)
   ret = sam_emac_initialize();
   if (ret < 0)
     {
-      nlldbg("ERROR: sam_gmac_initialize failed: %d\n", ret);
+      nerr("ERROR: up_emac_initialize failed: %d\n", ret);
     }
+}
+#elif defined(CONFIG_SAMA5_EMACB)
+static inline void up_emac_initialize(void)
+{
+  int ret;
+
+#if defined(CONFIG_SAMA5_EMAC0)
+  /* Initialize the EMAC0 driver */
+
+  ret = sam_emac_initialize(EMAC0_INTF);
+  if (ret < 0)
+    {
+      nerr("ERROR: up_emac_initialize(EMAC0) failed: %d\n", ret);
+    }
+#endif
+
+#if defined(CONFIG_SAMA5_EMAC1)
+  /* Initialize the EMAC1 driver */
+
+  ret = sam_emac_initialize(EMAC1_INTF);
+  if (ret < 0)
+    {
+      nerr("ERROR: up_emac_initialize(EMAC1) failed: %d\n", ret);
+    }
+#endif
 }
 #else
 #  define up_emac_initialize()
@@ -162,4 +187,4 @@ void up_netinitialize(void)
 #endif
 }
 
-#endif /* CONFIG_NET && CONFIG_SAMA5_EMAC */
+#endif /* CONFIG_NET */

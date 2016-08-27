@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/tiva/tiva_gpioirq.c
  *
- *   Copyright (C) 2009-2010, 2012, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2010, 2012, 2014-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,71 +38,41 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/arch.h>
+#include <nuttx/irq.h>
 
 #include <stdint.h>
 #include <string.h>
 #include <assert.h>
 #include <debug.h>
 
-#include <arch/irq.h>
+#include <arch/board/board.h>
 
+#include "chip.h"
+
+#include "up_internal.h"
 #include "up_arch.h"
-#include "os_internal.h"
-#include "irq_internal.h"
+#include "irq/irq.h"
 
 #include "tiva_gpio.h"
+
+#ifdef CONFIG_TIVA_GPIO_IRQS
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
+#define TIVA_NPINS 8
+#define TIVA_NIRQ_PINS (TIVA_NPORTS * TIVA_NPINS)
+#define TIVA_GPIO_IRQ_IDX(port,pin) ((port*TIVA_NPINS)+(pin))
+
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-/* A table of handlers for each GPIO interrupt */
+/* A table of handlers for each GPIO port interrupt */
 
-static FAR xcpt_t g_gpioirqvector[NR_GPIO_IRQS];
-
-/* A table that maps a GPIO group to a GPIO base address.  Overly complicated
- * because we support disabling interrupt support for arbitrary ports.  This
- * must carefully match the IRQ numbers assigned in arch/arm/include/lm3s/irq.h
- */
-
-static const uintptr_t g_gpiobase[] =
-{
-#ifndef CONFIG_TIVA_DISABLE_GPIOA_IRQS
-    TIVA_GPIOA_BASE
-#else
-    0
-#endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOB_IRQS
-  , TIVA_GPIOB_BASE
-#endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOC_IRQS
-  , TIVA_GPIOC_BASE
-#endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOD_IRQS
-  , TIVA_GPIOD_BASE
-#endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOE_IRQS
-  , TIVA_GPIOE_BASE
-#endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOF_IRQS
-  , TIVA_GPIOF_BASE
-#endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOG_IRQS
-  , TIVA_GPIOG_BASE
-#endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOH_IRQS
-  , TIVA_GPIOH_BASE
-#endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOJ_IRQS
-  , TIVA_GPIOJ_BASE
-#endif
-};
-
-#define GPIO_NADDRS (sizeof(g_gpiobase)/sizeof(uintptr_t))
+static FAR xcpt_t g_gpioportirqvector[TIVA_NIRQ_PINS];
 
 /****************************************************************************
  * Public Data
@@ -113,132 +83,457 @@ static const uintptr_t g_gpiobase[] =
  ****************************************************************************/
 
 /****************************************************************************
- * Name: tiva_gpiobaseaddress
- *
- * Input:
- *   gpioirq - A pin number in the range of 0 to NR_GPIO_IRQS.
+ * Name: gpioport2irq
  *
  * Description:
- *   Given a GPIO enumeration value, return the base address of the
- *   associated GPIO registers.  NOTE that range checking was provided by
- *   callee
+ *   Translates from GPIO port to GPIO IRQ.
  *
  ****************************************************************************/
 
-static uintptr_t tiva_gpiobaseaddress(unsigned int gpioirq)
+static int gpioport2irq(uint8_t port)
 {
-  unsigned int ndx = gpioirq >> 3;
-  if (ndx < GPIO_NADDRS)
+  int irq = -1;
+
+  switch (port)
     {
-      return g_gpiobase[ndx];
+#ifdef CONFIG_TIVA_GPIOA_IRQS
+      case (GPIO_PORTA >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOA;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOB_IRQS
+      case (GPIO_PORTB >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOB;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOC_IRQS
+      case (GPIO_PORTC >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOC;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOD_IRQS
+      case (GPIO_PORTD >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOD;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOE_IRQS
+      case (GPIO_PORTE >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOE;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOF_IRQS
+      case (GPIO_PORTF >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOF;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOG_IRQS
+      case (GPIO_PORTG >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOG;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOH_IRQS
+      case (GPIO_PORTH >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOH;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOJ_IRQS
+      case (GPIO_PORTJ >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOJ;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOK_IRQS
+      case (GPIO_PORTK >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOK;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOL_IRQS
+      case (GPIO_PORTL >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOL;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOM_IRQS
+      case (GPIO_PORTM >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOM;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPION_IRQS
+      case (GPIO_PORTN >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPION;
+        }
+        break;
+#endif
+#ifdef CONFIG_TIVA_GPIOP_IRQS
+      case (GPIO_PORTP >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOP;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOQ_IRQS
+      case (GPIO_PORTQ >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOQ;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOR_IRQS
+      case (GPIO_PORTR >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOR;
+        }
+        break;
+#endif
+
+#ifdef CONFIG_TIVA_GPIOS_IRQS
+      case (GPIO_PORTS >> GPIO_PORT_SHIFT):
+        {
+          irq = TIVA_IRQ_GPIOS;
+        }
+        break;
+#endif
     }
 
-  return 0;
+  return irq;
 }
 
 /****************************************************************************
- * Name: tiva_gpio*handler
+ * Name: tiva_gpioirqstatus
+ *
+ * Description:
+ *   Returns raw or masked interrupt status.
+ *
+ ****************************************************************************/
+
+uint32_t tiva_gpioirqstatus(uint8_t port, bool masked)
+{
+  uintptr_t base = tiva_gpiobaseaddress(port);
+
+  if (masked)
+    {
+      return getreg32(base + TIVA_GPIO_MIS_OFFSET);
+    }
+  else
+    {
+      return getreg32(base + TIVA_GPIO_RIS_OFFSET);
+    }
+}
+
+/****************************************************************************
+ * Name: tiva_gpioirqclear
+ *
+ * Description:
+ *   Clears the interrupt status of the input base
+ *
+ ****************************************************************************/
+
+void tiva_gpioirqclear(uint8_t port, uint32_t pinmask)
+{
+  uintptr_t base = tiva_gpiobaseaddress(port);
+
+  /* "The GPIOICR register is the interrupt clear register. Writing a 1 to a bit
+   * in this register clears the corresponding interrupt edge detection logic
+   * register. Writing a 0 has no effect."
+   */
+
+  modifyreg32(base + TIVA_GPIO_ICR_OFFSET, 0, pinmask);
+}
+
+/****************************************************************************
+ * Name: tiva_gpioporthandler
  *
  * Description:
  *   Handle interrupts on each enabled GPIO port
  *
  ****************************************************************************/
 
-static int tiva_gpiohandler(uint32_t regbase, int irqbase, void *context)
+static int tiva_gpioporthandler(uint8_t port, void *context)
 {
-  uint32_t mis;
-  int irq;
-  int pin;
 
-  /* Handle each pending GPIO interrupt.  "The GPIO MIS register is the masked
-   * interrupt status register. Bits read High in GPIO MIS reflect the status
-   * of input lines triggering an interrupt. Bits read as Low indicate that
-   * either no interrupt has been generated, or the interrupt is masked."
-   */
+  int       irq  = gpioport2irq(port);    /* GPIO port interrupt vector */
+  uint32_t  mis  = tiva_gpioirqstatus(port, true); /* Masked Interrupt Status */
+  uint8_t   pin;                                   /* Pin number */
 
-  mis = getreg32(regbase + TIVA_GPIO_MIS_OFFSET) & 0xff;
-
-  /* Clear all GPIO interrupts that we are going to process.  "The GPIO ICR
-   * register is the interrupt clear register. Writing a 1 to a bit in this
-   * register clears the corresponding interrupt edge detection logic register.
-   * Writing a 0 has no effect."
-   */
-
-  putreg32(mis, regbase + TIVA_GPIO_ICR_OFFSET);
+  tiva_gpioirqclear(port, 0xff);
+  gpioinfo("mis=0b%08b\n", mis & 0xff);
 
   /* Now process each IRQ pending in the MIS */
 
-  for (pin = 0; pin < 8 && mis != 0; pin++, mis >>= 1)
+  if (mis != 0)
     {
-      if ((mis & 1) != 0)
+      for (pin = 0; pin < TIVA_NPINS; ++pin)
         {
-          irq = irqbase + pin;
-          g_gpioirqvector[irq - NR_IRQS](irq, context);
+          if (((mis >> pin) & 1) != 0)
+            {
+              gpioinfo("port=%d pin=%d irq=%p index=%d\n",
+                       port, pin,
+                       g_gpioportirqvector[TIVA_GPIO_IRQ_IDX(port, pin)],
+                       TIVA_GPIO_IRQ_IDX(port, pin));
+
+              g_gpioportirqvector[TIVA_GPIO_IRQ_IDX(port, pin)](irq, context);
+            }
         }
     }
+
   return OK;
 }
 
-#ifndef CONFIG_TIVA_DISABLE_GPIOA_IRQS
+#ifdef CONFIG_TIVA_GPIOA_IRQS
 static int tiva_gpioahandler(int irq, FAR void *context)
 {
-  return tiva_gpiohandler(TIVA_GPIOA_BASE, TIVA_IRQ_GPIOA_0, context);
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTA >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
 }
 #endif
 
-#ifndef CONFIG_TIVA_DISABLE_GPIOB_IRQS
+#ifdef CONFIG_TIVA_GPIOB_IRQS
 static int tiva_gpiobhandler(int irq, FAR void *context)
 {
-  return tiva_gpiohandler(TIVA_GPIOB_BASE, TIVA_IRQ_GPIOB_0, context);
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTB >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
 }
 #endif
 
-#ifndef CONFIG_TIVA_DISABLE_GPIOC_IRQS
+#ifdef CONFIG_TIVA_GPIOC_IRQS
 static int tiva_gpiochandler(int irq, FAR void *context)
 {
-  return tiva_gpiohandler(TIVA_GPIOC_BASE, TIVA_IRQ_GPIOC_0, context);
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTC >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
 }
 #endif
 
-#ifndef CONFIG_TIVA_DISABLE_GPIOD_IRQS
+#ifdef CONFIG_TIVA_GPIOD_IRQS
 static int tiva_gpiodhandler(int irq, FAR void *context)
 {
-  return tiva_gpiohandler(TIVA_GPIOD_BASE, TIVA_IRQ_GPIOD_0, context);
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTD >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
 }
 #endif
 
-#ifndef CONFIG_TIVA_DISABLE_GPIOE_IRQS
+#ifdef CONFIG_TIVA_GPIOE_IRQS
 static int tiva_gpioehandler(int irq, FAR void *context)
 {
-  return tiva_gpiohandler(TIVA_GPIOE_BASE, TIVA_IRQ_GPIOE_0, context);
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTE >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
 }
 #endif
 
-#ifndef CONFIG_TIVA_DISABLE_GPIOF_IRQS
+#ifdef CONFIG_TIVA_GPIOF_IRQS
 static int tiva_gpiofhandler(int irq, FAR void *context)
 {
-  return tiva_gpiohandler(TIVA_GPIOF_BASE, TIVA_IRQ_GPIOF_0, context);
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTF >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
 }
 #endif
 
-#ifndef CONFIG_TIVA_DISABLE_GPIOG_IRQS
+#ifdef CONFIG_TIVA_GPIOG_IRQS
 static int tiva_gpioghandler(int irq, FAR void *context)
 {
-  return tiva_gpiohandler(TIVA_GPIOG_BASE, TIVA_IRQ_GPIOG_0, context);
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTG >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
 }
 #endif
 
-#ifndef CONFIG_TIVA_DISABLE_GPIOH_IRQS
+#ifdef CONFIG_TIVA_GPIOH_IRQS
 static int tiva_gpiohhandler(int irq, FAR void *context)
 {
-  return tiva_gpiohandler(TIVA_GPIOH_BASE, TIVA_IRQ_GPIOH_0, context);
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTH >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
 }
 #endif
 
-#ifndef CONFIG_TIVA_DISABLE_GPIOJ_IRQS
+#ifdef CONFIG_TIVA_GPIOJ_IRQS
 static int tiva_gpiojhandler(int irq, FAR void *context)
 {
-  return tiva_gpiohandler(TIVA_GPIOJ_BASE, TIVA_IRQ_GPIOJ_0, context);
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTJ >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
+}
+#endif
+
+#ifdef CONFIG_TIVA_GPIOK_IRQS
+static int tiva_gpiokhandler(int irq, FAR void *context)
+{
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTK >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
+}
+#endif
+
+#ifdef CONFIG_TIVA_GPIOL_IRQS
+static int tiva_gpiolhandler(int irq, FAR void *context)
+{
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTL >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
+}
+#endif
+
+#ifdef CONFIG_TIVA_GPIOM_IRQS
+static int tiva_gpiomhandler(int irq, FAR void *context)
+{
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTM >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
+}
+#endif
+
+#ifdef CONFIG_TIVA_GPION_IRQS
+static int tiva_gpionhandler(int irq, FAR void *context)
+{
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTN >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
+}
+#endif
+
+#ifdef CONFIG_TIVA_GPIOP_IRQS
+static int tiva_gpiophandler(int irq, FAR void *context)
+{
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTP >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
+}
+#endif
+
+#ifdef CONFIG_TIVA_GPIOQ_IRQS
+static int tiva_gpioqhandler(int irq, FAR void *context)
+{
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTQ >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
+}
+#endif
+
+#ifdef CONFIG_TIVA_GPIOR_IRQS
+static int tiva_gpiorhandler(int irq, FAR void *context)
+{
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTR >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
+}
+#endif
+
+#ifdef CONFIG_TIVA_GPIOS_IRQS
+static int tiva_gpioshandler(int irq, FAR void *context)
+{
+  irqstate_t flags;
+  flags = enter_critical_section();
+  up_disable_irq(irq);
+  int ret = tiva_gpioporthandler((GPIO_PORTS >> GPIO_PORT_SHIFT), context);
+  up_enable_irq(irq);
+  leave_critical_section(flags);
+  return ret;
 }
 #endif
 
@@ -247,182 +542,260 @@ static int tiva_gpiojhandler(int irq, FAR void *context)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: gpio_irqinitialize
+ * Name: tiva_gpioirqinitialize
  *
  * Description:
  *   Initialize all vectors to the unexpected interrupt handler
  *
  ****************************************************************************/
 
-int gpio_irqinitialize(void)
+int tiva_gpioirqinitialize(void)
 {
   int i;
 
   /* Point all interrupt vectors to the unexpected interrupt */
 
-  for (i = 0; i < NR_GPIO_IRQS; i++)
+  for (i = 0; i < TIVA_NIRQ_PINS; ++i)
     {
-      g_gpioirqvector[i] = irq_unexpected_isr;
+      g_gpioportirqvector[i] = irq_unexpected_isr;
     }
+
+  gpioinfo("tiva_gpioirqinitialize isr=%d/%d irq_unexpected_isr=%p\n",
+           i, TIVA_NIRQ_PINS, irq_unexpected_isr);
 
   /* Then attach each GPIO interrupt handlers and enable corresponding GPIO
    * interrupts
    */
 
-#ifndef CONFIG_TIVA_DISABLE_GPIOA_IRQS
+#ifdef CONFIG_TIVA_GPIOA_IRQS
   irq_attach(TIVA_IRQ_GPIOA, tiva_gpioahandler);
   up_enable_irq(TIVA_IRQ_GPIOA);
 #endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOB_IRQS
+
+#ifdef CONFIG_TIVA_GPIOB_IRQS
   irq_attach(TIVA_IRQ_GPIOB, tiva_gpiobhandler);
   up_enable_irq(TIVA_IRQ_GPIOB);
 #endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOC_IRQS
+
+#ifdef CONFIG_TIVA_GPIOC_IRQS
   irq_attach(TIVA_IRQ_GPIOC, tiva_gpiochandler);
   up_enable_irq(TIVA_IRQ_GPIOC);
 #endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOD_IRQS
+
+#ifdef CONFIG_TIVA_GPIOD_IRQS
   irq_attach(TIVA_IRQ_GPIOD, tiva_gpiodhandler);
   up_enable_irq(TIVA_IRQ_GPIOD);
 #endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOE_IRQS
+
+#ifdef CONFIG_TIVA_GPIOE_IRQS
   irq_attach(TIVA_IRQ_GPIOE, tiva_gpioehandler);
   up_enable_irq(TIVA_IRQ_GPIOE);
 #endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOF_IRQS
+
+#ifdef CONFIG_TIVA_GPIOF_IRQS
   irq_attach(TIVA_IRQ_GPIOF, tiva_gpiofhandler);
   up_enable_irq(TIVA_IRQ_GPIOF);
 #endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOG_IRQS
+
+#ifdef CONFIG_TIVA_GPIOG_IRQS
   irq_attach(TIVA_IRQ_GPIOG, tiva_gpioghandler);
   up_enable_irq(TIVA_IRQ_GPIOG);
 #endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOH_IRQS
+
+#ifdef CONFIG_TIVA_GPIOH_IRQS
   irq_attach(TIVA_IRQ_GPIOH, tiva_gpiohhandler);
   up_enable_irq(TIVA_IRQ_GPIOH);
 #endif
-#ifndef CONFIG_TIVA_DISABLE_GPIOJ_IRQS
+
+#ifdef CONFIG_TIVA_GPIOJ_IRQS
   irq_attach(TIVA_IRQ_GPIOJ, tiva_gpiojhandler);
   up_enable_irq(TIVA_IRQ_GPIOJ);
+#endif
+
+#ifdef CONFIG_TIVA_GPIOK_IRQS
+  irq_attach(TIVA_IRQ_GPIOK, tiva_gpiokhandler);
+  up_enable_irq(TIVA_IRQ_GPIOK);
+#endif
+
+#ifdef CONFIG_TIVA_GPIOL_IRQS
+  irq_attach(TIVA_IRQ_GPIOL, tiva_gpiolhandler);
+  up_enable_irq(TIVA_IRQ_GPIOL);
+#endif
+
+#ifdef CONFIG_TIVA_GPIOM_IRQS
+  irq_attach(TIVA_IRQ_GPIOM, tiva_gpiomhandler);
+  up_enable_irq(TIVA_IRQ_GPIOM);
+#endif
+
+#ifdef CONFIG_TIVA_GPION_IRQS
+  irq_attach(TIVA_IRQ_GPION, tiva_gpionhandler);
+  up_enable_irq(TIVA_IRQ_GPION);
+#endif
+
+#ifdef CONFIG_TIVA_GPIOP_IRQS
+  irq_attach(TIVA_IRQ_GPIOP, tiva_gpiophandler);
+  up_enable_irq(TIVA_IRQ_GPIOP);
+#endif
+
+#ifdef CONFIG_TIVA_GPIOQ_IRQS
+  irq_attach(TIVA_IRQ_GPIOQ, tiva_gpioqhandler);
+  up_enable_irq(TIVA_IRQ_GPIOQ);
+#endif
+
+#ifdef CONFIG_TIVA_GPIOR_IRQS
+  irq_attach(TIVA_IRQ_GPIOR, tiva_gpiorhandler);
+  up_enable_irq(TIVA_IRQ_GPIOR);
+#endif
+
+#ifdef CONFIG_TIVA_GPIOS_IRQS
+  irq_attach(TIVA_IRQ_GPIOS, tiva_gpioshandler);
+  up_enable_irq(TIVA_IRQ_GPIOS);
 #endif
 
   return OK;
 }
 
 /****************************************************************************
- * Name: gpio_irqattach
+ * Name: tiva_gpioirqattach
  *
  * Description:
- *   Attach in GPIO interrupt to the provide 'isr'
+ *   Attach in GPIO interrupt to the provided 'isr'. If isr==NULL, then the
+ *   irq_unexpected_isr handler is assigned and the pin's interrupt mask is
+ *   disabled to stop further interrupts. Otherwise, the new isr is linked
+ *   and the pin's interrupt mask is set.
+ *
+ * Returns:
+ *   oldhandler - the old interrupt handler assigned to this pin.
  *
  ****************************************************************************/
 
-int gpio_irqattach(int irq, xcpt_t isr)
+xcpt_t tiva_gpioirqattach(uint32_t pinset, xcpt_t isr)
 {
   irqstate_t flags;
-  int        gpioirq = irq - NR_IRQS;
-  int        ret     = ERROR;
+  xcpt_t     oldhandler = NULL;
+  uint8_t    port  = (pinset & GPIO_PORT_MASK) >> GPIO_PORT_SHIFT;
+  uint8_t    pinno = (pinset & GPIO_PIN_MASK);
+  uint8_t    pin   = 1 << pinno;
 
-  if ((unsigned)gpioirq < NR_GPIO_IRQS)
+  /* assign per-pin interrupt handlers */
+
+  if (port < TIVA_NPORTS)
     {
-      flags = irqsave();
+      flags = enter_critical_section();
+
+      /* store the older handler to return */
+
+      oldhandler = g_gpioportirqvector[TIVA_GPIO_IRQ_IDX(port, pinno)];
 
       /* If the new ISR is NULL, then the ISR is being detached.
        * In this case, disable the ISR and direct any interrupts
        * to the unexpected interrupt handler.
        */
 
+      gpioinfo("assign port=%d pin=%d function=%p to idx=%d\n",
+               port, pinno, isr, TIVA_GPIO_IRQ_IDX(port, pinno));
+
       if (isr == NULL)
         {
-#ifndef CONFIG_ARCH_NOINTC
-           gpio_irqdisable(gpioirq);
-#endif
-           isr = irq_unexpected_isr;
+          tiva_gpioirqdisable(port, pin);
+          g_gpioportirqvector[TIVA_GPIO_IRQ_IDX(port, pinno)] = irq_unexpected_isr;
+        }
+      else
+        {
+          g_gpioportirqvector[TIVA_GPIO_IRQ_IDX(port, pinno)] = isr;
+          tiva_gpioirqenable(port, pin);
         }
 
-      /* Save the new ISR in the table. */
-
-      g_irqvector[gpioirq] = isr;
-      irqrestore(flags);
-      ret = OK;
+      leave_critical_section(flags);
     }
-  return ret;
+
+  return oldhandler;
 }
 
 /****************************************************************************
- * Name: gpio_irqenable
+ * Name: tiva_gpioportirqattach
  *
  * Description:
- *   Enable the GPIO IRQ specified by 'irq'
+ *   Attach 'isr' to the GPIO port. Only use this if you want to handle
+ *   the entire ports interrupts explicitly.
  *
  ****************************************************************************/
 
-void gpio_irqenable(int irq)
+void tiva_gpioportirqattach(uint8_t port, xcpt_t isr)
 {
   irqstate_t flags;
-  int        gpioirq = irq - NR_IRQS;
-  uintptr_t  base;
-  uint32_t   regval;
-  int        pin;
+  int irq = gpioport2irq(port);
 
-  if ((unsigned)gpioirq < NR_GPIO_IRQS)
+  /* assign port interrupt handler */
+
+  if (port < TIVA_NPORTS)
     {
-      /* Get the base address of the GPIO module associated with this IRQ */
+      flags = enter_critical_section();
 
-      base = tiva_gpiobaseaddress(gpioirq);
-      DEBUGASSERT(base != 0);
-      pin  = (1 << (gpioirq & 7));
-
-      /* Disable the GPIO interrupt. "The GPIO IM register is the interrupt
-       * mask register. Bits set to High in GPIO IM allow the corresponding
-       * pins to trigger their individual interrupts and the combined GPIO INTR
-       * line. Clearing a bit disables interrupt triggering on that pin. All
-       * bits are cleared by a reset.
+      /* If the new ISR is NULL, then the ISR is being detached.
+       * In this case, disable the ISR and direct any interrupts
+       * to the unexpected interrupt handler.
        */
 
-      flags   = irqsave();
-      regval  = getreg32(base + TIVA_GPIO_IM_OFFSET);
-      regval |= pin;
-      putreg32(regval, base + TIVA_GPIO_IM_OFFSET);
-      irqrestore(flags);
+      gpioinfo("assign function=%p to port=%d\n", isr, port);
+
+      if (isr == NULL)
+        {
+          tiva_gpioirqdisable(port, 0xff);
+          irq_attach(irq, irq_unexpected_isr);
+        }
+      else
+        {
+          irq_attach(irq, isr);
+          tiva_gpioirqenable(port, 0xff);
+        }
+
+      leave_critical_section(flags);
     }
 }
 
 /****************************************************************************
- * Name: gpio_irqdisable
+ * Name: tiva_gpioirqenable
  *
  * Description:
- *   Disable the GPIO IRQ specified by 'irq'
+ *   Enable the GPIO port IRQ
  *
  ****************************************************************************/
 
-void gpio_irqdisable(int irq)
+void tiva_gpioirqenable(uint8_t port, uint8_t pin)
 {
-  irqstate_t flags;
-  int        gpioirq = irq - NR_IRQS;
-  uintptr_t  base;
-  uint32_t   regval;
-  int        pin;
+  uintptr_t base = tiva_gpiobaseaddress(port);
 
-  if ((unsigned)gpioirq < NR_GPIO_IRQS)
-    {
-      /* Get the base address of the GPIO module associated with this IRQ */
+  /* Enable the GPIO interrupt. "The GPIO IM register is the interrupt
+   * mask register. Bits set to High in GPIO IM allow the corresponding
+   * pins to trigger their individual interrupts and the combined GPIO INTR
+   * line. Clearing a bit disables interrupt triggering on that pin. All
+   * bits are cleared by a reset.
+   */
 
-      base = tiva_gpiobaseaddress(gpioirq);
-      DEBUGASSERT(base != 0);
-      pin  = (1 << (gpioirq & 7));
-
-      /* Disable the GPIO interrupt. "The GPIO IM register is the interrupt
-       * mask register. Bits set to High in GPIO IM allow the corresponding
-       * pins to trigger their individual interrupts and the combined GPIO INTR
-       * line. Clearing a bit disables interrupt triggering on that pin. All
-       * bits are cleared by a reset.
-       */
-
-      flags   = irqsave();
-      regval  = getreg32(base + TIVA_GPIO_IM_OFFSET);
-      regval &= ~pin;
-      putreg32(regval, base + TIVA_GPIO_IM_OFFSET);
-      irqrestore(flags);
-    }
+  modifyreg32(base + TIVA_GPIO_IM_OFFSET, 0, pin);
 }
+
+/****************************************************************************
+ * Name: tiva_gpioirqdisable
+ *
+ * Description:
+ *   Disable the GPIO port IRQ
+ *
+ ****************************************************************************/
+
+void tiva_gpioirqdisable(uint8_t port, uint8_t pin)
+{
+  uintptr_t base = tiva_gpiobaseaddress(port);
+
+  /* Disable the GPIO interrupt. "The GPIO IM register is the interrupt
+   * mask register. Bits set to High in GPIO IM allow the corresponding
+   * pins to trigger their individual interrupts and the combined GPIO INTR
+   * line. Clearing a bit disables interrupt triggering on that pin. All
+   * bits are cleared by a reset.
+   */
+
+  modifyreg32(base + TIVA_GPIO_IM_OFFSET, pin, 0);
+}
+
+#endif /* CONFIG_TIVA_GPIO_IRQS */

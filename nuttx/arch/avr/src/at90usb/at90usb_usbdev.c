@@ -1,7 +1,7 @@
-/*******************************************************************************
+/****************************************************************************
  * arch/arm/src/at90usb/at90usb_usbdev.c
  *
- *   Copyright (C) 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
-/*******************************************************************************
+/****************************************************************************
  * Included Files
- *******************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
@@ -47,6 +47,7 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/usb/usb.h>
@@ -62,9 +63,9 @@
 #include "up_arch.h"
 #include "up_internal.h"
 
-/*******************************************************************************
- * Definitions
- *******************************************************************************/
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
 /* Configuration ***************************************************************/
 /* PLL Settings are based on F_CPU frequency which is defined in the board.h file */
@@ -195,9 +196,9 @@
 #define avr_rqempty(ep)                   ((ep)->head == NULL)
 #define avr_rqpeek(ep)                    ((ep)->head)
 
-/*******************************************************************************
+/****************************************************************************
  * Private Types
- *******************************************************************************/
+ ****************************************************************************/
 
 /* A container for a request so that the request may be retained in a list */
 
@@ -261,9 +262,9 @@ struct avr_usbdev_s
   struct avr_ep_s eplist[AVR_NENDPOINTS];
 };
 
-/*******************************************************************************
+/****************************************************************************
  * Private Function Prototypes
- *******************************************************************************/
+ ****************************************************************************/
 
 /* Request queue operations ****************************************************/
 
@@ -331,9 +332,9 @@ static int avr_wakeup(struct usbdev_s *dev);
 static int avr_selfpowered(struct usbdev_s *dev, bool selfpowered);
 static int avr_pullup(struct usbdev_s *dev, bool enable);
 
-/*******************************************************************************
+/****************************************************************************
  * Private Data
- *******************************************************************************/
+ ****************************************************************************/
 
 /* Since there is only a single USB interface, all status information can be
  * be simply retained in a single global instance.
@@ -366,21 +367,21 @@ static const struct usbdev_ops_s g_devops =
   .pullup      = avr_pullup,
 };
 
-/*******************************************************************************
+/****************************************************************************
  * Public Data
- *******************************************************************************/
+ ****************************************************************************/
 
-/*******************************************************************************
+/****************************************************************************
  * Private Functions
- *******************************************************************************/
+ ****************************************************************************/
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_rqdequeue
  *
  * Description:
  *   Remove a request from an endpoint request queue
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static FAR struct avr_req_s *avr_rqdequeue(FAR struct avr_ep_s *privep)
 {
@@ -400,13 +401,13 @@ static FAR struct avr_req_s *avr_rqdequeue(FAR struct avr_ep_s *privep)
   return ret;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_rqenqueue
  *
  * Description:
  *   Add a request from an endpoint request queue
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static inline void avr_rqenqueue(FAR struct avr_ep_s *privep,
                                  FAR struct avr_req_s *req)
@@ -424,13 +425,13 @@ static inline void avr_rqenqueue(FAR struct avr_ep_s *privep,
     }
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_txready
  *
  * Description:
  *   Wait for the selected endpoint to be ready for an IN (TX) transfer
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void avr_txready(void)
 {
@@ -438,19 +439,19 @@ static void avr_txready(void)
   while (((UEINTX & (1 << TXINI))  == 0) && retries-- > 0);
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_fifoready
  *
  * Description:
  *   Wait for the selected endpoint FIFO to be ready
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_fifoready(int timeout)
 {
   UDINT &= ~(1 << SOFI);
 
-  for (;;)
+  for (; ; )
     {
       /* Check if the FIFO is ready by testing RWAL (read/write allowed).  The
        * meaning of this bigtdepends on the direction of the endpoint: For an
@@ -496,7 +497,7 @@ static int avr_fifoready(int timeout)
     }
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_ep0send
  *
  * Description:
@@ -505,7 +506,7 @@ static int avr_fifoready(int timeout)
  * Assumptions:
  * - Endpoint 0 is already selected.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void avr_ep0send(FAR const uint8_t *buffer, uint16_t buflen)
 {
@@ -518,9 +519,9 @@ static void avr_ep0send(FAR const uint8_t *buffer, uint16_t buflen)
 
   while (buflen)
     {
-     /* Verify that RXOUTI is clear.  RXOUTI is set when a new OUT data is
-      * received.  In this case, we have not option but to abort the transfer.
-      */
+      /* Verify that RXOUTI is clear.  RXOUTI is set when a new OUT data is
+       * received.  In this case, we have not option but to abort the transfer.
+       */
 
       regval = UEINTX;
       if ((regval & (1 << RXOUTI)) != 0)
@@ -577,13 +578,13 @@ static void avr_ep0send(FAR const uint8_t *buffer, uint16_t buflen)
     }
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epNsend
  *
  * Description:
  *   Perform a TX transfer for Endpoint N
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static inline int avr_epNsend(FAR struct avr_ep_s *privep,
                               FAR struct avr_req_s *privreq)
@@ -744,13 +745,13 @@ static inline int avr_epNsend(FAR struct avr_ep_s *privep,
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epNrecv
  *
  * Description:
  *   Perform an RX transfer for Endpoint N
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static inline int avr_epNrecv(FAR struct avr_ep_s *privep,
                               FAR struct usbdev_req_s *req)
@@ -826,7 +827,7 @@ static inline int avr_epNrecv(FAR struct avr_ep_s *privep,
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epINqueue
  *
  * Description:
@@ -835,7 +836,7 @@ static inline int avr_epNrecv(FAR struct avr_ep_s *privep,
  *   interrupt occurs.  Thus function is also called from the requeust enqueuing
  *   logic BUT with interrupts disabled.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_epINqueue(FAR struct avr_ep_s *privep)
 {
@@ -854,10 +855,10 @@ static int avr_epINqueue(FAR struct avr_ep_s *privep)
     }
   else
     {
-       /* No.. remove the next request from the queue of IN requests */
+      /* No.. remove the next request from the queue of IN requests */
 
-       privreq         =  avr_rqdequeue(privep);
-       privep->pending = privreq;
+      privreq         =  avr_rqdequeue(privep);
+      privep->pending = privreq;
     }
 
   /* Is there an IN request */
@@ -873,7 +874,7 @@ static int avr_epINqueue(FAR struct avr_ep_s *privep)
        * pending transfer in place.
        */
 
-       if (ret == OK || ret != -ETIME)
+      if (ret == OK || ret != -ETIME)
         {
           /* The transfer has completed, perhaps with an error.  Return the request
            * to the class driver.
@@ -887,7 +888,7 @@ static int avr_epINqueue(FAR struct avr_ep_s *privep)
   return ret;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epOUTqueue
  *
  * Description:
@@ -895,7 +896,7 @@ static int avr_epINqueue(FAR struct avr_ep_s *privep)
  *   from interrupt handling logic for an endpoint when the RXOUT endpoint
  *   interrupt occurs.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_epOUTqueue(FAR struct avr_ep_s *privep)
 {
@@ -926,13 +927,13 @@ static int avr_epOUTqueue(FAR struct avr_ep_s *privep)
   return ret;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_reqcomplete
  *
  * Description:
  *   Handle termination of the request at the head of the endpoint request queue.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void avr_reqcomplete(FAR struct avr_ep_s *privep, FAR struct avr_req_s *privreq,
                             int result)
@@ -959,13 +960,13 @@ static void avr_reqcomplete(FAR struct avr_ep_s *privep, FAR struct avr_req_s *p
   privep->stalled = stalled;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_cancelrequests
  *
  * Description:
  *   Cancel all pending requests for an endpoint
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void avr_cancelrequests(FAR struct avr_ep_s *privep, int status)
 {
@@ -998,13 +999,13 @@ static void avr_cancelrequests(FAR struct avr_ep_s *privep, int status)
     }
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_cancelall
  *
  * Description:
  *   Cancel all pending requests for an endpoint
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void avr_cancelall(int status)
 {
@@ -1021,14 +1022,14 @@ static void avr_cancelall(int status)
     }
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epfindbyaddr
  *
  * Description:
  *   Find the physical endpoint structure corresponding to a logic endpoint
  *   address
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static struct avr_ep_s *avr_epfindbyaddr(uint8_t epno)
 {
@@ -1063,14 +1064,14 @@ static struct avr_ep_s *avr_epfindbyaddr(uint8_t epno)
   return NULL;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_dispatchrequest
  *
  * Description:
  *   Provide unhandled setup actions to the class driver. This is logically part
  *   of the USB interrupt handler.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void avr_dispatchrequest(FAR const struct usb_ctrlreq_s *ctrl)
 {
@@ -1093,13 +1094,13 @@ static void avr_dispatchrequest(FAR const struct usb_ctrlreq_s *ctrl)
     }
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_ep0configure
  *
  * Description:
  *   Reset Usb engine
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_ep0configure(void)
 {
@@ -1139,7 +1140,7 @@ static int avr_ep0configure(void)
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epreset
  *
  * Description:
@@ -1148,7 +1149,7 @@ static int avr_ep0configure(void)
  * Input Parameters:
  *   epno - The endpoint to be reset
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void avr_epreset(FAR struct avr_ep_s *privep, int status)
 {
@@ -1172,13 +1173,13 @@ static void avr_epreset(FAR struct avr_ep_s *privep, int status)
   privep->stalled = false;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_usbreset
  *
  * Description:
  *   Reset Usb engine
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void avr_usbreset(void)
 {
@@ -1273,13 +1274,13 @@ static void avr_usbreset(void)
   UDIEN |=  ((1 << SUSPE) | (1 << EORSTE));
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_usbshutdown
  *
  * Description:
  *   Shutdown the USB interface and put the hardare in a known state
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 void avr_usbshutdown(void)
 {
@@ -1322,13 +1323,13 @@ void avr_usbshutdown(void)
   USBCON &= ~(1 << OTGPADE);
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_setaddress
  *
  * Description:
  *   Set the devices USB address
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static inline void avr_setaddress(uint8_t address)
 {
@@ -1352,14 +1353,14 @@ static inline void avr_setaddress(uint8_t address)
   UDADDR  = ((1 << ADDEN) | address);
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_ep0setup
  *
  * Description:
  *   USB Ctrl EP Setup Event. This is logically part of the USB interrupt
  *   handler.  This event occurs when a setup packet is receive on EP0 OUT.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static inline void avr_ep0setup(void)
 {
@@ -1386,7 +1387,7 @@ static inline void avr_ep0setup(void)
 
   /* Read EP0 setup data -- Read the setup data from the hardware. */
 
-  ptr = (uint8_t*)&ctrl;
+  ptr = (uint8_t *)&ctrl;
   for (i = 0; i < USB_SIZEOF_CTRLREQ; i++)
     {
       *ptr++ = UEDATX;
@@ -1398,8 +1399,8 @@ static inline void avr_ep0setup(void)
   index = GETUINT16(ctrl.index);
   len   = GETUINT16(ctrl.len);
 
-  ullvdbg("type=%02x req=%02x value=%04x index=%04x len=%04x\n",
-          ctrl.type, ctrl.req, value, index, len);
+  uinfo("type=%02x req=%02x value=%04x index=%04x len=%04x\n",
+        ctrl.type, ctrl.req, value, index, len);
 
   /* Dispatch any non-standard requests */
 
@@ -1595,7 +1596,7 @@ static inline void avr_ep0setup(void)
 #ifdef CONFIG_USBDEV_SELFPOWERED
                 if (value == USB_FEATURE_TESTMODE)
                   {
-                    ullvdbg("test mode: %d\n", index);
+                    uinfo("test mode: %d\n", index);
                   }
                 else if (value == USB_FEATURE_REMOTEWAKEUP)
                   {
@@ -1759,13 +1760,13 @@ static inline void avr_ep0setup(void)
     }
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_ep0interrupt
  *
  * Description:
  *   USB endpoint/pipe IN interrupt handler
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static inline void avr_ep0interrupt(void)
 {
@@ -1796,13 +1797,13 @@ static inline void avr_ep0interrupt(void)
     }
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epNinterrupt
  *
  * Description:
  *   USB endpoint/pipe IN interrupt handler
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static inline void avr_epNinterrupt(void)
 {
@@ -1868,13 +1869,13 @@ static inline void avr_epNinterrupt(void)
     }
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epinterrupt
  *
  * Description:
  *   USB endpoint/pipe interrupt handler
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_epinterrupt(int irq, FAR void *context)
 {
@@ -1892,14 +1893,14 @@ static int avr_epinterrupt(int irq, FAR void *context)
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_genvbus
  *
  * Description:
  *   A change in VBUS has been detected.  Check if the device has been
  *   connected to or disconnected from a host.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void avr_genvbus(void)
 {
@@ -1944,13 +1945,13 @@ static void avr_genvbus(void)
     }
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_gensuspend
  *
  * Description:
  *   The USB controller has been put in suspend mode.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static inline void avr_gensuspend(void)
 {
@@ -1979,13 +1980,13 @@ static inline void avr_gensuspend(void)
   PLLCSR = 0;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_genwakeup
  *
  * Description:
  *  Resume from suspend mode.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void avr_genwakeup(void)
 {
@@ -2011,13 +2012,13 @@ static void avr_genwakeup(void)
     }
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_geneor
  *
  * Description:
  *  Handle an end-of-reset interrupt
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static inline void avr_geneor(void)
 {
@@ -2052,13 +2053,13 @@ static inline void avr_geneor(void)
   UEIENX |= (1 << RXSTPE);
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_geninterrupt
  *
  * Description:
  *   USB general interrupt handler
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_geninterrupt(int irq, FAR void *context)
 {
@@ -2100,7 +2101,7 @@ static int avr_geninterrupt(int irq, FAR void *context)
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epconfigure
  *
  * Description:
@@ -2113,7 +2114,7 @@ static int avr_geninterrupt(int irq, FAR void *context)
  *          needs to take special action when all of the endpoints have been
  *          configured.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_epconfigure(FAR struct usbdev_ep_s *ep,
                            FAR const struct usb_epdesc_s *desc, bool last)
@@ -2229,24 +2230,24 @@ static int avr_epconfigure(FAR struct usbdev_ep_s *ep,
 
   /* Enable interrupts as appropriate for this endpoint */
 
-  UEIENX |= uecfg1x;
+  UEIENX |= ueienx;
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epdisable
  *
  * Description:
  *   The endpoint will no longer be used
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_epdisable(FAR struct usbdev_ep_s *ep)
 {
   FAR struct avr_ep_s *privep = (FAR struct avr_ep_s *)ep;
   irqstate_t flags;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!ep)
     {
       usbtrace(TRACE_DEVERROR(AVR_TRACEERR_INVALIDPARMS), 0);
@@ -2255,30 +2256,30 @@ static int avr_epdisable(FAR struct usbdev_ep_s *ep)
 #endif
   usbtrace(TRACE_EPDISABLE, privep->ep.eplog);
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Disable the endpoint */
 
   avr_epreset(privep, -ESHUTDOWN);
   g_usbdev.stalled = true;
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epallocreq
  *
  * Description:
  *   Allocate an I/O request
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static FAR struct usbdev_req_s *avr_epallocreq(FAR struct usbdev_ep_s *ep)
 {
   FAR struct avr_req_s *privreq;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!ep)
     {
       usbtrace(TRACE_DEVERROR(AVR_TRACEERR_INVALIDPARMS), 0);
@@ -2287,7 +2288,7 @@ static FAR struct usbdev_req_s *avr_epallocreq(FAR struct usbdev_ep_s *ep)
 #endif
   usbtrace(TRACE_EPALLOCREQ, ((FAR struct avr_ep_s *)ep)->ep.eplog);
 
-  privreq = (FAR struct avr_req_s *)kmalloc(sizeof(struct avr_req_s));
+  privreq = (FAR struct avr_req_s *)kmm_malloc(sizeof(struct avr_req_s));
   if (!privreq)
     {
       usbtrace(TRACE_DEVERROR(AVR_TRACEERR_ALLOCFAIL), 0);
@@ -2298,20 +2299,20 @@ static FAR struct usbdev_req_s *avr_epallocreq(FAR struct usbdev_ep_s *ep)
   return &privreq->req;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epfreereq
  *
  * Description:
  *   Free an I/O request
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void avr_epfreereq(FAR struct usbdev_ep_s *ep,
                           FAR struct usbdev_req_s *req)
 {
   FAR struct avr_req_s *privreq = (FAR struct avr_req_s *)req;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!ep || !req)
     {
       usbtrace(TRACE_DEVERROR(AVR_TRACEERR_INVALIDPARMS), 0);
@@ -2320,16 +2321,16 @@ static void avr_epfreereq(FAR struct usbdev_ep_s *ep,
 #endif
 
   usbtrace(TRACE_EPFREEREQ, ((FAR struct avr_ep_s *)ep)->ep.eplog);
-  kfree(privreq);
+  kmm_free(privreq);
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epallocbuffer
  *
  * Description:
  *   Allocate an I/O buffer
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_USBDEV_DMA
 static void *avr_epallocbuffer(FAR struct usbdev_ep_s *ep, unsigned bytes)
@@ -2339,18 +2340,18 @@ static void *avr_epallocbuffer(FAR struct usbdev_ep_s *ep, unsigned bytes)
 #ifdef CONFIG_USBDEV_DMAMEMORY
   return usbdev_dma_alloc(bytes);
 #else
-  return kmalloc(bytes);
+  return kmm_malloc(bytes);
 #endif
 }
 #endif
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epfreebuffer
  *
  * Description:
  *   Free an I/O buffer
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_USBDEV_DMA
 static void avr_epfreebuffer(FAR struct usbdev_ep_s *ep, FAR void *buf)
@@ -2360,18 +2361,18 @@ static void avr_epfreebuffer(FAR struct usbdev_ep_s *ep, FAR void *buf)
 #ifdef CONFIG_USBDEV_DMAMEMORY
   usbdev_dma_free(buf);
 #else
-  kfree(buf);
+  kmm_free(buf);
 #endif
 }
 #endif
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epsubmit
  *
  * Description:
  *   Submit an I/O request to the endpoint
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_epsubmit(FAR struct usbdev_ep_s *ep,
                         FAR struct usbdev_req_s *req)
@@ -2381,12 +2382,12 @@ static int avr_epsubmit(FAR struct usbdev_ep_s *ep,
   irqstate_t flags;
   int ret = OK;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!req || !req->callback || !req->buf || !ep)
     {
       usbtrace(TRACE_DEVERROR(AVR_TRACEERR_INVALIDPARMS), 0);
-      ullvdbg("req=%p callback=%p buf=%p ep=%p\n",
-              req, req->callback, req->buf, ep);
+      uinfo("req=%p callback=%p buf=%p ep=%p\n",
+            req, req->callback, req->buf, ep);
       return -EINVAL;
     }
 #endif
@@ -2406,7 +2407,7 @@ static int avr_epsubmit(FAR struct usbdev_ep_s *ep,
 
   /* Disable Interrupts */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* If we are stalled, then drop all requests on the floor */
 
@@ -2465,17 +2466,17 @@ static int avr_epsubmit(FAR struct usbdev_ep_s *ep,
         }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return ret;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epcancel
  *
  * Description:
  *   Cancel an I/O request previously sent to an endpoint
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_epcancel(FAR struct usbdev_ep_s *ep,
                         FAR struct usbdev_req_s *req)
@@ -2483,7 +2484,7 @@ static int avr_epcancel(FAR struct usbdev_ep_s *ep,
   FAR struct avr_ep_s *privep = (FAR struct avr_ep_s *)ep;
   irqstate_t flags;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!ep || !req)
     {
       usbtrace(TRACE_DEVERROR(AVR_TRACEERR_INVALIDPARMS), 0);
@@ -2497,19 +2498,19 @@ static int avr_epcancel(FAR struct usbdev_ep_s *ep,
    * just remove it from the list but ... all other implementations cancel all
    * requests ... */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   avr_cancelrequests(privep, -ESHUTDOWN);
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_epstall
  *
  * Description:
  *   Stall or resume and endpoint
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_epstall(FAR struct usbdev_ep_s *ep, bool resume)
 {
@@ -2517,7 +2518,7 @@ static int avr_epstall(FAR struct usbdev_ep_s *ep, bool resume)
 
   /* STALL or RESUME the endpoint */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (resume)
     {
       /* Clear stall and reset the data toggle */
@@ -2533,15 +2534,15 @@ static int avr_epstall(FAR struct usbdev_ep_s *ep, bool resume)
       UECONX       |= (1 << STALLRQ);
       g_usbdev.stalled = true;
     }
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Device operations
- *******************************************************************************/
+ ****************************************************************************/
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_allocep
  *
  * Description:
@@ -2555,7 +2556,7 @@ static int avr_epstall(FAR struct usbdev_ep_s *ep, bool resume)
  *   eptype - Endpoint type.  One of {USB_EP_ATTR_XFER_ISOC, USB_EP_ATTR_XFER_BULK,
  *            USB_EP_ATTR_XFER_INT}
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static FAR struct usbdev_ep_s *avr_allocep(FAR struct usbdev_s *dev,
                                            uint8_t epno, bool in,
@@ -2581,7 +2582,7 @@ static FAR struct usbdev_ep_s *avr_allocep(FAR struct usbdev_s *dev,
        * requested 'logical' endpoint.
        */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
       if (epno >= AVR_NENDPOINTS)
         {
           usbtrace(TRACE_DEVERROR(AVR_TRACEERR_BADEPNO), (uint16_t)epno);
@@ -2602,7 +2603,7 @@ static FAR struct usbdev_ep_s *avr_allocep(FAR struct usbdev_s *dev,
     {
       /* Yes.. now see if any of the request endpoints are available */
 
-      flags = irqsave();
+      flags = enter_critical_section();
 
       /* Select the lowest bit in the set of matching, available endpoints */
 
@@ -2611,52 +2612,52 @@ static FAR struct usbdev_ep_s *avr_allocep(FAR struct usbdev_s *dev,
           epmask = 1 << epndx;
           if ((epset & epmask) != 0)
             {
-               /* Initialize the endpoint structure */
+              /* Initialize the endpoint structure */
 
-               privep           = &g_usbdev.eplist[epndx];
-               memset(privep, 0, sizeof(struct avr_ep_s));
+              privep           = &g_usbdev.eplist[epndx];
+              memset(privep, 0, sizeof(struct avr_ep_s));
 
-               privep->ep.ops       = &g_epops;
-               privep->ep.eplog     = epndx;
-               privep->ep.maxpacket = (epndx == 1) ? 256 : 64;
+              privep->ep.ops       = &g_epops;
+              privep->ep.eplog     = epndx;
+              privep->ep.maxpacket = (epndx == 1) ? 256 : 64;
 
-               /* Mark the IN/OUT endpoint no longer available */
+              /* Mark the IN/OUT endpoint no longer available */
 
-               g_usbdev.epavail &= ~epmask;
-               if (in)
-                 {
-                   g_usbdev.epinset |= epmask;
-                   privep->epin      = 1;
-                 }
-               else
-                 {
-                   g_usbdev.epoutset |= epmask;
-                   privep->epin       = 0;
-                 }
+              g_usbdev.epavail &= ~epmask;
+              if (in)
+                {
+                  g_usbdev.epinset |= epmask;
+                  privep->epin      = 1;
+                }
+              else
+                {
+                  g_usbdev.epoutset |= epmask;
+                  privep->epin       = 0;
+                }
 
-               /* And return the pointer to the standard endpoint structure */
+              /* And return the pointer to the standard endpoint structure */
 
-               irqrestore(flags);
-               return &privep->ep;
+              leave_critical_section(flags);
+              return &privep->ep;
             }
         }
 
       /* Shouldn't get here */
 
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 
   usbtrace(TRACE_DEVERROR(AVR_TRACEERR_NOEP), (uint16_t) epno);
   return NULL;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_freeep
  *
  * Description:
  *   Free the previously allocated endpoint
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void avr_freeep(FAR struct usbdev_s *dev, FAR struct usbdev_ep_s *ep)
 {
@@ -2668,21 +2669,21 @@ static void avr_freeep(FAR struct usbdev_s *dev, FAR struct usbdev_ep_s *ep)
 
   /* Mark the endpoint as available */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   epmask = (1 << privep->ep.eplog);
   g_usbdev.epavail  |= epmask;
   g_usbdev.epinset  &= ~epmask;
   g_usbdev.epoutset &= ~epmask;
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_getframe
  *
  * Description:
  *   Returns the current frame number
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_getframe(struct usbdev_s *dev)
 {
@@ -2692,13 +2693,13 @@ static int avr_getframe(struct usbdev_s *dev)
   return (int)UDFNUMH << 8 | (int)UDFNUML;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_wakeup
  *
  * Description:
  *   Tries to wake up the host connected to this device
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_wakeup(struct usbdev_s *dev)
 {
@@ -2706,25 +2707,25 @@ static int avr_wakeup(struct usbdev_s *dev)
 
   usbtrace(TRACE_DEVWAKEUP, 0);
 
-  flags = irqsave();
+  flags = enter_critical_section();
   avr_genwakeup();
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_selfpowered
  *
  * Description:
  *   Sets/clears the device selfpowered feature
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_selfpowered(struct usbdev_s *dev, bool selfpowered)
 {
   usbtrace(TRACE_DEVSELFPOWERED, (uint16_t) selfpowered);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!dev)
     {
       usbtrace(TRACE_DEVERROR(AVR_TRACEERR_INVALIDPARMS), 0);
@@ -2736,13 +2737,13 @@ static int avr_selfpowered(struct usbdev_s *dev, bool selfpowered)
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_pullup
  *
  * Description:
  *   Software-controlled connect to/disconnect from USB host
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int avr_pullup(struct usbdev_s *dev, bool enable)
 {
@@ -2750,11 +2751,11 @@ static int avr_pullup(struct usbdev_s *dev, bool enable)
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Public Functions
- *******************************************************************************/
+ ****************************************************************************/
 
-/*******************************************************************************
+/****************************************************************************
  * Name: up_usbinitialize
  *
  * Description:
@@ -2767,7 +2768,7 @@ static int avr_pullup(struct usbdev_s *dev, bool enable)
  *   and P0.23 and PO.31 in PINSEL1 must be configured for Vbus and USB connect
  *   LED.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 void up_usbinitialize(void)
 {
@@ -2823,9 +2824,9 @@ errout:
   up_usbuninitialize();
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: up_usbuninitialize
- *******************************************************************************/
+ ****************************************************************************/
 
 void up_usbuninitialize(void)
 {
@@ -2841,7 +2842,7 @@ void up_usbuninitialize(void)
 
   /* Disconnect device */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   avr_pullup(&g_usbdev.usbdev, false);
   g_usbdev.usbdev.speed = USB_SPEED_UNKNOWN;
 
@@ -2853,17 +2854,17 @@ void up_usbuninitialize(void)
   /* Shutdown the USB controller hardware */
 
   avr_usbshutdown();
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: usbdev_register
  *
  * Description:
  *   Register a USB device class driver. The class driver's bind() method will be
  *   called to bind it to a USB device driver.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 int usbdev_register(struct usbdevclass_driver_s *driver)
 {
@@ -2871,7 +2872,7 @@ int usbdev_register(struct usbdevclass_driver_s *driver)
 
   usbtrace(TRACE_DEVREGISTER, 0);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!driver || !driver->ops->bind || !driver->ops->unbind ||
       !driver->ops->disconnect || !driver->ops->setup)
     {
@@ -2912,7 +2913,7 @@ int usbdev_register(struct usbdevclass_driver_s *driver)
   return ret;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: usbdev_unregister
  *
  * Description:
@@ -2920,13 +2921,13 @@ int usbdev_register(struct usbdevclass_driver_s *driver)
  *   it will first disconnect().  The driver is also requested to unbind() and clean
  *   up any device state, before this procedure finally returns.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 int usbdev_unregister(struct usbdevclass_driver_s *driver)
 {
   usbtrace(TRACE_DEVUNREGISTER, 0);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (driver != g_usbdev.driver)
     {
       usbtrace(TRACE_DEVERROR(AVR_TRACEERR_INVALIDPARMS), 0);
@@ -2944,7 +2945,7 @@ int usbdev_unregister(struct usbdevclass_driver_s *driver)
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: avr_pollvbus
  *
  * Description:
@@ -2955,15 +2956,15 @@ int usbdev_unregister(struct usbdevclass_driver_s *driver)
  *   (especially if a relay is used to switch VBUS!).  This poll is, then,
  *   simply a failsafe to assure that VBUS connection events are never missed.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_USB_NOISYVBUS
- void avr_pollvbus(void)
+void avr_pollvbus(void)
 {
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   avr_genvbus();
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 #endif

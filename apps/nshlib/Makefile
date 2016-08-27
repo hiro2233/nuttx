@@ -1,7 +1,7 @@
 ############################################################################
 # apps/nshlib/Makefile
 #
-#   Copyright (C) 2011-2013 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2011-2013, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -40,14 +40,24 @@ include $(APPDIR)/Make.defs
 # NSH Library
 
 ASRCS  =
-CSRCS  = nsh_init.c nsh_parse.c nsh_console.c nsh_script.c
+CSRCS  = nsh_init.c nsh_parse.c nsh_console.c nsh_script.c nsh_system.c
 CSRCS += nsh_command.c nsh_fscmds.c nsh_ddcmd.c nsh_proccmds.c nsh_mmcmds.c
-CSRCS += nsh_envcmds.c nsh_dbgcmds.c
+CSRCS += nsh_timcmds.c nsh_envcmds.c nsh_syscmds.c nsh_dbgcmds.c
 
 ifeq ($(CONFIG_NFILE_STREAMS),0)
 CSRCS += nsh_stdsession.c
+ifeq ($(CONFIG_NSH_CONSOLE_LOGIN),y)
+CSRCS += nsh_stdlogin.c
+endif
 else
 CSRCS += nsh_session.c
+ifeq ($(CONFIG_NSH_CONSOLE_LOGIN),y)
+CSRCS += nsh_login.c
+endif
+endif
+
+ifneq ($(CONFIG_NFILE_DESCRIPTORS),0)
+CSRCS += nsh_fsutils.c
 endif
 
 ifeq ($(CONFIG_NSH_BUILTIN_APPS),y)
@@ -69,12 +79,14 @@ CSRCS += nsh_routecmds.c
 endif
 endif
 
-ifeq ($(CONFIG_RTC),y)
-CSRCS += nsh_timcmds.c
-endif
-
 ifneq ($(CONFIG_DISABLE_MOUNTPOINT),y)
 CSRCS += nsh_mntcmds.c
+endif
+
+ifeq ($(CONFIG_MODULE),y)
+ifneq ($(CONFIG_NSH_DISABLE_MODCMDS),y)
+CSRCS += nsh_modcmds.c
+endif
 endif
 
 ifeq ($(CONFIG_NSH_CONSOLE),y)
@@ -83,6 +95,9 @@ endif
 
 ifeq ($(CONFIG_NSH_TELNET),y)
 CSRCS += nsh_telnetd.c
+ifeq ($(CONFIG_NSH_TELNET_LOGIN),y)
+CSRCS += nsh_telnetlogin.c
+endif
 endif
 
 ifneq ($(CONFIG_NSH_DISABLESCRIPT),y)
@@ -90,11 +105,23 @@ CSRCS += nsh_test.c
 endif
 
 ifeq ($(CONFIG_USBDEV),y)
-CSRCS += nsh_usbdev.c
+CSRCS += nsh_usbconsole.c
+endif
+
+ifeq ($(CONFIG_USBHOST),y)
+CSRCS += nsh_usbkeyboard.c
+endif
+
+ifeq ($(CONFIG_NSH_USBDEV_TRACE),y)
+CSRCS += nsh_usbtrace.c
 endif
 
 ifeq ($(CONFIG_NETUTILS_CODECS),y)
 CSRCS += nsh_codeccmd.c
+endif
+
+ifeq ($(CONFIG_NSH_LOGIN_PASSWD),y)
+CSRCS += nsh_passwdcmds.c
 endif
 
 AOBJS = $(ASRCS:.S=$(OBJEXT))
@@ -131,6 +158,8 @@ $(COBJS): %$(OBJEXT): %.c
 	$(call ARCHIVE, $(BIN), $(OBJS))
 	@touch .built
 
+install:
+
 context:
 
 .depend: Makefile $(SRCS)
@@ -149,3 +178,5 @@ distclean: clean
 
 -include Make.dep
 
+.PHONY: preconfig
+preconfig:

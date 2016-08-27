@@ -1,8 +1,7 @@
 /****************************************************************************
  * arch/z80/include/z80/irq.h
- * arch/chip/irq.h
  *
- *   Copyright (C) 2007-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,7 +49,7 @@
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Z80 Interrupts */
@@ -113,8 +112,8 @@ struct xcptcontext
 
   /* The following retains that state during signal execution */
 
-  uint16_t saved_pc;	/* Saved return address */
-  uint16_t saved_i;		/* Saved interrupt state */
+  uint16_t saved_pc;    /* Saved return address */
+  uint16_t saved_i;     /* Saved interrupt state */
 #endif
 };
 #endif
@@ -124,7 +123,7 @@ struct xcptcontext
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -134,13 +133,23 @@ struct xcptcontext
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
 
-EXTERN irqstate_t irqsave(void) __naked;
-EXTERN void       irqrestore(irqstate_t flags) __naked;
+/* Name: up_irq_save, up_irq_restore, and friends.
+ *
+ * NOTE: This function should never be called from application code and,
+ * as a general rule unless you really know what you are doing, this
+ * function should not be called directly from operation system code either:
+ * Typically, the wrapper functions, enter_critical_section() and
+ * leave_critical section(), are probably what you really want.
+ */
+
+irqstate_t up_irq_save(void) __naked;
+void       up_irq_restore(irqstate_t flags) __naked;
 
 #undef EXTERN
 #ifdef __cplusplus

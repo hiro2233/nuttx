@@ -47,13 +47,12 @@
 
 #include "chip.h"
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 #include "lpc214x_vic.h"
 
 /********************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ********************************************************************************/
 
 /********************************************************************************
@@ -108,12 +107,12 @@ static uint8_t g_nibblemap[16] = { 0, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 
 #ifndef CONFIG_VECTORED_INTERRUPTS
 void up_decodeirq(uint32_t *regs)
 #else
-static void lpc214x_decodeirq( uint32_t *regs)
+static void lpc214x_decodeirq(uint32_t *regs)
 #endif
 {
 #ifdef CONFIG_SUPPRESS_INTERRUPTS
-  lowsyslog("Unexpected IRQ\n");
-  current_regs = regs;
+  CURRENT_REGS = regs;
+  err("ERROR: Unexpected IRQ\n");
   PANIC();
 #else
 
@@ -148,22 +147,22 @@ static void lpc214x_decodeirq( uint32_t *regs)
       uint32_t *savestate;
 
       /* Current regs non-zero indicates that we are processing an interrupt;
-       * current_regs is also used to manage interrupt level context switches.
+       * CURRENT_REGS is also used to manage interrupt level context switches.
        */
 
-      savestate    = (uint32_t*)current_regs;
-      current_regs = regs;
+      savestate    = (uint32_t *)CURRENT_REGS;
+      CURRENT_REGS = regs;
 
       /* Deliver the IRQ */
 
       irq_dispatch(irq, regs);
 
-      /* Restore the previous value of current_regs.  NULL would indicate that
+      /* Restore the previous value of CURRENT_REGS.  NULL would indicate that
        * we are no longer in an interrupt handler.  It will be non-NULL if we
        * are returning from a nested interrupt.
        */
 
-      current_regs = savestate;
+      CURRENT_REGS = savestate;
     }
 #endif
 }

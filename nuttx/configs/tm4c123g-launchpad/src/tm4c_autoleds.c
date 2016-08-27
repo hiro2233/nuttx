@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/tm4c123g-launchpad/src/tm4c_leds.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,6 +42,7 @@
 #include <stdbool.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -51,7 +52,7 @@
 #include "tm4c123g-launchpad.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* The TM4C123G LaunchPad has a single RGB LED.  There is only one visible LED
  * which will vary in color.  But, from the standpoint of the firmware, this
@@ -96,40 +97,20 @@
  * LED_PANIC         4      ON   OFF   OFF (flashing 2Hz)
  */
 
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg  lldbg
-#  define ledvdbg llvdbg
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
-
 /* Dump GPIO registers */
 
-#ifdef CONFIG_DEBUG_LEDS
+#ifdef CONFIG_DEBUG_LEDS_INFO
 #  define led_dumpgpio(m) tiva_dumpgpio(LED_GPIO, m)
 #else
 #  define led_dumpgpio(m)
 #endif
 
 /****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: tm4c_ledinit
+ * Name: tm4c_led_initialize
  *
  * Description:
  *   Called to initialize the on-board LEDs.
@@ -137,24 +118,24 @@
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void tm4c_ledinit(void)
+void tm4c_led_initialize(void)
 {
-  leddbg("Initializing\n");
+  ledinfo("Initializing\n");
 
   /* Configure Port E, Bit 1 as an output, initial value=OFF */
 
-  led_dumpgpio("tm4c_ledinit before tiva_configgpio()");
+  led_dumpgpio("tm4c_led_initialize before tiva_configgpio()");
   tiva_configgpio(GPIO_LED_R);
   tiva_configgpio(GPIO_LED_G);
   tiva_configgpio(GPIO_LED_B);
-  led_dumpgpio("tm4c_ledinit after tiva_configgpio()");
+  led_dumpgpio("tm4c_led_initialize after tiva_configgpio()");
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  ****************************************************************************/
 
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   switch (led)
     {
@@ -191,10 +172,10 @@ void board_led_on(int led)
 }
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  ****************************************************************************/
 
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   switch (led)
     {

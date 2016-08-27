@@ -1,12 +1,13 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 config EXAMPLES_ADC
 	bool "ADC example"
 	default n
-	depends on ADC
+	depends on ADC && LIB_BOARDCTL
+	select BOARDCTL_ADCTEST
 	---help---
 		Enable the ADC example
 

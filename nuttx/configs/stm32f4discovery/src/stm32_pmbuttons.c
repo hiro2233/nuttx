@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/stm32f4discovery/src/stm32_pm_buttons.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2015-2016 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *            Diego Sanchez <dsanchez@nx-engineering.com>
  *
@@ -41,10 +41,12 @@
 #include <arch/board/board.h>
 #include <nuttx/config.h>
 
-#include <nuttx/power/pm.h>
-#include <arch/irq.h>
 #include <stdbool.h>
 #include <debug.h>
+
+#include <nuttx/board.h>
+#include <nuttx/power/pm.h>
+#include <arch/irq.h>
 
 #include "up_arch.h"
 #include "nvic.h"
@@ -71,9 +73,7 @@
 #  define CONFIG_PM_BUTTON_ACTIVITY 10
 #endif
 
-/****************************************************************************
- * Private Types
- ****************************************************************************/
+#define PM_IDLE_DOMAIN  0 /* Revisit */
 
 /****************************************************************************
  * Private Function Prototypes
@@ -82,10 +82,6 @@
 #ifdef CONFIG_ARCH_IRQBUTTONS
 static int button_handler(int irq, FAR void *context);
 #endif /* CONFIG_ARCH_IRQBUTTONS */
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -109,7 +105,7 @@ static int button_handler(int irq, FAR void *context)
    * special happened.
    */
 
-  pm_activity(CONFIG_PM_BUTTON_ACTIVITY);
+  pm_activity(PM_IDLE_DOMAIN, CONFIG_PM_BUTTON_ACTIVITY);
   return OK;
 }
 #endif /* CONFIG_ARCH_IRQBUTTONS */
@@ -138,9 +134,9 @@ void stm32_pm_buttons(void)
 
       if (oldhandler != NULL)
         {
-          lowsyslog("WARNING: oldhandler:%p is not NULL!  "
-                        "Button events may be lost or aliased!\n",
-                        oldhandler);
+          _warn("WARNING: oldhandler:%p is not NULL!  "
+                "Button events may be lost or aliased!\n",
+                oldhandler);
         }
 #endif
 }

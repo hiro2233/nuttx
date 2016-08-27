@@ -40,7 +40,7 @@ DELIM := $(strip /)
 
 # CFLAGS
 
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
   KDEFINE = ${shell $(TOPDIR)\tools\define.bat "$(CC)" __KERNEL__}
 else
@@ -48,27 +48,19 @@ else
 endif
 endif
 
-# Core allocator logic
+# Sources and paths
 
 ASRCS  =
-CSRCS  = mm_initialize.c mm_sem.c  mm_addfreechunk.c mm_size2ndx.c
-CSRCS += mm_shrinkchunk.c mm_malloc.c mm_zalloc.c mm_calloc.c mm_realloc.c
-CSRCS += mm_memalign.c mm_free.c mm_mallinfo.c
+CSRCS  =
 
-# Allocator instances
+DEPPATH = --dep-path .
+VPATH = .
 
-CSRCS += mm_user.c
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
-ifeq ($(CONFIG_MM_KERNEL_HEAP),y)
-CSRCS += mm_kernel.c
-endif
-endif
-
-# An optional granule allocator
-
-ifeq ($(CONFIG_GRAN),y)
-CSRCS += mm_graninit.c mm_granalloc.c mm_granfree.c mm_grancritical.c
-endif
+include mm_heap/Make.defs
+include umm_heap/Make.defs
+include kmm_heap/Make.defs
+include mm_gran/Make.defs
+include shm/Make.defs
 
 BINDIR ?= bin
 
@@ -115,11 +107,11 @@ endif
 # Dependencies
 
 .depend: Makefile $(SRCS)
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
-	$(Q) $(MKDEP) --obj-path ubin --obj-suffix $(OBJEXT) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make_ubin.dep
-	$(Q) $(MKDEP) --obj-path kbin --obj-suffix $(OBJEXT) "$(CC)" -- $(CFLAGS) $(KDEFINE) -- $(SRCS) >Make_kbin.dep
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
+	$(Q) $(MKDEP) --obj-path ubin --obj-suffix $(OBJEXT) $(DEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make_ubin.dep
+	$(Q) $(MKDEP) --obj-path kbin --obj-suffix $(OBJEXT) $(DEPPATH) "$(CC)" -- $(CFLAGS) $(KDEFINE) -- $(SRCS) >Make_kbin.dep
 else
-	$(Q) $(MKDEP) --obj-path bin --obj-suffix $(OBJEXT) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make_bin.dep
+	$(Q) $(MKDEP) --obj-path bin --obj-suffix $(OBJEXT) $(DEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make_bin.dep
 endif
 	$(Q) touch $@
 

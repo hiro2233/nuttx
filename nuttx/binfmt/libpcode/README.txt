@@ -4,16 +4,17 @@ libpcode README
 Configuration Dependencies
 --------------------------
 In order to use this module, you must first install the P-Code virtual
-machine.  You can get this from the Pascal package or from misc/pascal in
-the GIT repository. See the README.txt file at misc/pascal for installation
-instructions.  The correct location to install the P-code virtual machine is
-at apps/interpreters.
+machine.  You can get this from the Pascal package or from the NuttX Pascal
+GIT repository. See the README.txt file at the top-level Pascal for
+installation instructions.  The correct location to install the P-code
+virtual machine is at apps/interpreters (assuming that you are using
+the NuttX apps/ package and that you have named the directory apps/).
 
 Other required configuration settings:
 
   CONFIG_NFILE_DESCRIPTORS > 3
   CONFIG_BINFMT_DISABLE=n
-  CONFIG_PCODE=y
+  CONFIG_BINFMT_PCODE=y
 
 Directory Contents
 ------------------
@@ -49,6 +50,8 @@ Files include in this directory include:
      xxd -g 1 -i romfs.img >romfs.h
 
      then cleaned up with an editor to conform with NuttX coding standards.
+     Also, the data definitions in the romfs.h file should be marked with
+     'const' qualifier the so that the data will be stored in FLASH.
 
 Test Configuration
 ------------------
@@ -80,22 +83,22 @@ Here is a simple test configuration using the NuttX simulator:
 
    This enables building the PCODE binary format
 
-     CONFIG_PCODE=y
-     CONFIG_PCODE_PRIORITY=100
-     CONFIG_PCODE_STACKSIZE=2048
+     CONFIG_BINFMT_PCODE=y
+     CONFIG_BINFMT_PCODE_PRIORITY=100
+     CONFIG_BINFMT_PCODE_STACKSIZE=2048
 
    This enables building and mount a test filesystem:
 
-     CONFIG_PCODE_TEST_FS=y
-     CONFIG_PCODE_TEST_DEVMINOR=3
-     CONFIG_PCODE_TEST_DEVPATH="/dev/ram3"
-     CONFIG_PCODE_TEST_MOUNTPOINT="/bin"
+     CONFIG_BINFMT_PCODE_TEST_FS=y
+     CONFIG_BINFMT_PCODE_TEST_DEVMINOR=3
+     CONFIG_BINFMT_PCODE_TEST_DEVPATH="/dev/ram3"
+     CONFIG_BINFMT_PCODE_TEST_MOUNTPOINT="/bin"
 
    Debug options can also be enabled with:
 
-    CONFIG_DEBUG=y
+    CONFIG_DEBUG_FEATURES=y
     CONFIG_DEBUG_BINFMT=y
-    CONFIG_DEBUG_VERBOSE=y
+    CONFIG_DEBUG_INFO=y
 
 4. In lieu of a a real test application, this Quick'n'Dirty patch can be used
    to initialize the P-Code binary format:
@@ -124,23 +127,24 @@ Here is a simple test configuration using the NuttX simulator:
 Issues
 ------
 
-1. As implemented now, there is a tight coupling between the nuttx/directory
-   and the apps/ directory.  That should not be the case; the nuttx/ logic
-   should be completely independent of apps/ logic (but not vice versa).
+1. As implemented now, there is a tight coupling between the nuttx/binfmt
+   directory and the apps/interpreters/pcode directory.  That should not
+   be the case; the nuttx/ logic should be completely independent of apps/
+   logic (but not vice versa).
 
-2. The current implementation will not work in the CONFIG_KERNEL_BUILD.
-   This is because of the little proxy logic (function pcode_proxy() in the
-   file pcode.c).  (a) That logic would attempt to link with P-code logic
-   that resides in user space.  That will not work.  And (2) that proxy
-   would be started in user mode but in the kernel address space which will
-   certainly crash immediately.
+2. The current implementation will not work in the CONFIG_BUILD_PROTECTED or
+   CONFIG_BUILD_KERNEL configurations.  That is because of the little proxy
+   logic (function pcode_proxy() and prun() in the file pcode.c).  (a) That
+   logic would attempt to link with P-code logic that resides in user space.
+   That will not work.  And (2) that proxy would be started in user mode but
+   in the kernel address space which will certainly crash immediately.
 
 The general idea to fix both of these problems is as follows:
 
 1. Eliminate the pcode_proxy.  Instead start a P-Code execution program that
    resides in the file system.  That P-Code execution program already
-   exists.  It is in apps/system/prun.  This program should be built as,
-   say, an ELF binary and installed in a file system.
+   exists.  This program should be built as, say, an ELF binary and
+   installed in a file system.
 
 2. Add a configuration setting that gives the full path to where the pexec
    program is stored in the filesystem.

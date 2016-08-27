@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/sim/src/up_usestack.c
  *
- *   Copyright (C) 2007-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,23 +38,15 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+
 #include <sys/types.h>
+#include <string.h>
 #include <debug.h>
+
 #include <nuttx/arch.h>
-#include "os_internal.h"
+#include <nuttx/tls.h>
+
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -88,21 +80,37 @@
  *
  ****************************************************************************/
 
-int up_use_stack(struct tcb_s *tcb, void *stack, size_t stack_size)
+int up_use_stack(FAR struct tcb_s *tcb, FAR void *stack, size_t stack_size)
 {
+  FAR size_t *adj_stack_ptr;
+  size_t adj_stack_size;
+  size_t adj_stack_words;
+
+#ifdef CONFIG_TLS
+  /* Make certain that the user provided stack is properly aligned */
+
+  DEBUGASSERT(((uintptr_t)stack & TLS_STACK_MASK) == 0);
+#endif
   /* Move up to next even word boundary if necessary */
 
-  size_t adj_stack_size = stack_size & ~3;
-  size_t adj_stack_words = adj_stack_size >> 2;
+  adj_stack_size = stack_size & ~3;
+  adj_stack_words = adj_stack_size >> 2;
 
   /* This is the address of the last word in the allocation */
 
-  size_t *adj_stack_ptr = &((size_t*)stack)[adj_stack_words - 1];
+  adj_stack_ptr = &((FAR size_t *)stack)[adj_stack_words - 1];
 
   /* Save the values in the TCB */
 
   tcb->adj_stack_size  = adj_stack_size;
   tcb->stack_alloc_ptr = stack;
   tcb->adj_stack_ptr   = adj_stack_ptr;
+
+#ifdef CONFIG_TLS
+  /* Initialize the TLS data structure */
+
+  memset(stack, 0, sizeof(struct tls_info_s));
+#endif
+
   return OK;
 }

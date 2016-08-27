@@ -1,7 +1,7 @@
 ############################################################################
 # configs/stm32f4discovery/src/Makefile
 #
-#   Copyright (C) 2011-2013 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2011-2013, 2015-2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -35,16 +35,8 @@
 
 -include $(TOPDIR)/Make.defs
 
-CFLAGS += -I$(TOPDIR)/sched
-
 ASRCS =
-AOBJS = $(ASRCS:.S=$(OBJEXT))
-
-CSRCS = stm32_boot.c stm32_spi.c
-
-ifeq ($(CONFIG_HAVE_CXX),y)
-CSRCS += stm32_cxxinitialize.c
-endif
+CSRCS = stm32_boot.c stm32_bringup.c stm32_spi.c
 
 ifeq ($(CONFIG_ARCH_LEDS),y)
 CSRCS += stm32_autoleds.c
@@ -56,8 +48,44 @@ ifeq ($(CONFIG_ARCH_BUTTONS),y)
 CSRCS +=  stm32_buttons.c
 endif
 
+ifeq ($(CONFIG_CAN),y)
+CSRCS += stm32_can.c
+endif
+
 ifeq ($(CONFIG_STM32_OTGFS),y)
 CSRCS += stm32_usb.c
+endif
+
+ifeq ($(CONFIG_BH1750FVI),y)
+CSRCS += stm32_bh1750fvi.c
+endif
+
+ifeq ($(CONFIG_BMP180),y)
+CSRCS += stm32_bmp180.c
+endif
+
+ifeq ($(CONFIG_MAX31855),y)
+CSRCS += stm32_max31855.c
+endif
+
+ifeq ($(CONFIG_MAX6675),y)
+CSRCS += stm32_max6675.c
+endif
+
+ifeq ($(CONFIG_PCA9635PW),y)
+CSRCS += stm32_pca9635.c
+endif
+
+ifeq ($(CONFIG_STM32_SDIO),y)
+CSRCS += stm32_sdio.c
+endif
+
+ifeq ($(CONFIG_STM32_ETHMAC),y)
+CSRCS += stm32_ethernet.c
+endif
+
+ifeq ($(CONFIG_RGBLED),y)
+CSRCS += stm32_rgbled.c
 endif
 
 ifeq ($(CONFIG_PWM),y)
@@ -68,12 +96,8 @@ ifeq ($(CONFIG_QENCODER),y)
 CSRCS += stm32_qencoder.c
 endif
 
-ifeq ($(CONFIG_WATCHDOG),y)
-CSRCS += stm32_watchdog.c
-endif
-
 ifeq ($(CONFIG_NSH_LIBRARY),y)
-CSRCS += stm32_nsh.c
+CSRCS += stm32_appinit.c
 endif
 
 ifeq ($(CONFIG_ARCH_CUSTOM_PMINIT),y)
@@ -81,7 +105,11 @@ CSRCS += stm32_pm.c
 endif
 
 ifeq ($(CONFIG_PM_BUTTONS),y)
-CSRCS += stm32_pm_buttons.c
+CSRCS += stm32_pmbuttons.c
+endif
+
+ifeq ($(CONFIG_ZEROCROSS),y)
+CSRCS += stm32_zerocross.c
 endif
 
 ifeq ($(CONFIG_ARCH_IDLE_CUSTOM),y)
@@ -96,6 +124,10 @@ CSRCS += stm32_ssd1289.c
 endif
 endif
 
+ifeq ($(CONFIG_LCD_SSD1351),y)
+CSRCS += stm32_ssd1351.c
+endif
+
 ifeq ($(CONFIG_LCD_UG2864AMBAG01),y)
 CSRCS += stm32_ug2864ambag01.c
 endif
@@ -104,47 +136,16 @@ ifeq ($(CONFIG_LCD_UG2864HSWEG01),y)
 CSRCS += stm32_ug2864hsweg01.c
 endif
 
-COBJS = $(CSRCS:.c=$(OBJEXT))
-
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-ARCH_SRCDIR = $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(CONFIG_WINDOWS_NATIVE),y)
-  CFLAGS += -I$(ARCH_SRCDIR)\chip -I$(ARCH_SRCDIR)\common -I$(ARCH_SRCDIR)\armv7-m
-else
-ifeq ($(WINTOOL),y)
-  CFLAGS += -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
-			-I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
-			-I "${shell cygpath -w $(ARCH_SRCDIR)/armv7-m}"
-else
-  CFLAGS += -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/armv7-m
-endif
+ifeq ($(CONFIG_EXAMPLES_OSTEST),y)
+CSRCS += stm32_ostest.c
 endif
 
-all: libboard$(LIBEXT)
+ifeq ($(CONFIG_TIMER),y)
+CSRCS += stm32_timer.c
+endif
 
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
+ifeq ($(CONFIG_BOARDCTL_UNIQUEID),y)
+CSRCS += stm32_uid.c
+endif
 
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

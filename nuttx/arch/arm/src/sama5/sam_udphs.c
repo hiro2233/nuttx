@@ -62,7 +62,7 @@
 #include <nuttx/usb/usbdev.h>
 #include <nuttx/usb/usbdev_trace.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 
 #include "up_arch.h"
 #include "up_internal.h"
@@ -91,11 +91,7 @@
 #  define CONFIG_SAMA5_UDPHS_NDTDS 8
 #endif
 
-/* Extremely detailed register debug that you would normally never want
- * enabled.
- */
-
-#ifndef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB_INFO
 #  undef CONFIG_SAMA5_UDPHS_REGDEBUG
 #endif
 
@@ -555,7 +551,7 @@ static const struct usb_epdesc_s g_ep0desc =
 
 #ifdef CONFIG_SAMA5_UDPHS_SCATTERGATHER
 #ifdef CONFIG_SAMA5_UDPHS_PREALLOCATE
-/* This is a properly aligned pool of preallocated DMA transfer desciptors */
+/* This is a properly aligned pool of preallocated DMA transfer descriptors */
 
 static struct sam_dtd_s g_dtdpool[CONFIG_SAMA5_UDPHS_NDTDS]
                         __attribute__ ((aligned(16)));
@@ -563,7 +559,7 @@ static struct sam_dtd_s g_dtdpool[CONFIG_SAMA5_UDPHS_NDTDS]
 #endif
 
 
-/* Device error strings that may be enabled for more desciptive USB trace
+/* Device error strings that may be enabled for more descriptive USB trace
  * output.
  */
 
@@ -604,7 +600,7 @@ const struct trace_msg_t g_usb_trace_strings_deverror[] =
 };
 #endif
 
-/* Interrupt event strings that may be enabled for more desciptive USB trace
+/* Interrupt event strings that may be enabled for more descriptive USB trace
  * output.
  */
 
@@ -660,29 +656,29 @@ const struct trace_msg_t g_usb_trace_strings_intdecode[] =
 /****************************************************************************
  * Register Operations
  ****************************************************************************/
-/*******************************************************************************
+/****************************************************************************
  * Name: sam_printreg
  *
  * Description:
- *   Print the contents of a SAMA5 EHCI register
+ *   Print the contents of a SAMA5 UDPHS register
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_SAMA5_UDPHS_REGDEBUG
 static void sam_printreg(uintptr_t regaddr, uint32_t regval, bool iswrite)
 {
-  lldbg("%p%s%08x\n", regaddr, iswrite ? "<-" : "->", regval);
+  uinfo("%p%s%08x\n", regaddr, iswrite ? "<-" : "->", regval);
 }
 #endif
 
-/*******************************************************************************
+/****************************************************************************
  * Name: sam_checkreg
  *
  * Description:
  *   Check if it is time to output debug information for accesses to a SAMA5
- *   EHCI register
+ *   UDPHS register
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_SAMA5_UDPHS_REGDEBUG
 static void sam_checkreg(uintptr_t regaddr, uint32_t regval, bool iswrite)
@@ -722,7 +718,7 @@ static void sam_checkreg(uintptr_t regaddr, uint32_t regval, bool iswrite)
             {
               /* No.. More than one. */
 
-              lldbg("[repeats %d more times]\n", count);
+              uinfo("[repeats %d more times]\n", count);
             }
         }
 
@@ -740,13 +736,13 @@ static void sam_checkreg(uintptr_t regaddr, uint32_t regval, bool iswrite)
 }
 #endif
 
-/*******************************************************************************
+/****************************************************************************
  * Name: sam_getreg
  *
  * Description:
  *   Get the contents of an SAMA5 register
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_SAMA5_UDPHS_REGDEBUG
 static uint32_t sam_getreg(uintptr_t regaddr)
@@ -767,13 +763,13 @@ static inline uint32_t sam_getreg(uintptr_t regaddr)
 }
 #endif
 
-/*******************************************************************************
+/****************************************************************************
  * Name: sam_putreg
  *
  * Description:
  *   Set the contents of an SAMA5 register to a value
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_SAMA5_UDPHS_REGDEBUG
 static void sam_putreg(uint32_t regval, uintptr_t regaddr)
@@ -797,36 +793,36 @@ static inline void sam_putreg(uint32_t regval, uint32_t regaddr)
  * Name: sam_dumpep
  ****************************************************************************/
 
-#if defined(CONFIG_SAMA5_UDPHS_REGDEBUG) && defined(CONFIG_DEBUG)
+#if defined(CONFIG_SAMA5_UDPHS_REGDEBUG) && defined(CONFIG_DEBUG_FEATURES)
 static void sam_dumpep(struct sam_usbdev_s *priv, int epno)
 {
   /* Global Registers */
 
-  lldbg("Global Register:\n");
-  lldbg("  CTRL:    %04x\n", sam_getreg(SAM_UDPHS_CTRL));
-  lldbg("  FNUM:    %04x\n", sam_getreg(SAM_UDPHS_FNUM));
-  lldbg("  IEN:     %04x\n", sam_getreg(SAM_UDPHS_IEN));
-  lldbg("  INSTA:   %04x\n", sam_getreg(SAM_UDPHS_INTSTA));
-  lldbg("  TST:     %04x\n", sam_getreg(SAM_UDPHS_TST));
+  uinfo("Global Register:\n");
+  uinfo("  CTRL:    %04x\n", sam_getreg(SAM_UDPHS_CTRL));
+  uinfo("  FNUM:    %04x\n", sam_getreg(SAM_UDPHS_FNUM));
+  uinfo("  IEN:     %04x\n", sam_getreg(SAM_UDPHS_IEN));
+  uinfo("  INSTA:   %04x\n", sam_getreg(SAM_UDPHS_INTSTA));
+  uinfo("  TST:     %04x\n", sam_getreg(SAM_UDPHS_TST));
 
   /* Endpoint registers */
 
-  lldbg("Endpoint %d Register:\n", epno);
-  lldbg("  CFG:     %04x\n", sam_getreg(SAM_UDPHS_EPTCFG(epno)));
-  lldbg("  CTL:     %04x\n", sam_getreg(SAM_UDPHS_EPTCTL(epno)));
-  lldbg("  STA:     %04x\n", sam_getreg(SAM_UDPHS_EPTSTA(epno)));
+  uinfo("Endpoint %d Register:\n", epno);
+  uinfo("  CFG:     %04x\n", sam_getreg(SAM_UDPHS_EPTCFG(epno)));
+  uinfo("  CTL:     %04x\n", sam_getreg(SAM_UDPHS_EPTCTL(epno)));
+  uinfo("  STA:     %04x\n", sam_getreg(SAM_UDPHS_EPTSTA(epno)));
 
-  lldbg("DMA %d Register:\n", epno);
+  uinfo("DMA %d Register:\n", epno);
   if ((SAM_EPSET_DMA & SAM_EP_BIT(epno)) != 0)
     {
-      lldbg("  NXTDSC:  %04x\n", sam_getreg(SAM_UDPHS_DMANXTDSC(epno)));
-      lldbg("  ADDRESS: %04x\n", sam_getreg(SAM_UDPHS_DMAADDRESS(epno)));
-      lldbg("  CONTROL: %04x\n", sam_getreg(SAM_UDPHS_DMACONTROL(epno)));
-      lldbg("  STATUS:  %04x\n", sam_getreg(SAM_UDPHS_DMASTATUS(epno)));
+      uinfo("  NXTDSC:  %04x\n", sam_getreg(SAM_UDPHS_DMANXTDSC(epno)));
+      uinfo("  ADDRESS: %04x\n", sam_getreg(SAM_UDPHS_DMAADDRESS(epno)));
+      uinfo("  CONTROL: %04x\n", sam_getreg(SAM_UDPHS_DMACONTROL(epno)));
+      uinfo("  STATUS:  %04x\n", sam_getreg(SAM_UDPHS_DMASTATUS(epno)));
     }
   else
     {
-      lldbg("  None\n");
+      uinfo("  None\n");
     }
 }
 #endif
@@ -908,7 +904,7 @@ static void sam_dma_single(uint8_t epno, struct sam_req_s *privreq,
   /* Flush the contents of the DMA buffer to RAM */
 
   buffer = (uintptr_t)&privreq->req.buf[privreq->req.xfrd];
-  cp15_clean_dcache(buffer, buffer + privreq->inflight);
+  arch_clean_dcache(buffer, buffer + privreq->inflight);
 
   /* Set up the DMA */
 
@@ -969,11 +965,20 @@ static void sam_dma_wrsetup(struct sam_usbdev_s *priv, struct sam_ep_s *privep,
       if (remaining > DMA_MAX_FIFO_SIZE)
         {
           privreq->inflight = DMA_MAX_FIFO_SIZE;
+          privep->zlpneeded = false;
         }
       else
 #endif
         {
           privreq->inflight = remaining;
+
+          /* If the size is an exact multple of full packets, then note if
+           * we need to send a zero length packet next.
+           */
+
+          privep->zlpneeded =
+            ((privreq->req.flags & USBDEV_REQFLAGS_NULLPKT) != 0 &&
+             (remaining % privep->ep.maxpacket) == 0);
         }
 
       /* And perform the single DMA transfer.
@@ -1135,9 +1140,9 @@ static void sam_req_complete(struct sam_ep_s *privep, int16_t result)
 
   /* Remove the completed request at the head of the endpoint request list */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   privreq = sam_req_dequeue(&privep->reqq);
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   if (privreq)
     {
@@ -1223,9 +1228,19 @@ static void sam_req_wrsetup(struct sam_usbdev_s *priv,
    * the request.
    */
 
-  if (nbytes >= privep->ep.maxpacket)
+  privep->zlpneeded = false;
+  if (nbytes > privep->ep.maxpacket)
     {
-      nbytes =  privep->ep.maxpacket;
+      nbytes = privep->ep.maxpacket;
+    }
+  else if (nbytes == privep->ep.maxpacket)
+    {
+      /* If the size is exactly a full packet, then note if we need to
+       * send a zero length packet next.
+       */
+
+      privep->zlpneeded =
+        ((privreq->req.flags & USBDEV_REQFLAGS_NULLPKT) != 0);
     }
 
   /* This is the new number of bytes "in-flight" */
@@ -1280,7 +1295,7 @@ static void sam_req_wrsetup(struct sam_usbdev_s *priv,
  *     When a request is queued, the request 'len' is the number of bytes
  *     to transfer and 'xfrd' and 'inflight' must be zero.
  *
- *     When this function starts a tranfer it will update the request
+ *     When this function starts a transfer it will update the request
  *     'inflight' field to indicate the size of the transfer.
  *
  *     When the transfer completes, the the 'inflight' field must hold the
@@ -1338,9 +1353,9 @@ static int sam_req_write(struct sam_usbdev_s *priv, struct sam_ep_s *privep)
           return -ENOENT;
         }
 
-      ullvdbg("epno=%d req=%p: len=%d xfrd=%d inflight=%d zlpneeded=%d\n",
-              epno, privreq, privreq->req.len, privreq->req.xfrd,
-              privreq->inflight, privep->zlpneeded);
+      uinfo("epno=%d req=%p: len=%d xfrd=%d inflight=%d zlpneeded=%d\n",
+            epno, privreq, privreq->req.len, privreq->req.xfrd,
+            privreq->inflight, privep->zlpneeded);
 
       /* Handle any bytes in flight. */
 
@@ -1352,26 +1367,6 @@ static int sam_req_write(struct sam_usbdev_s *priv, struct sam_ep_s *privep)
       bytesleft = privreq->req.len - privreq->req.xfrd;
       if (bytesleft > 0)
         {
-          /* If the size is exactly a full packet, then note if we need to
-           * send a zero length packet next.
-           */
-
-          if (bytesleft == privep->ep.maxpacket &&
-             (privreq->req.flags & USBDEV_REQFLAGS_NULLPKT) != 0)
-            {
-              /* Next time we get here, bytesleft will be zero and zlpneeded
-               * will be set.
-               */
-
-              privep->zlpneeded = true;
-            }
-          else
-            {
-              /* No zero packet is forthcoming (maybe later) */
-
-              privep->zlpneeded = false;
-            }
-
           /* The way that we handle the transfer is going to depend on
            * whether or not this endpoint supports DMA.  In either case
            * the endpoint state will transition to SENDING.
@@ -1547,7 +1542,7 @@ static void sam_req_rddisable(uint8_t epno)
  *   - When receiving data via DMA, then data has already been transferred
  *     and this function is called on the terminating event.  The transfer
  *     is complete and we just need to check for end of request events and
- *     if we need to setup the tranfer for the next request.
+ *     if we need to setup the transfer for the next request.
  *   - When receiving via the FIFO, the transfer is not complete.  The
  *     data is in the FIFO and must be transferred from the FIFO to the
  *     request buffer.  No setup is needed for the next transfer other than
@@ -1567,7 +1562,7 @@ static void sam_req_rddisable(uint8_t epno)
  *     'inflight' field to hold the maximum size of the transfer; but
  *     'inflight' is not used with FIFO transfers.
  *
- *     When the transfer completes, the 'recvsize' paramter must be the
+ *     When the transfer completes, the 'recvsize' parameter must be the
  *     size of the transfer that just completed.   For the case of DMA,
  *     that is the size of the DMA transfer that has just been written to
  *     memory; for the FIFO transfer, recvsize is the number of bytes
@@ -1601,8 +1596,8 @@ static int sam_req_read(struct sam_usbdev_s *priv, struct sam_ep_s *privep,
           return -ENOENT;
         }
 
-      ullvdbg("EP%d: len=%d xfrd=%d\n",
-              epno, privreq->req.len, privreq->req.xfrd);
+      uinfo("EP%d: len=%d xfrd=%d\n",
+            epno, privreq->req.len, privreq->req.xfrd);
 
       /* Ignore any attempt to receive a zero length packet */
 
@@ -1886,8 +1881,8 @@ static void sam_ep0_setup(struct sam_usbdev_s *priv)
   index.w = GETUINT16(priv->ctrl.index);
   len.w   = GETUINT16(priv->ctrl.len);
 
-  ullvdbg("SETUP: type=%02x req=%02x value=%04x index=%04x len=%04x\n",
-          priv->ctrl.type, priv->ctrl.req, value.w, index.w, len.w);
+  uinfo("SETUP: type=%02x req=%02x value=%04x index=%04x len=%04x\n",
+        priv->ctrl.type, priv->ctrl.req, value.w, index.w, len.w);
 
   /* Dispatch any non-standard requests */
 
@@ -2050,7 +2045,7 @@ static void sam_ep0_setup(struct sam_usbdev_s *priv)
           {
             /* Special case recipient=device test mode */
 
-            ullvdbg("test mode: %d\n", index.w);
+            uinfo("test mode: %d\n", index.w);
           }
         else if ((priv->ctrl.type & USB_REQ_RECIPIENT_MASK) != USB_REQ_RECIPIENT_ENDPOINT)
           {
@@ -2350,7 +2345,7 @@ static void sam_dma_interrupt(struct sam_usbdev_s *priv, int epno)
   /* Get the result of the DMA operation */
 
   dmastatus = sam_getreg(SAM_UDPHS_DMASTATUS(epno));
-  uvdbg("DMA%d DMASTATUS: %08x\n", epno, dmastatus);
+  uinfo("DMA%d DMASTATUS: %08x\n", epno, dmastatus);
 
   /* Disable DMA interrupt to avoid receiving 2 (B_EN and TR_EN) */
 
@@ -2392,6 +2387,13 @@ static void sam_dma_interrupt(struct sam_usbdev_s *priv, int epno)
           /* This is an IN endpoint.  Continuing processing the write
            * request.  We must call sam_req_write in the IDLE state
            * with the number of bytes transferred in 'inflight'
+           *
+           * REVISIT: On the SAMV7, I found that you really need to
+           * wait for the TX completion interrupt before calling
+           * sam_req_write().  For the SAMV7, the logic here just
+           * enables that TX completion interrupt if BYCT > 0.  The
+           * symptom of the problem was occasional missing zero-length
+           * packets because sam_req_write() was called too soon.
            */
 
           DEBUGASSERT(USB_ISEPIN(privep->ep.eplog));
@@ -2412,7 +2414,7 @@ static void sam_dma_interrupt(struct sam_usbdev_s *priv, int epno)
 
           DEBUGASSERT(USB_ISEPOUT(privep->ep.eplog));
           buf = &privreq->req.buf[privreq->req.xfrd];
-          cp15_invalidate_dcache((uintptr_t)buf, (uintptr_t)buf + xfrsize);
+          arch_invalidate_dcache((uintptr_t)buf, (uintptr_t)buf + xfrsize);
 
           /* Complete this transfer, return the request to the class
            * implementation, and try to start the next, queue read request.
@@ -2451,7 +2453,7 @@ static void sam_dma_interrupt(struct sam_usbdev_s *priv, int epno)
                   USB_ISEPOUT(privep->ep.eplog));
 
       /* Get the number of bytes transferred from the DMA status.
-        *
+       *
        * BUFF_COUNT holds the number of untransmitted bytes. In this case,
        * BUFF_COUNT should not be zero.  BUFF_COUNT was set to the
        * 'inflight' count when the DMA started so the difference will
@@ -2468,7 +2470,7 @@ static void sam_dma_interrupt(struct sam_usbdev_s *priv, int epno)
        */
 
       buf = &privreq->req.buf[privreq->req.xfrd];
-      cp15_invalidate_dcache((uintptr_t)buf, (uintptr_t)buf + xfrsize);
+      arch_invalidate_dcache((uintptr_t)buf, (uintptr_t)buf + xfrsize);
 
       /* Complete this transfer, return the request to the class
        * implementation, and try to start the next, queue read request.
@@ -2816,7 +2818,7 @@ static int sam_udphs_interrupt(int irq, void *context)
           sam_suspend(priv);
         }
 
-      /* SOF interrupt*/
+      /* SOF interrupt */
 
       else if ((pending & UDPHS_INT_INTSOF) != 0)
         {
@@ -3131,7 +3133,7 @@ sam_ep_reserve(struct sam_usbdev_s *priv, uint8_t epset)
   irqstate_t flags;
   int epndx = 0;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   epset &= priv->epavail;
   if (epset)
     {
@@ -3156,7 +3158,7 @@ sam_ep_reserve(struct sam_usbdev_s *priv, uint8_t epset)
         }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return privep;
 }
 
@@ -3172,9 +3174,9 @@ sam_ep_reserve(struct sam_usbdev_s *priv, uint8_t epset)
 static inline void
 sam_ep_unreserve(struct sam_usbdev_s *priv, struct sam_ep_s *privep)
 {
-  irqstate_t flags = irqsave();
+  irqstate_t flags = enter_critical_section();
   priv->epavail   |= SAM_EP_BIT(USB_EPNO(privep->ep.eplog));
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -3214,7 +3216,7 @@ static int sam_ep_configure_internal(struct sam_ep_s *privep,
   uint8_t nbtrans;
   bool dirin;
 
-  uvdbg("len: %02x type: %02x addr: %02x attr: %02x "
+  uinfo("len: %02x type: %02x addr: %02x attr: %02x "
         "maxpacketsize: %02x %02x interval: %02x\n",
         desc->len, desc->type, desc->addr, desc->attr,
         desc->mxpacketsize[0],  desc->mxpacketsize[1],
@@ -3391,7 +3393,7 @@ static int sam_ep_configure(struct usbdev_ep_s *ep,
 
   /* Verify parameters.  Endpoint 0 is not available at this interface */
 
-#if defined(CONFIG_DEBUG) || defined(CONFIG_USBDEV_TRACE)
+#if defined(CONFIG_DEBUG_FEATURES) || defined(CONFIG_USBDEV_TRACE)
   uint8_t epno = USB_EPNO(desc->addr);
   usbtrace(TRACE_EPCONFIGURE, (uint16_t)epno);
 
@@ -3430,11 +3432,11 @@ static int sam_ep_disable(struct usbdev_ep_s *ep)
   irqstate_t flags;
   uint8_t epno;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!ep)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
-      ulldbg("ERROR: ep=%p\n", ep);
+      uerr("ERROR: ep=%p\n", ep);
       return -EINVAL;
     }
 #endif
@@ -3444,14 +3446,14 @@ static int sam_ep_disable(struct usbdev_ep_s *ep)
 
   /* Reset the endpoint and cancel any ongoing activity */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   priv  = privep->dev;
   sam_ep_reset(priv, epno);
 
   /* Revert to the addressed-but-not-configured state */
 
   priv->devstate = UDPHS_DEVSTATE_ADDRESSED;
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -3467,7 +3469,7 @@ static struct usbdev_req_s *sam_ep_allocreq(struct usbdev_ep_s *ep)
 {
   struct sam_req_s *privreq;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!ep)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3476,7 +3478,7 @@ static struct usbdev_req_s *sam_ep_allocreq(struct usbdev_ep_s *ep)
 #endif
   usbtrace(TRACE_EPALLOCREQ, USB_EPNO(ep->eplog));
 
-  privreq = (struct sam_req_s *)kmalloc(sizeof(struct sam_req_s));
+  privreq = (struct sam_req_s *)kmm_malloc(sizeof(struct sam_req_s));
   if (!privreq)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_ALLOCFAIL), 0);
@@ -3497,9 +3499,9 @@ static struct usbdev_req_s *sam_ep_allocreq(struct usbdev_ep_s *ep)
 
 static void sam_ep_freereq(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
 {
-  struct sam_req_s *privreq = (struct sam_req_s*)req;
+  struct sam_req_s *privreq = (struct sam_req_s *)req;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!ep || !req)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3508,7 +3510,7 @@ static void sam_ep_freereq(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
 #endif
   usbtrace(TRACE_EPFREEREQ, USB_EPNO(ep->eplog));
 
-  kfree(privreq);
+  kmm_free(privreq);
 }
 
 /****************************************************************************
@@ -3524,7 +3526,7 @@ static void *sam_ep_allocbuffer(struct usbdev_ep_s *ep, uint16_t nbytes)
 {
   /* There is not special buffer allocation requirement */
 
-  return kumalloc(nbytes);
+  return kumm_malloc(nbytes);
 }
 #endif
 
@@ -3541,7 +3543,7 @@ static void sam_ep_freebuffer(struct usbdev_ep_s *ep, void *buf)
 {
   /* There is not special buffer allocation requirement */
 
-  kufree(buf);
+  kumm_free(buf);
 }
 #endif
 
@@ -3562,11 +3564,12 @@ static int sam_ep_submit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
   uint8_t epno;
   int ret = OK;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!req || !req->callback || !req->buf || !ep)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
-      ulldbg("ERROR: req=%p callback=%p buf=%p ep=%p\n", req, req->callback, req->buf, ep);
+      uerr("ERROR: req=%p callback=%p buf=%p ep=%p\n",
+           req, req->callback, req->buf, ep);
       return -EINVAL;
     }
 #endif
@@ -3574,11 +3577,11 @@ static int sam_ep_submit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
   usbtrace(TRACE_EPSUBMIT, USB_EPNO(ep->eplog));
   priv = privep->dev;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!priv->driver)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_NOTCONFIGURED), priv->usbdev.speed);
-      ulldbg("ERROR: driver=%p\n", priv->driver);
+      uerr("ERROR: driver=%p\n", priv->driver);
       return -ESHUTDOWN;
     }
 #endif
@@ -3589,7 +3592,7 @@ static int sam_ep_submit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
   req->result       = -EINPROGRESS;
   req->xfrd         = 0;
   privreq->inflight = 0;
-  flags             = irqsave();
+  flags             = enter_critical_section();
 
   /* Handle IN (device-to-host) requests.  NOTE:  If the class device is
    * using the bi-directional EP0, then we assume that they intend the EP0
@@ -3605,7 +3608,7 @@ static int sam_ep_submit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
       if (privep->stalled)
         {
           sam_req_abort(privep, privreq, -EBUSY);
-          ulldbg("ERROR: stalled\n");
+          uerr("ERROR: stalled\n");
           ret = -EPERM;
         }
       else
@@ -3641,7 +3644,7 @@ static int sam_ep_submit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
         }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return ret;
 }
 
@@ -3654,7 +3657,7 @@ static int sam_ep_cancel(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
   struct sam_ep_s *privep = (struct sam_ep_s *)ep;
   irqstate_t flags;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!ep || !req)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3663,9 +3666,9 @@ static int sam_ep_cancel(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
 #endif
   usbtrace(TRACE_EPCANCEL, USB_EPNO(ep->eplog));
 
-  flags = irqsave();
+  flags = enter_critical_section();
   sam_req_cancel(privep, -EAGAIN);
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -3681,7 +3684,7 @@ static int sam_ep_stall(struct usbdev_ep_s *ep, bool resume)
   uint32_t regval;
   irqstate_t flags;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!ep)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3699,7 +3702,7 @@ static int sam_ep_stall(struct usbdev_ep_s *ep, bool resume)
 
   /* STALL or RESUME the endpoint */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   usbtrace(resume ? TRACE_EPRESUME : TRACE_EPSTALL, USB_EPNO(ep->eplog));
 
   /* Handle the resume condition */
@@ -3797,7 +3800,7 @@ static int sam_ep_stall(struct usbdev_ep_s *ep, bool resume)
         }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -3820,7 +3823,7 @@ static struct usbdev_ep_s *sam_allocep(struct usbdev_s *dev, uint8_t epno,
   uint16_t epset = SAM_EPSET_NOTEP0;
 
   usbtrace(TRACE_DEVALLOCEP, (uint16_t)epno);
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!dev)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3882,7 +3885,7 @@ static void sam_freeep(struct usbdev_s *dev, struct usbdev_ep_s *ep)
   struct sam_usbdev_s *priv;
   struct sam_ep_s *privep;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!dev || !ep)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3914,7 +3917,7 @@ static int sam_getframe(struct usbdev_s *dev)
   uint32_t regval;
   uint16_t frameno;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!dev)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3946,7 +3949,7 @@ static int sam_wakeup(struct usbdev_s *dev)
   uint32_t regval;
 
   usbtrace(TRACE_DEVWAKEUP, 0);
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!dev)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3956,7 +3959,7 @@ static int sam_wakeup(struct usbdev_s *dev)
 
   /* Resume normal operation */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   sam_resume(priv);
 
   /* Activate a remote wakeup.  Setting this bit forces an external interrupt
@@ -3968,7 +3971,7 @@ static int sam_wakeup(struct usbdev_s *dev)
   regval  = sam_getreg(SAM_UDPHS_CTRL);
   regval |= UDPHS_CTRL_REWAKEUP;
   sam_putreg(regval, SAM_UDPHS_CTRL);
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   /* This bit is automatically cleared by hardware at the end of the Upstream
    * Resume
@@ -3992,7 +3995,7 @@ static int sam_selfpowered(struct usbdev_s *dev, bool selfpowered)
 
   usbtrace(TRACE_DEVSELFPOWERED, (uint16_t)selfpowered);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!dev)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -4205,10 +4208,10 @@ static void sam_hw_setup(struct sam_usbdev_s *priv)
   sam_putreg(regval, SAM_UDPHS_CTRL);
 
   /* REVISIT: Per recommendations and sample code, USB clocking (as
-   * configured in the PMC CKGR_UCKR) is set up after reseting the UDHPS.
-   * However, that initialation has already been done in sam_clockconfig().
+   * configured in the PMC CKGR_UCKR) is set up after resetting the UDHPS.
+   * However, that initialization has already been done in sam_clockconfig().
    * Also, that clocking is shared with the UHPHS USB host logic; the
-   * device logica cannot autonomously control USB clocking.
+   * device logic cannot autonomously control USB clocking.
    */
 
   /* Initialize DMA channels */
@@ -4285,16 +4288,16 @@ static void sam_sw_setup(struct sam_usbdev_s *priv)
   int epno;
 
 #ifdef CONFIG_SAMA5_UDPHS_SCATTERGATHER
-#ifndef CONFIG_SAMA5_EHCI_PREALLOCATE
+#ifndef CONFIG_SAMA5_UDPHS_PREALLOCATE
   int i;
 
   /* Allocate a pool of free DMA transfer descriptors */
 
   priv->dtdpool = (struct sam_dtd_s *)
-    kmemalign(16, CONFIG_SAMA5_UDPHS_NDTDS * sizeof(struct sam_dtd_s));
+    kmm_memalign(16, CONFIG_SAMA5_UDPHS_NDTDS * sizeof(struct sam_dtd_s));
   if (!priv->dtdpool)
-     {
-      udbg("ERROR: Failed to allocate the DMA transfer descriptor pool\n");
+    {
+      uerr("ERROR: Failed to allocate the DMA transfer descriptor pool\n");
       return NULL;
     }
 
@@ -4318,7 +4321,7 @@ static void sam_sw_setup(struct sam_usbdev_s *priv)
       sam_td_free(&g_dtdpool[i]);
     }
 
-#endif /* CONFIG_SAMA5_EHCI_PREALLOCATE */
+#endif /* CONFIG_SAMA5_UDPHS_PREALLOCATE */
 #endif /* CONFIG_SAMA5_UDPHS_SCATTERGATHER */
 
   /* Initialize the device state structure.  NOTE: many fields
@@ -4351,12 +4354,6 @@ static void sam_sw_setup(struct sam_usbdev_s *priv)
 
       priv->eplist[epno].ep.maxpacket = SAM_UDPHS_MAXPACKETSIZE(epno);
     }
-
-  /* Select a smaller endpoint size for EP0 */
-
-#if SAM_EP0MAXPACKET < SAM_MAXPACKET_SIZE
-  priv->eplist[EP0].ep.maxpacket = SAM_EP0MAXPACKET;
-#endif
 }
 
 /****************************************************************************
@@ -4475,7 +4472,7 @@ void up_usbuninitialize(void)
   struct sam_usbdev_s *priv = &g_udphs;
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   usbtrace(TRACE_DEVUNINIT, 0);
 
   /* Disable and detach the UDPHS IRQ */
@@ -4493,7 +4490,7 @@ void up_usbuninitialize(void)
 
   sam_hw_shutdown(priv);
   sam_sw_shutdown(priv);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -4517,7 +4514,7 @@ int usbdev_register(struct usbdevclass_driver_s *driver)
 
   usbtrace(TRACE_DEVREGISTER, 0);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!driver || !driver->ops->bind || !driver->ops->unbind ||
       !driver->ops->disconnect || !driver->ops->setup)
     {
@@ -4563,7 +4560,7 @@ int usbdev_register(struct usbdevclass_driver_s *driver)
 
       sam_pullup(&priv->usbdev, true);
       priv->usbdev.speed = USB_SPEED_FULL;
-   }
+    }
 
   return ret;
 }
@@ -4591,7 +4588,7 @@ int usbdev_unregister(struct usbdevclass_driver_s *driver)
 
   usbtrace(TRACE_DEVUNREGISTER, 0);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (driver != priv->driver)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -4603,7 +4600,7 @@ int usbdev_unregister(struct usbdevclass_driver_s *driver)
    * canceled while the class driver is still bound.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Unbind the class driver */
 
@@ -4627,7 +4624,7 @@ int usbdev_unregister(struct usbdevclass_driver_s *driver)
   /* Unhook the driver */
 
   priv->driver = NULL;
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 

@@ -35,55 +35,13 @@
 
 -include $(TOPDIR)/Make.defs
 
-ARCH_SRCDIR	= $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-ifeq ($(WINTOOL),y)
-  CFLAGS	+= -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/arm}" \
-  		   -I "${shell cygpath -w $(ARCH_SRCDIR)/sched}"
-else
-  CFLAGS	+= -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/arm -I$(TOPDIR)/sched
-endif
-
-ASRCS		=
-AOBJS		= $(ASRCS:.S=$(OBJEXT))
-CSRCS		= up_spi.c up_leds.c up_buttons.c
-ifeq ($(CONFIG_NSH_ARCHINIT),y)
-CSRCS		+= up_nsh.c
+ASRCS =
+CSRCS = str71_spi.c str71_leds.c str71_buttons.c
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+CSRCS += str71_appinit.c
 endif
 ifeq ($(CONFIG_ENC28J60),y)
-CSRCS		+= up_enc28j60.c
+CSRCS += str71_enc28j60.c
 endif
-COBJS		= $(CSRCS:.c=$(OBJEXT))
 
-SRCS		= $(ASRCS) $(CSRCS)
-OBJS		= $(AOBJS) $(COBJS)
-
-CFLAGS		+= -I $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(TOPDIR)/configs/Board.mk

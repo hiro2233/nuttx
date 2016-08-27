@@ -54,7 +54,7 @@
 
 /* Included implementation-dependent register save structure layouts */
 
-#ifdef CONFIG_ARMV7M_CMNVECTOR
+#if defined(CONFIG_ARMV7M_CMNVECTOR) && !defined(CONFIG_ARMV7M_LAZYFPU)
 #  include <arch/armv7-m/irq_cmnvector.h>
 #else
 #  include <arch/armv7-m/irq_lazyfpu.h>
@@ -108,7 +108,7 @@
 
 /* This structure represents the return state from a system call */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_LIB_SYSCALL
 struct xcpt_syscall_s
 {
   uint32_t excreturn;   /* The EXC_RETURN value */
@@ -127,7 +127,7 @@ struct xcptcontext
    * are pending signals to be processed.
    */
 
-  void *sigdeliver; /* Actual type is sig_deliver_t */
+  FAR void *sigdeliver; /* Actual type is sig_deliver_t */
 
   /* These are saved copies of LR, PRIMASK, and xPSR used during
    * signal processing.
@@ -140,11 +140,11 @@ struct xcptcontext
   uint32_t saved_primask;
 #endif
   uint32_t saved_xpsr;
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
   uint32_t saved_lr;
 #endif
 
-# ifdef CONFIG_NUTTX_KERNEL
+# ifdef CONFIG_BUILD_PROTECTED
   /* This is the saved address to use when returning from a user-space
    * signal handler.
    */
@@ -154,7 +154,7 @@ struct xcptcontext
 # endif
 #endif
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_LIB_SYSCALL
   /* The following array holds the return address and the exc_return value
    * needed to return from each nested system call.
    */
@@ -175,6 +175,15 @@ struct xcptcontext
  ****************************************************************************/
 
 #ifndef __ASSEMBLY__
+
+/* Name: up_irq_save, up_irq_restore, and friends.
+ *
+ * NOTE: This function should never be called from application code and,
+ * as a general rule unless you really know what you are doing, this
+ * function should not be called directly from operation system code either:
+ * Typically, the wrapper functions, enter_critical_section() and
+ * leave_critical section(), are probably what you really want.
+ */
 
 /* Get/set the PRIMASK register */
 
@@ -237,8 +246,8 @@ static inline void setbasepri(uint32_t basepri)
 
 /* Disable IRQs */
 
-static inline void irqdisable(void) inline_function;
-static inline void irqdisable(void)
+static inline void up_irq_disable(void) inline_function;
+static inline void up_irq_disable(void)
 {
 #ifdef CONFIG_ARMV7M_USEBASEPRI
   setbasepri(NVIC_SYSH_DISABLE_PRIORITY);
@@ -249,8 +258,8 @@ static inline void irqdisable(void)
 
 /* Save the current primask state & disable IRQs */
 
-static inline irqstate_t irqsave(void) inline_function;
-static inline irqstate_t irqsave(void)
+static inline irqstate_t up_irq_save(void) inline_function;
+static inline irqstate_t up_irq_save(void)
 {
 #ifdef CONFIG_ARMV7M_USEBASEPRI
 
@@ -280,8 +289,8 @@ static inline irqstate_t irqsave(void)
 
 /* Enable IRQs */
 
-static inline void irqenable(void) inline_function;
-static inline void irqenable(void)
+static inline void up_irq_enable(void) inline_function;
+static inline void up_irq_enable(void)
 {
   setbasepri(0);
   __asm__ __volatile__ ("\tcpsie  i\n");
@@ -289,8 +298,8 @@ static inline void irqenable(void)
 
 /* Restore saved primask state */
 
-static inline void irqrestore(irqstate_t flags) inline_function;
-static inline void irqrestore(irqstate_t flags)
+static inline void up_irq_restore(irqstate_t flags) inline_function;
+static inline void up_irq_restore(irqstate_t flags)
 {
 #ifdef CONFIG_ARMV7M_USEBASEPRI
   setbasepri((uint32_t)flags);
@@ -327,17 +336,6 @@ static inline uint32_t getipsr(void)
   return ipsr;
 }
 
-static inline void setipsr(uint32_t ipsr) inline_function;
-static inline void setipsr(uint32_t ipsr)
-{
-  __asm__ __volatile__
-    (
-      "\tmsr ipsr, %0\n"
-      :
-      : "r" (ipsr)
-      : "memory");
-}
-
 /* Get/set CONTROL */
 
 static inline uint32_t getcontrol(void) inline_function;
@@ -368,7 +366,7 @@ static inline void setcontrol(uint32_t control)
 #endif /* __ASSEMBLY__ */
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -378,7 +376,8 @@ static inline void setcontrol(uint32_t control)
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

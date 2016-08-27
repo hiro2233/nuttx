@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/icmp/icmp_poll.c
  *
- *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,34 +42,19 @@
 
 #include <debug.h>
 
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip.h>
-#include <nuttx/net/uip/uip-arch.h>
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/netdev.h>
+#include <nuttx/net/icmp.h>
 
-#include "uip/uip_internal.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Public Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
+#include "devif/devif.h"
+#include "icmp/icmp.h"
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: uip_icmppoll
+ * Name: icmp_poll
  *
  * Description:
  *   Poll a UDP "connection" structure for availability of TX data
@@ -85,19 +70,17 @@
  *
  ****************************************************************************/
 
-void uip_icmppoll(struct uip_driver_s *dev)
+void icmp_poll(FAR struct net_driver_s *dev)
 {
   /* Setup for the application callback */
 
-  dev->d_appdata = &dev->d_buf[UIP_LLH_LEN + UIP_IPICMPH_LEN];
-  dev->d_snddata = &dev->d_buf[UIP_LLH_LEN + UIP_IPICMPH_LEN];
-
+  dev->d_appdata = &dev->d_buf[NET_LL_HDRLEN(dev) + IPICMP_HDRLEN];
   dev->d_len     = 0;
   dev->d_sndlen  = 0;
 
   /* Perform the application callback */
 
-  (void)uip_callbackexecute(dev, NULL, UIP_POLL, g_echocallback);
+  (void)devif_conn_event(dev, NULL, ICMP_POLL, dev->d_conncb);
 }
 
 #endif /* CONFIG_NET && CONFIG_NET_ICMP && CONFIG_NET_ICMP_PING */

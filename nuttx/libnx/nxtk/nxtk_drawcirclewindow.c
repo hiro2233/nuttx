@@ -1,7 +1,7 @@
 /****************************************************************************
  * libnx/nxtk/nxtk_drawcirclewindow.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -124,11 +124,14 @@ int nxtk_drawcirclewindow(NXTKWINDOW hfwnd, FAR const struct nxgl_point_s *cente
 
   for (i = POINT_0p0; i < POINT_337p5; i++)
     {
+      /* Draw one line segment */
+
       vector.pt1.x = pts[i].x;
       vector.pt1.y = pts[i].y;
       vector.pt2.x = pts[i+1].x;
       vector.pt2.y = pts[i+1].y;
-      ret = nxtk_drawlinewindow(hfwnd, &vector, width, color);
+
+      ret = nxtk_drawlinewindow(hfwnd, &vector, width, color, NX_LINECAP_PT1);
       if (ret != OK)
         {
           return ret;
@@ -141,5 +144,5 @@ int nxtk_drawcirclewindow(NXTKWINDOW hfwnd, FAR const struct nxgl_point_s *cente
   vector.pt1.y = pts[POINT_337p5].y;
   vector.pt2.x = pts[POINT_0p0].x;
   vector.pt2.y = pts[POINT_0p0].y;
-  return nxtk_drawlinewindow(hfwnd, &vector, width, color);
+  return nxtk_drawlinewindow(hfwnd, &vector, width, color, NX_LINECAP_PT1);
 }

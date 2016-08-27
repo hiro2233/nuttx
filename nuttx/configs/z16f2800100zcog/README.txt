@@ -114,11 +114,6 @@ The patch can also be removed with:
 
 See the section "Selecting Configurations" below.
 
-UPDATE:  2014-4-27:  The configs/16z/nsh example still does not run
-correctly.  This is believe to be caused by additional, undiagnosed
-compiler errors.  At present, these compiler bugs do not seem to effect
-the z16f2800100zcog.
-
 Serial Console
 ==============
 
@@ -173,7 +168,7 @@ nsh
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -221,7 +216,7 @@ ostest
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -267,7 +262,7 @@ pashello
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.

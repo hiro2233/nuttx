@@ -1,7 +1,7 @@
 /************************************************************************************************
  * arch/arm/src/sam34/sam_vectors.S
  *
- *   Copyright (C) 2009-2010, 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2010, 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,7 +44,7 @@
 #include "exc_return.h"
 
 /************************************************************************************************
- * Preprocessor Definitions
+ * Pre-processor Definitions
  ************************************************************************************************/
 /* Configuration ********************************************************************************/
 
@@ -62,7 +62,7 @@
    * nested interrupt, the interrupt stack if no privileged task has run.
    */
 
-#  if defined(CONFIG_NUTTX_KERNEL) && CONFIG_ARCH_INTERRUPTSTACK < 4
+#  if defined(CONFIG_BUILD_PROTECTED) && CONFIG_ARCH_INTERRUPTSTACK < 4
 #    error Interrupt stack must be used with high priority interrupts in kernel mode
 #  endif
 
@@ -93,7 +93,7 @@
 #define HEAP_BASE		(_ebss+CONFIG_IDLETHREAD_STACKSIZE)
 
 /************************************************************************************************
- * Global Symbols
+ * Public Symbols
  ************************************************************************************************/
 
 	.syntax		unified
@@ -166,6 +166,8 @@ _vectors:
 #  include "chip/sam3u_vectors.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM3X) || defined(CONFIG_ARCH_CHIP_SAM3A)
 #  include "chip/sam3x_vectors.h"
+#elif defined(CONFIG_ARCH_CHIP_SAM4CM)
+#  include "chip/sam4cm_vectors.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM4E)
 #  include "chip/sam4e_vectors.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM4L)
@@ -207,6 +209,8 @@ handlers:
 #  include "chip/sam3u_vectors.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM3X) || defined(CONFIG_ARCH_CHIP_SAM3A)
 #  include "chip/sam3x_vectors.h"
+#elif defined(CONFIG_ARCH_CHIP_SAM4CM)
+#  include "chip/sam4cm_vectors.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM4E)
 #  include "chip/sam4e_vectors.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM4L)
@@ -242,7 +246,7 @@ exception_common:
 
 	/* Complete the context save */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 	/* The EXC_RETURN value will be 0xfffffff9 (privileged thread) or 0xfffffff1
 	 * (handler mode) if the stack is on the MSP.  It can only be on the PSP if
 	 * EXC_RETURN is 0xfffffffd (unprivileged thread)
@@ -256,7 +260,7 @@ exception_common:
 1:
 #endif
 
-	/* r1 holds the value of the stack pointer AFTER the excption handling logic
+	/* r1 holds the value of the stack pointer AFTER the exception handling logic
 	 * pushed the various registers onto the stack.  Get r2 = the value of the
 	 * stack pointer BEFORE the interrupt modified it.
 	 */
@@ -284,7 +288,7 @@ exception_common:
 	 * r14=register values.
 	 */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 	stmdb	sp!, {r2-r11,r14}		/* Save the remaining registers plus the SP value */
 #else
 	stmdb	sp!, {r2-r11}			/* Save the remaining registers plus the SP value */
@@ -314,16 +318,17 @@ exception_common:
 
 	mov		r1, sp
 
-#if CONFIG_ARCH_INTERRUPTSTACK > 3
+	/* Also save the top of the stack in a preserved register */
+
+	mov		r4, sp
+
+#if CONFIG_ARCH_INTERRUPTSTACK > 7
 	/* If CONFIG_ARCH_INTERRUPTSTACK is defined, we will set the MSP to use
 	 * a special special interrupt stack pointer.  The way that this is done
 	 * here prohibits nested interrupts without some additional logic!
 	 */
 
 	ldr		sp, =g_intstackbase
-	str		r1, [sp, #-4]!			/* Save the MSP on the interrupt stack */
-	bl		up_doirq				/* R0=IRQ, R1=register save (msp) */
-	ldr		r1, [sp, #+4]!			/* Recover R1=main stack pointer */
 
 #else
 	/* Otherwise, we will re-use the interrupted thread's stack.  That may
@@ -331,9 +336,13 @@ exception_common:
 	 * kernel mode).
 	 */
 
-	bl		up_doirq				/* R0=IRQ, R1=register save (msp) */
-	mov		r1, sp					/* Recover R1=main stack pointer */
+	bic		r2, r4, #7				/* Get the stack pointer with 8-byte alignment */
+	mov		sp, r2					/* Instantiate the aligned stack */
+
 #endif
+
+	bl		up_doirq				/* R0=IRQ, R1=register save (msp) */
+	mov		r1, r4					/* Recover R1=main stack pointer */
 
 	/* On return from up_doirq, R0 will hold a pointer to register context
 	 * array to use for the interrupt return.  If that return value is the same
@@ -372,7 +381,7 @@ exception_common:
 	ldmia	r1, {r4-r11}			/* Fetch eight registers in HW save area */
 	ldr		r1, [r0, #(4*REG_SP)]	/* R1=Value of SP before interrupt */
 	stmdb	r1!, {r4-r11}			/* Store eight registers in HW save area */
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 	ldmia	r0, {r2-r11,r14}		/* Recover R4-R11, r14 + 2 temp values */
 #else
 	ldmia	r0, {r2-r11}			/* Recover R4-R11 + 2 temp values */
@@ -387,7 +396,7 @@ exception_common:
 	 */
 
 2:
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 	ldmia	r1!, {r2-r11,r14}		/* Recover R4-R11, r14 + 2 temp values */
 #else
 	ldmia	r1!, {r2-r11}			/* Recover R4-R11 + 2 temp values */
@@ -412,7 +421,7 @@ exception_common:
 
 3:
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 	/* The EXC_RETURN value will be 0xfffffff9 (privileged thread) or 0xfffffff1
 	 * (handler mode) if the stack is on the MSP.  It can only be on the PSP if
 	 * EXC_RETURN is 0xfffffffd (unprivileged thread)
@@ -467,13 +476,13 @@ exception_common:
  *
  ************************************************************************************************/
 
-#if CONFIG_ARCH_INTERRUPTSTACK > 3
+#if CONFIG_ARCH_INTERRUPTSTACK > 7
 	.bss
 	.global	g_intstackalloc
 	.global	g_intstackbase
-	.align	4
+	.align	8
 g_intstackalloc:
-	.skip	(CONFIG_ARCH_INTERRUPTSTACK & ~3)
+	.skip	(CONFIG_ARCH_INTERRUPTSTACK & ~7)
 g_intstackbase:
 	.size	g_intstackalloc, .-g_intstackalloc
 #endif

@@ -42,7 +42,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Color Creation and Conversion Macros *************************************/
 /* This macro creates RGB24 from 8:8:8 RGB */
@@ -298,7 +298,8 @@ struct argbcolor_s
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

@@ -3,7 +3,7 @@
 # These driver supports various Memory Technology Devices (MTD) using the
 # NuttX MTD interface.
 #
-#   Copyright (C) 2009-2013 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2009-2013, 2015-2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@
 
 ifeq ($(CONFIG_MTD),y)
 
-CSRCS += at45db.c flash_eraseall.c ftl.c m25px.c ramtron.c mtd_config.c
+CSRCS += at45db.c ftl.c m25px.c ramtron.c mtd_config.c
 
 ifeq ($(CONFIG_MTD_PARTITION),y)
 CSRCS += mtd_partition.c
@@ -47,6 +47,18 @@ endif
 
 ifeq ($(CONFIG_MTD_SECT512),y)
 CSRCS += sector512.c
+endif
+
+ifeq ($(CONFIG_MTD_WRBUFFER),y)
+CSRCS += mtd_rwbuffer.c
+else
+ifeq ($(CONFIG_MTD_READAHEAD),y)
+CSRCS += mtd_rwbuffer.c
+endif
+endif
+
+ifeq ($(CONFIG_MTD_PROGMEM),y)
+CSRCS += mtd_progmem.c
 endif
 
 ifeq ($(CONFIG_MTD_NAND),y)
@@ -58,6 +70,10 @@ endif
 
 ifeq ($(CONFIG_RAMMTD),y)
 CSRCS += rammtd.c
+endif
+
+ifeq ($(CONFIG_FILEMTD),y)
+CSRCS += filemtd.c
 endif
 
 ifeq ($(CONFIG_MTD_AT24XX),y)
@@ -72,6 +88,10 @@ ifeq ($(CONFIG_MTD_SST25XX),y)
 CSRCS += sst25xx.c
 endif
 
+ifeq ($(CONFIG_MTD_SST26),y)
+CSRCS += sst26.c
+endif
+
 ifeq ($(CONFIG_MTD_SST39FV),y)
 CSRCS += sst39vf.c
 endif
@@ -82,6 +102,18 @@ endif
 
 ifeq ($(CONFIG_MTD_AT25),y)
 CSRCS += at25.c
+endif
+
+ifeq ($(CONFIG_MTD_S25FL1),y)
+CSRCS += s25fl1.c
+endif
+
+ifeq ($(CONFIG_MTD_N25QXXX),y)
+CSRCS += n25qxxx.c
+endif
+
+ifeq ($(CONFIG_MTD_IS25XP),y)
+CSRCS += is25xp.c
 endif
 
 ifeq ($(CONFIG_MTD_SMART),y)

@@ -47,7 +47,7 @@
 #endif
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
@@ -150,8 +150,8 @@
 
 /* TPM2 Channels */
 
-#define GPIO_TPM1_CH0OUT PIN_TPM2_CH0_1
-#define GPIO_TPM1_CH1OUT PIN_TPM2_CH1_1
+#define GPIO_TPM2_CH0OUT PIN_TPM2_CH0_1
+#define GPIO_TPM2_CH1OUT PIN_TPM2_CH1_1
 
 /* LED definitions ******************************************************************/
 /* The Freedom KL25Z has a single RGB LED driven by the KL25Z as follows:
@@ -202,18 +202,36 @@
  * alternative.
  */
 
-#define PIN_SPI0_SCK   (PIN_SPI0_SCK_2 | PIN_ALT2_PULLUP)
-#define PIN_SPI0_MISO  (PIN_SPI0_MISO_4 | PIN_ALT2_PULLUP)
-#define PIN_SPI0_MOSI  (PIN_SPI0_MOSI_3 | PIN_ALT2_PULLUP)
+/* SPI0 Pinout
+ * ===========
+ *
+ * SCK = PTD1 (D13 at connector J2 pin 12 of Freedom Board)
+ * MISO = PTD3 (D12 at connector J2 pin 10 of Freedom Board)
+ * MOSI = PTD2 (D11 at connector J2 pin 8 of Freedom Board)
+ */
+
+#define PIN_SPI0_SCK   (PIN_SPI0_SCK_3 | PIN_ALT2_PULLUP)
+#define PIN_SPI0_MISO  (PIN_SPI0_MISO_6 | PIN_ALT2_PULLUP)
+#define PIN_SPI0_MOSI  (PIN_SPI0_MOSI_5 | PIN_ALT2_PULLUP)
 
 #define PIN_SPI1_SCK   (PIN_SPI1_SCK_2 | PIN_ALT2_PULLUP)
 #define PIN_SPI1_MISO  (PIN_SPI1_MISO_3 | PIN_ALT2_PULLUP)
 #define PIN_SPI1_MOSI  (PIN_SPI0_MOSI_7 | PIN_ALT2_PULLUP)
 
 /* These pins are used by CC3000 module */
+
 #define GPIO_WIFI_EN (GPIO_OUTPUT | GPIO_OUTPUT_ZER0 | PIN_PORTC | PIN12)
 #define GPIO_WIFI_IRQ (GPIO_INPUT | PIN_PORTA | PIN16)
 #define GPIO_WIFI_CS (GPIO_OUTPUT | GPIO_OUTPUT_ONE | PIN_PORTE | PIN1)
+
+/* Interrupt pin used by ADXL345
+ *
+ *   CS = PTD0 (D10 at connector J2 pin 6 of Freedom Board)
+ *   INT1 = PTA16 (at connector J2 pin 9 of Freedom Board)
+ */
+
+#define GPIO_ADXL345_INT1 (GPIO_INPUT | PIN_PORTA | PIN_INT_RISING | PIN16)
+#define GPIO_ADXL345_CS   (GPIO_OUTPUT | GPIO_OUTPUT_ONE | PIN_PORTD | PIN0)
 
 /************************************************************************************
  * Public Data

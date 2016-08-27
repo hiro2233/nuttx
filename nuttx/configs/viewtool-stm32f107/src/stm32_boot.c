@@ -45,14 +45,6 @@
 #include "viewtool_stm32f107.h"
 
 /************************************************************************************
- * Pre-processor Definitions
- ************************************************************************************/
-
-/************************************************************************************
- * Private Functions
- ************************************************************************************/
-
-/************************************************************************************
  * Public Functions
  ************************************************************************************/
 
@@ -69,13 +61,13 @@
 void stm32_boardinitialize(void)
 {
   /* Configure SPI chip selects if 1) SPI is not disabled, and 2) the weak function
-   * stm32_spiinitialize() has been brought into the link.
+   * stm32_spidev_initialize() has been brought into the link.
    */
 
 #if defined(CONFIG_STM32_SPI1) || defined(CONFIG_STM32_SPI2) || defined(CONFIG_STM32_SPI3)
-  if (stm32_spiinitialize)
+  if (stm32_spidev_initialize)
     {
-      stm32_spiinitialize();
+      stm32_spidev_initialize();
     }
 #endif
 
@@ -93,5 +85,5 @@ void stm32_boardinitialize(void)
 
   /* Configure on-board LEDs (unconditionally). */
 
-  stm32_ledinit();
+  stm32_led_initialize();
 }

@@ -2,7 +2,7 @@
  * netutils/thttpd/thttpd_cgi.c
  * CGI support
  *
- *   Copyright (C) 2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Derived from the file libhttpd.c in the original THTTPD package:
@@ -42,6 +42,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -55,13 +56,13 @@
 
 #include <nuttx/binfmt/symtab.h>
 #include <nuttx/binfmt/binfmt.h>
-#include <apps/netutils/thttpd.h>
+#include "netutils/thttpd.h"
 
 #include "config.h"
+#include "timers.h"
 #include "libhttpd.h"
 #include "thttpd_alloc.h"
 #include "thttpd_strings.h"
-#include "timers.h"
 #include "fdwatch.h"
 
 #if defined(CONFIG_THTTPD) && defined(CONFIG_THTTPD_CGI_PATTERN)
@@ -128,7 +129,7 @@ static void create_environment(httpd_conn *hc);
 static char **make_argp(httpd_conn *hc);
 static inline int cgi_interpose_input(struct cgi_conn_s *cc);
 static inline int cgi_interpose_output(struct cgi_conn_s *cc);
-static int  cgi_child(int argc, char **argv);
+static int cgi_child(int argc, char **argv);
 
 /****************************************************************************
  * Private Data
@@ -365,19 +366,19 @@ static inline int cgi_interpose_input(struct cgi_conn_s *cc)
   ssize_t nbytes_read;
   ssize_t nbytes_written;
 
-  nllvdbg("nbytes: %d contentlength: %d\n", cc->inbuf.nbytes, cc->inbuf.contentlength);
+  ninfo("nbytes: %d contentlength: %d\n", cc->inbuf.nbytes, cc->inbuf.contentlength);
   if (cc->inbuf.nbytes < cc->inbuf.contentlength)
     {
       do
         {
           nbytes_read = read(cc->connfd, cc->inbuf.buffer,
             MIN(CONFIG_THTTPD_CGIINBUFFERSIZE, cc->inbuf.contentlength - cc->inbuf.nbytes));
-          nllvdbg("nbytes_read: %d\n", nbytes_read);
+          ninfo("nbytes_read: %d\n", nbytes_read);
           if (nbytes_read < 0)
             {
               if (errno != EINTR)
                 {
-                  nlldbg("read failed: %d\n", errno);
+                  nerr("ERROR: read failed: %d\n", errno);
                   return 1;
                 }
             }
@@ -387,10 +388,10 @@ static inline int cgi_interpose_input(struct cgi_conn_s *cc)
       if (nbytes_read > 0)
         {
           nbytes_written = httpd_write(cc->wrfd, cc->inbuf.buffer, nbytes_read);
-          nllvdbg("nbytes_written: %d\n", nbytes_written);
+          ninfo("nbytes_written: %d\n", nbytes_written);
           if (nbytes_written != nbytes_read)
             {
-              nlldbg("httpd_write failed\n");
+              nerr("ERROR: httpd_write failed\n");
               return 1;
             }
           cgi_dumpbuffer("Sent to CGI:", cc->inbuf.buffer, nbytes_written);
@@ -446,7 +447,7 @@ static inline int cgi_interpose_output(struct cgi_conn_s *cc)
 
   /* Loop while there are things we can do without waiting for more input */
 
-  nllvdbg("state: %d\n", cc->outbuf.state);
+  ninfo("state: %d\n", cc->outbuf.state);
   switch (cc->outbuf.state)
     {
       case CGI_OUTBUFFER_READHEADER:
@@ -460,7 +461,7 @@ static inline int cgi_interpose_output(struct cgi_conn_s *cc)
                */
 
               nbytes_read = read(cc->rdfd, cc->inbuf.buffer, CONFIG_THTTPD_CGIINBUFFERSIZE);
-              nllvdbg("Read %d bytes from fd %d\n", nbytes_read, cc->rdfd);
+              ninfo("Read %d bytes from fd %d\n", nbytes_read, cc->rdfd);
 
               if (nbytes_read < 0)
                 {
@@ -468,7 +469,7 @@ static inline int cgi_interpose_output(struct cgi_conn_s *cc)
                     {
                       if (errno != EAGAIN)
                         {
-                          nlldbg("read: %d\n", errno);
+                          nerr("ERROR: read: %d\n", errno);
                         }
                       return 1;
                     }
@@ -484,7 +485,7 @@ static inline int cgi_interpose_output(struct cgi_conn_s *cc)
 
           if (nbytes_read <= 0)
             {
-              nllvdbg("End-of-file\n");
+              ninfo("End-of-file\n");
               br               = &(cc->outbuf.buffer[cc->outbuf.len]);
               cc->outbuf.state = CGI_OUTBUFFER_HEADERREAD;
             }
@@ -496,14 +497,14 @@ static inline int cgi_interpose_output(struct cgi_conn_s *cc)
               (void)memcpy(&(cc->outbuf.buffer[cc->outbuf.len]), cc->inbuf.buffer, nbytes_read);
               cc->outbuf.len                   += nbytes_read;
               cc->outbuf.buffer[cc->outbuf.len] = '\0';
-              nllvdbg("Header bytes accumulated: %d\n", cc->outbuf.len);
+              ninfo("Header bytes accumulated: %d\n", cc->outbuf.len);
 
               /* Check for end of header */
 
               if ((br = strstr(cc->outbuf.buffer, "\r\n\r\n")) != NULL ||
                   (br = strstr(cc->outbuf.buffer, "\012\012")) != NULL)
                 {
-                  nllvdbg("End-of-header\n");
+                  ninfo("End-of-header\n");
                   cc->outbuf.state = CGI_OUTBUFFER_HEADERREAD;
                 }
               else
@@ -558,7 +559,7 @@ static inline int cgi_interpose_output(struct cgi_conn_s *cc)
 
           /* Write the status line. */
 
-          nllvdbg("Status: %d\n", status);
+          ninfo("Status: %d\n", status);
           switch (status)
             {
             case 200:
@@ -642,7 +643,7 @@ static inline int cgi_interpose_output(struct cgi_conn_s *cc)
                */
 
               nbytes_read = read(cc->rdfd, cc->inbuf.buffer, CONFIG_THTTPD_CGIINBUFFERSIZE);
-              nllvdbg("Read %d bytes from fd %d\n", nbytes_read, cc->rdfd);
+              ninfo("Read %d bytes from fd %d\n", nbytes_read, cc->rdfd);
 
               if (nbytes_read < 0)
                 {
@@ -650,7 +651,7 @@ static inline int cgi_interpose_output(struct cgi_conn_s *cc)
                     {
                       if (errno != EAGAIN)
                         {
-                          nlldbg("read: %d\n", errno);
+                          nerr("ERROR: read: %d\n", errno);
                         }
                       return 1;
                     }
@@ -666,7 +667,7 @@ static inline int cgi_interpose_output(struct cgi_conn_s *cc)
 
           if (nbytes_read == 0)
             {
-              nllvdbg("End-of-file\n");
+              ninfo("End-of-file\n");
               cc->outbuf.state = CGI_OUTBUFFER_DONE;
               return 1;
             }
@@ -706,20 +707,20 @@ static int cgi_child(int argc, char **argv)
   int        nbytes;
   int        fd;
   int        ret;
-  int        err = 1;
+  int        errcode = 1;
 
   /* Use low-level debug out (because the low-level output may survive closing
    * all file descriptors
    */
 
-  nllvdbg("Started: %s\n", argv[1]);
+  ninfo("Started: %s\n", argv[1]);
 
   /* Allocate memory and initialize memory for interposing */
 
   cc = (FAR struct cgi_conn_s*)httpd_malloc(sizeof(struct cgi_conn_s));
   if (!cc)
     {
-      nlldbg("cgi_conn allocation failed\n");
+      nerr("ERROR: cgi_conn allocation failed\n");
       close(hc->conn_fd);
       goto errout;
     }
@@ -745,7 +746,7 @@ static int cgi_child(int argc, char **argv)
    * now prevents re-use of fd=0 and 1 by pipe().
    */
 
-  nllvdbg("Closing descriptors\n");
+  ninfo("Closing descriptors\n");
   for (fd = 3; fd < (CONFIG_NFILE_DESCRIPTORS + CONFIG_NSOCKET_DESCRIPTORS); fd++)
     {
        /* Keep hc->conn_fd open for obvious reasons */
@@ -763,11 +764,11 @@ static int cgi_child(int argc, char **argv)
    * socket to the CGI program.
    */
 
-  nllvdbg("Create STDIN pipe\n");
+  ninfo("Create STDIN pipe\n");
   ret = pipe(pipefd);
   if (ret < 0)
     {
-      nlldbg("STDIN pipe: %d\n", errno);
+      nerr("ERROR: STDIN pipe: %d\n", errno);
       goto errout_with_cgiconn;
     }
   else
@@ -783,7 +784,7 @@ static int cgi_child(int argc, char **argv)
 
       if (ret < 0)
         {
-          nlldbg("STDIN dup2: %d\n", errno);
+          nerr("ERROR: STDIN dup2: %d\n", errno);
           goto errout_with_descriptors;
         }
     }
@@ -794,11 +795,11 @@ static int cgi_child(int argc, char **argv)
 
   if (ret == 0)
     {
-      nllvdbg("Create STDOUT pipe\n");
+      ninfo("Create STDOUT pipe\n");
       ret = pipe(pipefd);
       if (ret < 0)
         {
-          nlldbg("STDOUT pipe: %d\n", errno);
+          nerr("ERROR: STDOUT pipe: %d\n", errno);
           goto errout_with_descriptors;
         }
       else
@@ -814,7 +815,7 @@ static int cgi_child(int argc, char **argv)
 
           if (ret < 0)
             {
-              nlldbg("STDOUT dup2: %d\n", errno);
+              nerr("ERROR: STDOUT dup2: %d\n", errno);
               goto errout_with_descriptors;
             }
         }
@@ -832,6 +833,7 @@ static int cgi_child(int argc, char **argv)
         {
           (void)chdir(directory); /* ignore errors */
         }
+
       httpd_free(dupname);
     }
 
@@ -840,7 +842,7 @@ static int cgi_child(int argc, char **argv)
   httpd_realloc_str(&cc->outbuf.buffer, &cc->outbuf.size, CONFIG_THTTPD_CGIOUTBUFFERSIZE);
   if (!cc->outbuf.buffer)
     {
-      nlldbg("hdr allocation failed\n");
+      nerr("ERROR: hdr allocation failed\n");
       goto errout_with_descriptors;
     }
 
@@ -849,19 +851,24 @@ static int cgi_child(int argc, char **argv)
   fw = fdwatch_initialize(2);
   if (!fw)
     {
-      nlldbg("fdwatch allocation failed\n");
+      nerr("ERROR: fdwatch allocation failed\n");
       goto errout_with_outbuffer;
     }
 
   /* Run the CGI program. */
 
-  nllvdbg("Starting CGI: %s\n", hc->expnfilename);
+  ninfo("Starting CGI: %s\n", hc->expnfilename);
+
+#ifdef CONFIG_THTTPD_NXFLAT
   child = exec(hc->expnfilename, (FAR char * const *)argp, g_thttpdsymtab, g_thttpdnsymbols);
+#else
+  child = exec(hc->expnfilename, (FAR char * const *)argp, NULL, 0);
+#endif
   if (child < 0)
     {
       /* Something went wrong. */
 
-      nlldbg("execve %s: %d\n", hc->expnfilename, errno);
+      nerr("ERROR: execve %s: %d\n", hc->expnfilename, errno);
       goto errout_with_watch;
    }
 
@@ -871,7 +878,7 @@ static int cgi_child(int argc, char **argv)
   client_data.i = child;
   if (tmr_create(NULL, cgi_kill, client_data, CONFIG_THTTPD_CGI_TIMELIMIT * 1000L, 0) == NULL)
     {
-      nlldbg("tmr_create(cgi_kill child) failed\n");
+      nerr("ERROR: tmr_create(cgi_kill child) failed\n");
       goto errout_with_watch;
     }
 #endif
@@ -884,12 +891,12 @@ static int cgi_child(int argc, char **argv)
   /* Send any data that is already buffer to the CGI task */
 
   nbytes = hc->read_idx - hc->checked_idx;
-  nllvdbg("nbytes: %d contentlength: %d\n", nbytes, hc->contentlength);
+  ninfo("nbytes: %d contentlength: %d\n", nbytes, hc->contentlength);
   if (nbytes > 0)
     {
       if (httpd_write(cc->wrfd, &(hc->read_buf[hc->checked_idx]), nbytes) != nbytes)
         {
-          nlldbg("httpd_write failed\n");
+          nerr("ERROR: httpd_write failed\n");
           return 1;
         }
     }
@@ -902,7 +909,7 @@ static int cgi_child(int argc, char **argv)
   indone  = false;
   outdone = false;
 
-  nllvdbg("Interposing\n");
+  ninfo("Interposing\n");
   cgi_semgive();  /* Not safe to reference hc after this point */
   do
     {
@@ -914,7 +921,7 @@ static int cgi_child(int argc, char **argv)
         {
           /* Transfer data from the client to the CGI program (POST) */
 
-          nllvdbg("Interpose input\n");
+          ninfo("Interpose input\n");
           indone = cgi_interpose_input(cc);
           if (indone)
             {
@@ -928,7 +935,7 @@ static int cgi_child(int argc, char **argv)
         {
           /* Handle receipt of headers and CGI program response (GET) */
 
-          nllvdbg("Interpose output\n");
+          ninfo("Interpose output\n");
           outdone = cgi_interpose_output(cc);
         }
 
@@ -942,12 +949,12 @@ static int cgi_child(int argc, char **argv)
 
       else if (kill(child, 0) != 0)
         {
-          nllvdbg("CGI no longer running: %d\n", errno);
+          ninfo("CGI no longer running: %d\n", errno);
           outdone = true;
         }
   }
   while (!outdone);
-  err = 0;
+  errcode = 0;
 
   /* Get rid of watch structures */
 
@@ -970,15 +977,16 @@ errout_with_cgiconn:
   httpd_free(cc);
 
 errout:
-  nllvdbg("Return %d\n", err);
-  if (err != 0)
+  ninfo("Return %d\n", errcode);
+  if (errcode != 0)
     {
       INTERNALERROR("errout");
       httpd_send_err(hc, 500, err500title, "", err500form, hc->encodedurl);
       httpd_write_response(hc);
       cgi_semgive();
     }
-  return err;
+
+  return errcode;
 }
 
 /****************************************************************************
@@ -1021,23 +1029,19 @@ int cgi(httpd_conn *hc)
       argv[0] = arg;
       argv[1] = NULL;
 
-#ifndef CONFIG_CUSTOM_STACK
       child = task_create("CGI child", CONFIG_THTTPD_CGI_PRIORITY,
                           CONFIG_THTTPD_CGI_STACKSIZE,
                           (main_t)cgi_child, (FAR char * const *)argv);
-#else
-      child = task_create("CGI child", CONFIG_THTTPD_CGI_PRIORITY,
-                          (main_t)cgi_child, (FAR char * const *)argv);
-#endif
       if (child < 0)
         {
-          ndbg("task_create: %d\n", errno);
+          nerr("ERROR: task_create: %d\n", errno);
           INTERNALERROR("task_create");
-          httpd_send_err(hc, 500, err500title, "", err500form, hc->encodedurl);
+          httpd_send_err(hc, 500, err500title, "", err500form,
+                         hc->encodedurl);
           goto errout_with_sem;
         }
 
-      ndbg("Started CGI task %d for file '%s'\n", child, hc->expnfilename);
+      ninfo("Started CGI task %d for file '%s'\n", child, hc->expnfilename);
 
       /* Wait for the CGI threads to become initialized */
 
@@ -1049,7 +1053,8 @@ int cgi(httpd_conn *hc)
   else
     {
       NOTIMPLEMENTED("CGI");
-      httpd_send_err(hc, 501, err501title, "", err501form, httpd_method_str(hc->method));
+      httpd_send_err(hc, 501, err501title, "", err501form,
+                     httpd_method_str(hc->method));
       goto errout_with_sem;
     }
 
@@ -1069,10 +1074,10 @@ static void cgi_kill(ClientData client_data, struct timeval *nowP)
 
   /* task_delete() is a very evil API.  It can leave memory stranded! */
 
-  nlldbg("Killing CGI child: %d\n", pid);
+  ninfo("Killing CGI child: %d\n", pid);
   if (task_delete(pid) != 0)
     {
-      nlldbg("task_delete() failed: %d\n", errno);
+      nerr("ERROR: task_delete() failed: %d\n", errno);
     }
 }
 #endif

@@ -1,11 +1,12 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 config EXAMPLES_THTTPD
 	bool "THTTPD web server example"
 	default n
+	depends on FS_ROMFS && BUILD_FLAT
 	---help---
 		Enable the THTTPD web server example
 

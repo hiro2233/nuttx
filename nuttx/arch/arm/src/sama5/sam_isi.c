@@ -159,8 +159,8 @@ int sam_isi_initialize(void)
    * initialized?
    */
 
-  g_isi.actual = sam_pck_configure(ISI_PCKID, CONFIG_ISI_MCKFREQ);
-  gvdbg("PCK%d frequency=%d actual=%d\n",
+  g_isi.actual = sam_pck_configure(ISI_PCKID, PCKSRC_MCK, CONFIG_ISI_MCKFREQ);
+  ginfo("PCK%d frequency=%d actual=%d\n",
         ISI_PCKID, CONFIG_ISI_MCKFREQ, g_isi.actual);
 
   /* Enable the MCK (output) */
@@ -180,4 +180,4 @@ int sam_isi_initialize(void)
 #warning Missing logic
 }
 
-#endif /* CONFIG_SAMA5_ISI && CONFIG_SAMA5_EMAC */
+#endif /* CONFIG_SAMA5_ISI */

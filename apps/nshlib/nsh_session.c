@@ -1,7 +1,7 @@
 /****************************************************************************
  * apps/nshlib/nsh_session.c
  *
- *   Copyright (C) 2007-2009, 2011-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011-2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,37 +43,13 @@
 #include <stdlib.h>
 
 #ifdef CONFIG_NSH_CLE
-#  include <apps/cle.h>
+#  include "system/cle.h"
 #else
-#  include <apps/readline.h>
+#  include "system/readline.h"
 #endif
 
 #include "nsh.h"
 #include "nsh_console.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -83,12 +59,13 @@
  * Name: nsh_session
  *
  * Description:
- *   This is the common session logic or any NSH session.  This function
- *   return when an error reading from the input stream occurs, presumably
+ *   This is the common session login on any NSH session.  This function
+ *   returns when an error reading from the input stream occurs, presumably
  *   signaling the end of the session.
  *
  *   This function:
- *   - Executes the NSH logic script
+ *   - Performs the login sequence if so configured
+ *   - Executes the NSH login script
  *   - Presents a greeting
  *   - Then provides a prompt then gets and processes the command line.
  *   - This continues until an error occurs, then the session returns.
@@ -103,19 +80,46 @@
 
 int nsh_session(FAR struct console_stdio_s *pstate)
 {
+  FAR struct nsh_vtbl_s *vtbl;
   int ret;
 
   DEBUGASSERT(pstate);
+  vtbl = &pstate->cn_vtbl;
 
-  /* Present a greeting */
+#ifdef CONFIG_NSH_CONSOLE_LOGIN
+  /* Login User and Password Check */
+
+  if (nsh_login(pstate) != OK)
+    {
+      nsh_exit(vtbl, 1);
+      return -1; /* nsh_exit does not return */
+    }
+#endif /* CONFIG_NSH_CONSOLE_LOGIN */
+
+  /* Present a greeting and possibly a Message of the Day (MOTD) */
 
   fputs(g_nshgreeting, pstate->cn_outstream);
+
+#ifdef CONFIG_NSH_MOTD
+# ifdef CONFIG_NSH_PLATFORM_MOTD
+  /* Output the platform message of the day */
+
+  platform_motd(vtbl->iobuffer, IOBUFFERSIZE);
+  fprintf(pstate->cn_outstream, "%s\n", vtbl->iobuffer);
+
+# else
+  /* Output the fixed message of the day */
+
+  fprintf(pstate->cn_outstream, "%s\n", g_nshmotd);
+# endif
+#endif
+
   fflush(pstate->cn_outstream);
 
   /* Execute the login script */
 
 #ifdef CONFIG_NSH_ROMFSRC
-  (void)nsh_loginscript(&pstate->cn_vtbl);
+  (void)nsh_loginscript(vtbl);
 #endif
 
   /* Then enter the command line parsing loop */
@@ -148,7 +152,7 @@ int nsh_session(FAR struct console_stdio_s *pstate)
         {
           /* Parse process the command */
 
-          (void)nsh_parse(&pstate->cn_vtbl, pstate->cn_line);
+          (void)nsh_parse(vtbl, pstate->cn_line);
           fflush(pstate->cn_outstream);
         }
 

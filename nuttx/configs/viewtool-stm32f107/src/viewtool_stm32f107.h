@@ -1,7 +1,7 @@
-/******************************************************************************
+/****************************************************************************
  * configs/viewtool-stm32f107/src/viewtool_stm32f107.h
  *
- *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,27 +31,28 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ******************************************************************************/
+ ****************************************************************************/
 
-#ifndef __CONFIGS_VIEWTOOL_STM32F107_SRC_INTERNAL_H
-#define __CONFIGS_VIEWTOOL_STM32F107_SRC_INTERNAL_H
+#ifndef __CONFIGS_VIEWTOOL_STM32F107_SRC_H
+#define __CONFIGS_VIEWTOOL_STM32F107_SRC_H
 
-/******************************************************************************
+/****************************************************************************
  * Included Files
- ******************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <nuttx/compiler.h>
 #include <stdint.h>
 
-/******************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- ******************************************************************************/
-/* Configuration **************************************************************/
+ ****************************************************************************/
+/* Configuration ************************************************************/
 /* Assume that everything is supported */
 
-#define HAVE_USBDEV   1
-#define HAVE_MMCSD    1
+#define HAVE_USBDEV     1
+#define HAVE_MMCSD      1
+#define HAVE_RTC_DRIVER 1
 
 /* Handle chip differences */
 
@@ -91,7 +92,13 @@
 
 #define VIEWTOOL_MMCSD_SLOTNO 0
 
-/* GPIO Configuration *********************************************************/
+/* Check if we can support the RTC driver */
+
+#if !defined(CONFIG_RTC) || !defined(CONFIG_RTC_DRIVER)
+#  undef HAVE_RTC_DRIVER
+#endif
+
+/* GPIO Configuration *******************************************************/
 /* LEDs
  *
  * There are four LEDs on the ViewTool STM32F103/F107 board that can be controlled
@@ -114,7 +121,7 @@
                          GPIO_OUTPUT_SET | GPIO_PORTB | GPIO_PIN13)
 
 
-/* Buttons **************************************************************************/
+/* Buttons ******************************************************************/
 /* All pulled high and will be sensed low when depressed.
  *
  *   SW2 PC11  Needs J42 closed
@@ -276,55 +283,82 @@
 #define GPIO_LCDTP_CS     (GPIO_OUTPUT | GPIO_CNF_OUTPP | GPIO_MODE_50MHz | \
                            GPIO_OUTPUT_SET | GPIO_PORTC | GPIO_PIN4)
 
-/************************************************************************************
+/* Freescale MPL115A barometer (optional add-on)
+ *
+ * This board support logic includes support for a Freescale MPL115A barometer
+ * using SPI3 with chip select on PB6.
+ */
+
+#define GPIO_MPL115A_CS   (GPIO_OUTPUT | GPIO_CNF_OUTPP | GPIO_MODE_50MHz | \
+                           GPIO_OUTPUT_SET | GPIO_PORTB | GPIO_PIN6)
+
+/****************************************************************************
  * Public Functions
- ************************************************************************************/
+ ****************************************************************************/
 
 #ifndef __ASSEMBLY__
 
-/************************************************************************************
- * Name: stm32_spiinitialize
+/****************************************************************************
+ * Name: stm32_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the M3 Wildfire board.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
-void weak_function stm32_spiinitialize(void);
+void weak_function stm32_spidev_initialize(void);
 
-/************************************************************************************
+/****************************************************************************
+ * Name: stm32_led_initialize
+ *
+ * Description:
+ *   Configure LEDs.  LEDs are left in the OFF state.
+ *
+ ****************************************************************************/
+
+void stm32_led_initialize(void);
+
+/****************************************************************************
  * Name: stm32_usbdev_initialize
  *
  * Description:
  *   Called from stm32_usbdev_initialize very early in initialization to setup USB-related
  *   GPIO pins for the Viewtool STM32F107 board.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
 #if defined(CONFIG_STM32_OTGFS) && defined(CONFIG_USBDEV)
 void weak_function stm32_usbdev_initialize(void);
 #endif
 
-/************************************************************************************
+/****************************************************************************
  * Name: stm32_sdinitialize
  *
  * Description:
  *   Initialize the SPI-based SD card.  Requires CONFIG_DISABLE_MOUNTPOINT=n
  *   and CONFIG_STM32_SPI1=y
  *
- ************************************************************************************/
+ ****************************************************************************/
 
 int stm32_sdinitialize(int minor);
 
-/************************************************************************************
- * Name: board_led_initialize
+/****************************************************************************
+ * Name: stm32_mpl115ainitialize
  *
  * Description:
- *   Configure LEDs.  LEDs are left in the OFF state.
+ *   Initialize and register the MPL115A Pressure Sensor driver.
  *
- ************************************************************************************/
+ * Input parameters:
+ *   devpath - The full path to the driver to register. E.g., "/dev/press0"
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
 
-void stm32_ledinit(void);
+#if defined(CONFIG_SPI) && defined(CONFIG_MPL115A) && defined(CONFIG_STM32_SPI3)
+int stm32_mpl115ainitialize(FAR const char *devpath);
+#endif
 
 #endif  /* __ASSEMBLY__ */
-#endif /* __CONFIGS_VIEWTOOL_STM32F107_SRC_INTERNAL_H */
+#endif /* __CONFIGS_VIEWTOOL_STM32F107_SRC_H */

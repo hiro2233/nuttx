@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/bch/bchlib_read.c
  *
- *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,9 +46,7 @@
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/fs/fs.h>
-
-#include "bch_internal.h"
+#include "bch.h"
 
 /****************************************************************************
  * Private Types
@@ -132,7 +130,6 @@ ssize_t bchlib_read(FAR void *handle, FAR char *buffer, size_t offset, size_t le
 
       /* Adjust pointers and counts */
 
-      sectoffset = 0;
       sector++;
 
       if (sector >= bch->nsectors)
@@ -149,7 +146,7 @@ ssize_t bchlib_read(FAR void *handle, FAR char *buffer, size_t offset, size_t le
    * into the user buffer.
    */
 
-  if (len >= bch->sectsize )
+  if (len >= bch->sectsize)
     {
       nsectors = len / bch->sectsize;
       if (sector + nsectors > bch->nsectors)
@@ -161,15 +158,13 @@ ssize_t bchlib_read(FAR void *handle, FAR char *buffer, size_t offset, size_t le
                                        sector, nsectors);
       if (ret < 0)
         {
-          fdbg("Read failed: %d\n");
+          ferr("ERROR: Read failed: %d\n");
           return ret;
         }
 
       /* Adjust pointers and counts */
 
-      sectoffset = 0;
       sector    += nsectors;
-
       nbytes     = nsectors * bch->sectsize;
       bytesread += nbytes;
 

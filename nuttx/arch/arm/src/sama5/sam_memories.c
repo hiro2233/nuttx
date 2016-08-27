@@ -43,7 +43,10 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/addrenv.h>
+
 #include "chip.h"
+#include "sam_pgalloc.h"
 #include "sam_memories.h"
 
 /****************************************************************************
@@ -115,6 +118,38 @@ static inline uintptr_t periphb_physregaddr(uintptr_t virtregaddr)
 }
 
 /****************************************************************************
+ * Name: periphc_physregaddr
+ *
+ * Description:
+ *   Given the virtual address of a peripheral C register, return the
+ *   physical address of the register
+ *
+ ****************************************************************************/
+
+#ifdef SAM_PERIPHC_VSECTION
+static inline uintptr_t periphc_physregaddr(uintptr_t virtregaddr)
+{
+#if SAM_PERIPHB_PSECTION != SAM_PERIPHB_VSECTION
+  /* Get the offset into the virtual memory region section containing the
+   * register
+   */
+
+  uintptr_t sectoffset = virtregaddr - SAM_PERIPHC_VSECTION;
+
+  /* Add that offset to the physical base address of the memory region */
+
+  return SAM_PERIPHC_PSECTION + sectoffset;
+
+#else
+  /* 1-to-1 mapping */
+
+  return virtregaddr;
+
+#endif
+}
+#endif
+
+/****************************************************************************
  * Name: sysc_physregaddr
  *
  * Description:
@@ -123,6 +158,7 @@ static inline uintptr_t periphb_physregaddr(uintptr_t virtregaddr)
  *
  ****************************************************************************/
 
+#ifdef SAM_SYSC_VSECTION
 static inline uintptr_t sysc_physregaddr(uintptr_t virtregaddr)
 {
 #if SAM_SYSC_PSECTION != SAM_SYSC_VSECTION
@@ -143,6 +179,7 @@ static inline uintptr_t sysc_physregaddr(uintptr_t virtregaddr)
 
 #endif
 }
+#endif
 
 /****************************************************************************
  * Name: isram_physramaddr
@@ -183,7 +220,8 @@ static inline uintptr_t isram_physramaddr(uintptr_t virtramaddr)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SAMA5_DDRCS
+#if defined(CONFIG_SAMA5_DDRCS) || defined(CONFIG_SAMA5_BOOT_SDRAM) || \
+    defined(CONFIG_BOOT_SDRAM_DATA)
 static inline uintptr_t sdram_physramaddr(uintptr_t virtramaddr)
 {
 #if SAM_DDRCS_PSECTION != SAM_DDRCS_VSECTION
@@ -438,7 +476,8 @@ static inline uintptr_t isram_virtramaddr(uintptr_t physramaddr)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SAMA5_DDRCS
+#if defined(CONFIG_SAMA5_DDRCS) || defined(CONFIG_SAMA5_BOOT_SDRAM) || \
+    defined(CONFIG_BOOT_SDRAM_DATA)
 static inline uintptr_t sdram_virtramaddr(uintptr_t physramaddr)
 {
 #if SAM_DDRCS_PSECTION != SAM_DDRCS_VSECTION
@@ -687,13 +726,29 @@ uintptr_t sam_physregaddr(uintptr_t virtregaddr)
       return periphb_physregaddr(virtregaddr);
     }
 
-  /* Check for a system controller register */
+  /* Check for a system controller/peripheral C register
+   *
+   * Naming of peripheral sections differs between the SAMA5D3 and SAMA5D4.
+   * There is nothing called SYSC in the SAMA5D4 memory map.  The third
+   * peripheral section is un-named in the SAMA5D4 memory map, but I have
+   * chosen the name PERIPHC for this usage.
+   */
 
+#ifdef SAM_PERIPHC_VSECTION
+  else if (virtregaddr >= SAM_PERIPHC_VSECTION &&
+           virtregaddr < (SAM_PERIPHC_VSECTION + SAM_PERIPHC_SIZE))
+    {
+      return periphc_physregaddr(virtregaddr);
+    }
+#endif
+
+#ifdef SAM_SYSC_VSECTION
   else if (virtregaddr >= SAM_SYSC_VSECTION &&
            virtregaddr < (SAM_SYSC_VSECTION + SAM_SYSC_SIZE))
     {
       return sysc_physregaddr(virtregaddr);
     }
+#endif
 
   /* Check for NFCS SRAM.  If NFC SRAM is being used by the NAND logic,
    * then it will be treated as peripheral space.
@@ -711,7 +766,7 @@ uintptr_t sam_physregaddr(uintptr_t virtregaddr)
    * address
    */
 
-  dbg("Bad virtual address: %08lx\n|", virtregaddr);
+  serr("ERROR: Bad virtual address: %08lx\n", virtregaddr);
   DEBUGPANIC();
   return virtregaddr;
 }
@@ -737,11 +792,49 @@ uintptr_t sam_physramaddr(uintptr_t virtramaddr)
       return isram_physramaddr(virtramaddr);
     }
 
-#ifdef CONFIG_SAMA5_DDRCS
-  /* Check for external SDRAM */
+#if defined(CONFIG_SAMA5_DDRCS)
+  /* Check for external SDRAM.  We may have external DRAM if, as examples,
+   * we are running from NOR FLASH or ISRAM with data in DRAM
+   * (SAMA5_BOOT_ISRAM or SAMA5_BOOT_CS0FLASH with CONFIG_SAMA5_DDRCS).  In
+   * this case, the DRAM configuration settings, SAM_DDRCS_VSECTION and
+   * SAMA5_DDRCS_SIZE give us the correct size of the installed DRAM.
+   *
+   *   SAM_DDRCS_VSECTION -- Virtual start of the DRAM memory region
+   *   SAMA5_DDRCS_SIZE   -- The installed DRAM size.
+   *
+   * REVISIT:  However, not all of it may be mapped?  Only the "primary"
+   * RAM region will be mapped by default.  See below.
+   */
 
   else if (virtramaddr >= SAM_DDRCS_VSECTION &&
            virtramaddr < (SAM_DDRCS_VSECTION + SAMA5_DDRCS_SIZE))
+    {
+      return sdram_physramaddr(virtramaddr);
+    }
+
+#elif defined(CONFIG_SAMA5_BOOT_SDRAM) || defined(CONFIG_BOOT_SDRAM_DATA)
+  /* The DDRCS values may be highly couple to the CONFIG_RAM_START,
+   * CONFIG_RAM_VSTART, and CONFIG_RAM_SIZE when CONFIG_SAMA5_BOOT_SDRAM or
+   * CONFIG_BOOT_SDRAM_DATA is selected.
+   *
+   *   CONFIG_SAMA5_BOOT_SDRAM -- We were booted into DRAM by some bootloader.
+   *      DRAM support is not enabled, SAMA5_DDRCS_SIZE is not valid.
+   *   CONFIG_BOOT_SDRAM_DATA -- We are running from NOR or ISRAM, but our
+   *      .bss, .data, and primary heap are in DRAM (In this case, I would
+   *      expect CONFIG_SAMA5_DDRCS to also be set, however).
+   *
+   * In all cases, CONFIG_RAM_START, RAM_VSTART, and RAM_SIZE describe the
+   * "primary" RAM region that is mapped at boot time.  This "primary" RAM
+   * region is the one that holds .bss, .data, and primary head.  And this
+   * is the only DRAM memory region that is mapped at boot time.
+   *
+   * REVISIT:  How does this work if we want to set aside a block of DRAM
+   * outside of .bss, .data, and .heap for, as an example, for a framebuffer.
+   * In that case, we will to revisit this.
+   */
+
+  else if (virtramaddr >= CONFIG_RAM_VSTART &&
+           virtramaddr < (CONFIG_RAM_VSTART + CONFIG_RAM_SIZE))
     {
       return sdram_physramaddr(virtramaddr);
     }
@@ -811,13 +904,28 @@ uintptr_t sam_physramaddr(uintptr_t virtramaddr)
     }
 #endif
 
+#ifdef CONFIG_ARCH_ADDRENV
+  /* Check if the virtual address lies in the user data area and, if so
+   * get the mapping to the physical address in the page pool.
+   */
+
+  else
+    {
+      uintptr_t paddr = sam_physpgaddr(virtramaddr);
+      if (paddr != 0)
+        {
+          return paddr;
+        }
+    }
+#endif
+
   /* We will not get here unless we are called with an invalid or
    * unsupported RAM address.  Special case the NULL address.
    */
 
   if (virtramaddr != 0)
     {
-      dbg("Bad virtual address: %08lx\n|", virtramaddr);
+      serr("ERROR: Bad virtual address: %08lx\n", virtramaddr);
       DEBUGPANIC();
     }
 
@@ -846,13 +954,23 @@ uintptr_t sam_virtramaddr(uintptr_t physramaddr)
     }
 
 #ifdef CONFIG_SAMA5_DDRCS
-  /* Check for external SDRAM */
+  /* Check for external SDRAM.  NOTE:  See comments in sam_physramaddr */
 
   else if (physramaddr >= SAM_DDRCS_PSECTION &&
            physramaddr < (SAM_DDRCS_PSECTION + SAMA5_DDRCS_SIZE))
     {
       return sdram_virtramaddr(physramaddr);
     }
+
+#elif defined(CONFIG_SAMA5_BOOT_SDRAM) || defined(CONFIG_BOOT_SDRAM_DATA)
+  /* See comments in sam_physramaddr */
+
+  else if (physramaddr >= CONFIG_RAM_START &&
+           physramaddr < (CONFIG_RAM_START + CONFIG_RAM_SIZE))
+    {
+      return sdram_physramaddr(physramaddr);
+    }
+
 #endif
 
   /* Check for NFCS SRAM.  If NFC SRAM is not being used by the NAND logic,
@@ -919,13 +1037,28 @@ uintptr_t sam_virtramaddr(uintptr_t physramaddr)
     }
 #endif
 
+#ifdef CONFIG_ARCH_ADDRENV
+  /* Check if the physical address lies in the page pool and, if so
+   * get the mapping to the virtual address in the user data area.
+   */
+
+  else
+    {
+      uintptr_t vaddr = sam_virtpgaddr(physramaddr);
+      if (vaddr != 0)
+        {
+          return vaddr;
+        }
+    }
+#endif
+
   /* We will not get here unless we are called with an invalid or
    * unsupported RAM address.  Special case the NULL address.
    */
 
   if (physramaddr != 0)
     {
-      dbg("Bad physical address: %08lx\n|", physramaddr);
+      serr("ERROR: Bad physical address: %08lx\n|", physramaddr);
       DEBUGPANIC();
     }
 

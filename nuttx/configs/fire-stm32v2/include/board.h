@@ -2,7 +2,7 @@
  * configs/fire-stm32v2/include/board.h
  * include/arch/board/board.h
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,7 +50,7 @@
 #include "stm32.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
@@ -103,14 +103,14 @@
 #define STM32_RCC_CFGR_PPRE1    RCC_CFGR_PPRE1_HCLKd2
 #define STM32_PCLK1_FREQUENCY   (STM32_HCLK_FREQUENCY/2)
 
-/* APB1 timers 2-4 will be twice PCLK1 (I presume the remaining will receive PCLK1) */
+/* APB1 timers 2-7 will be twice PCLK1 */
 
 #define STM32_APB1_TIM2_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 #define STM32_APB1_TIM3_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 #define STM32_APB1_TIM4_CLKIN   (2*STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM5_CLKIN   (STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM6_CLKIN   (STM32_PCLK1_FREQUENCY)
-#define STM32_APB1_TIM7_CLKIN   (STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM5_CLKIN   (2*STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM6_CLKIN   (2*STM32_PCLK1_FREQUENCY)
+#define STM32_APB1_TIM7_CLKIN   (2*STM32_PCLK1_FREQUENCY)
 
 /* USB divider -- Divide PLL clock by 1.5 */
 
@@ -120,8 +120,14 @@
  * otherwise frequency is 2xAPBx.
  * Note: TIM1,8 are on APB2, others on APB1 */
 
-#define STM32_TIM18_FREQUENCY   STM32_HCLK_FREQUENCY
-#define STM32_TIM27_FREQUENCY   STM32_HCLK_FREQUENCY
+#define BOARD_TIM1_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM2_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM3_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM4_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM5_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM6_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM7_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM8_FREQUENCY    STM32_HCLK_FREQUENCY
 
 /* SDIO dividers.  Note that slower clocking is required when DMA is disabled
  * in order to avoid RX overrun/TX underrun errors due to delayed responses
@@ -384,22 +390,6 @@ extern "C" {
  ************************************************************************************/
 
 void stm32_boardinitialize(void);
-
-/************************************************************************************
- * Name:  stm32_ledinit, stm32_setled, and stm32_setleds
- *
- * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board LEDs.  If
- *   CONFIG_ARCH_LEDS is not defined, then the following interfacesare available to
- *   control the LEDs from user applications.
- *
- ************************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-void stm32_ledinit(void);
-void stm32_setled(int led, bool ledon);
-void stm32_setleds(uint8_t ledset);
-#endif
 
 /************************************************************************************
  * Name:  fire_lcdclear

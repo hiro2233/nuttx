@@ -41,22 +41,11 @@
 
 #include <stdint.h>
 
-#include "os_internal.h"
+#include <arch/irq.h>
+
 #include "up_internal.h"
 
 #ifdef CONFIG_ARCH_FPU
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -75,7 +64,7 @@ void up_copyarmstate(uint32_t *dest, uint32_t *src)
 {
   int i;
 
-  /* In the Cortex-M3 model, the state is copied from the stack to the TCB,
+  /* In the Cortex-A model, the state is copied from the stack to the TCB,
    * but only a reference is passed to get the state from the TCB.  So the
    * following check avoids copying the TCB save area onto itself:
    */
@@ -88,7 +77,7 @@ void up_copyarmstate(uint32_t *dest, uint32_t *src)
 
       up_savefpu(dest);
 
-      /* Then copy all of the ARM registers (mitting the floating point
+      /* Then copy all of the ARM registers (omitting the floating point
        * registers).  Indices: 0 through (ARM_CONTEXT_REGS-1).
        */
 

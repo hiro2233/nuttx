@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z80/src/ez80/ez80_registerdump.c
  *
- *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,21 +45,13 @@
 #include <nuttx/arch.h>
 
 #include "chip/switch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
-/****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/* Output debug info if stack dump is selected -- even if
- * debug is not selected.
- */
-
 #ifdef CONFIG_ARCH_STACKDUMP
-# undef  lldbg
-# define lldbg lowsyslog
-#endif
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
 /****************************************************************************
  * Private Data
@@ -73,30 +65,30 @@
  * Name: z80_registerdump
  ****************************************************************************/
 
-#ifdef CONFIG_ARCH_STACKDUMP
 static void ez80_registerdump(void)
 {
-  if (current_regs)
+  if (g_current_regs)
     {
 #ifdef CONFIG_EZ80_Z80MODE
-      lldbg("AF: %04x  I: %04x\n",
-            current_regs[XCPT_AF], current_regs[XCPT_I]);
-      lldbg("BC: %04x DE: %04x HL: %04x\n",
-            current_regs[XCPT_BC], current_regs[XCPT_DE], current_regs[XCPT_HL]);
-      lldbg("IX: %04x IY: %04x\n",
-            current_regs[XCPT_IX], current_regs[XCPT_IY]);
-      lldbg("SP: %04x PC: %04x\n"
-            current_regs[XCPT_SP], current_regs[XCPT_PC]);
+      _alert("AF: %04x  I: %04x\n",
+            g_current_regs[XCPT_AF], g_current_regs[XCPT_I]);
+      _alert("BC: %04x DE: %04x HL: %04x\n",
+            g_current_regs[XCPT_BC], g_current_regs[XCPT_DE], g_current_regs[XCPT_HL]);
+      _alert("IX: %04x IY: %04x\n",
+            g_current_regs[XCPT_IX], g_current_regs[XCPT_IY]);
+      _alert("SP: %04x PC: %04x\n"
+            g_current_regs[XCPT_SP], g_current_regs[XCPT_PC]);
 #else
-      lldbg("AF: %06x  I: %06x\n",
-            current_regs[XCPT_AF], current_regs[XCPT_I]);
-      lldbg("BC: %06x DE: %06x HL: %06x\n",
-            current_regs[XCPT_BC], current_regs[XCPT_DE], current_regs[XCPT_HL]);
-      lldbg("IX: %06x IY: %06x\n",
-            current_regs[XCPT_IX], current_regs[XCPT_IY]);
-      lldbg("SP: %06x PC: %06x\n"
-            current_regs[XCPT_SP], current_regs[XCPT_PC]);
+      _alert("AF: %06x  I: %06x\n",
+            g_current_regs[XCPT_AF], g_current_regs[XCPT_I]);
+      _alert("BC: %06x DE: %06x HL: %06x\n",
+            g_current_regs[XCPT_BC], g_current_regs[XCPT_DE], g_current_regs[XCPT_HL]);
+      _alert("IX: %06x IY: %06x\n",
+            g_current_regs[XCPT_IX], g_current_regs[XCPT_IY]);
+      _alert("SP: %06x PC: %06x\n"
+            g_current_regs[XCPT_SP], g_current_regs[XCPT_PC]);
 #endif
     }
 }
-#endif
+
+#endif /* CONFIG_ARCH_STACKDUMP */

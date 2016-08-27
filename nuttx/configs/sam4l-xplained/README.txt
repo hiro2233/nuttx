@@ -240,12 +240,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -294,7 +288,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -354,8 +348,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -572,10 +566,10 @@ SAM4L Xplained Pro-specific Configuration Options
     CONFIG_SAM34_GPIOA_IRQ
     CONFIG_SAM34_GPIOB_IRQ
     CONFIG_SAM34_GPIOC_IRQ
-    CONFIG_USART0_ISUART
-    CONFIG_USART1_ISUART
-    CONFIG_USART2_ISUART
-    CONFIG_USART3_ISUART
+    CONFIG_USART0_SERIALDRIVER
+    CONFIG_USART1_SERIALDRIVER
+    CONFIG_USART2_SERIALDRIVER
+    CONFIG_USART3_SERIALDRIVER
 
   ST91SAM4L specific device driver settings
 
@@ -617,7 +611,7 @@ Configurations
   change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -628,7 +622,7 @@ Configurations
     change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -732,7 +726,6 @@ Configuration sub-directories
        Device Drivers
          CONFIG_SPI=y                      : Enable SPI support
          CONFIG_SPI_EXCHANGE=y             : The exchange() method is supported
-         CONFIG_SPI_OWNBUS=y               : Smaller code if this is the only SPI device
 
          CONFIG_MMCSD=y                    : Enable MMC/SD support
          CONFIG_MMCSD_NSLOTS=1             : Only one MMC/SD card slot
@@ -787,7 +780,6 @@ Configuration sub-directories
          CONFIG_SPI=y                       : Enable SPI support
          CONFIG_SPI_EXCHANGE=y              : The exchange() method is supported
          CONFIG_SPI_CMDDATA=y               : CMD/DATA support is required
-         CONFIG_SPI_OWNBUS=y                : Smaller code if this is the only SPI device
 
        Device Drivers -> LCDs
          CONFIG_LCD=y                       : Enable LCD support

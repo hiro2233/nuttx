@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/freedom-kl25z/src/kl_spi.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,48 +52,31 @@
 #if defined(CONFIG_KL_SPI0) || defined(CONFIG_KL_SPI1)
 
 /****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/* Enables debug output from this file (needs CONFIG_DEBUG too) */
-
-#undef SPI_DEBUG   /* Define to enable debug */
-#undef SPI_VERBOSE /* Define to enable verbose debug */
-
-#ifdef SPI_DEBUG
-#  define spidbg  lldbg
-#  ifdef SPI_VERBOSE
-#    define spivdbg lldbg
-#  else
-#    define spivdbg(x...)
-#  endif
-#else
-#  undef SPI_VERBOSE
-#  define spidbg(x...)
-#  define spivdbg(x...)
-#endif
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: kl_spiinitialize
+ * Name: kl_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the FRDM-KL25Z board.
  *
  ****************************************************************************/
 
-void weak_function kl_spiinitialize(void)
+void weak_function kl_spidev_initialize(void)
 {
   /* Configure SPI0 chip selects */
 
 #ifdef CONFIG_KL_SPI0
+# ifdef CONFIG_ADXL345_SPI
+  kl_configgpio(GPIO_ADXL345_CS);
+#endif
+
+# ifdef CONFIG_WL_CC3000
+  kl_configgpio(GPIO_WIFI_CS);
+  kl_configgpio(GPIO_WIFI_EN);
+  kl_configgpio(GPIO_WIFI_INT);
+# endif
 #endif
 
   /* Configure SPI1 chip selects */
@@ -109,7 +92,7 @@ void weak_function kl_spiinitialize(void)
  *   These external functions must be provided by board-specific logic.  They
  *   are implementations of the select, status, and cmddata methods of the SPI
  *   interface defined by struct spi_ops_s (see include/nuttx/spi/spi.h). All
- *   other methods including up_spiinitialize()) are provided by common
+ *   other methods including kl_spibus_initialize()) are provided by common
  *   Kinetis logic.  To use this common SPI logic on your board:
  *
  *   1. Provide logic in kl_boardinitialize() to configure SPI chip select
@@ -122,9 +105,9 @@ void weak_function kl_spiinitialize(void)
  *      kl_spi[n]cmddata() functions in your board-specific logic.  These
  *      functions will perform cmd/data selection operations using GPIOs in
  *      the way your board is configured.
- *   3. Add a call to up_spiinitialize() in your low level application
+ *   3. Add a call to kl_spibus_initialize() in your low level application
  *      initialization logic
- *   4. The handle returned by up_spiinitialize() may then be used to bind
+ *   4. The handle returned by kl_spibus_initialize() may then be used to bind
  *      the SPI driver to higher level logic (e.g., calling
  *      mmcsd_spislotinitialize(), for example, will bind the SPI driver to
  *      the SPI MMC/SD driver).
@@ -159,8 +142,25 @@ void weak_function kl_spiinitialize(void)
 void kl_spi0select(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
                    bool selected)
 {
-  spivdbg("devid: %d CS: %s\n",
+  spiinfo("devid: %d CS: %s\n",
            (int)devid, selected ? "assert" : "de-assert");
+
+#ifdef CONFIG_ADXL345_SPI
+  if (devid == SPIDEV_ACCELEROMETER)
+    {
+      /* Active low */
+
+      kl_gpiowrite(GPIO_ADXL345_CS, !selected);
+    }
+#endif
+
+#if defined(CONFIG_WL_CC3000)
+  if (devid == SPIDEV_WIRELESS)
+    {
+      kl_gpiowrite(GPIO_WIFI_CS, !selected);
+    }
+#endif
+
 }
 #endif
 
@@ -168,7 +168,7 @@ void kl_spi0select(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
 void kl_spi1select(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
                    bool selected)
 {
-  spivdbg("devid: %d CS: %s\n",
+  spiinfo("devid: %d CS: %s\n",
            (int)devid, selected ? "assert" : "de-assert");
 }
 #endif
@@ -205,7 +205,7 @@ uint8_t kl_spi1status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
  * Name: kl_spi[n]cmddata
  *
  * Description:
- *   Some SPI interfaces, particularly with LCDs, and an auxilary 9th data
+ *   Some SPI interfaces, particularly with LCDs, and an auxiliary 9th data
  *   input that determines where the other 8 data bits represent command or
  *   data.  These interfaces control that CMD/DATA GPIO output
  *

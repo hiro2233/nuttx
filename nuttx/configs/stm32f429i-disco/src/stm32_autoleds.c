@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/stm32f429i-disco/src/stm32_autoleds.c
  *
- *   Copyright (C) 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,7 @@
 #include <stdbool.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -54,20 +55,8 @@
 #ifdef CONFIG_ARCH_LEDS
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
-
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg  lldbg
-#  define ledvdbg llvdbg
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
 
 /* The following definitions map the encoded LED setting to GPIO settings */
 
@@ -203,10 +192,10 @@ static void led_setonoff(unsigned int bits)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_led_initialize
+ * Name: board_autoled_initialize
  ****************************************************************************/
 
-void board_led_initialize(void)
+void board_autoled_initialize(void)
 {
    /* Configure LED1-4 GPIOs for output */
 
@@ -215,19 +204,19 @@ void board_led_initialize(void)
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  ****************************************************************************/
 
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   led_setonoff(ON_BITS(g_ledbits[led]));
 }
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  ****************************************************************************/
 
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   led_setonoff(OFF_BITS(g_ledbits[led]));
 }

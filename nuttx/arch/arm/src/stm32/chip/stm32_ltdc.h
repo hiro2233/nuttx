@@ -127,6 +127,7 @@
 #define STM32_LTDC_L1CFBAR          (STM32_LTDC_BASE+STM32_LTDC_L1CFBAR_OFFSET)
 #define STM32_LTDC_L1CFBLR          (STM32_LTDC_BASE+STM32_LTDC_L1CFBLR_OFFSET)
 #define STM32_LTDC_L1CFBLNR         (STM32_LTDC_BASE+STM32_LTDC_L1CFBLNR_OFFSET)
+#define STM32_LTDC_L1CLUTWR         (STM32_LTDC_BASE+STM32_LTDC_L1CLUTWR_OFFSET)
 
 #define STM32_LTDC_L2CR             (STM32_LTDC_BASE+STM32_LTDC_L2CR_OFFSET)
 #define STM32_LTDC_L2WHPCR          (STM32_LTDC_BASE+STM32_LTDC_L2WHPCR_OFFSET)
@@ -139,6 +140,7 @@
 #define STM32_LTDC_L2CFBAR          (STM32_LTDC_BASE+STM32_LTDC_L2CFBAR_OFFSET)
 #define STM32_LTDC_L2CFBLR          (STM32_LTDC_BASE+STM32_LTDC_L2CFBLR_OFFSET)
 #define STM32_LTDC_L2CFBLNR         (STM32_LTDC_BASE+STM32_LTDC_L2CFBLNR_OFFSET)
+#define STM32_LTDC_L2CLUTWR         (STM32_LTDC_BASE+STM32_LTDC_L2CLUTWR_OFFSET)
 
 /* LTDC Register Bit Definitions ***************************************************/
 
@@ -344,12 +346,12 @@
 
 /* LTDC Layer x Color Frame Buffer Length Configuration Register */
 
-#define LTDC_LxCFBLCR_CFBLL_SHIFT   (0)       /* Bits 0-12: Color Frame Buffer Line Length */
-#define LTDC_LxCFBLCR_CFBLL_MASK    (0x1FFF << LTDC_LxCFBLCR_CFBLL_SHIFT)
-#  define LTDC_LxCFBLCR_CFBLL(n)    ((uint32_t)(n) << LTDC_LxCFBLCR_CFBLL_SHIFT)
-#define LTDC_LxCFBLCR_CFBP_SHIFT    (16)       /* Bits 16-28: Color Frame Buffer Pitch */
-#define LTDC_LxCFBLCR_CFBP_MASK     (0x1FFF << LTDC_LxCFBLCR_CFBP_SHIFT)
-#  define LTDC_LxCFBLCR_CFBP(n)     ((uint32_t)(n) << LTDC_LxCFBLCR_CFBP_SHIFT)
+#define LTDC_LxCFBLR_CFBLL_SHIFT    (0)       /* Bits 0-12: Color Frame Buffer Line Length */
+#define LTDC_LxCFBLR_CFBLL_MASK     (0x1FFF << LTDC_LxCFBLR_CFBLL_SHIFT)
+#  define LTDC_LxCFBLR_CFBLL(n)     ((uint32_t)(n) << LTDC_LxCFBLR_CFBLL_SHIFT)
+#define LTDC_LxCFBLR_CFBP_SHIFT     (16)       /* Bits 16-28: Color Frame Buffer Pitch */
+#define LTDC_LxCFBLR_CFBP_MASK      (0x1FFF << LTDC_LxCFBLR_CFBP_SHIFT)
+#  define LTDC_LxCFBLR_CFBP(n)      ((uint32_t)(n) << LTDC_LxCFBLR_CFBP_SHIFT)
 
 /* LTDC Layer x Color Frame Buffer Line Number Register */
 

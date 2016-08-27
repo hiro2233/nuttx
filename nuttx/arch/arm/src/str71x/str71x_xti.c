@@ -50,14 +50,13 @@
 
 #include "chip.h"
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
-#include "str71x_internal.h"
+#include "str71x.h"
 
 #ifdef CONFIG_STR71X_XTI
 
 /********************************************************************************
- * Pre-procesor Definitions
+ * Pre-processor Definitions
  ********************************************************************************/
 
 /********************************************************************************
@@ -120,7 +119,7 @@ static int str71x_xtiinterrupt(int irq, FAR void *context)
 
       if ((pending & mask) != 0)
         {
-	  /* Deliver the IRQ */
+          /* Deliver the IRQ */
 
           irq_dispatch(irq, context);
           pending &= ~mask;

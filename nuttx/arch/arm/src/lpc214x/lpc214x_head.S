@@ -50,7 +50,7 @@
 #include "up_arch.h"
 
 /*****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  *****************************************************************************/
 
 /* This file holds the NuttX start logic that runs when the LPC2148
@@ -280,7 +280,7 @@
  */
 
 	.macro	showprogress, code
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 	mov	r0, #\code
 	bl	up_lowputc
 #endif
@@ -592,7 +592,7 @@ __start:
 	/* Initialize onboard LEDs */
 
 #ifdef CONFIG_ARCH_LEDS
-	bl	board_led_initialize
+	bl	board_autoled_initialize
 #endif
 
 	/* Then jump to OS entry */

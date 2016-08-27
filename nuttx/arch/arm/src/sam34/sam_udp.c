@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sam34/sam_udp.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.orgr>
  *
  * This driver derives in a small part from the SAMA5D3 UDP driver:
@@ -58,6 +58,7 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/usb/usb.h>
@@ -89,7 +90,7 @@
  * enabled.
  */
 
-#ifndef CONFIG_DEBUG
+#ifndef CONFIG_DEBUG_USB
 #  undef CONFIG_SAM34_UDP_REGDEBUG
 #endif
 
@@ -112,7 +113,7 @@
                              UDPEP_CSR_STALLSENT | UDPEP_CSR_RXSETUP | \
                              UDPEP_CSR_TXCOMP)
 
-#define nop()               __asm__ __volatile__ ( "nop" )
+#define nop()               __asm__ __volatile__ ("nop")
 
 /* USB-related masks */
 
@@ -230,7 +231,7 @@ enum sam_epstate_e
   UDP_EPSTATE_STALLED,      /* Endpoint is stalled */
   UDP_EPSTATE_IDLE,         /* Endpoint is idle (i.e. ready for transmission) */
   UDP_EPSTATE_SENDING,      /* Endpoint is sending data */
-  UDP_EPSTATE_RXSTOPPED,    /* OUT dndpoint is stopped waiting for a read request */
+  UDP_EPSTATE_RXSTOPPED,    /* OUT endpoint is stopped waiting for a read request */
                             /* --- Endpoint 0 Only --- */
   UDP_EPSTATE_EP0DATAOUT,   /* Endpoint 0 is receiving SETUP OUT data */
   UDP_EPSTATE_EP0STATUSIN,  /* Endpoint 0 is sending SETUP status */
@@ -304,6 +305,7 @@ struct sam_ep_s
   uint8_t              zlpneeded:1;  /* Zero length packet needed at end of transfer */
   uint8_t              zlpsent:1;    /* Zero length packet has been sent */
   uint8_t              txbusy:1;     /* Write request queue is busy (recursion avoidance kludge) */
+  uint8_t              lastbank:1;   /* Last bank we read data from */
 };
 
 struct sam_usbdev_s
@@ -500,7 +502,7 @@ static const struct usb_epdesc_s g_ep0desc =
   .interval      = 0
 };
 
-/* Device error strings that may be enabled for more desciptive USB trace
+/* Device error strings that may be enabled for more descriptive USB trace
  * output.
  */
 
@@ -540,7 +542,7 @@ const struct trace_msg_t g_usb_trace_strings_deverror[] =
 };
 #endif
 
-/* Interrupt event strings that may be enabled for more desciptive USB trace
+/* Interrupt event strings that may be enabled for more descriptive USB trace
  * output.
  */
 
@@ -594,29 +596,29 @@ const struct trace_msg_t g_usb_trace_strings_intdecode[] =
 /****************************************************************************
  * Register Operations
  ****************************************************************************/
-/*******************************************************************************
+/****************************************************************************
  * Name: sam_printreg
  *
  * Description:
- *   Print the contents of a SAM34 EHCI register
+ *   Print the contents of a SAM34 UDP registers
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_SAM34_UDP_REGDEBUG
 static void sam_printreg(uintptr_t regaddr, uint32_t regval, bool iswrite)
 {
-  lldbg("%p%s%08x\n", regaddr, iswrite ? "<-" : "->", regval);
+  _info("%p%s%08x\n", regaddr, iswrite ? "<-" : "->", regval);
 }
 #endif
 
-/*******************************************************************************
+/****************************************************************************
  * Name: sam_checkreg
  *
  * Description:
  *   Check if it is time to output debug information for accesses to a SAM34
- *   EHCI register
+ *   UDP registers
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_SAM34_UDP_REGDEBUG
 static void sam_checkreg(uintptr_t regaddr, uint32_t regval, bool iswrite)
@@ -656,7 +658,7 @@ static void sam_checkreg(uintptr_t regaddr, uint32_t regval, bool iswrite)
             {
               /* No.. More than one. */
 
-              lldbg("[repeats %d more times]\n", count);
+              _info("[repeats %d more times]\n", count);
             }
         }
 
@@ -674,13 +676,13 @@ static void sam_checkreg(uintptr_t regaddr, uint32_t regval, bool iswrite)
 }
 #endif
 
-/*******************************************************************************
+/****************************************************************************
  * Name: sam_getreg
  *
  * Description:
  *   Get the contents of an SAM34 register
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_SAM34_UDP_REGDEBUG
 static uint32_t sam_getreg(uintptr_t regaddr)
@@ -701,13 +703,13 @@ static inline uint32_t sam_getreg(uintptr_t regaddr)
 }
 #endif
 
-/*******************************************************************************
+/****************************************************************************
  * Name: sam_putreg
  *
  * Description:
  *   Set the contents of an SAM34 register to a value
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_SAM34_UDP_REGDEBUG
 static void sam_putreg(uint32_t regval, uintptr_t regaddr)
@@ -731,20 +733,20 @@ static inline void sam_putreg(uint32_t regval, uint32_t regaddr)
  * Name: sam_dumpep
  ****************************************************************************/
 
-#if defined(CONFIG_SAM34_UDP_REGDEBUG) && defined(CONFIG_DEBUG)
+#if defined(CONFIG_SAM34_UDP_REGDEBUG) && defined(CONFIG_DEBUG_USB)
 static void sam_dumpep(struct sam_usbdev_s *priv, uint8_t epno)
 {
   /* Global Registers */
 
-  lldbg("Global Registers:\n");
-  lldbg(" FRMNUM:    %08x\n", sam_getreg(SAM_UDP_FRMNUM));
-  lldbg("GLBSTAT:    %08x\n", sam_getreg(SAM_UDP_GLBSTAT));
-  lldbg("  FADDR:    %08x\n", sam_getreg(SAM_UDP_FADDR));
-  lldbg("    IMR:    %08x\n", sam_getreg(SAM_UDP_IMR));
-  lldbg("    ISR:    %08x\n", sam_getreg(SAM_UDP_ISR));
-  lldbg("  RSTEP:    %08x\n", sam_getreg(SAM_UDP_RSTEP));
-  lldbg("   TXVC:    %08x\n", sam_getreg(SAM_UDP_TXVC));
-  lldbg(" CSR[%d]:    %08x\n", epno, sam_getreg(SAM_UDPEP_CSR(epno)));
+  _info("Global Registers:\n");
+  _info(" FRMNUM:    %08x\n", sam_getreg(SAM_UDP_FRMNUM));
+  _info("GLBSTAT:    %08x\n", sam_getreg(SAM_UDP_GLBSTAT));
+  _info("  FADDR:    %08x\n", sam_getreg(SAM_UDP_FADDR));
+  _info("    IMR:    %08x\n", sam_getreg(SAM_UDP_IMR));
+  _info("    ISR:    %08x\n", sam_getreg(SAM_UDP_ISR));
+  _info("  RSTEP:    %08x\n", sam_getreg(SAM_UDP_RSTEP));
+  _info("   TXVC:    %08x\n", sam_getreg(SAM_UDP_TXVC));
+  _info(" CSR[%d]:    %08x\n", epno, sam_getreg(SAM_UDPEP_CSR(epno)));
 }
 #endif
 
@@ -803,9 +805,9 @@ static void sam_req_complete(struct sam_ep_s *privep, int16_t result)
 
   /* Remove the completed request at the head of the endpoint request list */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   privreq = sam_req_dequeue(&privep->reqq);
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   if (privreq)
     {
@@ -967,9 +969,9 @@ static int sam_req_write(struct sam_usbdev_s *priv, struct sam_ep_s *privep)
           return -ENOENT;
         }
 
-      ullvdbg("epno=%d req=%p: len=%d xfrd=%d inflight=%d zlpneeded=%d\n",
-              epno, privreq, privreq->req.len, privreq->req.xfrd,
-              privreq->inflight, privep->zlpneeded);
+      uinfo("epno=%d req=%p: len=%d xfrd=%d inflight=%d zlpneeded=%d\n",
+            epno, privreq, privreq->req.len, privreq->req.xfrd,
+            privreq->inflight, privep->zlpneeded);
 
       /* Handle any bytes in flight. */
 
@@ -1116,7 +1118,7 @@ static int sam_req_read(struct sam_usbdev_s *priv, struct sam_ep_s *privep,
   epno = USB_EPNO(privep->ep.eplog);
   do
     {
-      /* Peek at the next read request in the requeust queue */
+      /* Peek at the next read request in the request queue */
 
       privreq = sam_rqpeek(&privep->reqq);
       if (!privreq)
@@ -1138,8 +1140,8 @@ static int sam_req_read(struct sam_usbdev_s *priv, struct sam_ep_s *privep,
           return -ENOENT;
         }
 
-      ullvdbg("EP%d: len=%d xfrd=%d\n",
-              epno, privreq->req.len, privreq->req.xfrd);
+      uinfo("EP%d: len=%d xfrd=%d\n",
+            epno, privreq->req.len, privreq->req.xfrd);
 
       /* Ignore any attempt to receive a zero length packet */
 
@@ -1187,8 +1189,13 @@ static int sam_req_read(struct sam_usbdev_s *priv, struct sam_ep_s *privep,
 
   /* We get here when an RXDATABK0/1 interrupt occurs.  That interrupt
    * cannot be cleared until all of the data has been taken from the RX
-   * FIFO.  But we can
+   * FIFO.
+   *
+   * Also, we need to remember which bank we read last so the interrupt handler
+   * can determine the correct bank read sequence for future reads.
    */
+
+  privep->lastbank = bank;
 
   sam_csr_clrbits(epno, bank ? UDPEP_CSR_RXDATABK1 : UDPEP_CSR_RXDATABK0);
 
@@ -1407,8 +1414,8 @@ static void sam_ep0_setup(struct sam_usbdev_s *priv)
   index.w = GETUINT16(priv->ctrl.index);
   len.w   = GETUINT16(priv->ctrl.len);
 
-  ullvdbg("SETUP: type=%02x req=%02x value=%04x index=%04x len=%04x\n",
-          priv->ctrl.type, priv->ctrl.req, value.w, index.w, len.w);
+  uinfo("SETUP: type=%02x req=%02x value=%04x index=%04x len=%04x\n",
+        priv->ctrl.type, priv->ctrl.req, value.w, index.w, len.w);
 
   /* Dispatch any non-standard requests */
 
@@ -1416,7 +1423,7 @@ static void sam_ep0_setup(struct sam_usbdev_s *priv)
     {
       usbtrace(TRACE_INTDECODE(SAM_TRACEINTID_NOSTDREQ), priv->ctrl.type);
 
-      /* Let the class implementation handle all non-standar requests */
+      /* Let the class implementation handle all non-standard requests */
 
       sam_ep0_dispatch(priv);
       return;
@@ -1571,7 +1578,7 @@ static void sam_ep0_setup(struct sam_usbdev_s *priv)
           {
             /* Special case recipient=device test mode */
 
-            ullvdbg("test mode: %d\n", index.w);
+            uinfo("test mode: %d\n", index.w);
           }
         else if ((priv->ctrl.type & USB_REQ_RECIPIENT_MASK) != USB_REQ_RECIPIENT_ENDPOINT)
           {
@@ -1702,7 +1709,7 @@ static void sam_ep0_setup(struct sam_usbdev_s *priv)
             index.w == 0 && len.w == 0)
           {
              /* The request seems valid... let the class implementation handle it.
-              * If the class implementation accespts it new configuration, it will
+              * If the class implementation accepts it new configuration, it will
               * call sam_ep_configure() to configure the endpoints.
               */
 
@@ -1872,7 +1879,6 @@ static void sam_ep_bankinterrupt(struct sam_usbdev_s *priv,
        * transferred from the FIFO.
        */
 
-      privep->epstate = UDP_EPSTATE_IDLE;
       (void)sam_req_read(priv, privep, pktsize, bank);
     }
 
@@ -1958,6 +1964,8 @@ static void sam_ep_interrupt(struct sam_usbdev_s *priv, int epno)
   struct sam_ep_s *privep;
   uintptr_t regaddr;
   uint32_t csr;
+  bool bk0;
+  bool bk1;
 
   DEBUGASSERT((unsigned)epno < SAM_UDP_NENDPOINTS);
 
@@ -2019,33 +2027,81 @@ static void sam_ep_interrupt(struct sam_usbdev_s *priv, int epno)
         }
     }
 
-  /* OUT packet received in data bank 0 */
 
-  if ((csr & UDPEP_CSR_RXDATABK0) != 0)
+  /* OUT packet received.
+   *
+   * OUT packets are received in two banks. The hardware does not provide
+   * information about which bank has been filled last. Therefore we need to
+   * keep track about which bank we read last to figure out which bank(s) we
+   * need to read next.
+   *
+   * When we get here either none, one or both banks can be filled with data.
+   * Depending on which bank we read last and which bank(s) contain data we
+   * need to correctly sequence the FIFO reads:
+   *
+   * case  lastbank      bk0    bk1     read sequence
+   *  1.      0           0      0      No data to read
+   *  2.      0           1      0      Only read bank 0
+   *  3.      0           0      1      Only read bank 1
+   *  4.      0           1      1      Read bank 1, then read bank 0
+   *
+   *  5.      1           0      0      No data to read
+   *  6.      1           1      0      Only read bank 0
+   *  7.      1           0      1      Only read bank 1 (should not happen)
+   *  8.      1           1      1      Read bank 0, then read bank 1
+   *
+   * lastbank will be updated in sam_req_read() after the FIFO has been read
+   * and clear RXDATABKx.
+   */
+
+  bk0 = (csr & UDPEP_CSR_RXDATABK0) != 0;
+  bk1 = (csr & UDPEP_CSR_RXDATABK1) != 0;
+
+  /* 2. and 6. - Only read bank 0 */
+
+  if (bk0 && !bk1)
     {
       usbtrace(TRACE_INTDECODE(SAM_TRACEINTID_RXDATABK0), (uint16_t)csr);
-
-      /* Handle data received on Bank 0.  sam_ep_bankinterrupt will
-       * clear the  RXDATABK0 interrupt once that data has been
-       * transferred from the FIFO.
-       */
-
       sam_ep_bankinterrupt(priv, privep, csr, 0);
     }
 
-  /* OUT packet received in data bank 1 */
+  /* 3. and 7. - Only read bank 1*/
 
-  else if ((csr & UDPEP_CSR_RXDATABK1) != 0)
+  else if (!bk0 && bk1)
     {
+#ifdef CONFIG_DEBUG_USB_WARN
+      if (privep->lastbank == 1)
+        {
+          uwarn("WARNING: Unexpected USB RX case.\n");
+        }
+#endif
+
       usbtrace(TRACE_INTDECODE(SAM_TRACEINTID_RXDATABK1), (uint16_t)csr);
-      DEBUGASSERT(SAM_UDP_NBANKS(epno) > 1);
-
-      /* Handle data received on Bank 1.  sam_ep_bankinterrupt will
-       * clear the  RXDATABK1 interrupt once that data has been
-       * transferred from the FIFO.
-       */
-
       sam_ep_bankinterrupt(priv, privep, csr, 1);
+    }
+  else if (bk0 && bk1)
+    {
+      /* 4. - Read bank 1, then read bank 0 */
+
+      if (privep->lastbank == 0)
+        {
+          usbtrace(TRACE_INTDECODE(SAM_TRACEINTID_RXDATABK1), (uint16_t)csr);
+          sam_ep_bankinterrupt(priv, privep, csr, 1);
+
+          usbtrace(TRACE_INTDECODE(SAM_TRACEINTID_RXDATABK0), (uint16_t)csr);
+          sam_ep_bankinterrupt(priv, privep, csr, 0);
+        }
+
+      /* 8. - Read bank 0, then read bank 1 */
+
+      else
+        {
+          usbtrace(TRACE_INTDECODE(SAM_TRACEINTID_RXDATABK0), (uint16_t)csr);
+          sam_ep_bankinterrupt(priv, privep, csr, 0);
+
+          usbtrace(TRACE_INTDECODE(SAM_TRACEINTID_RXDATABK1), (uint16_t)csr);
+          sam_ep_bankinterrupt(priv, privep, csr, 1);
+        }
     }
 
   /* STALL sent */
@@ -2120,7 +2176,7 @@ static void sam_ep_interrupt(struct sam_usbdev_s *priv, int epno)
            * data transfer.  This bit must be cleared before CSR:RXSETUP is
            * cleared at the end of the SETUP stage.
            *
-           * NOTE: Clearing this bit seems to be un-necessary.  I think it must
+           * NOTE: Clearing this bit seems to be unnecessary.  I think it must
            * be cleared when RXSETUP is set.
            */
 
@@ -2224,7 +2280,7 @@ static int sam_udp_interrupt(int irq, void *context)
           sam_suspend(priv);
         }
 
-      /* SOF interrupt*/
+      /* SOF interrupt */
 
       else if ((pending & UDP_INT_SOF) != 0)
         {
@@ -2351,7 +2407,7 @@ static void sam_csr_setbits(uint8_t epno, uint32_t setbits)
    * accessing DPR.
    */
 
-  for (count = 0; count < 15; count++ )
+  for (count = 0; count < 15; count++)
     {
       nop();
     }
@@ -2386,7 +2442,7 @@ static void sam_csr_clrbits(uint8_t epno, uint32_t clrbits)
    * accessing DPR.
    */
 
-  for (count = 0; count < 15; count++ )
+  for (count = 0; count < 15; count++)
     {
       nop();
     }
@@ -2486,7 +2542,7 @@ static void sam_ep_reset(struct sam_usbdev_s *priv, uint8_t epno)
 
   sam_putreg(UDP_INT_EP(epno), SAM_UDP_IDR);
 
-  /* Cancel any queued requests.  Since they are canceled with status
+  /* Cancel any queued requests.  Since they are cancelled with status
    * -ESHUTDOWN, then will not be requeued until the configuration is reset.
    * NOTE:  This should not be necessary... the CLASS_DISCONNECT above
    * should result in the class implementation calling sam_ep_disable
@@ -2509,6 +2565,7 @@ static void sam_ep_reset(struct sam_usbdev_s *priv, uint8_t epno)
   privep->zlpneeded = false;
   privep->zlpsent   = false;
   privep->txbusy    = false;
+  privep->lastbank  = 1;
 }
 
 /****************************************************************************
@@ -2557,7 +2614,7 @@ static int sam_ep_stall(struct sam_ep_s *privep)
 
   /* Check that endpoint is enabled and not already in Halt state */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if ((privep->epstate != UDP_EPSTATE_DISABLED) &&
       (privep->epstate != UDP_EPSTATE_STALLED))
     {
@@ -2582,7 +2639,7 @@ static int sam_ep_stall(struct sam_ep_s *privep)
       sam_csr_setbits(epno, UDPEP_CSR_FORCESTALL);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -2601,7 +2658,7 @@ static int sam_ep_resume(struct sam_ep_s *privep)
 
   DEBUGASSERT(/* privep->epstate == UDP_EPSTATE_IDLE && */ privep->dev);
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Check if the endpoint is stalled */
 
@@ -2646,7 +2703,7 @@ static int sam_ep_resume(struct sam_ep_s *privep)
         }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -2665,7 +2722,7 @@ sam_ep_reserve(struct sam_usbdev_s *priv, uint8_t epset)
   irqstate_t flags;
   int epndx = 0;
 
-  flags  = irqsave();
+  flags  = enter_critical_section();
   epset &= priv->epavail;
   if (epset)
     {
@@ -2690,7 +2747,7 @@ sam_ep_reserve(struct sam_usbdev_s *priv, uint8_t epset)
         }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return privep;
 }
 
@@ -2698,7 +2755,7 @@ sam_ep_reserve(struct sam_usbdev_s *priv, uint8_t epset)
  * Name: sam_ep_unreserve
  *
  * Description:
- *   The endpoint is no long in-used.  It will be un-reserved and can be
+ *   The endpoint is no long in-used.  It will be unreserved and can be
  *   re-used if needed.
  *
  ****************************************************************************/
@@ -2706,9 +2763,9 @@ sam_ep_reserve(struct sam_usbdev_s *priv, uint8_t epset)
 static inline void
 sam_ep_unreserve(struct sam_usbdev_s *priv, struct sam_ep_s *privep)
 {
-  irqstate_t flags = irqsave();
+  irqstate_t flags = enter_critical_section();
   priv->epavail   |= SAM_EP_BIT(USB_EPNO(privep->ep.eplog));
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -2748,7 +2805,7 @@ static int sam_ep_configure_internal(struct sam_ep_s *privep,
 
   DEBUGASSERT(privep && privep->dev && desc);
 
-  uvdbg("len: %02x type: %02x addr: %02x attr: %02x "
+  uinfo("len: %02x type: %02x addr: %02x attr: %02x "
         "maxpacketsize: %02x %02x interval: %02x\n",
         desc->len, desc->type, desc->addr, desc->attr,
         desc->mxpacketsize[0],  desc->mxpacketsize[1],
@@ -2890,7 +2947,7 @@ static int sam_ep_configure(struct usbdev_ep_s *ep,
 
   /* Verify parameters.  Endpoint 0 is not available at this interface */
 
-#if defined(CONFIG_DEBUG) || defined(CONFIG_USBDEV_TRACE)
+#if defined(CONFIG_DEBUG_USB) || defined(CONFIG_USBDEV_TRACE)
   uint8_t epno = USB_EPNO(desc->addr);
   usbtrace(TRACE_EPCONFIGURE, (uint16_t)epno);
 
@@ -2941,11 +2998,11 @@ static int sam_ep_disable(struct usbdev_ep_s *ep)
   irqstate_t flags;
   uint8_t epno;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB
   if (!ep)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
-      ulldbg("ERROR: ep=%p\n", ep);
+      uerr("ERROR: ep=%p\n", ep);
       return -EINVAL;
     }
 #endif
@@ -2955,14 +3012,14 @@ static int sam_ep_disable(struct usbdev_ep_s *ep)
 
   /* Reset the endpoint and cancel any ongoing activity */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   priv  = privep->dev;
   sam_ep_reset(priv, epno);
 
   /* Revert to the addressed-but-not-configured state */
 
   sam_setdevaddr(priv, priv->devaddr);
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -2978,16 +3035,17 @@ static struct usbdev_req_s *sam_ep_allocreq(struct usbdev_ep_s *ep)
 {
   struct sam_req_s *privreq;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB
   if (!ep)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
       return NULL;
     }
 #endif
+
   usbtrace(TRACE_EPALLOCREQ, USB_EPNO(ep->eplog));
 
-  privreq = (struct sam_req_s *)kmalloc(sizeof(struct sam_req_s));
+  privreq = (struct sam_req_s *)kmm_malloc(sizeof(struct sam_req_s));
   if (!privreq)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_ALLOCFAIL), 0);
@@ -3008,9 +3066,9 @@ static struct usbdev_req_s *sam_ep_allocreq(struct usbdev_ep_s *ep)
 
 static void sam_ep_freereq(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
 {
-  struct sam_req_s *privreq = (struct sam_req_s*)req;
+  struct sam_req_s *privreq = (struct sam_req_s *)req;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB
   if (!ep || !req)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3019,7 +3077,7 @@ static void sam_ep_freereq(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
 #endif
   usbtrace(TRACE_EPFREEREQ, USB_EPNO(ep->eplog));
 
-  kfree(privreq);
+  kmm_free(privreq);
 }
 
 /****************************************************************************
@@ -3035,7 +3093,7 @@ static void *sam_ep_allocbuffer(struct usbdev_ep_s *ep, uint16_t nbytes)
 {
   /* There is not special buffer allocation requirement */
 
-  return kumalloc(nbytes);
+  return kumm_malloc(nbytes);
 }
 #endif
 
@@ -3052,7 +3110,7 @@ static void sam_ep_freebuffer(struct usbdev_ep_s *ep, void *buf)
 {
   /* There is not special buffer allocation requirement */
 
-  kufree(buf);
+  kumm_free(buf);
 }
 #endif
 
@@ -3073,11 +3131,12 @@ static int sam_ep_submit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
   uint8_t epno;
   int ret = OK;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB
   if (!req || !req->callback || !req->buf || !ep)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
-      ulldbg("ERROR: req=%p callback=%p buf=%p ep=%p\n", req, req->callback, req->buf, ep);
+      uerr("ERROR: req=%p callback=%p buf=%p ep=%p\n",
+           req, req->callback, req->buf, ep);
       return -EINVAL;
     }
 #endif
@@ -3085,11 +3144,11 @@ static int sam_ep_submit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
   usbtrace(TRACE_EPSUBMIT, USB_EPNO(ep->eplog));
   priv = privep->dev;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB
   if (!priv->driver)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_NOTCONFIGURED), priv->usbdev.speed);
-      ulldbg("ERROR: driver=%p\n", priv->driver);
+      uerr("ERROR: driver=%p\n", priv->driver);
       return -ESHUTDOWN;
     }
 #endif
@@ -3100,7 +3159,7 @@ static int sam_ep_submit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
   req->result       = -EINPROGRESS;
   req->xfrd         = 0;
   privreq->inflight = 0;
-  flags             = irqsave();
+  flags             = enter_critical_section();
 
   /* Handle IN (device-to-host) requests.  NOTE:  If the class device is
    * using the bi-directional EP0, then we assume that they intend the EP0
@@ -3113,11 +3172,11 @@ static int sam_ep_submit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
 
       if (privep->stalled || privep->pending)
         {
-          /* Yes.. in this case, save the new they will get in a special
-           * "pending" they will get queue until the stall is cleared.
+          /* Yes.. in this case, save the request in a special "pending"
+           * queue. They will stay queuee until the stall is cleared.
            */
 
-          ulldbg("Pending stall clear\n");
+          uinfo("Pending stall clear\n");
           sam_req_enqueue(&privep->pendq, privreq);
           usbtrace(TRACE_INREQQUEUED(epno), req->len);
           ret = OK;
@@ -3168,7 +3227,7 @@ static int sam_ep_submit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
         }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return ret;
 }
 
@@ -3181,18 +3240,19 @@ static int sam_ep_cancel(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
   struct sam_ep_s *privep = (struct sam_ep_s *)ep;
   irqstate_t flags;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB
   if (!ep || !req)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
       return -EINVAL;
     }
 #endif
+
   usbtrace(TRACE_EPCANCEL, USB_EPNO(ep->eplog));
 
-  flags = irqsave();
+  flags = enter_critical_section();
   sam_req_cancel(privep, -EAGAIN);
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -3207,7 +3267,7 @@ static int sam_ep_stallresume(struct usbdev_ep_s *ep, bool resume)
   irqstate_t flags;
   int ret;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB
   if (!ep)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3233,7 +3293,7 @@ static int sam_ep_stallresume(struct usbdev_ep_s *ep, bool resume)
        * requests before sending the stall.
        */
 
-      flags = irqsave();
+      flags = enter_critical_section();
       epno = USB_EPNO(ep->eplog);
       if (epno != 0 && USB_ISEPIN(ep->eplog))
         {
@@ -3247,7 +3307,7 @@ static int sam_ep_stallresume(struct usbdev_ep_s *ep, bool resume)
                */
 
               privep->pending = true;
-              irqrestore(flags);
+              leave_critical_section(flags);
               return OK;
             }
         }
@@ -3257,7 +3317,7 @@ static int sam_ep_stallresume(struct usbdev_ep_s *ep, bool resume)
        */
 
       ret = sam_ep_stall(privep);
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 
   return ret;
@@ -3282,7 +3342,8 @@ static struct usbdev_ep_s *sam_allocep(struct usbdev_s *dev, uint8_t epno,
   uint16_t epset = SAM_EPSET_NOTEP0;
 
   usbtrace(TRACE_DEVALLOCEP, (uint16_t)epno);
-#ifdef CONFIG_DEBUG
+
+#ifdef CONFIG_DEBUG_USB
   if (!dev)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3344,13 +3405,14 @@ static void sam_freeep(struct usbdev_s *dev, struct usbdev_ep_s *ep)
   struct sam_usbdev_s *priv;
   struct sam_ep_s *privep;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB
   if (!dev || !ep)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
       return;
     }
 #endif
+
   priv   = (struct sam_usbdev_s *)dev;
   privep = (struct sam_ep_s *)ep;
   usbtrace(TRACE_DEVFREEEP, (uint16_t)USB_EPNO(ep->eplog));
@@ -3376,7 +3438,7 @@ static int sam_getframe(struct usbdev_s *dev)
   uint32_t regval;
   uint16_t frameno;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB
   if (!dev)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3408,7 +3470,8 @@ static int sam_wakeup(struct usbdev_s *dev)
   uint32_t regval;
 
   usbtrace(TRACE_DEVWAKEUP, 0);
-#ifdef CONFIG_DEBUG
+
+#ifdef CONFIG_DEBUG_USB
   if (!dev)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3418,7 +3481,7 @@ static int sam_wakeup(struct usbdev_s *dev)
 
   /* Resume normal operation */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   sam_resume(priv);
 
   /* Activate a remote wakeup.  Setting the Enable Send Resume (ESR) bit
@@ -3461,7 +3524,7 @@ static int sam_wakeup(struct usbdev_s *dev)
   regval  = sam_getreg(SAM_UDP_GLBSTAT);
   regval |= UDP_GLBSTAT_ESR;
   sam_putreg(regval, SAM_UDP_GLBSTAT);
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -3479,7 +3542,7 @@ static int sam_selfpowered(struct usbdev_s *dev, bool selfpowered)
 
   usbtrace(TRACE_DEVSELFPOWERED, (uint16_t)selfpowered);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB
   if (!dev)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -3575,7 +3638,7 @@ static void sam_reset(struct sam_usbdev_s *priv)
     {
       struct sam_ep_s *privep = &priv->eplist[epno];
 
-      /* Cancel any queued requests.  Since they are canceled
+      /* Cancel any queued requests.  Since they are cancelled
        * with status -ESHUTDOWN, then will not be requeued
        * until the configuration is reset.  NOTE:  This should
        * not be necessary... the CLASS_DISCONNECT above should
@@ -3767,12 +3830,6 @@ static void sam_sw_setup(struct sam_usbdev_s *priv)
 
       priv->eplist[epno].ep.maxpacket = SAM_UDP_MAXPACKETSIZE(epno);
     }
-
-  /* Select a smaller endpoint size for EP0 */
-
-#if SAM_EP0MAXPACKET < SAM_MAXPACKET_SIZE
-  priv->eplist[EP0].ep.maxpacket = SAM_EP0MAXPACKET;
-#endif
 }
 
 /****************************************************************************
@@ -3889,7 +3946,7 @@ void up_usbuninitialize(void)
   struct sam_usbdev_s *priv = &g_udp;
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   usbtrace(TRACE_DEVUNINIT, 0);
 
   /* Disable and detach the UDP IRQ */
@@ -3907,7 +3964,7 @@ void up_usbuninitialize(void)
 
   sam_hw_shutdown(priv);
   sam_sw_shutdown(priv);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -3931,7 +3988,7 @@ int usbdev_register(struct usbdevclass_driver_s *driver)
 
   usbtrace(TRACE_DEVREGISTER, 0);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB
   if (!driver || !driver->ops->bind || !driver->ops->unbind ||
       !driver->ops->disconnect || !driver->ops->setup)
     {
@@ -3977,7 +4034,7 @@ int usbdev_register(struct usbdevclass_driver_s *driver)
 
       sam_pullup(&priv->usbdev, true);
       priv->usbdev.speed = USB_SPEED_FULL;
-   }
+    }
 
   return ret;
 }
@@ -4005,7 +4062,7 @@ int usbdev_unregister(struct usbdevclass_driver_s *driver)
 
   usbtrace(TRACE_DEVUNREGISTER, 0);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_USB
   if (driver != priv->driver)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_INVALIDPARMS), 0);
@@ -4017,7 +4074,7 @@ int usbdev_unregister(struct usbdevclass_driver_s *driver)
    * canceled while the class driver is still bound.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Unbind the class driver */
 
@@ -4041,7 +4098,7 @@ int usbdev_unregister(struct usbdevclass_driver_s *driver)
   /* Unhook the driver */
 
   priv->driver = NULL;
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 

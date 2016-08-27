@@ -1,7 +1,7 @@
 ############################################################################
 # net/arp/Make.defs
 #
-#   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2014-2015 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -33,18 +33,26 @@
 #
 ############################################################################
 
-ifeq ($(CONFIG_NET),y)
+# ARP support is available for Ethernet only
 
-# ARP supported is not provided for SLIP (Ethernet only)
+ifeq ($(CONFIG_NET_ARP),y)
+NET_CSRCS += arp_arpin.c arp_out.c arp_format.c arp_table.c arp_timer.c
 
-ifneq ($(CONFIG_NET_SLIP),y)
-NET_CSRCS += arp_inout.c arp_table.c arp_timer.c
+ifeq ($(CONFIG_NET_ARP_IPIN),y)
+NET_CSRCS += arp_ipin.c
+endif
+
+ifeq ($(CONFIG_NET_ARP_SEND),y)
+NET_CSRCS += arp_send.c arp_poll.c arp_notify.c
+endif
+
+ifeq ($(CONFIG_NET_ARP_DUMP),y)
+NET_CSRCS += arp_dump.c
+endif
 
 # Include arp build support
 
 DEPPATH += --dep-path arp
 VPATH += :arp
-CFLAGS += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)$(DELIM)net$(DELIM)arp}
 
-endif
-endif
+endif # CONFIG_NET_ARP

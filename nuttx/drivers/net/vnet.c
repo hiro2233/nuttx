@@ -6,7 +6,7 @@
  *
  * This file is a part of NuttX:
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2014 Gregory Nutt. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -49,21 +49,25 @@
 #include <time.h>
 #include <string.h>
 #include <debug.h>
-#include <wdog.h>
 #include <errno.h>
 
-#include <nuttx/irq.h>
-#include <nuttx/arch.h>
+#include <arpa/inet.h>
 
-#include <nuttx/net/uip/uip.h>
+#include <nuttx/arch.h>
+#include <nuttx/irq.h>
+#include <nuttx/wdog.h>
 #include <nuttx/net/arp.h>
-#include <nuttx/net/uip/uip-arch.h>
+#include <nuttx/net/netdev.h>
+
+#ifdef CONFIG_NET_PKT
+#  include <nuttx/net/pkt.h>
+#endif
 
 #include <rgmp/vnet.h>
 #include <rgmp/stdio.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* CONFIG_VNET_NINTERFACES determines the number of physical interfaces
@@ -71,13 +75,12 @@
  */
 
 #ifndef CONFIG_VNET_NINTERFACES
-# define CONFIG_VNET_NINTERFACES 1
+#  define CONFIG_VNET_NINTERFACES 1
 #endif
 
 /* TX poll deley = 1 seconds. CLK_TCK is the number of clock ticks per second */
 
 #define VNET_WDDELAY   (1*CLK_TCK)
-#define VNET_POLLHSEC  (1*2)
 
 /* TX timeout = 1 minute */
 
@@ -85,7 +88,7 @@
 
 /* This is a helper pointer for accessing the contents of the Ethernet header */
 
-#define BUF ((struct uip_eth_hdr *)vnet->sk_dev.d_buf)
+#define BUF ((struct eth_hdr_s *)vnet->sk_dev.d_buf)
 
 /****************************************************************************
  * Private Types
@@ -97,13 +100,13 @@
 
 struct vnet_driver_s
 {
-    bool sk_bifup;               /* true:ifup false:ifdown */
-    WDOG_ID sk_txpoll;           /* TX poll timer */
-    //WDOG_ID sk_txtimeout;        /* TX timeout timer */
+  bool sk_bifup;               /* true:ifup false:ifdown */
+  WDOG_ID sk_txpoll;           /* TX poll timer */
+  struct rgmp_vnet *vnet;
 
-    /* This holds the information visible to uIP/NuttX */
-    struct rgmp_vnet *vnet;
-    struct uip_driver_s sk_dev;  /* Interface understood by uIP */
+  /* This holds the information visible to the NuttX */
+
+  struct net_driver_s sk_dev;  /* Interface understood by the network */
 };
 
 /****************************************************************************
@@ -119,7 +122,7 @@ static struct vnet_driver_s g_vnet[CONFIG_VNET_NINTERFACES];
 /* Common TX logic */
 
 static int  vnet_transmit(FAR struct vnet_driver_s *vnet);
-static int  vnet_uiptxpoll(struct uip_driver_s *dev);
+static int  vnet_txpoll(struct net_driver_s *dev);
 
 /* Interrupt handling */
 
@@ -132,12 +135,12 @@ static void vnet_txtimeout(int argc, uint32_t arg, ...);
 
 /* NuttX callback functions */
 
-static int vnet_ifup(struct uip_driver_s *dev);
-static int vnet_ifdown(struct uip_driver_s *dev);
-static int vnet_txavail(struct uip_driver_s *dev);
+static int vnet_ifup(struct net_driver_s *dev);
+static int vnet_ifdown(struct net_driver_s *dev);
+static int vnet_txavail(struct net_driver_s *dev);
 #ifdef CONFIG_NET_IGMP
-static int vnet_addmac(struct uip_driver_s *dev, FAR const uint8_t *mac);
-static int vnet_rmmac(struct uip_driver_s *dev, FAR const uint8_t *mac);
+static int vnet_addmac(struct net_driver_s *dev, FAR const uint8_t *mac);
+static int vnet_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
 
 /****************************************************************************
@@ -166,43 +169,45 @@ static int vnet_rmmac(struct uip_driver_s *dev, FAR const uint8_t *mac);
 
 static int vnet_transmit(FAR struct vnet_driver_s *vnet)
 {
-    int err;
+  int errcode;
 
-	/* Verify that the hardware is ready to send another packet.  If we get
-	 * here, then we are committed to sending a packet; Higher level logic
-	 * must have assured that there is not transmission in progress.
-	 */
+  /* Verify that the hardware is ready to send another packet.  If we get
+   * here, then we are committed to sending a packet; Higher level logic
+   * must have assured that there is not transmission in progress.
+   */
 
-	/* Increment statistics */
+  /* Send the packet: address=vnet->sk_dev.d_buf, length=vnet->sk_dev.d_len */
 
-	/* Send the packet: address=vnet->sk_dev.d_buf, length=vnet->sk_dev.d_len */
-    err = vnet_xmit(vnet->vnet, (char *)vnet->sk_dev.d_buf, vnet->sk_dev.d_len);
-    if (err) {
-		/* Setup the TX timeout watchdog (perhaps restarting the timer) */
-		//(void)wd_start(vnet->sk_txtimeout, VNET_TXTIMEOUT, vnet_txtimeout, 1, (uint32_t)vnet);
+  errcode = vnet_xmit(vnet->vnet, (char *)vnet->sk_dev.d_buf, vnet->sk_dev.d_len);
+  if (errcode)
+    {
+      /* When vnet_xmit fail, it means TX buffer is full. Watchdog
+       * is of no use here because no TX done INT will happen. So
+       * we reset the TX buffer directly.
+       */
 
-		// When vnet_xmit fail, it means TX buffer is full. Watchdog
-		// is of no use here because no TX done INT will happen. So
-		// we reset the TX buffer directly.
-#ifdef CONFIG_DEBUG
-		cprintf("VNET: TX buffer is full\n");
+#ifdef CONFIG_DEBUG_FEATURES
+      cprintf("VNET: TX buffer is full\n");
 #endif
-		return ERROR;
+      return ERROR;
     }
-    else {
-		// this step may be unnecessary here
-		vnet_txdone(vnet);
+  else
+    {
+      /* This step may be unnecessary here */
+
+      vnet_txdone(vnet);
     }
 
-    return OK;
+  return OK;
 }
 
 /****************************************************************************
- * Function: vnet_uiptxpoll
+ * Function: vnet_txpoll
  *
  * Description:
- *   The transmitter is available, check if uIP has any outgoing packets ready
- *   to send.  This is a callback from uip_poll().  uip_poll() may be called:
+ *   The transmitter is available, check if the network has any outgoing
+ *   packets ready to send.  This is a callback from devif_poll(). 
+ *   devif_poll() may be called:
  *
  *   1. When the preceding TX packet send is complete,
  *   2. When the preceding TX packet send timesout and the interface is reset
@@ -221,31 +226,57 @@ static int vnet_transmit(FAR struct vnet_driver_s *vnet)
  *
  ****************************************************************************/
 
-static int vnet_uiptxpoll(struct uip_driver_s *dev)
+static int vnet_txpoll(struct net_driver_s *dev)
 {
-	FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)dev->d_private;
+  FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)dev->d_private;
 
-	/* If the polling resulted in data that should be sent out on the network,
-	 * the field d_len is set to a value > 0.
-	 */
+  /* If the polling resulted in data that should be sent out on the network,
+   * the field d_len is set to a value > 0.
+   */
 
-	if (vnet->sk_dev.d_len > 0)
+  if (vnet->sk_dev.d_len > 0)
     {
-		arp_out(&vnet->sk_dev);
-		vnet_transmit(vnet);
+      /* Look up the destination MAC address and add it to the Ethernet
+       * header.
+       */
 
-		/* Check if there is room in the device to hold another packet. If not,
-		 * return a non-zero value to terminate the poll.
-		 */
-		if (vnet_is_txbuff_full(vnet->vnet))
-			return 1;
+#ifdef CONFIG_NET_IPv4
+#ifdef CONFIG_NET_IPv6
+      if (IFF_IS_IPv4(vnet->sk_dev.d_flags))
+#endif
+        {
+          arp_out(&vnet->sk_dev);
+        }
+#endif /* CONFIG_NET_IPv4 */
+
+#ifdef CONFIG_NET_IPv6
+#ifdef CONFIG_NET_IPv4
+      else
+#endif
+        {
+          neighbor_out(&vnet->sk_dev);
+        }
+#endif /* CONFIG_NET_IPv6 */
+
+      /* Send the packet */
+
+      vnet_transmit(vnet);
+
+      /* Check if there is room in the device to hold another packet. If not,
+       * return a non-zero value to terminate the poll.
+       */
+
+      if (vnet_is_txbuff_full(vnet->vnet))
+        {
+          return 1;
+        }
     }
 
-	/* If zero is returned, the polling will continue until all connections have
-	 * been examined.
-	 */
+  /* If zero is returned, the polling will continue until all connections have
+   * been examined.
+   */
 
-	return 0;
+  return 0;
 }
 
 /****************************************************************************
@@ -267,53 +298,132 @@ static int vnet_uiptxpoll(struct uip_driver_s *dev)
 
 void rtos_vnet_recv(struct rgmp_vnet *rgmp_vnet, char *data, int len)
 {
-    struct vnet_driver_s *vnet = rgmp_vnet->priv;
+  struct vnet_driver_s *vnet = rgmp_vnet->priv;
 
-    do {
-		/* Check for errors and update statistics */
+  do
+    {
+      /* Check if the packet is a valid size for the network buffer
+       * configuration.
+       */
 
-		/* Check if the packet is a valid size for the uIP buffer configuration */
-		if (len > CONFIG_NET_BUFSIZE || len < 14) {
-#ifdef CONFIG_DEBUG
-			cprintf("VNET: receive invalid packet of size %d\n", len);
+      if (len > CONFIG_NET_ETH_MTU || len < 14)
+        {
+#ifdef CONFIG_DEBUG_FEATURES
+          cprintf("VNET: receive invalid packet of size %d\n", len);
 #endif
-			return;
-		}
+          return;
+        }
 
-		// Copy the data data from the hardware to vnet->sk_dev.d_buf.  Set
-		// amount of data in vnet->sk_dev.d_len
-		memcpy(vnet->sk_dev.d_buf, data, len);
-		vnet->sk_dev.d_len = len;
+      /* Copy the data data from the hardware to vnet->sk_dev.d_buf.  Set
+       * amount of data in vnet->sk_dev.d_len
+       */
 
-		/* We only accept IP packets of the configured type and ARP packets */
+      memcpy(vnet->sk_dev.d_buf, data, len);
+      vnet->sk_dev.d_len = len;
+
+#ifdef CONFIG_NET_PKT
+      /* When packet sockets are enabled, feed the frame into the packet tap */
+
+       pkt_input(&vnet->sk_dev);
+#endif
+
+      /* We only accept IP packets of the configured type and ARP packets */
+
+#ifdef CONFIG_NET_IPv4
+      if (BUF->type == HTONS(ETHTYPE_IP))
+        {
+          ninfo("IPv4 frame\n");
+
+          /* Handle ARP on input then give the IPv4 packet to the network
+           * layer
+           */
+
+          arp_ipin(&vnet->sk_dev);
+          ipv4_input(&vnet->sk_dev);
+
+          /* If the above function invocation resulted in data that should be
+           * sent out on the network, the field  d_len will set to a value > 0.
+           */
+
+          if (vnet->sk_dev.d_len > 0)
+            {
+              /* Update the Ethernet header with the correct MAC address */
 
 #ifdef CONFIG_NET_IPv6
-		if (BUF->type == HTONS(UIP_ETHTYPE_IP6))
-#else
-			if (BUF->type == HTONS(UIP_ETHTYPE_IP))
+              if (IFF_IS_IPv4(vnet->sk_dev.d_flags))
 #endif
-			{
-				arp_ipin(&vnet->sk_dev);
-				uip_input(&vnet->sk_dev);
+                {
+                  arp_out(&vnet->sk_dev);
+                }
+#ifdef CONFIG_NET_IPv6
+              else
+                {
+                  neighbor_out(&vnet->sk_dev);
+                }
+#endif
 
-				// If the above function invocation resulted in data that should be
-				// sent out on the network, the field  d_len will set to a value > 0.
-				if (vnet->sk_dev.d_len > 0) {
-					arp_out(&vnet->sk_dev);
-					vnet_transmit(vnet);
-				}
-			}
-			else if (BUF->type == htons(UIP_ETHTYPE_ARP)) {
-				arp_arpin(&vnet->sk_dev);
+              /* And send the packet */
 
-				// If the above function invocation resulted in data that should be
-				// sent out on the network, the field  d_len will set to a value > 0.
-				if (vnet->sk_dev.d_len > 0) {
-					vnet_transmit(vnet);
-				}
-			}
+              vnet_transmit(vnet);
+            }
+        }
+      else
+#endif
+#ifdef CONFIG_NET_IPv6
+      if (BUF->type == HTONS(ETHTYPE_IP6))
+        {
+          ninfo("Iv6 frame\n");
+
+          /* Give the IPv6 packet to the network layer */
+
+          ipv6_input(&vnet->sk_dev);
+
+          /* If the above function invocation resulted in data that should be
+           * sent out on the network, the field  d_len will set to a value > 0.
+           */
+
+          if (vnet->sk_dev.d_len > 0)
+           {
+              /* Update the Ethernet header with the correct MAC address */
+
+#ifdef CONFIG_NET_IPv4
+              if (IFF_IS_IPv4(vnet->sk_dev.d_flags))
+                {
+                  arp_out(&vnet->sk_dev);
+                }
+              else
+#endif
+#ifdef CONFIG_NET_IPv6
+                {
+                  neighbor_out(&vnet->sk_dev);
+                }
+#endif
+
+              /* And send the packet */
+
+              vnet_transmit(vnet);
+            }
+        }
+      else
+#endif
+#ifdef CONFIG_NET_ARP
+      if (BUF->type == htons(ETHTYPE_ARP))
+        {
+          arp_arpin(&vnet->sk_dev);
+
+          /* If the above function invocation resulted in data that should
+           * be sent out on the network, the field  d_len will set to a
+           * value > 0.
+           */
+
+          if (vnet->sk_dev.d_len > 0)
+            {
+              vnet_transmit(vnet);
+            }
+        }
+#endif
     }
-    while (0); /* While there are more packets to be processed */
+  while (0); /* While there are more packets to be processed */
 }
 
 /****************************************************************************
@@ -335,17 +445,9 @@ void rtos_vnet_recv(struct rgmp_vnet *rgmp_vnet, char *data, int len)
 
 static void vnet_txdone(FAR struct vnet_driver_s *vnet)
 {
-	/* Check for errors and update statistics */
+  /* Poll the network for new XMIT data */
 
-	/* If no further xmits are pending, then cancel the TX timeout and
-	 * disable further Tx interrupts.
-	 */
-
-	//wd_cancel(vnet->sk_txtimeout);
-
-	/* Then poll uIP for new XMIT data */
-
-	(void)uip_poll(&vnet->sk_dev, vnet_uiptxpoll);
+  (void)devif_poll(&vnet->sk_dev, vnet_txpoll);
 }
 
 /****************************************************************************
@@ -369,15 +471,11 @@ static void vnet_txdone(FAR struct vnet_driver_s *vnet)
 
 static void vnet_txtimeout(int argc, uint32_t arg, ...)
 {
-	FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)arg;
+  FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)arg;
 
-	/* Increment statistics and dump debug info */
+  /* Poll the network for new XMIT data */
 
-	/* Then reset the hardware */
-
-	/* Then poll uIP for new XMIT data */
-
-	(void)uip_poll(&vnet->sk_dev, vnet_uiptxpoll);
+  (void)devif_poll(&vnet->sk_dev, vnet_txpoll);
 }
 
 /****************************************************************************
@@ -400,28 +498,31 @@ static void vnet_txtimeout(int argc, uint32_t arg, ...)
 
 static void vnet_polltimer(int argc, uint32_t arg, ...)
 {
-	FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)arg;
+  FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)arg;
 
-	/* Check if there is room in the send another TX packet.  We cannot perform
-	 * the TX poll if he are unable to accept another packet for transmission.
-	 */
-	if (vnet_is_txbuff_full(vnet->vnet)) {
-#ifdef CONFIG_DEBUG
-		cprintf("VNET: TX buffer is full\n");
+  /* Check if there is room in the send another TX packet.  We cannot perform
+   * the TX poll if he are unable to accept another packet for transmission.
+   */
+
+  if (vnet_is_txbuff_full(vnet->vnet))
+    {
+#ifdef CONFIG_DEBUG_FEATURES
+      cprintf("VNET: TX buffer is full\n");
 #endif
-		return;
-	}
+      return;
+    }
 
-	/* If so, update TCP timing states and poll uIP for new XMIT data. Hmmm..
-	 * might be bug here.  Does this mean if there is a transmit in progress,
-	 * we will missing TCP time state updates?
-	 */
+  /* If so, update TCP timing states and poll the network for new XMIT data.
+   * Hmmm..  might be bug here.  Does this mean if there is a transmit in
+   * progress, we will missing TCP time state updates?
+   */
 
-	(void)uip_timer(&vnet->sk_dev, vnet_uiptxpoll, VNET_POLLHSEC);
+  (void)devif_timer(&vnet->sk_dev, vnet_txpoll);
 
-	/* Setup the watchdog poll timer again */
+  /* Setup the watchdog poll timer again */
 
-	(void)wd_start(vnet->sk_txpoll, VNET_WDDELAY, vnet_polltimer, 1, arg);
+  (void)wd_start(vnet->sk_txpoll, VNET_WDDELAY, vnet_polltimer, 1,
+                 (wdparm_t)arg);
 }
 
 /****************************************************************************
@@ -441,22 +542,23 @@ static void vnet_polltimer(int argc, uint32_t arg, ...)
  *
  ****************************************************************************/
 
-static int vnet_ifup(struct uip_driver_s *dev)
+static int vnet_ifup(struct net_driver_s *dev)
 {
-	FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)dev->d_private;
+  FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)dev->d_private;
 
-	ndbg("Bringing up: %d.%d.%d.%d\n",
-		 dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
-		 (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24 );
+  ninfo("Bringing up: %d.%d.%d.%d\n",
+        dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
+        (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24);
 
-	/* Initialize PHYs, the Ethernet interface, and setup up Ethernet interrupts */
+  /* Initialize PHYs, the Ethernet interface, and setup up Ethernet interrupts */
 
-	/* Set and activate a timer process */
+  /* Set and activate a timer process */
 
-	(void)wd_start(vnet->sk_txpoll, VNET_WDDELAY, vnet_polltimer, 1, (uint32_t)vnet);
+  (void)wd_start(vnet->sk_txpoll, VNET_WDDELAY, vnet_polltimer, 1,
+                 (wdparm_t)vnet);
 
-	vnet->sk_bifup = true;
-	return OK;
+  vnet->sk_bifup = true;
+  return OK;
 }
 
 /****************************************************************************
@@ -475,30 +577,29 @@ static int vnet_ifup(struct uip_driver_s *dev)
  *
  ****************************************************************************/
 
-static int vnet_ifdown(struct uip_driver_s *dev)
+static int vnet_ifdown(struct net_driver_s *dev)
 {
-	FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)dev->d_private;
-	irqstate_t flags;
+  FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)dev->d_private;
+  irqstate_t flags;
 
-	/* Disable the Ethernet interrupt */
+  /* Disable the Ethernet interrupt */
 
-	flags = irqsave();
+  flags = enter_critical_section();
 
-	/* Cancel the TX poll timer and TX timeout timers */
+  /* Cancel the TX poll timer and TX timeout timers */
 
-	wd_cancel(vnet->sk_txpoll);
-	//wd_cancel(vnet->sk_txtimeout);
+  wd_cancel(vnet->sk_txpoll);
 
-	/* Put the EMAC is its reset, non-operational state.  This should be
-	 * a known configuration that will guarantee the vnet_ifup() always
-	 * successfully brings the interface back up.
-	 */
+  /* Put the EMAC is its reset, non-operational state.  This should be
+   * a known configuration that will guarantee the vnet_ifup() always
+   * successfully brings the interface back up.
+   */
 
-	/* Mark the device "down" */
+  /* Mark the device "down" */
 
-	vnet->sk_bifup = false;
-	irqrestore(flags);
-	return OK;
+  vnet->sk_bifup = false;
+  leave_critical_section(flags);
+  return OK;
 }
 
 /****************************************************************************
@@ -520,37 +621,39 @@ static int vnet_ifdown(struct uip_driver_s *dev)
  *
  ****************************************************************************/
 
-static int vnet_txavail(struct uip_driver_s *dev)
+static int vnet_txavail(struct net_driver_s *dev)
 {
-	FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)dev->d_private;
-	irqstate_t flags;
+  FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)dev->d_private;
+  irqstate_t flags;
 
-	/* Disable interrupts because this function may be called from interrupt
-	 * level processing.
-	 */
+  /* Disable interrupts because this function may be called from interrupt
+   * level processing.
+   */
 
-	flags = irqsave();
+  flags = enter_critical_section();
 
-	/* Ignore the notification if the interface is not yet up */
+  /* Ignore the notification if the interface is not yet up */
 
-	if (vnet->sk_bifup)
+  if (vnet->sk_bifup)
     {
-		/* Check if there is room in the hardware to hold another outgoing packet. */
-		if (vnet_is_txbuff_full(vnet->vnet)) {
-#ifdef CONFIG_DEBUG
-			cprintf("VNET: TX buffer is full\n");
+      /* Check if there is room in the hardware to hold another outgoing packet. */
+
+      if (vnet_is_txbuff_full(vnet->vnet))
+        {
+#ifdef CONFIG_DEBUG_FEATURES
+          cprintf("VNET: TX buffer is full\n");
 #endif
-			goto out;
-		}
+          goto out;
+        }
 
-		/* If so, then poll uIP for new XMIT data */
+      /* If so, then poll the network for new XMIT data */
 
-		(void)uip_poll(&vnet->sk_dev, vnet_uiptxpoll);
+      (void)devif_poll(&vnet->sk_dev, vnet_txpoll);
     }
 
 out:
-	irqrestore(flags);
-	return OK;
+  leave_critical_section(flags);
+  return OK;
 }
 
 /****************************************************************************
@@ -572,13 +675,13 @@ out:
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IGMP
-static int vnet_addmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
+static int vnet_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
-	FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)dev->d_private;
+  FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)dev->d_private;
 
-	/* Add the MAC address to the hardware multicast routing table */
+  /* Add the MAC address to the hardware multicast routing table */
 
-	return OK;
+  return OK;
 }
 #endif
 
@@ -601,13 +704,13 @@ static int vnet_addmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IGMP
-static int vnet_rmmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
+static int vnet_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
-	FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)dev->d_private;
+  FAR struct vnet_driver_s *vnet = (FAR struct vnet_driver_s *)dev->d_private;
 
-	/* Add the MAC address to the hardware multicast routing table */
+  /* Add the MAC address to the hardware multicast routing table */
 
-	return OK;
+  return OK;
 }
 #endif
 
@@ -634,39 +737,40 @@ static int vnet_rmmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
 
 int vnet_init(struct rgmp_vnet *vnet)
 {
-	struct vnet_driver_s *priv;
-	static int i = 0;
+  struct vnet_driver_s *priv;
+  static int i = 0;
 
-	if (i >= CONFIG_VNET_NINTERFACES)
-		return -1;
+  if (i >= CONFIG_VNET_NINTERFACES)
+    {
+      return -1;
+    }
 
-	priv = &g_vnet[i++];
+  priv = &g_vnet[i++];
 
-	/* Initialize the driver structure */
+  /* Initialize the driver structure */
 
-	memset(priv, 0, sizeof(struct vnet_driver_s));
-	priv->sk_dev.d_ifup    = vnet_ifup;     /* I/F down callback */
-	priv->sk_dev.d_ifdown  = vnet_ifdown;   /* I/F up (new IP address) callback */
-	priv->sk_dev.d_txavail = vnet_txavail;  /* New TX data callback */
+  memset(priv, 0, sizeof(struct vnet_driver_s));
+  priv->sk_dev.d_ifup    = vnet_ifup;     /* I/F down callback */
+  priv->sk_dev.d_ifdown  = vnet_ifdown;   /* I/F up (new IP address) callback */
+  priv->sk_dev.d_txavail = vnet_txavail;  /* New TX data callback */
 #ifdef CONFIG_NET_IGMP
-	priv->sk_dev.d_addmac  = vnet_addmac;   /* Add multicast MAC address */
-	priv->sk_dev.d_rmmac   = vnet_rmmac;    /* Remove multicast MAC address */
+  priv->sk_dev.d_addmac  = vnet_addmac;   /* Add multicast MAC address */
+  priv->sk_dev.d_rmmac   = vnet_rmmac;    /* Remove multicast MAC address */
 #endif
-	priv->sk_dev.d_private = (void*)priv;   /* Used to recover private state from dev */
+  priv->sk_dev.d_private = (FAR void *)priv; /* Used to recover private state from dev */
 
-	/* Create a watchdog for timing polling for and timing of transmisstions */
+  /* Create a watchdog for timing polling for and timing of transmisstions */
 
-	priv->sk_txpoll       = wd_create();    /* Create periodic poll timer */
-	//priv->sk_txtimeout    = wd_create();   /* Create TX timeout timer */
+  priv->sk_txpoll        = wd_create();   /* Create periodic poll timer */
 
-	priv->vnet = vnet;
-	vnet->priv = priv;
+  priv->vnet             = vnet;
+  vnet->priv             = priv;
 
-	/* Register the device with the OS */
+  /* Register the device with the OS */
 
-	(void)netdev_register(&priv->sk_dev);
+  (void)netdev_register(&priv->sk_dev), NET_LL_ETHERNET;
 
-	return 0;
+  return 0;
 }
 
 #endif /* CONFIG_NET && CONFIG_NET_VNET */

@@ -6,7 +6,7 @@
  *
  * This is part of the NuttX RTOS and based on the LPC2148 port:
  *
- *   Copyright (C) 2010, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +45,8 @@
 #include <nuttx/config.h>
 #include <sys/types.h>
 
+#include <nuttx/board.h>
+
 #include "chip.h"
 #include "up_arch.h"
 #include "up_internal.h"
@@ -81,11 +83,11 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_led_initialize
+ * Name: board_autoled_initialize
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void board_led_initialize(void)
+void board_autoled_initialize(void)
 {
   /* Initialize GIOs P1.16-P1.23 */
 
@@ -95,20 +97,20 @@ void board_led_initialize(void)
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  ****************************************************************************/
 
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   putled8(~(LEDBIT(led)), LED_MASK_OFFSET);
   putled8(LEDBIT(led), LED_SET_OFFSET);
 }
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  ****************************************************************************/
 
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   putled8(LEDBIT(led), LED_CLR_OFFSET);
 }

@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/nx/nx_server.c
  *
- *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,6 +39,8 @@
 
 #include <nuttx/config.h>
 
+#include <sys/boardctl.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -47,6 +49,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/nx/nx.h>
 
 #ifdef CONFIG_NX_LCDDRIVER
@@ -60,7 +63,7 @@
 #ifdef CONFIG_NX_MULTIUSER
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -89,34 +92,45 @@ int nx_servertask(int argc, char *argv[])
   int ret;
 
 #if defined(CONFIG_EXAMPLES_NX_EXTERNINIT)
+  struct boardioc_graphics_s devinfo;
+  int ret;
+
   /* Use external graphics driver initialization */
 
-  message("nxeg_initialize: Initializing external graphics device\n");
-  dev = up_nxdrvinit(CONFIG_EXAMPLES_NX_DEVNO);
-  if (!dev)
+  printf("nx_servertask: Initializing external graphics device\n");
+
+  devinfo.devno = CONFIG_EXAMPLES_NX_DEVNO;
+  devinfo.dev = NULL;
+
+  ret = boardctl(BOARDIOC_GRAPHICS_SETUP, (uintptr_t)&devinfo);
+  if (ret < 0)
     {
-      message("nxeg_initialize: up_nxdrvinit failed, devno=%d\n", CONFIG_EXAMPLES_NX_DEVNO);
+      printf("nx_servertask: boardctl failed, devno=%d: %d\n",
+             CONFIG_EXAMPLES_NX_DEVNO, errno);
       g_exitcode = NXEXIT_EXTINITIALIZE;
       return ERROR;
     }
 
+  dev = devinfo.dev;
+
 #elif defined(CONFIG_NX_LCDDRIVER)
   /* Initialize the LCD device */
 
-  message("nx_servertask: Initializing LCD\n");
-  ret = up_lcdinitialize();
+  printf("nx_servertask: Initializing LCD\n");
+  ret = board_lcd_initialize();
   if (ret < 0)
     {
-      message("nx_servertask: up_lcdinitialize failed: %d\n", -ret);
+      printf("nx_servertask: board_lcd_initialize failed: %d\n", -ret);
       return 1;
     }
 
   /* Get the device instance */
 
-  dev = up_lcdgetdev(CONFIG_EXAMPLES_NX_DEVNO);
+  dev = board_lcd_getdev(CONFIG_EXAMPLES_NX_DEVNO);
   if (!dev)
     {
-      message("nx_servertask: up_lcdgetdev failed, devno=%d\n", CONFIG_EXAMPLES_NX_DEVNO);
+      printf("nx_servertask: board_lcd_getdev failed, devno=%d\n",
+             CONFIG_EXAMPLES_NX_DEVNO);
       return 2;
     }
 
@@ -126,18 +140,20 @@ int nx_servertask(int argc, char *argv[])
 #else
   /* Initialize the frame buffer device */
 
-  message("nx_servertask: Initializing framebuffer\n");
-  ret = up_fbinitialize();
+  printf("nx_servertask: Initializing framebuffer\n");
+
+  ret = up_fbinitialize(0);
   if (ret < 0)
     {
-      message("nx_servertask: up_fbinitialize failed: %d\n", -ret);
+      printf("nx_servertask: up_fbinitialize failed: %d\n", -ret);
       return 1;
     }
 
-  dev = up_fbgetvplane(CONFIG_EXAMPLES_NX_VPLANE);
+  dev = up_fbgetvplane(0, CONFIG_EXAMPLES_NX_VPLANE);
   if (!dev)
     {
-      message("nx_servertask: up_fbgetvplane failed, vplane=%d\n", CONFIG_EXAMPLES_NX_VPLANE);
+      printf("nx_servertask: up_fbgetvplane failed, vplane=%d\n",
+             CONFIG_EXAMPLES_NX_VPLANE);
       return 2;
     }
 #endif
@@ -145,7 +161,7 @@ int nx_servertask(int argc, char *argv[])
   /* Then start the server */
 
   ret = nx_run(dev);
-  message("nx_servertask: nx_run returned: %d\n", errno);
+  printf("nx_servertask: nx_run returned: %d\n", errno);
   return 3;
 }
 

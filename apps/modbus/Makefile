@@ -1,7 +1,7 @@
 ############################################################################
 # apps/modbus/Makefile
 #
-#   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2012, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -48,10 +48,6 @@ CSRCS += mb.c
 DEPPATH = --dep-path .
 VPATH = .
 
-ifeq ($(WINTOOL),y)
-INCDIROPT = -w
-endif
-
 include ascii/Make.defs
 include functions/Make.defs
 include nuttx/Make.defs
@@ -96,6 +92,8 @@ ifeq ($(CONFIG_MODBUS),y)
 	$(Q) touch .built
 endif
 
+install:
+
 context:
 
 .depend: Makefile $(SRCS)
@@ -117,3 +115,5 @@ distclean: clean
 
 -include Make.dep
 
+.PHONY: preconfig
+preconfig:

@@ -53,22 +53,6 @@
 #include "nxffs.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Public Types
- ****************************************************************************/
-
-/****************************************************************************
- * Public Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -85,7 +69,7 @@ int nxffs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   FAR struct nxffs_volume_s *volume;
   int ret;
 
-  fvdbg("cmd: %d arg: %08lx\n", cmd, arg);
+  finfo("cmd: %d arg: %08lx\n", cmd, arg);
 
   /* Sanity checks */
 
@@ -103,8 +87,8 @@ int nxffs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   ret = sem_wait(&volume->exclsem);
   if (ret != OK)
     {
-      ret = -errno;
-      fdbg("ERROR: sem_wait failed: %d\n", ret);
+      ret = -get_errno();
+      ferr("ERROR: sem_wait failed: %d\n", ret);
       goto errout;
     }
 
@@ -112,13 +96,13 @@ int nxffs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   if (cmd == FIOC_REFORMAT)
     {
-      fvdbg("Reformat command\n");
+      finfo("Reformat command\n");
 
       /* We cannot reformat the volume if there are any open inodes */
 
       if (volume->ofiles)
         {
-          fdbg("ERROR: Open files\n");
+          ferr("ERROR: Open files\n");
           ret = -EBUSY;
           goto errout_with_semaphore;
         }
@@ -130,7 +114,7 @@ int nxffs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   else if (cmd == FIOC_OPTIMIZE)
     {
-      fvdbg("Optimize command\n");
+      finfo("Optimize command\n");
 
       /* Pack the volume */
 

@@ -1,6 +1,5 @@
 /****************************************************************************
  * arch/arm/src/kinetis/kinetis_wdog.c
- * arch/arm/src/chip/kinetis_wdog.c
  *
  *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -40,23 +39,11 @@
 
 #include <nuttx/config.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 
 #include "up_arch.h"
-#include "kinetis_internal.h"
-#include "kinetis_wdog.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
+#include "kinetis.h"
+#include "chip/kinetis_wdog.h"
 
 /****************************************************************************
  * Private Functions
@@ -80,13 +67,13 @@ static void kinetis_wdunlock(void)
    * to assure that the following steps are atomic.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Write 0xC520 followed by 0xD928 to the unlock register */
 
   putreg16(0xc520, KINETIS_WDOG_UNLOCK);
   putreg16(0xd928, KINETIS_WDOG_UNLOCK);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -108,7 +95,7 @@ void kinetis_wddisable(void)
   /* Unlock the watchdog so that we can write to registers */
 
   kinetis_wdunlock();
-	
+
   /* Clear the WDOGEN bit to disable the watchdog */
 
   regval  = getreg16(KINETIS_WDOG_STCTRLH);

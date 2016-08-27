@@ -78,12 +78,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -132,7 +126,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -192,8 +186,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -340,35 +334,62 @@ events as follows:
   * If LED1, LED2, LED3 are statically on, then NuttX probably failed to boot
     and these LEDs will give you some indication of where the failure was
  ** The normal state is LED3 ON and LED1 faintly glowing.  This faint glow
-    is because of timer interupts that result in the LED being illuminated
+    is because of timer interrupts that result in the LED being illuminated
     on a small proportion of the time.
 *** LED2 may also flicker normally if signals are processed.
 
 Temperature Sensor
 ==================
 
-Support for the on-board LM-75 temperature sensor is available.  This supported
-has been verified, but has not been included in any of the available the
-configurations.  To set up the temperature sensor, add the following to the
-NuttX configuration file
+  LM-75 Temperature Sensor Driver
+  -------------------------------
+  Support for the on-board LM-75 temperature sensor is available.  This
+  support has been verified, but has not been included in any of the
+  available the configurations.  To set up the temperature sensor, add the
+  following to the NuttX configuration file
 
-  CONFIG_I2C=y
-  CONFIG_I2C_LM75=y
+    Drivers -> Sensors
+      CONFIG_LM75=y
+      CONFIG_I2C_LM75=y
 
-Then you can implement logic like the following to use the temperature sensor:
+  Then you can implement logic like the following to use the temperature
+  sensor:
 
-  #include <nuttx/sensors/lm75.h>
-  #include <arch/board/board.h>
+    #include <nuttx/sensors/lm75.h>
+    #include <arch/board/board.h>
 
-  ret =  stm32_lm75initialize("/dev/temp");       /* Register the temperature sensor */
-  fd = open("/dev/temp", O_RDONLY);               /* Open the temperature sensor device */
-  ret = ioctl(fd, SNIOC_FAHRENHEIT, 0);           /* Select Fahrenheit */
-  bytesread = read(fd, buffer, 8*sizeof(b16_t));  /* Read temperature samples */
+    ret = stm32_lm75initialize("/dev/temp");        /* Register the temperature sensor */
+    fd  = open("/dev/temp", O_RDONLY);              /* Open the temperature sensor device */
+    ret = ioctl(fd, SNIOC_FAHRENHEIT, 0);           /* Select Fahrenheit */
+    bytesread = read(fd, buffer, 8*sizeof(b16_t));  /* Read temperature samples */
 
-More complex temperature sensor operations are also available.  See the IOCTAL
-commands enumerated in include/nuttx/sensors/lm75.h.  Also read the descriptions
-of the stm32_lm75initialize() and stm32_lm75attach() interfaces in the
-arch/board/board.h file (sames as configs/stm3210e-eval/include/board.h).
+  More complex temperature sensor operations are also available.  See the
+  IOCTL commands enumerated in include/nuttx/sensors/lm75.h.  Also read the 
+  escriptions of the stm32_lm75initialize() and stm32_lm75attach()
+  interfaces in the arch/board/board.h file (sames as
+  configs/stm3210e-eval/include/board.h).
+
+  NSH Command Line Application
+  ----------------------------
+  There is a tiny NSH command line application at examples/system/lm75 that
+  will read the current temperature from an LM75 compatible temperature sensor
+  and print the temperature on stdout in either units of degrees Fahrenheit or
+  Centigrade.  This tiny command line application is enabled with the following
+  configuration options:
+
+    Library
+      CONFIG_LIBM=y
+      CONFIG_LIBC_FLOATINGPOINT=y
+
+    Applications -> NSH Library
+      CONFIG_NSH_ARCHINIT=y
+
+    Applications -> System Add-Ons
+      CONFIG_SYSTEM_LM75=y
+      CONFIG_SYSTEM_LM75_DEVNAME="/dev/temp"
+      CONFIG_SYSTEM_LM75_FAHRENHEIT=y  (or CENTIGRADE)
+      CONFIG_SYSTEM_LM75_STACKSIZE=1024
+      CONFIG_SYSTEM_LM75_PRIORITY=100
 
 RTC
 ===
@@ -636,7 +657,7 @@ STM3210E-EVAL-specific Configuration Options
     CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2 is defined.
     CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
     CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
-    CONFIG_CAN_REGDEBUG - If CONFIG_DEBUG is set, this will generate an
+    CONFIG_STM32_CAN_REGDEBUG - If CONFIG_DEBUG_FEATURES is set, this will generate an
       dump of all CAN registers.
 
   STM3210E-EVAL LCD Hardware Configuration
@@ -722,7 +743,7 @@ Where <subdir> is one of the following:
     microSD     Yes                     Yes
     Support
     ----------- ----------------------- --------------------------------
-    FAT FS      CONFIG_FAT_LCNAME=y     CONFIG_FAT_LCNAME=y
+    FAT FS      CONFIG_FAT_LCNAMES=y    CONFIG_FAT_LCNAMES=y
     Config      CONFIG_FAT_LFN=n        CONFIG_FAT_LFN=y (4)
     ----------- ----------------------- --------------------------------
     Support for No                      Yes
@@ -768,7 +789,7 @@ Where <subdir> is one of the following:
        change these configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -804,7 +825,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -898,10 +919,39 @@ Where <subdir> is one of the following:
         c. Others could be similar configured:  apps/examples/nxhello,
             nximage, ...
 
-  nxconsole:
+    4. The nsh configuration was used to verify the discrete joystick
+       (DJoystick driver).  If you would like to duplicate this test, below
+       are the configuration changes needed to setup the DJoystick driver
+       (see nuttx/drivers/input/djoystick.c) and the DJoystick test (see
+       apps/examples/djoystick):
+
+          Pre-requisites:
+
+            CONFIG_DISABLE_POLL=n      # Don't disable poll()
+            CONFIG_BUILTIN=y           # Enable support for built-in applications
+            CONFIG_NSH_BUILTIN_APPS=y  # Enable NSH built-in applications
+
+          Enable the DJoystick driver:
+
+            CONFIG_INPUT=y             # Enable input driver support
+            CONFIG_DJOYSTICK=y         # Enable the joystick drivers
+                                       # (default parmeters should be okay)
+          Enable the DJoystick Example:
+
+           CONFIG_EXAMPLES_DJOYSTICK=y  # Enable the DJoystick example
+           CONFIG_EXAMPLES_DJOYSTICK_DEVNAME="/dev/djoy0"
+           CONFIG_EXAMPLES_DJOYSTICK_SIGNO=13
+
+       When running the configuration, you should see the built-in
+       application 'djoy'.  Just typo 'djoy' at the NSH command prompt.
+       The test will simply should the joystick position and will exect when
+       the joystick select indication is received (when the joystick button
+       is push downward).
+
+  nxterm:
   ----------
     This is yet another NSH configuration.  This NSH configuration differs
-    from the other, however, in that it uses the NxConsole driver to host
+    from the other, however, in that it uses the NxTerm driver to host
     the NSH shell.
 
     NOTES:
@@ -910,7 +960,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -923,14 +973,14 @@ Where <subdir> is one of the following:
          CONFG_NX_MULTIUSER=y
          CONFIG_DISABLE_MQUEUE=n
 
-       The following definition in the defconfig file to enables the NxConsole
+       The following definition in the defconfig file to enables the NxTerm
        driver:
 
-         CONFIG_NXCONSOLE=y
+         CONFIG_NXTERM=y
 
-       And this selects apps/examples/nxconsole instead of apps/examples/nsh:
+       And this selects apps/examples/nxterm instead of apps/examples/nsh:
 
-         CONFIG_EXAMPLES_NXCONSOLE=y
+         CONFIG_EXAMPLES_NXTERM=y
 
        Other configuration settings of interest:
 
@@ -954,7 +1004,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -992,7 +1042,7 @@ Where <subdir> is one of the following:
         CONFIG_PM_BUTTONS=y
 
        CONFIG_PM_BUTTONS enables button support for PM testing.  Buttons can
-       drive EXTI interrupts and EXTI interrrupts can be used to wakeup for
+       drive EXTI interrupts and EXTI interrupts can be used to wakeup for
        certain reduced power modes (STOP mode).  The use of the buttons here
        is for PM testing purposes only; buttons would normally be part the
        application code and CONFIG_PM_BUTTONS would not be defined.
@@ -1014,11 +1064,11 @@ Where <subdir> is one of the following:
     USB debug output can be enabled as by changing the following
     settings in the configuration file:
 
-      -CONFIG_DEBUG=n
-      -CONFIG_DEBUG_VERBOSE=n
+      -CONFIG_DEBUG_FEATURES=n
+      -CONFIG_DEBUG_INFO=n
       -CONFIG_DEBUG_USB=n
-      +CONFIG_DEBUG=y
-      +CONFIG_DEBUG_VERBOSE=y
+      +CONFIG_DEBUG_FEATURES=y
+      +CONFIG_DEBUG_INFO=y
       +CONFIG_DEBUG_USB=y
 
       -CONFIG_EXAMPLES_USBSERIAL_TRACEINIT=n
@@ -1065,7 +1115,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.

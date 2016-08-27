@@ -1,7 +1,7 @@
 /****************************************************************************
  *  arch/arm/src/kinetis/kinetis_pinirq.c
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,15 +43,16 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 
 #include "up_arch.h"
 #include "up_internal.h"
 
-#include "kinetis_internal.h"
-#include "kinetis_port.h"
+#include "kinetis.h"
+#include "chip/kinetis_port.h"
 
-#ifdef CONFIG_GPIO_IRQ
+#ifdef CONFIG_KINETIS_GPIOIRQ
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -128,7 +129,7 @@ static int kinetis_portinterrupt(int irq, FAR void *context,
        */
 
       uint32_t bit = (1 << i);
-      if ((isfr & bit ) != 0)
+      if ((isfr & bit) != 0)
         {
           /* I think that bits may be set in the ISFR for DMA activities
            * well.  So, no error is declared if there is no registered
@@ -286,7 +287,7 @@ xcpt_t kinetis_pinirqattach(uint32_t pinset, xcpt_t pinisr)
   /* Get the table associated with this port */
 
   DEBUGASSERT(port < KINETIS_NPORTS);
-  flags = irqsave();
+  flags = enter_critical_section();
   switch (port)
     {
 #ifdef CONFIG_KINETIS_PORTAINTS
@@ -315,6 +316,7 @@ xcpt_t kinetis_pinirqattach(uint32_t pinset, xcpt_t pinisr)
         break;
 #endif
       default:
+        leave_critical_section(flags);
         return NULL;
     }
 
@@ -325,6 +327,7 @@ xcpt_t kinetis_pinirqattach(uint32_t pinset, xcpt_t pinisr)
 
    /* And return the old PIN isr address */
 
+   leave_critical_section(flags);
    return oldisr;
 #else
    return NULL;
@@ -372,20 +375,32 @@ void kinetis_pinirqenable(uint32_t pinset)
             regval |= PORT_PCR_IRQC_ZERO;
             break;
 
-          case PIN_INT_RISING : /* Interrupt on rising edge*/
+          case PIN_INT_RISING : /* Interrupt on rising edge */
             regval |= PORT_PCR_IRQC_RISING;
             break;
 
-          case PIN_INT_BOTH : /* Interrupt on falling edge */
+          case PIN_INT_FALLING : /* Interrupt on falling edge */
             regval |= PORT_PCR_IRQC_FALLING;
             break;
 
-          case PIN_DMA_FALLING : /* nterrupt on either edge */
+          case PIN_INT_BOTH : /* Interrupt on either edge */
             regval |= PORT_PCR_IRQC_BOTH;
             break;
 
-          case PIN_INT_ONE : /* IInterrupt when logic one */
+          case PIN_INT_ONE : /* Interrupt when logic one */
             regval |= PORT_PCR_IRQC_ONE;
+            break;
+
+          case PIN_DMA_RISING : /* DMA on rising edge */
+            regval |= PORT_PCR_IRQC_DMARISING;
+            break;
+
+          case PIN_DMA_FALLING : /* DMA on falling edge */
+            regval |= PORT_PCR_IRQC_DMAFALLING;
+            break;
+
+          case PIN_DMA_BOTH : /* DMA on either edge */
+            regval |= PORT_PCR_IRQC_DMABOTH;
             break;
 
           default:
@@ -435,4 +450,4 @@ void kinetis_pinirqdisable(uint32_t pinset)
     }
 #endif /* HAVE_PORTINTS */
 }
-#endif /* CONFIG_GPIO_IRQ */
+#endif /* CONFIG_KINETIS_GPIOIRQ */

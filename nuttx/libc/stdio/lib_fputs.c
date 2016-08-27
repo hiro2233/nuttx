@@ -49,10 +49,10 @@
 
 #include <nuttx/arch.h>
 
-#include "lib_internal.h"
+#include "libc.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -64,15 +64,15 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Global Function Prototypes
+ * Public Function Prototypes
  ****************************************************************************/
 
 /****************************************************************************
- * Global Constant Data
+ * Public Constant Data
  ****************************************************************************/
 
 /****************************************************************************
- * Global Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -80,7 +80,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -104,7 +104,7 @@ int fputs(FAR const char *s, FAR FILE *stream)
 
   /* Make sure that a string was provided. */
 
-#ifdef CONFIG_DEBUG /* Most parameter checking is disabled if DEBUG is off */
+#ifdef CONFIG_DEBUG_FEATURES /* Most parameter checking is disabled if DEBUG is off */
   if (!s)
     {
       set_errno(EINVAL);
@@ -149,7 +149,7 @@ int fputs(FAR const char *s, FAR FILE *stream)
 
   /* Make sure that a string was provided. */
 
-#ifdef CONFIG_DEBUG /* Most parameter checking is disabled if DEBUG is off */
+#ifdef CONFIG_DEBUG_FEATURES /* Most parameter checking is disabled if DEBUG is off */
   if (!s)
     {
       set_errno(EINVAL);
@@ -192,7 +192,7 @@ int fputs(FAR const char *s, FAR FILE *stream)
 
   /* Make sure that a string was provided. */
 
-#ifdef CONFIG_DEBUG /* Most parameter checking is disabled if DEBUG is off */
+#ifdef CONFIG_DEBUG_FEATURES /* Most parameter checking is disabled if DEBUG is off */
   if (!s)
     {
       set_errno(EINVAL);

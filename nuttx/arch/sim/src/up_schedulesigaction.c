@@ -1,5 +1,5 @@
 /****************************************************************************
- * up_schedulesigaction.c
+ * arch/sim/src/up_schedulesigaction.c
  *
  *   Copyright (C) 2007-2010 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -44,20 +44,8 @@
 
 #include <nuttx/arch.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -100,7 +88,7 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
 {
   /* We don't have to anything complex for the simulated target */
 
-  if (tcb == (struct tcb_s*)g_readytorun.head)
+  if (tcb == this_task())
     {
       sigdeliver(tcb);
     }

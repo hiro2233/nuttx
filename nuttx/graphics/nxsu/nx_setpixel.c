@@ -48,7 +48,7 @@
 #include "nxfe.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -91,7 +91,7 @@
 int nx_setpixel(NXWINDOW hwnd,  FAR const struct nxgl_point_s *pos,
                 nxgl_mxpixel_t color[CONFIG_NX_NPLANES])
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!hwnd || !pos || !color)
     {
       errno = EINVAL;

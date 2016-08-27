@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/nx/nx_main.c
  *
- *   Copyright (C) 2008-2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2011, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
 #include <nuttx/config.h>
 
 #include <sys/types.h>
+#include <sys/boardctl.h>
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -51,13 +53,18 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/arch.h>
+#include <nuttx/board.h>
+
 #ifdef CONFIG_NX_LCDDRIVER
 #  include <nuttx/lcd/lcd.h>
 #else
 #  include <nuttx/video/fb.h>
+#  ifdef CONFIG_VNCSERVER
+#    include <nuttx/video/vnc.h>
+#  endif
 #endif
 
-#include <nuttx/arch.h>
 #include <nuttx/nx/nx.h>
 #include <nuttx/nx/nxtk.h>
 #include <nuttx/nx/nxfonts.h>
@@ -141,7 +148,7 @@ nxgl_mxpixel_t g_tbcolor[CONFIG_NX_NPLANES];
  * Name: nxeg_drivemouse
  ****************************************************************************/
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
 static void nxeg_drivemouse(void)
 {
   nxgl_coord_t x;
@@ -153,7 +160,7 @@ static void nxeg_drivemouse(void)
     {
       for (y = 0; y < g_yres; y += ystep)
         {
-          message("nxeg_drivemouse: Mouse left button at (%d,%d)\n", x, y);
+          printf("nxeg_drivemouse: Mouse left button at (%d,%d)\n", x, y);
           (void)nx_mousein(g_hnx, x, y, NX_MOUSE_LEFTBUTTON);
         }
     }
@@ -231,7 +238,7 @@ static inline NXEGWINDOW nxeg_openwindow(FAR const struct nx_callback_s *cb,
   hwnd = nx_openwindow(g_hnx, cb, (FAR void *)state);
   if (!hwnd)
     {
-      message("nxeg_openwindow: nx_openwindow failed: %d\n", errno);
+      printf("nxeg_openwindow: nx_openwindow failed: %d\n", errno);
       g_exitcode = NXEXIT_NXOPENWINDOW;
     }
   return hwnd;
@@ -245,7 +252,7 @@ static inline NXEGWINDOW nxeg_openwindow(FAR const struct nx_callback_s *cb,
   hwnd = nxtk_openwindow(g_hnx, cb, (FAR void *)state);
   if (!hwnd)
     {
-      message("nxeg_openwindow: nxtk_openwindow failed: %d\n", errno);
+      printf("nxeg_openwindow: nxtk_openwindow failed: %d\n", errno);
       g_exitcode = NXEXIT_NXOPENWINDOW;
     }
   return hwnd;
@@ -262,7 +269,7 @@ static inline int nxeg_closewindow(NXEGWINDOW hwnd, FAR struct nxeg_state_s *sta
   int ret = nx_closewindow(hwnd);
   if (ret < 0)
     {
-      message("nxeg_closewindow: nx_closewindow failed: %d\n", errno);
+      printf("nxeg_closewindow: nx_closewindow failed: %d\n", errno);
       g_exitcode = NXEXIT_NXCLOSEWINDOW;
     }
   return ret;
@@ -273,7 +280,7 @@ static inline int nxeg_closewindow(NXEGWINDOW hwnd, FAR struct nxeg_state_s *sta
   int ret = nxtk_closewindow(hwnd);
   if (ret < 0)
     {
-      message("nxeg_closewindow: nxtk_closewindow failed: %d\n", errno);
+      printf("nxeg_closewindow: nxtk_closewindow failed: %d\n", errno);
       g_exitcode = NXEXIT_NXCLOSEWINDOW;
     }
   nxeg_freestate(state);
@@ -291,7 +298,7 @@ static inline int nxeg_setsize(NXEGWINDOW hwnd, FAR struct nxgl_size_s *size)
   int ret = nx_setsize(hwnd, size);
   if (ret < 0)
     {
-      message("nxeg_setsize: nx_setsize failed: %d\n", errno);
+      printf("nxeg_setsize: nx_setsize failed: %d\n", errno);
       g_exitcode = NXEXIT_NXSETSIZE;
     }
   return ret;
@@ -302,7 +309,7 @@ static inline int nxeg_setsize(NXEGWINDOW hwnd, FAR struct nxgl_size_s *size)
   int ret = nxtk_setsize(hwnd, size);
   if (ret < 0)
     {
-      message("nxeg_setsize: nxtk_setsize failed: %d\n", errno);
+      printf("nxeg_setsize: nxtk_setsize failed: %d\n", errno);
       g_exitcode = NXEXIT_NXSETSIZE;
     }
   return ret;
@@ -319,7 +326,7 @@ static inline int nxeg_setposition(NXEGWINDOW hwnd, FAR struct nxgl_point_s *pos
   int ret = nx_setposition(hwnd, pos);
   if (ret < 0)
     {
-      message("nxeg_setposition: nx_setposition failed: %d\n", errno);
+      printf("nxeg_setposition: nx_setposition failed: %d\n", errno);
       g_exitcode = NXEXIT_NXSETPOSITION;
     }
   return ret;
@@ -330,7 +337,7 @@ static inline int nxeg_setposition(NXEGWINDOW hwnd, FAR struct nxgl_point_s *pos
   int ret = nxtk_setposition(hwnd, pos);
   if (ret < 0)
     {
-      message("nxeg_setposition: nxtk_setposition failed: %d\n", errno);
+      printf("nxeg_setposition: nxtk_setposition failed: %d\n", errno);
       g_exitcode = NXEXIT_NXSETPOSITION;
     }
   return ret;
@@ -350,7 +357,7 @@ static inline int nxeq_opentoolbar(NXEGWINDOW hwnd, nxgl_coord_t height,
   ret = nxtk_opentoolbar(hwnd, height, cb, (FAR void *)state);
   if (ret < 0)
     {
-      message("nxeq_opentoolbar: nxtk_opentoolbar failed: %d\n", errno);
+      printf("nxeq_opentoolbar: nxtk_opentoolbar failed: %d\n", errno);
       g_exitcode = NXEXIT_NXOPENTOOLBAR;
     }
   return ret;
@@ -367,7 +374,7 @@ static inline int nxeg_lower(NXEGWINDOW hwnd)
   int ret = nx_lower(hwnd);
   if (ret < 0)
     {
-      message("nxeg_lower: nx_lower failed: %d\n", errno);
+      printf("nxeg_lower: nx_lower failed: %d\n", errno);
       g_exitcode = NXEXIT_NXLOWER;
     }
   return ret;
@@ -378,7 +385,7 @@ static inline int nxeg_lower(NXEGWINDOW hwnd)
   int ret = nxtk_lower(hwnd);
   if (ret < 0)
     {
-      message("nxeg_lower: nxtk_lower failed: %d\n", errno);
+      printf("nxeg_lower: nxtk_lower failed: %d\n", errno);
       g_exitcode = NXEXIT_NXLOWER;
     }
   return ret;
@@ -395,7 +402,7 @@ static inline int nxeg_raise(NXEGWINDOW hwnd)
   int ret = nx_raise(hwnd);
   if (ret < 0)
     {
-      message("nxeg_raise: nx_raise failed: %d\n", errno);
+      printf("nxeg_raise: nx_raise failed: %d\n", errno);
       g_exitcode = NXEXIT_NXRAISE;
     }
   return ret;
@@ -406,7 +413,7 @@ static inline int nxeg_raise(NXEGWINDOW hwnd)
   int ret = nxtk_raise(hwnd);
   if (ret < 0)
     {
-      message("nxeg_raise: nxtk_raise failed: %d\n", errno);
+      printf("nxeg_raise: nxtk_raise failed: %d\n", errno);
       g_exitcode = NXEXIT_NXRAISE;
     }
   return ret;
@@ -421,39 +428,48 @@ static inline int nxeg_raise(NXEGWINDOW hwnd)
 static inline int nxeg_suinitialize(void)
 {
   FAR NX_DRIVERTYPE *dev;
+  int ret;
 
 #if defined(CONFIG_EXAMPLES_NX_EXTERNINIT)
+  struct boardioc_graphics_s devinfo;
+
   /* Use external graphics driver initialization */
 
-  message("nxeg_initialize: Initializing external graphics device\n");
-  dev = up_nxdrvinit(CONFIG_EXAMPLES_NX_DEVNO);
-  if (!dev)
+  printf("nxeg_initialize: Initializing external graphics device\n");
+
+  devinfo.devno = CONFIG_EXAMPLES_NX_DEVNO;
+  devinfo.dev = NULL;
+
+  ret = boardctl(BOARDIOC_GRAPHICS_SETUP, (uintptr_t)&devinfo);
+  if (ret < 0)
     {
-      message("nxeg_initialize: up_nxdrvinit failed, devno=%d\n", CONFIG_EXAMPLES_NX_DEVNO);
+      printf("nxeg_initialize: boardctl failed, devno=%d: %d\n",
+             CONFIG_EXAMPLES_NX_DEVNO, errno);
       g_exitcode = NXEXIT_EXTINITIALIZE;
       return ERROR;
     }
 
-#elif defined(CONFIG_NX_LCDDRIVER)
-  int ret;
+  dev = devinfo.dev;
 
+#elif defined(CONFIG_NX_LCDDRIVER)
   /* Initialize the LCD device */
 
-  message("nxeg_initialize: Initializing LCD\n");
-  ret = up_lcdinitialize();
+  printf("nxeg_initialize: Initializing LCD\n");
+  ret = board_lcd_initialize();
   if (ret < 0)
     {
-      message("nxeg_initialize: up_lcdinitialize failed: %d\n", -ret);
+      printf("nxeg_initialize: board_lcd_initialize failed: %d\n", -ret);
       g_exitcode = NXEXIT_LCDINITIALIZE;
       return ERROR;
     }
 
   /* Get the device instance */
 
-  dev = up_lcdgetdev(CONFIG_EXAMPLES_NX_DEVNO);
+  dev = board_lcd_getdev(CONFIG_EXAMPLES_NX_DEVNO);
   if (!dev)
     {
-      message("nxeg_initialize: up_lcdgetdev failed, devno=%d\n", CONFIG_EXAMPLES_NX_DEVNO);
+      printf("nxeg_initialize: board_lcd_getdev failed, devno=%d\n",
+             CONFIG_EXAMPLES_NX_DEVNO);
       g_exitcode = NXEXIT_LCDGETDEV;
       return ERROR;
     }
@@ -461,24 +477,27 @@ static inline int nxeg_suinitialize(void)
   /* Turn the LCD on at 75% power */
 
   (void)dev->setpower(dev, ((3*CONFIG_LCD_MAXPOWER + 3)/4));
-#else
-  int ret;
 
+#else
   /* Initialize the frame buffer device */
 
-  message("nxeg_initialize: Initializing framebuffer\n");
-  ret = up_fbinitialize();
+  printf("nxeg_initialize: Initializing framebuffer\n");
+
+  ret = up_fbinitialize(0);
   if (ret < 0)
     {
-      message("nxeg_initialize: up_fbinitialize failed: %d\n", -ret);
+      printf("nxeg_initialize: up_fbinitialize failed: %d\n", -ret);
+
       g_exitcode = NXEXIT_FBINITIALIZE;
       return ERROR;
     }
 
-  dev = up_fbgetvplane(CONFIG_EXAMPLES_NX_VPLANE);
+  dev = up_fbgetvplane(0, CONFIG_EXAMPLES_NX_VPLANE);
   if (!dev)
     {
-      message("nxeg_initialize: up_fbgetvplane failed, vplane=%d\n", CONFIG_EXAMPLES_NX_VPLANE);
+      printf("nxeg_initialize: up_fbgetvplane failed, vplane=%d\n",
+             CONFIG_EXAMPLES_NX_VPLANE);
+
       g_exitcode = NXEXIT_FBGETVPLANE;
       return ERROR;
     }
@@ -486,14 +505,30 @@ static inline int nxeg_suinitialize(void)
 
   /* Then open NX */
 
-  message("nxeg_initialize: Open NX\n");
+  printf("nxeg_initialize: Open NX\n");
+
   g_hnx = nx_open(dev);
   if (!g_hnx)
     {
-      message("nxeg_suinitialize: nx_open failed: %d\n", errno);
+      printf("nxeg_suinitialize: nx_open failed: %d\n", errno);
+
       g_exitcode = NXEXIT_NXOPEN;
       return ERROR;
     }
+
+#ifdef CONFIG_VNCSERVER
+  /* Setup the VNC server to support keyboard/mouse inputs */
+
+  ret = vnc_default_fbinitialize(0, g_hnx);
+  if (ret < 0)
+    {
+      printf("vnc_default_fbinitialize failed: %d\n", ret);
+      nx_close(g_hnx);
+      g_exitcode = NXEXIT_FBINITIALIZE;
+      return ERROR;
+    }
+#endif
+
   return OK;
 }
 #endif
@@ -516,19 +551,19 @@ static inline int nxeg_muinitialize(void)
   ret = sched_setparam(0, &param);
   if (ret < 0)
     {
-      message("nxeg_initialize: sched_setparam failed: %d\n" , ret);
+      printf("nxeg_initialize: sched_setparam failed: %d\n" , ret);
       g_exitcode = NXEXIT_SCHEDSETPARAM;
       return ERROR;
     }
 
   /* Start the server task */
 
-  message("nxeg_initialize: Starting nx_servertask task\n");
+  printf("nxeg_initialize: Starting nx_servertask task\n");
   servrid = task_create("NX Server", CONFIG_EXAMPLES_NX_SERVERPRIO,
                         CONFIG_EXAMPLES_NX_STACKSIZE, nx_servertask, NULL);
   if (servrid < 0)
     {
-      message("nxeg_initialize: Failed to create nx_servertask task: %d\n", errno);
+      printf("nxeg_initialize: Failed to create nx_servertask task: %d\n", errno);
       g_exitcode = NXEXIT_TASKCREATE;
       return ERROR;
     }
@@ -544,6 +579,18 @@ static inline int nxeg_muinitialize(void)
     {
        pthread_attr_t attr;
 
+#ifdef CONFIG_VNCSERVER
+      /* Setup the VNC server to support keyboard/mouse inputs */
+
+      ret = vnc_default_fbinitialize(0, g_hnx);
+      if (ret < 0)
+        {
+          printf("vnc_default_fbinitialize failed: %d\n", ret);
+          nx_disconnect(g_hnx);
+          g_exitcode = NXEXIT_FBINITIALIZE;
+          return ERROR;
+        }
+#endif
        /* Start a separate thread to listen for server events.  This is probably
         * the least efficient way to do this, but it makes this example flow more
         * smoothly.
@@ -575,10 +622,11 @@ static inline int nxeg_muinitialize(void)
     }
   else
     {
-      message("nxeg_initialize: nx_connect failed: %d\n", errno);
+      printf("nxeg_initialize: nx_connect failed: %d\n", errno);
       g_exitcode = NXEXIT_NXCONNECT;
       return ERROR;
     }
+
   return OK;
 }
 #endif
@@ -617,7 +665,11 @@ static int nxeg_initialize(void)
  * Name: nx_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int nx_main(int argc, char *argv[])
+#endif
 {
   NXEGWINDOW hwnd1;
   NXEGWINDOW hwnd2;
@@ -629,10 +681,10 @@ int nx_main(int argc, char *argv[])
   /* Initialize */
 
   ret = nxeg_initialize();
-  message("nx_main: NX handle=%p\n", g_hnx);
+  printf("nx_main: NX handle=%p\n", g_hnx);
   if (!g_hnx || ret < 0)
     {
-      message("nx_main: Failed to get NX handle: %d\n", errno);
+      printf("nx_main: Failed to get NX handle: %d\n", errno);
       g_exitcode = NXEXIT_NXOPEN;
       goto errout;
     }
@@ -642,29 +694,29 @@ int nx_main(int argc, char *argv[])
   g_fonthandle = nxf_getfonthandle(CONFIG_EXAMPLES_NX_FONTID);
   if (!g_fonthandle)
     {
-      message("nx_main: Failed to get font handle: %d\n", errno);
+      printf("nx_main: Failed to get font handle: %d\n", errno);
       g_exitcode = NXEXIT_FONTOPEN;
       goto errout;
     }
 
   /* Set the background to the configured background color */
 
-  message("nx_main: Set background color=%d\n", CONFIG_EXAMPLES_NX_BGCOLOR);
+  printf("nx_main: Set background color=%d\n", CONFIG_EXAMPLES_NX_BGCOLOR);
   color = CONFIG_EXAMPLES_NX_BGCOLOR;
   ret = nx_setbgcolor(g_hnx, &color);
   if (ret < 0)
     {
-      message("nx_main: nx_setbgcolor failed: %d\n", errno);
+      printf("nx_main: nx_setbgcolor failed: %d\n", errno);
       g_exitcode = NXEXIT_NXSETBGCOLOR;
       goto errout_with_nx;
     }
 
   /* Create window #1 */
 
-  message("nx_main: Create window #1\n");
+  printf("nx_main: Create window #1\n");
   nxeg_initstate(&g_wstate[0], 1, CONFIG_EXAMPLES_NX_COLOR1);
   hwnd1 = nxeg_openwindow(&g_nxcb, &g_wstate[0]);
-  message("nx_main: hwnd1=%p\n", hwnd1);
+  printf("nx_main: hwnd1=%p\n", hwnd1);
   if (!hwnd1)
     {
       goto errout_with_nx;
@@ -676,14 +728,14 @@ int nx_main(int argc, char *argv[])
     {
       (void)sem_wait(&g_semevent);
     }
-  message("nx_main: Screen resolution (%d,%d)\n", g_xres, g_yres);
+  printf("nx_main: Screen resolution (%d,%d)\n", g_xres, g_yres);
 
   /* Set the size of the window 1 */
 
   size.w = g_xres / 2;
   size.h = g_yres / 2;
 
-  message("nx_main: Set window #1 size to (%d,%d)\n", size.w, size.h);
+  printf("nx_main: Set window #1 size to (%d,%d)\n", size.w, size.h);
   ret = nxeg_setsize(hwnd1, &size);
   if (ret < 0)
     {
@@ -695,7 +747,7 @@ int nx_main(int argc, char *argv[])
    * actually do them!
    */
 
-  message("nx_main: Sleeping\n\n");
+  printf("nx_main: Sleeping\n\n");
   sleep(1);
 
   /* Set the position of window #1 */
@@ -703,7 +755,7 @@ int nx_main(int argc, char *argv[])
   pt.x = g_xres / 8;
   pt.y = g_yres / 8;
 
-  message("nx_main: Set window #1 postion to (%d,%d)\n", pt.x, pt.y);
+  printf("nx_main: Set window #1 position to (%d,%d)\n", pt.x, pt.y);
   ret = nxeg_setposition(hwnd1, &pt);
   if (ret < 0)
     {
@@ -712,13 +764,13 @@ int nx_main(int argc, char *argv[])
 
   /* Sleep a bit */
 
-  message("nx_main: Sleeping\n\n");
+  printf("nx_main: Sleeping\n\n");
   sleep(1);
 
   /* Open the toolbar */
 
 #ifndef CONFIG_EXAMPLES_NX_RAWWINDOWS
-  message("nx_main: Add toolbar to window #1\n");
+  printf("nx_main: Add toolbar to window #1\n");
   ret = nxeq_opentoolbar(hwnd1, CONFIG_EXAMPLES_NX_TOOLBAR_HEIGHT, &g_tbcb, &g_wstate[0]);
   if (ret < 0)
     {
@@ -727,16 +779,16 @@ int nx_main(int argc, char *argv[])
 
   /* Sleep a bit */
 
-  message("nx_main: Sleeping\n\n");
+  printf("nx_main: Sleeping\n\n");
   sleep(1);
 #endif
 
   /* Create window #2 */
 
-  message("nx_main: Create window #2\n");
+  printf("nx_main: Create window #2\n");
   nxeg_initstate(&g_wstate[1], 2, CONFIG_EXAMPLES_NX_COLOR2);
   hwnd2 = nxeg_openwindow(&g_nxcb, &g_wstate[1]);
-  message("nx_main: hwnd2=%p\n", hwnd2);
+  printf("nx_main: hwnd2=%p\n", hwnd2);
   if (!hwnd2)
     {
       goto errout_with_hwnd1;
@@ -744,12 +796,12 @@ int nx_main(int argc, char *argv[])
 
   /* Sleep a bit */
 
-  message("nx_main: Sleeping\n\n");
+  printf("nx_main: Sleeping\n\n");
   sleep(1);
 
   /* Set the size of the window 2 == size of window 1*/
 
-  message("nx_main: Set hwnd2 size to (%d,%d)\n", size.w, size.h);
+  printf("nx_main: Set hwnd2 size to (%d,%d)\n", size.w, size.h);
   ret = nxeg_setsize(hwnd2, &size);
   if (ret < 0)
     {
@@ -758,7 +810,7 @@ int nx_main(int argc, char *argv[])
 
   /* Sleep a bit */
 
-  message("nx_main: Sleeping\n\n");
+  printf("nx_main: Sleeping\n\n");
   sleep(1);
 
   /* Set the position of window #2 */
@@ -766,7 +818,7 @@ int nx_main(int argc, char *argv[])
   pt.x = g_xres - size.w - pt.x;
   pt.y = g_yres - size.h - pt.y;
 
-  message("nx_main: Set hwnd2 postion to (%d,%d)\n", pt.x, pt.y);
+  printf("nx_main: Set hwnd2 position to (%d,%d)\n", pt.x, pt.y);
   ret = nxeg_setposition(hwnd2, &pt);
   if (ret < 0)
     {
@@ -775,11 +827,11 @@ int nx_main(int argc, char *argv[])
 
   /* Sleep a bit */
 
-  message("nx_main: Sleeping\n\n");
+  printf("nx_main: Sleeping\n\n");
   sleep(1);
 
 #ifndef CONFIG_EXAMPLES_NX_RAWWINDOWS
-  message("nx_main: Add toolbar to window #2\n");
+  printf("nx_main: Add toolbar to window #2\n");
   ret = nxeq_opentoolbar(hwnd2, CONFIG_EXAMPLES_NX_TOOLBAR_HEIGHT, &g_tbcb, &g_wstate[1]);
   if (ret < 0)
     {
@@ -788,30 +840,30 @@ int nx_main(int argc, char *argv[])
 
   /* Sleep a bit */
 
-  message("nx_main: Sleeping\n\n");
+  printf("nx_main: Sleeping\n\n");
   sleep(1);
 #endif
 
   /* Give keyboard input to the top window -- should be window #2 */
 
 #ifdef CONFIG_NX_KBD
-  message("nx_main: Send keyboard input: %s\n", g_kbdmsg1);
+  printf("nx_main: Send keyboard input: %s\n", g_kbdmsg1);
   ret = nx_kbdin(g_hnx, strlen((FAR const char *)g_kbdmsg1), g_kbdmsg1);
   if (ret < 0)
     {
-      message("nx_main: nx_kbdin failed: %d\n", errno);
+      printf("nx_main: nx_kbdin failed: %d\n", errno);
       goto errout_with_hwnd2;
     }
 
   /* Sleep a bit */
 
-  message("nx_main: Sleeping\n\n");
+  printf("nx_main: Sleeping\n\n");
   sleep(1);
 #endif
 
   /* Lower window 2 */
 
-  message("nx_main: Lower window #2\n");
+  printf("nx_main: Lower window #2\n");
   ret = nxeg_lower(hwnd2);
   if (ret < 0)
     {
@@ -820,40 +872,40 @@ int nx_main(int argc, char *argv[])
 
   /* Sleep a bit */
 
-  message("nx_main: Sleeping\n\n");
+  printf("nx_main: Sleeping\n\n");
   sleep(1);
 
   /* Put mouse left-button clicks all over the screen and see who responds */
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
   nxeg_drivemouse();
 
   /* Sleep a bit */
 
-  message("nx_main: Sleeping\n\n");
+  printf("nx_main: Sleeping\n\n");
   sleep(1);
 #endif
 
   /* Give keyboard input to the top window -- should be window #1 */
 
 #ifdef CONFIG_NX_KBD
-  message("nx_main: Send keyboard input: %s\n", g_kbdmsg2);
+  printf("nx_main: Send keyboard input: %s\n", g_kbdmsg2);
   ret = nx_kbdin(g_hnx, strlen((FAR const char *)g_kbdmsg2), g_kbdmsg2);
   if (ret < 0)
     {
-      message("nx_main: nx_kbdin failed: %d\n", errno);
+      printf("nx_main: nx_kbdin failed: %d\n", errno);
       goto errout_with_hwnd2;
     }
 
   /* Sleep a bit */
 
-  message("nx_main: Sleeping\n\n");
+  printf("nx_main: Sleeping\n\n");
   sleep(1);
 #endif
 
   /* Raise window 2 */
 
-  message("nx_main: Raise window #2\n");
+  printf("nx_main: Raise window #2\n");
   ret = nxeg_raise(hwnd2);
   if (ret < 0)
     {
@@ -862,37 +914,37 @@ int nx_main(int argc, char *argv[])
 
   /* Put mouse left-button clicks all over the screen and see who responds */
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
   nxeg_drivemouse();
 #endif
 
   /* Sleep a bit */
 
-  message("nx_main: Sleeping\n\n");
+  printf("nx_main: Sleeping\n\n");
   sleep(2);
 
   /* Close the window 2 */
 
 errout_with_hwnd2:
-  message("nx_main: Close window #2\n");
+  printf("nx_main: Close window #2\n");
   (void)nxeg_closewindow(hwnd2, &g_wstate[1]);
 
   /* Close the window1 */
 
 errout_with_hwnd1:
-  message("nx_main: Close window #1\n");
+  printf("nx_main: Close window #1\n");
   (void)nxeg_closewindow(hwnd1, &g_wstate[0]);
 
 errout_with_nx:
 #ifdef CONFIG_NX_MULTIUSER
   /* Disconnect from the server */
 
-  message("nx_main: Disconnect from the server\n");
+  printf("nx_main: Disconnect from the server\n");
   nx_disconnect(g_hnx);
 #else
   /* Close the server */
 
-  message("nx_main: Close NX\n");
+  printf("nx_main: Close NX\n");
   nx_close(g_hnx);
 #endif
 errout:

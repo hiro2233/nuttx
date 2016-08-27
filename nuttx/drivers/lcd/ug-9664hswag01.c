@@ -123,16 +123,6 @@
 #  undef CONFIG_LCD_RPORTRAIT
 #endif
 
-/* Verbose debug must also be enabled to use the extra OLED debug */
-
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_VERBOSE
-#endif
-
-#ifndef CONFIG_DEBUG_VERBOSE
-#  undef CONFIG_DEBUG_LCD
-#endif
-
 /* Check contrast selection */
 
 #ifndef CONFIG_LCD_MAXCONTRAST
@@ -221,14 +211,6 @@
 #define LS_BIT          (1 << 0)
 #define MS_BIT          (1 << 7)
 
-/* Debug ******************************************************************************/
-
-#ifdef CONFIG_DEBUG_LCD
-# define lcddbg(format, ...)  vdbg(format, ##__VA_ARGS__)
-#else
-# define lcddbg(x...)
-#endif
-
 /**************************************************************************************
  * Private Type Definition
  **************************************************************************************/
@@ -247,10 +229,10 @@ struct ug_dev_s
   uint8_t contrast;
   uint8_t powered;
 
- /* The SSD1305 does not support reading from the display memory in SPI mode.
-  * Since there is 1 BPP and access is byte-by-byte, it is necessary to keep
-  * a shadow copy of the framebuffer memory.
-  */
+  /* The SSD1305 does not support reading from the display memory in SPI mode.
+   * Since there is 1 BPP and access is byte-by-byte, it is necessary to keep
+   * a shadow copy of the framebuffer memory.
+   */
 
   uint8_t fb[UG_FBSIZE];
 };
@@ -261,13 +243,8 @@ struct ug_dev_s
 
 /* SPI helpers */
 
-#ifdef CONFIG_SPI_OWNBUS
-static inline void ug_select(FAR struct spi_dev_s *spi);
-static inline void ug_deselect(FAR struct spi_dev_s *spi);
-#else
 static void ug_select(FAR struct spi_dev_s *spi);
 static void ug_deselect(FAR struct spi_dev_s *spi);
-#endif
 
 /* LCD Data Transfer Methods */
 
@@ -337,10 +314,10 @@ static const struct fb_videoinfo_s g_videoinfo =
 
 static const struct lcd_planeinfo_s g_planeinfo =
 {
-  .putrun = ug_putrun,             /* Put a run into LCD memory */
-  .getrun = ug_getrun,             /* Get a run from LCD memory */
-  .buffer = (uint8_t*)g_runbuffer, /* Run scratch buffer */
-  .bpp    = UG_BPP,                /* Bits-per-pixel */
+  .putrun = ug_putrun,                  /* Put a run into LCD memory */
+  .getrun = ug_getrun,                  /* Get a run from LCD memory */
+  .buffer = (FAR uint8_t *)g_runbuffer, /* Run scratch buffer */
+  .bpp    = UG_BPP,                     /* Bits-per-pixel */
 };
 
 /* This is the standard, NuttX LCD driver object */
@@ -415,14 +392,6 @@ static inline FAR const char *ug_powerstring(uint8_t power)
  *
  **************************************************************************************/
 
-#ifdef CONFIG_SPI_OWNBUS
-static inline void ug_select(FAR struct spi_dev_s *spi)
-{
-  /* We own the SPI bus, so just select the chip */
-
-  SPI_SELECT(spi, SPIDEV_DISPLAY, true);
-}
-#else
 static void ug_select(FAR struct spi_dev_s *spi)
 {
   /* Select UG-9664HSWAG01 chip (locking the SPI bus in case there are multiple
@@ -438,11 +407,11 @@ static void ug_select(FAR struct spi_dev_s *spi)
 
   SPI_SETMODE(spi, CONFIG_UG9664HSWAG01_SPIMODE);
   SPI_SETBITS(spi, 8);
+  (void)SPI_HWFEATURES(spi, 0);
 #ifdef CONFIG_UG9664HSWAG01_FREQUENCY
-  SPI_SETFREQUENCY(spi, CONFIG_UG9664HSWAG01_FREQUENCY);
+  (void)SPI_SETFREQUENCY(spi, CONFIG_UG9664HSWAG01_FREQUENCY);
 #endif
 }
-#endif
 
 /**************************************************************************************
  * Function: ug_deselect
@@ -460,14 +429,6 @@ static void ug_select(FAR struct spi_dev_s *spi)
  *
  **************************************************************************************/
 
-#ifdef CONFIG_SPI_OWNBUS
-static inline void ug_deselect(FAR struct spi_dev_s *spi)
-{
-  /* We own the SPI bus, so just de-select the chip */
-
-  SPI_SELECT(spi, SPIDEV_DISPLAY, false);
-}
-#else
 static void ug_deselect(FAR struct spi_dev_s *spi)
 {
   /* De-select UG-9664HSWAG01 chip and relinquish the SPI bus. */
@@ -475,7 +436,6 @@ static void ug_deselect(FAR struct spi_dev_s *spi)
   SPI_SELECT(spi, SPIDEV_DISPLAY, false);
   SPI_LOCK(spi, false);
 }
-#endif
 
 /**************************************************************************************
  * Name:  ug_putrun
@@ -506,7 +466,7 @@ static int ug_putrun(fb_coord_t row, fb_coord_t col, FAR const uint8_t *buffer,
   uint8_t i;
   int     pixlen;
 
-  gvdbg("row: %d col: %d npixels: %d\n", row, col, npixels);
+  ginfo("row: %d col: %d npixels: %d\n", row, col, npixels);
   DEBUGASSERT(buffer);
 
   /* Clip the run to the display */
@@ -703,7 +663,7 @@ static int ug_getrun(fb_coord_t row, fb_coord_t col, FAR uint8_t *buffer,
   uint8_t i;
   int     pixlen;
 
-  gvdbg("row: %d col: %d npixels: %d\n", row, col, npixels);
+  ginfo("row: %d col: %d npixels: %d\n", row, col, npixels);
   DEBUGASSERT(buffer);
 
   /* Clip the run to the display */
@@ -846,7 +806,7 @@ static int ug_getvideoinfo(FAR struct lcd_dev_s *dev,
                               FAR struct fb_videoinfo_s *vinfo)
 {
   DEBUGASSERT(dev && vinfo);
-  gvdbg("fmt: %d xres: %d yres: %d nplanes: %d\n",
+  ginfo("fmt: %d xres: %d yres: %d nplanes: %d\n",
          g_videoinfo.fmt, g_videoinfo.xres, g_videoinfo.yres, g_videoinfo.nplanes);
   memcpy(vinfo, &g_videoinfo, sizeof(struct fb_videoinfo_s));
   return OK;
@@ -864,7 +824,7 @@ static int ug_getplaneinfo(FAR struct lcd_dev_s *dev, unsigned int planeno,
                               FAR struct lcd_planeinfo_s *pinfo)
 {
   DEBUGASSERT(dev && pinfo && planeno == 0);
-  gvdbg("planeno: %d bpp: %d\n", planeno, g_planeinfo.bpp);
+  ginfo("planeno: %d bpp: %d\n", planeno, g_planeinfo.bpp);
   memcpy(pinfo, &g_planeinfo, sizeof(struct lcd_planeinfo_s));
   return OK;
 }
@@ -882,7 +842,7 @@ static int ug_getpower(struct lcd_dev_s *dev)
 {
   struct ug_dev_s *priv = (struct ug_dev_s *)dev;
   DEBUGASSERT(priv);
-  gvdbg("powered: %s\n", ug_powerstring(priv->powered));
+  ginfo("powered: %s\n", ug_powerstring(priv->powered));
   return priv->powered;
 }
 
@@ -900,7 +860,7 @@ static int ug_setpower(struct lcd_dev_s *dev, int power)
   struct ug_dev_s *priv = (struct ug_dev_s *)dev;
 
   DEBUGASSERT(priv && (unsigned)power <= CONFIG_LCD_MAXPOWER);
-  gvdbg("power: %s powered: %s\n",
+  ginfo("power: %s powered: %s\n",
         ug_powerstring(power), ug_powerstring(priv->powered));
 
   /* Select and lock the device */
@@ -969,7 +929,7 @@ static int ug_setcontrast(struct lcd_dev_s *dev, unsigned int contrast)
 {
   struct ug_dev_s *priv = (struct ug_dev_s *)dev;
 
-  gvdbg("contrast: %d\n", contrast);
+  ginfo("contrast: %d\n", contrast);
   DEBUGASSERT(priv);
 
   if (contrast > 255)
@@ -1078,7 +1038,7 @@ FAR struct lcd_dev_s *ug_initialize(FAR struct spi_dev_s *spi, unsigned int devn
 
   FAR struct ug_dev_s  *priv = &g_ugdev;
 
-  gvdbg("Initializing\n");
+  ginfo("Initializing\n");
   DEBUGASSERT(spi && devno == 0);
 
   /* Save the reference to the SPI device */
@@ -1109,7 +1069,7 @@ FAR struct lcd_dev_s *ug_initialize(FAR struct spi_dev_s *spi, unsigned int devn
   (void)SPI_SEND(spi, 0x80);                      /* Data 1: Set 1 of 256 contrast steps */
   (void)SPI_SEND(spi, SSD1305_MAPCOL131);         /* Set segment re-map */
   (void)SPI_SEND(spi, SSD1305_DISPNORMAL);        /* Set normal display */
-/*(void)SPI_SEND(spi, SSD1305_DISPINVERTED);         Set inverse display */
+//(void)SPI_SEND(spi, SSD1305_DISPINVERTED);      /* Set inverse display */
   (void)SPI_SEND(spi, SSD1305_SETMUX);            /* Set multiplex ratio */
   (void)SPI_SEND(spi, 0x3f);                      /* Data 1: MUX ratio -1: 15-63 */
   (void)SPI_SEND(spi, SSD1305_SETOFFSET);         /* Set display offset */

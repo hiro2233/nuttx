@@ -45,25 +45,9 @@
 #include <nuttx/arch.h>
 
 #include "chip/switch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
-/****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/* Output debug info if stack dump is selected -- even if
- * debug is not selected.
- */
-
 #ifdef CONFIG_ARCH_STACKDUMP
-# undef  lldbg
-# define lldbg lowsyslog
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -73,19 +57,19 @@
  * Name: z80_registerdump
  ****************************************************************************/
 
-#ifdef CONFIG_ARCH_STACKDUMP
 static void z80_registerdump(void)
 {
-  if (current_regs)
+  if (g_current_regs)
     {
-      lldbg("AF: %04x  I: %04x\n",
-            current_regs[XCPT_AF], current_regs[XCPT_I]);
-      lldbg("BC: %04x DE: %04x HL: %04x\n",
-            current_regs[XCPT_BC], current_regs[XCPT_DE], current_regs[XCPT_HL]);
-      lldbg("IX: %04x IY: %04x\n",
-            current_regs[XCPT_IX], current_regs[XCPT_IY]);
-      lldbg("SP: %04x PC: %04x\n"
-            current_regs[XCPT_SP], current_regs[XCPT_PC]);
+      _alert("AF: %04x  I: %04x\n",
+            g_current_regs[XCPT_AF], g_current_regs[XCPT_I]);
+      _alert("BC: %04x DE: %04x HL: %04x\n",
+            g_current_regs[XCPT_BC], g_current_regs[XCPT_DE], g_current_regs[XCPT_HL]);
+      _alert("IX: %04x IY: %04x\n",
+            g_current_regs[XCPT_IX], g_current_regs[XCPT_IY]);
+      _alert("SP: %04x PC: %04x\n"
+            g_current_regs[XCPT_SP], g_current_regs[XCPT_PC]);
     }
 }
-#endif
+
+#endif /* CONFIG_ARCH_STACKDUMP */

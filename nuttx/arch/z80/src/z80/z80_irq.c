@@ -45,10 +45,6 @@
 #include "up_internal.h"
 
 /****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Data
  ****************************************************************************/
 
@@ -56,29 +52,21 @@
  * structure.  If is non-NULL only during interrupt processing.
  */
 
-volatile chipreg_t *current_regs;
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
+volatile chipreg_t *g_current_regs;
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: irqsave
+ * Name: up_irq_save
  *
  * Description:
  *   Disable all interrupts; return previous interrupt state
  *
  ****************************************************************************/
 
-irqstate_t irqsave(void) __naked
+irqstate_t up_irq_save(void) __naked
 {
   __asm
 	ld	a, i		; AF Parity bit holds interrupt state
@@ -90,14 +78,14 @@ irqstate_t irqsave(void) __naked
 }
 
 /****************************************************************************
- * Name: irqrestore
+ * Name: up_irq_restore
  *
  * Description:
  *   Restore previous interrupt state
  *
  ****************************************************************************/
 
-void irqrestore(irqstate_t flags) __naked
+void up_irq_restore(irqstate_t flags) __naked
 {
   __asm
 	di			; Assume disabled

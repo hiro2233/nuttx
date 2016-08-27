@@ -49,10 +49,10 @@
 #include <stdbool.h>
 #include <errno.h>
 
-#include <apps/ftpc.h>
+#include "netutils/ftpc.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Maximum size of one command line */

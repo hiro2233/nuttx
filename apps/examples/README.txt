@@ -48,6 +48,102 @@ examples/adc
     CONFIG_EXAMPLES_ADC_GROUPSIZE - The number of samples to read at once.
       Default: 4
 
+examples/adjoystick
+^^^^^^^^^^^^^^^^^^
+
+  This is a simple test of the analog joystick driver.  See details about
+  this driver in nuttx/include/nuttx/input/adjoystick.h.
+
+  Configuration Pre-requisites:
+
+    CONFIG_DISABLE_SIGNALS - Must *NOT* be selected
+    CONFIG_AJOYSTICK - The analog joystick driver
+
+  Example Configuration:
+    CONFIG_EXAMPLES_AJOYSTICK - Enabled the analog joystick example
+    CONFIG_EXAMPLES_AJOYSTICK_DEVNAME - Joystick device name.  Default
+      "/dev/adjoy0"
+    CONFIG_EXAMPLES_AJOYSTICK_SIGNO - Signal used to signal the test
+      application.  Default 13.
+
+examples/alarm
+^^^^^^^^^^^^^^
+  A simple example that tests the alarm IOCTLs of the RTC driver.
+
+  Dependencies:
+
+    CONFIG_RTC_DRIVER - RTC driver must be initialized to allow user space
+      access to the RTC.
+    CONFIG_RTC_ALARM - Support for RTC alarms must be enabled.
+
+  Configuration:
+
+    CONFIG_EXAMPLES_ALARM - Enable the RTC driver alarm test
+    CONFIG_EXAMPLES_ALARM_PROGNAME - If CONFIG_BUILD_KERNEL=y, then this is
+      the name of the program that will be use when the NSH ELF program is
+      installed.
+    CONFIG_EXAMPLES_ALARM_PRIORITY - Alarm daemon priority
+    CONFIG_EXAMPLES_ALARM_STACKSIZE - Alarm daemon stack size
+    CONFIG_EXAMPLES_ALARM_DEVPATH - RTC device path (/dev/rtc0)
+    ONFIG_EXAMPLES_ALARM_SIGNO - Alarm signal
+
+examples/bastest
+^^^^^^^^^^^^^^^^
+  This directory contains a small program that will mount a ROMFS file system
+  containing the BASIC test files extracted from the BAS 2.4 release.  See
+  examples/bastest/README.txt for licensing and usage information.
+
+    CONFIG_EXAMPLES_BASTEST_DEVMINOR - The minor device number of the ROMFS block
+      driver. For example, the N in /dev/ramN. Used for registering the RAM
+      block driver that will hold the ROMFS file system containing the BASIC
+      files to be tested.  Default: 0
+
+    CONFIG_EXAMPLES_BASTEST_DEVPATH - The path to the ROMFS block driver device.  This
+      must match EXAMPLES_BASTEST_DEVMINOR. Used for registering the RAM block driver
+      that will hold the ROMFS file system containing the BASIC files to be
+      tested.  Default: "/dev/ram0"
+
+examples/bridge
+^^^^^^^^^^^^^^^
+
+  A simple test of a system with multiple networks.  It simply echoes all UDP
+  packets received on network 1 and network 2 to network 2 and network 1,
+  respectively.  Interface 1 and interface may or may not lie on the same
+  network.
+
+    CONFIG_EXAMPLES_BRIDGE - Enables the simple UDP bridge test
+
+  There identical configurations for each of the two networks, NETn where n
+  refers to the network being configured n={1,2}.  Let 'm' refer to the
+  other network.
+
+    CONFIG_EXAMPLES_BRIDGE_NETn_IFNAME - The register name of the network n
+      device.  Must match the previously registered driver name and must
+      not be the same as other network device name,
+      CONFIG_EXAMPLES_BRIDGE_NETm_IFNAME
+    CONFIG_EXAMPLES_BRIDGE_NETn_RECVPORT - Network n listen port number
+    CONFIG_EXAMPLES_BRIDGE_NETn_SNDPORT - Network 2 send port number
+    CONFIG_EXAMPLES_BRIDGE_NETn_IOBUFIZE - Size of the network n UDP
+      send/receive I/O buffer
+    CONFIG_EXAMPLES_BRIDGE_NETn_STACKSIZE - Network n daemon stacksize
+    CONFIG_EXAMPLES_BRIDGE_NETn_PRIORITY - Network n daemon task priority
+
+  If used as a NSH add-on, then it is assumed that initialization of both
+  networks was performed externally prior to the time that this test was
+  started.  Otherwise, the following options are available:
+
+    CONFIG_EXAMPLES_BRIDGE_NETn_NOMAC - Select of the the network n hardware
+      does not have a built-in MAC address.  If selected, the MAC address
+      provided by CONFIG_EXAMPLES_BRIDGE_NETn_MACADDR will be used to assign
+      the MAC address to the network n device.
+    CONFIG_EXAMPLES_BRIDGE_NETn_DHCPC - Use DHCP Client to get the network n
+      IP address.
+    CONFIG_EXAMPLES_BRIDGE_NETn_IPADDR -- If CONFIG_EXAMPLES_BRIDGE_NETn_DHCPC
+      is not selected, then this is the fixed IP address for network n.
+    CONFIG_EXAMPLES_BRIDGE_NETn_DRIPADDR - Netweork n default router IP
+      address (Gateway)
+    CONFIG_EXAMPLES_BRIDGE_NETn_NETMASK - Network n mask.
+
 examples/buttons
 ^^^^^^^^^^^^^^^^
 
@@ -75,7 +171,8 @@ examples/buttons
   NOTE: This test exercises internal button driver interfaces.  As such, it
   relies on internal OS interfaces that are not normally available to a
   user-space program.  As a result, this example cannot be used if a
-  NuttX is built as a protected, supervisor kernel (CONFIG_NUTTX_KERNEL).
+  NuttX is built as a protected, supervisor kernel (CONFIG_BUILD_PROTECTED
+  or CONFIG_BUILD_KERNEL).
 
 examples/can
 ^^^^^^^^^^^^
@@ -111,10 +208,32 @@ examples/can
    CONFIG_EXAMPLES_CAN_READONLY - Only receive messages
    CONFIG_EXAMPLES_CAN_WRITEONLY - Only send messages
 
+examples/canard
+^^^^^^^^^^^^^^^
+
+  Example application for canutils/libcarnard.
+
 examples/cc3000
 ^^^^^^^^^^^^^^^
 
   This is a test for the TI CC3000 wireless networking module.
+
+examples/chat
+^^^^^^^^^^^^^
+
+  Demonstrates AT chat functionality over a TTY device. This is useful with AT
+  modems, for example, to establish a pppd connection (see the related pppd
+  example). Moreover, some AT modems - such as ones made by u-blox - have an
+  internal TCP/IP stack, often with an implementation of TLS/SSL. In such cases
+  the chat utility can be used to configure the internal TCP/IP stack, establish
+  socket connections, set up security (e.g., download base64-encoded
+  certificates to the modem), and perform data exchange through sockets over the
+  TTY device.
+
+  Useful configuration parameters:
+    CONFIG_EXAMPLES_CHAT_PRESET[0..3]    - preset chat scripts
+    CONFIG_EXAMPLES_CHAT_TTY_DEVNODE     - TTY device node name
+    CONFIG_EXAMPLES_CHAT_TIMEOUT_SECONDS - default receive timeout
 
 examples/configdata
 ^^^^^^^^^^^^^^^^^^^
@@ -134,7 +253,7 @@ examples/cxxtest
   This is a test of the C++ standard library.  At present a port of the uClibc++
   C++ library is available.  Due to licensing issues, the uClibc++ C++ library
   is not included in the NuttX source tree by default, but must be installed
-  (see misc/uClibc++/README.txt for installation).
+  (see the README.txt file in the uClibc++ download package for installation).
 
   The uClibc++ test includes simple test of:
 
@@ -182,7 +301,7 @@ examples/dhcpd
                                      (as well as various other UDP-related
                                      configuration settings)
     CONFIG_NET_BROADCAST=y         - UDP broadcast support is needed.
-    CONFIG_NETUTILS_UIPLIB=y       - The UIP library is needed
+    CONFIG_NETUTILS_NETLIB=y       - The networking library is needed
 
     CONFIG_EXAMPLES_DHCPD_NOMAC     - (May be defined to use software assigned MAC)
     CONFIG_EXAMPLES_DHCPD_IPADDR    - Target IP address
@@ -214,6 +333,24 @@ examples/discover
     CONFIG_EXAMPLES_DISCOVER_IPADDR - Target IP address
     CONFIG_EXAMPLES_DISCOVER_DRIPADDR - Router IP address
     CONFIG_EXAMPLES_DISCOVER_NETMASK - Network Mask
+
+examples/adjoystick
+^^^^^^^^^^^^^^^^^^
+
+  This is a simple test of the discrete joystick driver.  See details about
+  this driver in nuttx/include/nuttx/input/djoystick.h.
+
+  Configuration Pre-requisites:
+
+    CONFIG_DISABLE_SIGNALS - Must *NOT* be selected
+    CONFIG_DJOYSTICK - The discrete joystick driver
+
+  Example Configuration:
+    CONFIG_EXAMPLES_DJOYSTICK - Enabled the discrete joystick example
+    CONFIG_EXAMPLES_DJOYSTICK_DEVNAME - Joystick device name.  Default
+      "/dev/djoy0"
+    CONFIG_EXAMPLES_DJOYSTICK_SIGNO - Signal used to signal the test
+      application.  Default 13.
 
 examples/elf
 ^^^^^^^^^^^^
@@ -254,8 +391,8 @@ examples/elf
 
   3. This example also requires genromfs.  genromfs can be build as part of the
      nuttx toolchain.  Or can built from the genromfs sources that can be found
-     at misc/tools/genromfs-0.5.2.tar.gz.  In any event, the PATH variable must
-     include the path to the genromfs executable.
+     in the NuttX tools repository (genromfs-0.5.2.tar.gz).  In any event, the
+     PATH variable must include the path to the genromfs executable.
 
   4. ELF size:  The ELF files in this example are, be default, quite large
      because they include a lot of "build garbage".  You can greatly reduce the
@@ -291,8 +428,27 @@ examples/flash_test
     * CONFIG_MTD_SMART=y - SMART block driver support
     * CONFIG_NSH_BUILTIN_APPS=y - This example can only be built as an NSH
       command
-    * CONFIG_NUTTX_KERNEL=n - This test uses internal OS interfaces and so
-      is not available in the NUTTX kernel build
+    * CONFIG_BUILD_PROTECTED=n and CONFIG_BUILD_KERNEL=n- This test uses
+      internal OS interfaces and so is not available in the NUTTX kernel
+      builds
+
+examples/fstest
+^^^^^^^^^^^^^^
+
+  This is a generic file system test that derives from examples/nxffs.  It
+  was created to test the tmpfs file system, but should work with any file
+  system provided that all initialization has already been performed prior
+  to starting the test.
+
+  * CONFIG_EXAMPLES_FSTEST: Enable the file system example
+  * CONFIG_EXAMPLES_FSTEST_MAXNAME: Determines the maximum size of names used
+    in the filesystem
+  * CONFIG_EXAMPLES_FSTEST_MAXFILE: Determines the maximum size of a file
+  * CONFIG_EXAMPLES_FSTEST_MAXIO: Max I/O, default 347.
+  * CONFIG_EXAMPLES_FSTEST_MAXOPEN: Max open files.
+  * CONFIG_EXAMPLES_FSTEST_MOUNTPT: Path where the file system is mounted.
+  * CONFIG_EXAMPLES_FSTEST_NLOOPS: Number of test loops. default 100
+  * CONFIG_EXAMPLES_FSTEST_VERBOSE: Verbose output
 
 examples/ftpc
 ^^^^^^^^^^^^^
@@ -333,8 +489,8 @@ examples/ftpc
   You may also want to define the following in your configuration file.
   Otherwise, you will have not feeback about what is going on:
 
-    CONFIG_DEBUG=y
-    CONFIG_DEBUG_VERBOSE=y
+    CONFIG_DEBUG_FEATURES=y
+    CONFIG_DEBUG_INFO=y
     CONFIG_DEBUG_FTPC=y
 
 examples/ftpd
@@ -394,8 +550,13 @@ examples/ftpd
   The following netutils libraries should be enabled in your defconfig
   file:
 
-    CONFIG_NETUTILS_UIPLIB=y
+    CONFIG_NETUTILS_NETLIB=y
     CONFIG_NETUTILS_TELNED=y
+
+examples/gpio
+^^^^^^^^^^^^
+
+  A simple test/example of the NuttX GPIO driver.
 
 examples/hello
 ^^^^^^^^^^^^^^
@@ -489,11 +650,11 @@ examples/igmp
       Network mask
   * CONFIG_EXAMPLES_IGMP_GRPADDR
       Multicast group address
-  * CONFIG_EXAMPLES_UIPLIB
-      The UIP library is needed
+  * CONFIG_EXAMPLES_NETLIB
+      The networking library is needed
 
-examples/adc
-^^^^^^^^^^^^
+examples/i2cchar
+^^^^^^^^^^^^^^^^
 
   A mindlessly simple test of an I2C driver.  It reads an write garbage data to the
   I2C transmitter and/or received as fast possible.
@@ -582,12 +743,114 @@ examples/lcdrw
   NOTE: This test exercises internal lcd driver interfaces.  As such, it
   relies on internal OS interfaces that are not normally available to a
   user-space program.  As a result, this example cannot be used if a
-  NuttX is built as a protected, supervisor kernel (CONFIG_NUTTX_KERNEL).
+  NuttX is built as a protected, supervisor kernel (CONFIG_BUILD_PROTECTED
+  or CONFIG_BUILD_KERNEL).
+
+examples/leds
+^^^^^^^^^^^^
+  This is a simple test of the board LED driver at nuttx/drivers/leds/userled_*.c.
+
+examples/ltdc
+^^^^^^^^^^^^^
+
+  STM32 LTDC framebuffer example.  Depends on:
+
+  * CONFIG_STM32_LTDC
+
+  Enabled with:
+
+  * CONFIG_EXAMPLES_LTDC
+
+examples/media
+^^^^^^^^^^^^^^
+
+  The media test simply writes values onto the media hidden behind a
+  character driver and verifies that the media can be successfully written
+  and read.  This low level test is useful in the early phases of the
+  bringup of a new block or mtd driver because it avoids the complexity of
+  a file system.
+
+  This test uses a character driver and cannot directly access block or mtd
+  drivers.  This test is suitable for use EEPROM character drivers (see
+  nuttx/drivers/eeprom), or with block drivers wrapped as character drivers
+  (see nuttx/drivers/bch)
+
+    int ret = bchdev_register(<path-to-block-dirver>,
+                              <path-to-character-driver>, false);
+
+  MTD drivers need an additional wrapper layer, the FTL wrapper must first
+  be used to convert the MTD driver to a block device:
+
+    int ret = ftl_initialize(<N>, mtd);
+    ret = bchdev_register(/dev/mtdblock<N>, <path-to-character-driver>,
+                          false);
 
 examples/mm
 ^^^^^^^^^^^
 
   This is a simple test of the memory manager.
+
+examples/module
+^^^^^^^^^^^^^^
+
+  This example builds a small loadable module test case.  This includes on
+  character driver under examples/module/drivers.  This driver is  built using
+  the relocatable ELF format and installed in a ROMFS file system.  At run time,
+  the driver module is loaded and exercises.  Requires CONFIG_MODULE.
+  Other configuration options:
+
+    CONFIG_EXAMPLES_ELF_DEVMINOR - The minor device number of the ROMFS block
+      driver. For example, the N in /dev/ramN. Used for registering the RAM
+      block driver that will hold the ROMFS file system containing the ELF
+      executables to be tested.  Default: 0
+
+    CONFIG_EXAMPLES_ELF_DEVPATH - The path to the ROMFS block driver device.  This
+      must match EXAMPLES_ELF_DEVMINOR. Used for registering the RAM block driver
+      that will hold the ROMFS file system containing the ELF executables to be
+      tested.  Default: "/dev/ram0"
+
+  NOTES:
+
+  1. CFLAGS should be provided in CELFFLAGS.  RAM and FLASH memory regions
+     may require long allcs.  For ARM, this might be:
+
+       CELFFLAGS = $(CFLAGS) -mlong-calls
+
+     Similarly for C++ flags which must be provided in CXXELFFLAGS.
+
+  2. Your top-level nuttx/Make.defs file must also include an approproate definition,
+     LDELFFLAGS, to generate a relocatable ELF object.  With GNU LD, this should
+     include '-r' and '-e <entry point>'.
+
+       LDELFFLAGS = -r -e module_initialize
+
+     If you use GCC to link, you make also need to include '-nostdlib' or
+     '-nostartfiles' and '-nodefaultlibs'.
+
+  3. This example also requires genromfs.  genromfs can be build as part of the
+     nuttx toolchain.  Or can built from the genromfs sources that can be found
+     in the NuttX tools repository (genromfs-0.5.2.tar.gz).  In any event, the
+     PATH variable must include the path to the genromfs executable.
+
+  4. ELF size:  The ELF files in this example are, be default, quite large
+     because they include a lot of "build garbage".  You can greatly reduce the
+     size of the ELF binaries are using the 'objcopy --strip-unneeded' command to
+     remove un-necessary information from the ELF files.
+
+  5. Simulator.  You cannot use this example with the the NuttX simulator on
+     Cygwin.  That is because the Cygwin GCC does not generate ELF file but
+     rather some Windows-native binary format.
+
+     If you really want to do this, you can create a NuttX x86 buildroot toolchain
+     and use that be build the ELF executables for the ROMFS file system.
+
+  6. Linker scripts.  You might also want to use a linker scripts to combine
+     sections better.  An example linker script is at nuttx/sched/module/gnu-elf.ld.
+     That example might have to be tuned for your particular linker output to
+     position additional sections correctly.  The GNU LD LDELFFLAGS then might
+     be:
+
+       LDELFFLAGS = -r -e module_initialize -T$(TOPDIR)/sched/module/gnu-elf.ld
 
 examples/modbus
 ^^^^^^^^^^^^^^^
@@ -658,6 +921,55 @@ examples/mtdpart
   * CONFIG_EXAMPLES_MTDPART_NEBLOCKS - This value gives the nubmer of erase
     blocks in MTD RAM device.
 
+examples/mtdrwb
+^^^^^^^^^^^^^^^^
+
+  This examples provides a simple test of MTD Read-Ahead/Write buffering
+  logic.
+
+  * CONFIG_EXAMPLES_MTDRWB - Enables the MTD R/W buffering test example
+  * CONFIG_EXAMPLES_MTDRWB_ARCHINIT - The default is to use the RAM MTD
+    device at drivers/mtd/rammtd.c. But an architecture-specific MTD driver
+    can be used instead by defining CONFIG_EXAMPLES_MTDRWB_ARCHINIT.  In
+    this case, the initialization logic will call mtdrwb_archinitialize()
+    to obtain the MTD driver instance.
+
+  When CONFIG_EXAMPLES_MTDRWB_ARCHINIT is not defined, this test will use
+  the RAM MTD device at drivers/mtd/rammtd.c to simulate FLASH. The size of
+  the allocated RAM drive will be: CONFIG_EXMPLES_RAMMTD_ERASESIZE *
+  CONFIG_EXAMPLES_MTDRWB_NEBLOCKS
+
+  * CONFIG_EXAMPLES_MTDRWB_ERASESIZE - This value gives the size of one
+    erase block in the MTD RAM device. This must exactly match the default
+    configuration in drivers/mtd/rammtd.c!
+  * CONFIG_EXAMPLES_MTDRWB_NEBLOCKS - This value gives the nubmer of erase
+    blocks in MTD RAM device.
+
+examples/netpkt
+^^^^^^^^^^^^^^^
+
+  A test of AF_PACKET, "raw" sockets.  Contributed by Lazlo Sitzer.
+
+examples/netloop
+^^^^^^^^^^^^^^^^
+
+  This is a simple test of the netwok loopback device.  examples/nettest can
+  also be configured to provide (better) test of local loopback transfers.
+  This version derives from examples/poll and is focused on testing poll()
+  with loopback devices.
+
+    CONFIG_EXAMPLES_NETLOOP=y - Enables the nettest example
+
+  Dependencies:
+
+    CONFIG_NSH_BUILTIN_APPS=n     - Does NOT work as an NSH built-in command
+    CONFIG_NET_LOOPBACK           - Requires local loopback supprt
+    CONFIG_NET_TCP                - Requires TCP support with the following:
+    CONFIG_NET_TCPBACKLOG
+    CONFIG_NET_TCP_READAHEAD
+    CONFIG_NET_TCP_WRITE_BUFFERS
+    CONFIG_NET_IPv4               - Currently supports only IPv4
+
 examples/nettest
 ^^^^^^^^^^^^^^^^
 
@@ -665,7 +977,7 @@ examples/nettest
   functionality in a TCP/IP connection.
 
     CONFIG_EXAMPLES_NETTEST=y - Enables the nettest example
-    CONFIG_EXAMPLES_UIPLIB=y  - The UIP livrary in needed.
+    CONFIG_EXAMPLES_NETLIB=y  - The networking library in needed.
 
   See also examples/tcpecho
 
@@ -708,9 +1020,9 @@ examples/nsh
 
   And if networking is included:
 
-    CONFIG_NETUTILS_UIPLIB=y
+    CONFIG_NETUTILS_NETLIB=y
     CONFIG_NETUTILS_DHCPC=y
-    CONFIG_NETUTILS_DNSCLIENT=y
+    CONFIG_NETDB_DNSCLIENT=y
     CONFIG_NETUTILS_TFTPC=y
     CONFIG_NETUTILS_WEBCLIENT=y
 
@@ -773,10 +1085,14 @@ examples/nx
       function with a prototype like:
 
       #ifdef CONFIG_NX_LCDDRIVER
-      FAR struct lcd_dev_s *up_nxdrvinit(unsigned int devno);
+      FAR struct lcd_dev_s *board_graphics_setup(unsigned int devno);
       #else
-      FAR struct fb_vtable_s *up_nxdrvinit(unsigned int devno);
+      FAR struct fb_vtable_s *board_graphics_setup(unsigned int devno);
       #endif
+
+      and must also define: CONFIG_LIB_BOARDCTL=y and
+      CONFIG_BOARDCTL_GRAPHICS=y so that the boardctl() interface
+      will be available in order to access this function.
 
   This test can be performed with either the single-user version of
   NX or with the multiple user version of NX selected with CONFIG_NX_MULTIUSER.
@@ -800,17 +1116,17 @@ examples/nx
     CONFIG_DISABLE_PTHREAD=n
     CONFIG_NX_BLOCKING=y
 
-examples/nxconsole
+examples/nxterm
 ^^^^^^^^^^^^^^^^^^
 
   This directory contains yet another version of the NuttShell (NSH).  This
-  version uses the NX console device defined in include/nuttx/nx/nxconsole.h
+  version uses the NX console device defined in include/nuttx/nx/nxterm.h
   for output.  the result is that the NSH input still come from the standard
   console input (probably a serial console).  But the text output will go to
   an NX winbdow.  Prerequisite configuration settings for this test include:
 
     CONFIG_NX=y              -- NX graphics must be enabled
-    CONFIG_NXCONSOLE=y       -- The NX console driver must be built
+    CONFIG_NXTERM=y       -- The NX console driver must be built
     CONFIG_NX_MULTIUSER=y    -- NX multi-user support must be enabled.
     CONFIG_DISABLE_MQUEUE=n  -- Message queue support must be available.
     CONFIG_DISABLE_SIGNALS=n -- Signals are needed
@@ -846,20 +1162,24 @@ examples/nxconsole
       function with a prototype like:
 
       #ifdef CONFIG_NX_LCDDRIVER
-      FAR struct lcd_dev_s *up_nxdrvinit(unsigned int devno);
+      FAR struct lcd_dev_s *board_graphics_setup(unsigned int devno);
       #else
-      FAR struct fb_vtable_s *up_nxdrvinit(unsigned int devno);
+      FAR struct fb_vtable_s *board_graphics_setup(unsigned int devno);
       #endif
 
+      and must also define: CONFIG_LIB_BOARDCTL=y and
+      CONFIG_BOARDCTL_GRAPHICS=y so that the boardctl() interface
+      will be available in order to access this function.
+
     CONFIG_EXAMPLES_NXCON_MINOR -- The NX console device minor number.
-      Default is 0 corresponding to /dev/nxcon0
+      Default is 0 corresponding to /dev/nxterm0
     CONFIG_EXAMPLES_NXCON_DEVNAME -- The quoated, full path to the
       NX console device corresponding to CONFIG_EXAMPLES_NXCON_MINOR.
-      Default: "/dev/nxcon0"
-    CONFIG_EXAMPLES_NXCONSOLE_PRIO - Priority of the NxConsole task.
+      Default: "/dev/nxterm0"
+    CONFIG_EXAMPLES_NXTERM_PRIO - Priority of the NxTerm task.
       Default: SCHED_PRIORITY_DEFAULT
-    CONFIG_EXAMPLES_NXCONSOLE_STACKSIZE - Stack size allocated for the
-      NxConsole task. Default: 2048
+    CONFIG_EXAMPLES_NXTERM_STACKSIZE - Stack size allocated for the
+      NxTerm task. Default: 2048
 
   The following configuration settings determine how to set up the NX
   server (CONFIG_NX_MULTIUSER):
@@ -918,10 +1238,14 @@ examplex/nxhello
       function with a prototype like:
 
       #ifdef CONFIG_NX_LCDDRIVER
-      FAR struct lcd_dev_s *up_nxdrvinit(unsigned int devno);
+      FAR struct lcd_dev_s *board_graphics_setup(unsigned int devno);
       #else
-      FAR struct fb_vtable_s *up_nxdrvinit(unsigned int devno);
+      FAR struct fb_vtable_s *board_graphics_setup(unsigned int devno);
       #endif
+
+      and must also define: CONFIG_LIB_BOARDCTL=y and
+      CONFIG_BOARDCTL_GRAPHICS=y so that the boardctl() interface
+      will be available in order to access this function.
 
 examples/nximage
 ^^^^^^^^^^^^^^^^
@@ -954,10 +1278,14 @@ examples/nximage
       function with a prototype like:
 
       #ifdef CONFIG_NX_LCDDRIVER
-      FAR struct lcd_dev_s *up_nxdrvinit(unsigned int devno);
+      FAR struct lcd_dev_s *board_graphics_setup(unsigned int devno);
       #else
-      FAR struct fb_vtable_s *up_nxdrvinit(unsigned int devno);
+      FAR struct fb_vtable_s *board_graphics_setup(unsigned int devno);
       #endif
+
+      and must also define: CONFIG_LIB_BOARDCTL=y and
+      CONFIG_BOARDCTL_GRAPHICS=y so that the boardctl() interface
+      will be available in order to access this function.
 
     How was that run-length encoded image produced?
 
@@ -1012,10 +1340,14 @@ examplex/nxlines
       function with a prototype like:
 
       #ifdef CONFIG_NX_LCDDRIVER
-      FAR struct lcd_dev_s *up_nxdrvinit(unsigned int devno);
+      FAR struct lcd_dev_s *board_graphics_setup(unsigned int devno);
       #else
-      FAR struct fb_vtable_s *up_nxdrvinit(unsigned int devno);
+      FAR struct fb_vtable_s *board_graphics_setup(unsigned int devno);
       #endif
+
+      and must also define: CONFIG_LIB_BOARDCTL=y and
+      CONFIG_BOARDCTL_GRAPHICS=y so that the boardctl() interface
+      will be available in order to access this function.
 
     CONFIG_NSH_BUILTIN_APPS - Build the NX lines examples as an NSH built-in
       function.
@@ -1067,10 +1399,14 @@ examples/nxtext
       function with a prototype like:
 
       #ifdef CONFIG_NX_LCDDRIVER
-      FAR struct lcd_dev_s *up_nxdrvinit(unsigned int devno);
+      FAR struct lcd_dev_s *board_graphics_setup(unsigned int devno);
       #else
-      FAR struct fb_vtable_s *up_nxdrvinit(unsigned int devno);
+      FAR struct fb_vtable_s *board_graphics_setup(unsigned int devno);
       #endif
+
+      and must also define: CONFIG_LIB_BOARDCTL=y and
+      CONFIG_BOARDCTL_GRAPHICS=y so that the boardctl() interface
+      will be available in order to access this function.
 
     CONFIG_EXAMPLES_NXTEXT_BMCACHE - The maximum number of characters that
       can be put in the background window.  Default is 128.
@@ -1104,6 +1440,11 @@ examples/null
 
   This is the do nothing application.  It is only used for bringing
   up new NuttX architectures in the most minimal of environments.
+
+examples/oneshot
+^^^^^^^^^^^^^^^^
+
+  Simple test of a oneshot driver.
 
 examples/ostest
 ^^^^^^^^^^^^^^^
@@ -1150,10 +1491,15 @@ examples/pashello
   The correct install location for the NuttX examples and build files is
   apps/interpreters.
 
+examples/pca9635
+^^^^^^^^^^^^^^^^
+
+  A simple test of the PCA9635PW LED driver.
+
 examples/pipe
 ^^^^^^^^^^^^^
 
-  A test of the mkfifo() and pipe() APIs.
+  A test of the mkfifo() and pipe() APIs.  Requires CONFIG_PIPES
 
  * CONFIG_EXAMPLES_PIPE_STACKSIZE
      Sets the size of the stack to use when creating the child tasks.
@@ -1213,9 +1559,9 @@ examples/poll
 
   If networking is enabled, applications using this example will need to
   provide the following definition in the defconfig file to enable the
-  UIP library:
+  networking library:
 
-    CONFIG_NETUTILS_UIPLIB=y
+    CONFIG_NETUTILS_NETLIB=y
 
 examples/posix_spawn
 ^^^^^^^^^^^^^^^^^^^^
@@ -1268,8 +1614,8 @@ examples/posix_spawn
 
   3. This example also requires genromfs.  genromfs can be build as part of the
      nuttx toolchain.  Or can built from the genromfs sources that can be found
-     at misc/tools/genromfs-0.5.2.tar.gz.  In any event, the PATH variable must
-     include the path to the genromfs executable.
+     in the NuttX tools repository (genromfs-0.5.2.tar.gz).  In any event, the
+     PATH variable must include the path to the genromfs executable.
 
   4. ELF size:  The ELF files in this example are, be default, quite large
      because they include a lot of "build garbage".  You can greatly reduce the
@@ -1290,6 +1636,11 @@ examples/posix_spawn
      be:
 
        LDELFFLAGS = -r -e main -T$(TOPDIR)/binfmt/libelf/gnu-elf.ld
+
+examples/pty_test
+^^^^^^^^^^^^^^^^^
+
+  A test of NuttX pseudo-terminals.  Provided by Alan Carvalho de Assis.
 
 examples/pwm
 ^^^^^^^^^^^^
@@ -1382,7 +1733,19 @@ examples/relays
   NOTE: This test exercises internal relay driver interfaces.  As such, it
   relies on internal OS interfaces that are not normally available to a
   user-space program.  As a result, this example cannot be used if a
-  NuttX is built as a protected, supervisor kernel (CONFIG_NUTTX_KERNEL).
+  NuttX is built as a protected, supervisor kernel (CONFIG_BUILD_PROTECTED
+  or CONFIG_BUILD_KERNEL).
+
+examples/rfid_readuid
+^^^^^^^^^^^^^^^^^^^^^
+
+  RFID READUID example
+
+examples/rgbled
+^^^^^^^^^^^^^^^
+
+  This example demonstrates the use of the RGB led driver to drive an RGB LED
+  with PWM outputs so that all color characteristcs of RGB LED can be controlled.
 
 examples/rgmp
 ^^^^^^^^^^^^^
@@ -1446,7 +1809,7 @@ examples/sendmail
   Applications using this example will need to enble the following
   netutils libraries in their defconfig file:
 
-    CONFIG_NETUTILS_UIPLIB=y
+    CONFIG_NETUTILS_NETLIB=y
     CONFIG_NETUTILS_SMTP=y
 
 examples/serialblaster
@@ -1482,7 +1845,7 @@ examples/slcd
 examples/smart
 ^^^^^^^^^^^^^^
 
-  This is a test of the SMART file systemt that derives from
+  This is a test of the SMART file system that derives from
   examples/nxffs.
 
   * CONFIG_EXAMPLES_SMART: - Enable the SMART file system example
@@ -1505,8 +1868,6 @@ examples/smart
   * CONFIG_EXAMPLES_SMART_NLOOPS: Number of test loops. default 100
   * CONFIG_EXAMPLES_SMART_VERBOSE: Verbose output
 
-endif
-
 examples/smart_test
 ^^^^^^^^^^^^^^^^^^^
 
@@ -1519,6 +1880,20 @@ examples/smart_test
 
     * CONFIG_NSH_BUILTIN_APPS=y: This test can be built only as an NSH
       command
+
+examples/smp
+^^^^^^^^^^^^
+
+  This is a simple test for SMP functionality.  It is basically just the
+  pthread barrier test with some custom instrumentation.
+
+examples/system
+^^^^^^^^^^^^^^^
+
+  This is a simple test of the system() command.  The test simply executes this
+  system command:
+
+    ret = system("ls -Rl /");
 
 examples/tcpecho
 ^^^^^^^^^^^^^^^^
@@ -1547,7 +1922,7 @@ examples/telnetd
   tiny shell and also supports telnetd.
 
     CONFIG_EXAMPLES_TELNETD - Enable the Telnetd example
-    CONFIG_NETUTILS_UIPLIB, CONFIG_NETUTILS_TELNED - Enable netutils
+    CONFIG_NETUTILS_NETLIB, CONFIG_NETUTILS_TELNED - Enable netutils
       libraries needed by the Telnetd example.
     CONFIG_EXAMPLES_TELNETD_DAEMONPRIO - Priority of the Telnet daemon.
       Default: SCHED_PRIORITY_DEFAULT
@@ -1585,7 +1960,7 @@ examples/thttpd
   Applications using this example will need to enable the following
   netutils libraries in the defconfig file:
 
-    CONFIG_NETUTILS_UIPLIB=y
+    CONFIG_NETUTILS_NETLIB=y
     CONFIG_NETUTILS_THTTPD=y
 
 examples/tiff
@@ -1612,6 +1987,31 @@ examples/tiff
 
     CONFIG_EXAMPLES_TIFF=y
     CONFIG_GRAPHICS_TIFF=y
+
+examples/timer
+^^^^^^^^^^^^^^
+
+  This is a simple test of the timer driver (see include/nuttx/timers/timer.h).
+
+  Dependencies:
+    CONFIG_TIMER - The timer driver must be selected
+
+  Example configuration:
+
+    CONFIG_EXAMPLE_TIMER_DEVNAME - This is the name of the timer device that
+      will be tested.  Default: "/dev/timer0"
+    CONFIG_EXAMPLE_TIMER_INTERVAL - This is the timer interval in
+      microseconds.  Default: 1000000
+    CONFIG_EXAMPLE_TIMER_DELAY - This is the delay between timer samples in
+      microseconds.  Default: 10000
+    CONFIG_EXAMPLES_TIMER_APPNAME - This is the name of the built-in
+      application:  Default:  "timer"
+    CONFIG_EXAMPLES_TIMER_STACKSIZE - This is the stack size allocated when
+      the timer task runs.  Default: 2048
+    CONFIG_EXAMPLES_TIMER_PRIORITY - This is the priority of the timer task:
+      Default: 100
+    CONFIG_EXAMPLES_TIMER_PROGNAME - This is the name of the program that
+      will be use when the NSH ELF program is installed.  Default: "timer"
 
 examples/touchscreen
 ^^^^^^^^^^^^^^^^^^^^
@@ -1647,12 +2047,19 @@ examples/touchscreen
 
     CONFIG_EXAMPLES_TOUCHSREEN=y
 
-  The board-specific logic must provide the following interfaces that will
-  be called by the example in order to initialize and uninitialize the
-  touchscreen hardware:
+  This example code will call boardctl() to setup the touchscreen driver
+  for texting.  The implementation of boardctl() will require that board-
+  specific logic  provide the following interfaces that will be called by
+  the boardctl() in order to initialize and uninitialize the touchscreen hardware:
 
-    int arch_tcinitialize(int minor);
-    int arch_tcuninitialize(void);
+    int board_tsc_setup(int minor);
+    void board_tsc_teardown(void);
+
+examples/uavcan
+^^^^^^^^^^^^^^^
+
+  Illustrates use of canutils/uavcan.  Contributed by Paul Alexander
+  Patience.
 
 examples/udp
 ^^^^^^^^^^^^
@@ -1663,53 +2070,39 @@ examples/udp
   Applications using this example will need to enabled the following
   netutils libraries in the defconfig file:
 
-    CONFIG_NETUTILS_UIPLIB=y
+    CONFIG_NETUTILS_NETLIB=y
 
-examples/uip
-^^^^^^^^^^^^
+examples/udpblaster
+^^^^^^^^^^^^^^^^^^^
 
-  This is a port of uIP tiny webserver example application.  Settings
-  specific to this example include:
+  This is a simple network test for stressing UDP transfers.  It simply
+  sends UDP packets from both the host and the target and the highest ratei
+  possible.
 
-    CONFIG_EXAMPLES_UIP_NOMAC     - (May be defined to use software assigned MAC)
-    CONFIG_EXAMPLES_UIP_IPADDR    - Target IP address
-    CONFIG_EXAMPLES_UIP_DRIPADDR  - Default router IP addess
-    CONFIG_EXAMPLES_UIP_NETMASK   - Network mask
-    CONFIG_EXAMPLES_UIP_DHCPC     - Select to get IP address via DHCP
 
-  If you use DHCPC, then some special configuration network options are
-  required.  These include:
+examples/unionfs
+^^^^^^^^^^^^^^^^
 
-    CONFIG_NET=y                 - Of course
-    CONFIG_NSOCKET_DESCRIPTORS   - And, of course, you must allocate some
-                                   socket descriptors.
-    CONFIG_NET_UDP=y             - UDP support is required for DHCP
-                                   (as well as various other UDP-related
-                                   configuration settings).
-    CONFIG_NET_BROADCAST=y       - UDP broadcast support is needed.
-    CONFIG_NET_BUFSIZE=650       - Per RFC2131 (p. 9), the DHCP client must be
-    (or larger)                    prepared to receive DHCP messages of up to
-                                   576 bytes (excluding Ethernet, IP, or UDP
-                                   headers and FCS).
+  This is at trivial test of the Union File System.  See
+  nuttx/fs/unionfs/README.txt.  Dependencies:
 
-  Other configuration items apply also to the selected webserver net utility.
-  Additional relevant settings for the uIP webserver net utility are:
+    CONFIG_DISABLE_MOUNTPOINT          - Mountpoint support must not be disabled
+    CONFIG_NFILE_DESCRIPTORS < 4       - Some file descriptors must be allocated
+    CONFIG_FS_ROMFS                    - ROMFS support is required
+    CONFIG_FS_UNIONFS                  - Union File System support is required
 
-    CONFIG_NETUTILS_HTTPDSTACKSIZE
-    CONFIG_NETUTILS_HTTPDFILESTATS
-    CONFIG_NETUTILS_HTTPDNETSTATS
+  Configuration options.  Use the defaults if you are unsure of what you are doing:
 
-  Applications using this example will need to enable the following
-  netutils libraries in their defconfig file:
+    CONFIG_EXAMPLES_UNIONFS            - Enables the example
+    CONFIG_EXAMPLES_UNIONFS_MOUNTPT    - Mountpoint path for the Union File System
+    CONFIG_EXAMPLES_UNIONFS_TMPA       - Temporary mount point for file system 1
+    CONFIG_EXAMPLES_UNIONFS_TMPB       - Temporary mount point for file system 2
+    CONFIG_EXAMPLES_UNIONFS_RAMDEVNO_A - ROMFS file system 1 RAM disk device number
+    CONFIG_EXAMPLES_UNIONFS_RAMDEVNO_B - ROMFS file system 2 RAM disk device number
+    CONFIG_EXAMPLES_UNIONFS_SECTORSIZE - ROM disk sector size.
 
-    CONFIG_NETUTILS_UIPLIB=y
-    CONFIG_NETUTILS_DHCPC=y
-    CONFIG_NETUTILS_DNSCLIENT=y
-    CONFIG_NETUTILS_WEBSERVER=y
-
-  NOTE:  This example does depend on the perl script at
-  nuttx/tools/mkfsdata.pl.  You must have perl installed on your
-  development system at /usr/bin/perl.
+  See the README.txt file at nuttx/configs/sim/README.txt for a walk-through of
+  the output of this text.
 
 examples/usbserial
 ^^^^^^^^^^^^^^^^^^
@@ -1729,7 +2122,7 @@ examples/usbserial
     CONFIG_EXAMPLES_USBSERIAL_ONLYBIG
        Send only large, multi-packet messages.  Default: Send large and small.
 
-    If CONFIG_USBDEV_TRACE is enabled (or CONFIG_DEBUG and CONFIG_DEBUG_USB), then
+    If CONFIG_USBDEV_TRACE is enabled (or CONFIG_DEBUG_FEATURES and CONFIG_DEBUG_USB), then
     the example code will also manage the USB trace output.  The amount of trace output
     can be controlled using:
 
@@ -1824,7 +2217,7 @@ examples/usbterm
     CONFIG_EXAMPLES_USBTERM_BUFLEN - The size of the input and output
       buffers used for receiving data. Default 256 bytes.
 
-  If CONFIG_USBDEV_TRACE is enabled (or CONFIG_DEBUG and CONFIG_DEBUG_USB, or
+  If CONFIG_USBDEV_TRACE is enabled (or CONFIG_DEBUG_FEATURES and CONFIG_DEBUG_USB, or
   CONFIG_USBDEV_TRACE), then the example code will also manage the USB trace
   output.  The amount of trace output can be controlled using:
 
@@ -1860,6 +2253,34 @@ examples/usbterm
   Prolifics emulation (not defined) and the CDC serial implementation
   (when defined). CONFIG_USBDEV_TRACE_INITIALIDSET.
 
+examples/ustream
+^^^^^^^^^^^^^^^^
+
+  This is the same test as examples/udp and similar to examples/ustream,
+  but using Unix domain datagram sockets.
+
+  Dependencies:
+    CONFIG_NET_LOCAL - Depends on support for Unix domain sockets
+
+  Configuration:
+    CONFIG_EXAMPLES_UDGRAM - Enables the Unix domain socket example.
+    CONFIG_EXAMPLES_UDGRAM_ADDR - Specifics the Unix domain address.
+      Default "/dev/fifo".
+
+examples/ustream
+^^^^^^^^^^^^^^^^
+
+  This is the same test as examples/udp and similar to examples/udgram,
+  but using Unix domain stream sockets.
+
+  Dependencies:
+    CONFIG_NET_LOCAL - Depends on support for Unix domain sockets
+
+  Configuration:
+    CONFIG_EXAMPLES_USTREAM - Enables the Unix domain socket example.
+    CONFIG_EXAMPLES_USTREAM_ADDR - Specifics the Unix domain address.
+      Default "/dev/fifo".
+
 examples/watchdog
 ^^^^^^^^^^^^^^^^^
 
@@ -1888,6 +2309,55 @@ examples/watchdog
     CONFIG_EXAMPLES_WATCHDOG_TIMEOUT - The watchdog timeout value in
       milliseconds before the watchdog timer expires.  Default:  2000
       milliseconds.
+
+examples/webserver
+^^^^^^^^^^^^^^^^^^
+
+  This is a port of uIP tiny webserver example application.  Settings
+  specific to this example include:
+
+    CONFIG_EXAMPLES_WEBSERVER_NOMAC     - (May be defined to use software assigned MAC)
+    CONFIG_EXAMPLES_WEBSERVER_IPADDR    - Target IP address
+    CONFIG_EXAMPLES_WEBSERVER_DRIPADDR  - Default router IP addess
+    CONFIG_EXAMPLES_WEBSERVER_NETMASK   - Network mask
+    CONFIG_EXAMPLES_WEBSERVER_DHCPC     - Select to get IP address via DHCP
+
+  If you use DHCPC, then some special configuration network options are
+  required.  These include:
+
+    CONFIG_NET=y                 - Of course
+    CONFIG_NSOCKET_DESCRIPTORS   - And, of course, you must allocate some
+                                   socket descriptors.
+    CONFIG_NET_UDP=y             - UDP support is required for DHCP
+                                   (as well as various other UDP-related
+                                   configuration settings).
+    CONFIG_NET_BROADCAST=y       - UDP broadcast support is needed.
+    CONFIG_NET_ETH_MTU=650       - Per RFC2131 (p. 9), the DHCP client must be
+    (or larger)                    prepared to receive DHCP messages of up to
+                                   576 bytes (excluding Ethernet, IP, or UDP
+                                   headers and FCS).
+                                   NOTE: Note that the actual MTU setting will
+                                   depend upon the specific link protocol.
+                                   Here Ethernet is indicated.
+
+  Other configuration items apply also to the selected webserver net utility.
+  Additional relevant settings for the uIP webserver net utility are:
+
+    CONFIG_NETUTILS_HTTPDSTACKSIZE
+    CONFIG_NETUTILS_HTTPDFILESTATS
+    CONFIG_NETUTILS_HTTPDNETSTATS
+
+  Applications using this example will need to enable the following
+  netutils libraries in their defconfig file:
+
+    CONFIG_NETUTILS_NETLIB=y
+    CONFIG_NETUTILS_DHCPC=y
+    CONFIG_NETDB_DNSCLIENT=y
+    CONFIG_NETUTILS_WEBSERVER=y
+
+  NOTE:  This example does depend on the perl script at
+  nuttx/tools/mkfsdata.pl.  You must have perl installed on your
+  development system at /usr/bin/perl.
 
 examples/wget
 ^^^^^^^^^^^^^
@@ -1925,8 +2395,8 @@ examples/wget
   Applications using this example will need to enable the following netutils
   libraries in the defconfig file:
 
-    CONFIG_NETUTILS_UIPLIB=y
-    CONFIG_NETUTILS_DNSCLIENT=y
+    CONFIG_NETUTILS_NETLIB=y
+    CONFIG_NETDB_DNSCLIENT=y
     CONFIG_NETUTILS_WEBCLIENT=y
 
 examples/wget
@@ -1958,3 +2428,8 @@ examples/xmlrpc
       Default 0x0a000001. Ignored if CONFIG_NSH_BUILTIN_APPS is selected.
     CONFIG_EXAMPLES_XMLRPC_NETMASK - Network Mask.  Default 0xffffff00
       Ignored if CONFIG_NSH_BUILTIN_APPS is selected.
+
+examples/zerocross
+^^^^^^^^^^^^^^^^^^
+
+  A simple test of the Zero Crossing device driver.

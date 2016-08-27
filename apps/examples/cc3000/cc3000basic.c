@@ -1,4 +1,4 @@
-/***************************************************************************
+/****************************************************************************
  * apps/examples/cc3000basic.c
  *
  * Derives from an application to demo an Arduino connected to the TI CC3000
@@ -102,7 +102,7 @@
  *    11    860    844 Telnet sd
  */
 
- #include <nuttx/config.h>
+#include <nuttx/config.h>
 
 #include "board.h"
 #include <stdio.h>
@@ -113,13 +113,14 @@
 #include <stdbool.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
+
 #include <nuttx/arch.h>
 #include <nuttx/wireless/cc3000/nvmem.h>
 #include <nuttx/wireless/cc3000/include/sys/socket.h>
 #include <nuttx/wireless/cc3000/wlan.h>
 #include <nuttx/wireless/cc3000/hci.h>
-#include <nuttx/wireless/cc3000/security.h>
 #include <nuttx/wireless/cc3000/netapp.h>
+
 #include "shell.h"
 
 /****************************************************************************
@@ -195,10 +196,10 @@ static void _stkmon_disp(FAR struct tcb_s *tcb, FAR void *arg)
 #if CONFIG_TASK_NAME_SIZE > 0
   strncpy(buff,tcb->name,CONFIG_TASK_NAME_SIZE);
   buff[CONFIG_TASK_NAME_SIZE] = '\0';
-  syslog("%5d %6d %6d %s\n",
+  syslog(LOG_INFO, "%5d %6d %6d %s\n",
          tcb->pid, tcb->adj_stack_size, up_check_tcbstack(tcb), buff);
 #else
-  syslog("%5d %6d %6d\n",
+  syslog(LOG_INFO, "%5d %6d %6d\n",
          tcb->pid, tcb->adj_stack_size, up_check_tcbstack(tcb));
 #endif
 }
@@ -256,9 +257,9 @@ static bool wait_on(long timeoutMs, volatile unsigned long *what,
 void stkmon_disp(void)
 {
 #if CONFIG_TASK_NAME_SIZE > 0
-  syslog("%-5s %-6s %-6s %s\n", "PID", "SIZE", "USED", "THREAD NAME");
+  syslog(LOG_INFO, "%-5s %-6s %-6s %s\n", "PID", "SIZE", "USED", "THREAD NAME");
 #else
-  syslog("%-5s %-6s %-6s\n", "PID", "SIZE", "USED");
+  syslog(LOG_INFO, "%-5s %-6s %-6s\n", "PID", "SIZE", "USED");
 #endif
   sched_foreach(_stkmon_disp, NULL);
 }
@@ -267,7 +268,7 @@ void stkmon_disp(void)
 void AsyncEventPrint(void)
 {
   printf("\n");
-  switch(lastAsyncEvent)
+  switch (lastAsyncEvent)
     {
       printf("CC3000 Async event: Simple config done\n");
       break;
@@ -305,7 +306,8 @@ void AsyncEventPrint(void)
       break;
 
     default:
-      printf("AsyncCallback called with unhandled event! (0x%X)\n", lastAsyncEvent);
+      printf("AsyncCallback called with unhandled event! (0x%lx)\n",
+             (unsigned long)lastAsyncEvent);
       break;
     }
 }
@@ -443,7 +445,7 @@ void Initialize(void)
             {
               printf(":");
             }
-          printf("%X", fancyBuffer[i]);
+          printf("%x", fancyBuffer[i]);
         }
 
       printf("\n");
@@ -511,9 +513,10 @@ void StartSmartConfig(void)
   printf("Starting Smart Config\n");
 
   printf("  Disabling auto-connect policy...");
-  if ((rval = wlan_ioctl_set_connection_policy(DISABLE, DISABLE, DISABLE)) !=0 )
+  if ((rval = wlan_ioctl_set_connection_policy(DISABLE, DISABLE, DISABLE)) !=0)
     {
-      printf(" Failed!\n    Setting auto connection policy failed, error: %X\n", rval);
+      printf(" Failed!\n    Setting auto connection policy failed, error: %lx\n",
+             (unsigned long)rval);
       return;
     }
 
@@ -521,9 +524,10 @@ void StartSmartConfig(void)
   printf("  Deleting all existing profiles...");
   fflush(stdout);
 
-  if ((rval = wlan_ioctl_del_profile(255)) !=0 )
+  if ((rval = wlan_ioctl_del_profile(255)) !=0)
     {
-      printf(" Failed!\n    Deleting all profiles failed, error: %X\n", rval);
+      printf(" Failed!\n    Deleting all profiles failed, error: %lx\n",
+             (unsigned long)rval);
       return;
     }
 
@@ -533,9 +537,10 @@ void StartSmartConfig(void)
   printf("  Setting smart config prefix...");
   fflush(stdout);
 
-  if ((rval = wlan_smart_config_set_prefix(simpleConfigPrefix)) !=0 )
+  if ((rval = wlan_smart_config_set_prefix(simpleConfigPrefix)) !=0)
     {
-      printf(" Failed!\n    Setting smart config prefix failed, error: %X", rval);
+      printf(" Failed!\n    Setting smart config prefix failed, error: %lx",
+             (unsigned long)rval);
       return;
     }
 
@@ -543,9 +548,10 @@ void StartSmartConfig(void)
   printf("  Starting smart config...");
   fflush(stdout);
 
-  if ((rval = wlan_smart_config_start(0)) !=0 )
+  if ((rval = wlan_smart_config_start(0)) !=0)
     {
-      printf(" Failed!\n    Starting smart config failed, error: %X\n", rval);
+      printf(" Failed!\n    Starting smart config failed, error: %lx\n",
+             (unsigned long)rval);
       return;
     }
 
@@ -560,9 +566,11 @@ void StartSmartConfig(void)
 
   printf("  Enabling auto-connect policy...");
   fflush(stdout);
-  if ((rval=wlan_ioctl_set_connection_policy(DISABLE, DISABLE, ENABLE)) !=0 )
+
+  if ((rval = wlan_ioctl_set_connection_policy(DISABLE, DISABLE, ENABLE)) !=0)
     {
-      printf(" Failed!\n    Setting auto connection policy failed, error: %X\n", rval);
+      printf(" Failed!\n    Setting auto connection policy failed, error: %lx\n",
+             (unsigned long)rval);
       return;
     }
 
@@ -806,7 +814,7 @@ void ListAccessPoints(void)
 
   printf("List visible access points\n");
 
-  printf("  Setting scan paramters...\n");
+  printf("  Setting scan parameters...\n");
 
   for (i=0; i<NUM_CHANNELS; i++)
     {
@@ -857,7 +865,7 @@ void ListAccessPoints(void)
       if (sr.isValid)
         {
           printf("    ");
-          switch(sr.securityMode)
+          switch (sr.securityMode)
             {
             case WLAN_SEC_UNSEC:  /* 0 */
               printf("OPEN ");
@@ -873,7 +881,7 @@ void ListAccessPoints(void)
               break;
             }
 
-          sprintf(localB, "%3d  ", sr.rssi);
+          sprintf(localB, "%3u  ", sr.rssi);
           printf("%s", localB);
           memset(localB, 0, 33);
           memcpy(localB, sr.ssid_name, sr.ssidLength);
@@ -882,7 +890,7 @@ void ListAccessPoints(void)
 
       if (--apCounter>0)
         {
-          if ((rval=wlan_ioctl_get_scan_results(2000, (uint8_t *)&sr)) !=0 )
+          if ((rval=wlan_ioctl_get_scan_results(2000, (uint8_t *)&sr)) !=0)
             {
               printf("  Got back unusual result from wlan_ioctl_get scan, can't continue: %d\n", rval);
               return;
@@ -946,7 +954,7 @@ void ShowInformation(void)
         {
         printf(":");
       }
-      printf("%X", inf.uaMacAddr[i]);
+      printf("%x", inf.uaMacAddr[i]);
     }
 
   printf("\n");
@@ -957,7 +965,11 @@ void ShowInformation(void)
   printf("  Connected to SSID: %s\n", localB);
 }
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int c3b_main(int argc, char *argv[])
+#endif
 {
   char ch='0';
 

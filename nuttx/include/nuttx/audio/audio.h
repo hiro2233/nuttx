@@ -63,12 +63,12 @@
 #ifdef CONFIG_AUDIO
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 /* CONFIG_AUDIO - Enables Audio driver support
- * CONFIG_DEBUG_AUDIO - If enabled (with CONFIG_DEBUG and, optionally,
- *   CONFIG_DEBUG_VERBOSE), this will generate output that can be used to
+ * CONFIG_DEBUG_AUDIO - If enabled (with CONFIG_DEBUG_FEATURES and, optionally,
+ *   CONFIG_DEBUG_INFO), this will generate output that can be used to
  *   debug Audio drivers.
  */
 
@@ -76,7 +76,7 @@
 /* The Audio module uses a standard character driver framework.  However, a
  * lot of the Audio driver functionality is configured via a device control
  * interface, such as sampling rate, volume, data format, etc.
- * The Audio ioctl commands are lised below:
+ * The Audio ioctl commands are listed below:
  *
  * AUDIOIOC_GETCAPS - Get the Audio Device Capabilities
  *
@@ -124,13 +124,13 @@
 
 /* Audio Device Types *******************************************************/
 /* The NuttX audio interface support different types of audio devices for
- * input, output, synthesis, and manupulation of audio data.  A given driver/
+ * input, output, synthesis, and manipulation of audio data.  A given driver/
  * device could support a combination of these device type.  The following
- * is a list of bit-field definitons for defining the device type.
+ * is a list of bit-field definitions for defining the device type.
  */
 
 #define AUDIO_TYPE_QUERY            0x00
-#define AUDIO_TYPE_INPUT            0x02
+#define AUDIO_TYPE_INPUT            0x01
 #define AUDIO_TYPE_OUTPUT           0x02
 #define AUDIO_TYPE_MIXER            0x04
 #define AUDIO_TYPE_SELECTOR         0x08
@@ -141,7 +141,7 @@
 
 /* Audio Format Types *******************************************************/
 /* The following defines the audio data format types in NuttX.  During a
- * format query, these will be converted to bit positions withing the
+ * format query, these will be converted to bit positions within the
  * ac_format field, meaning we currently only support up to 16 formats. To
  * support more than that, we will use the FMT_OTHER entry, and the
  * interfacing software can perform a second query to get the other formats.
@@ -157,8 +157,8 @@
 #define AUDIO_FMT_WAV               0x07
 #define AUDIO_FMT_MP3               0x08
 #define AUDIO_FMT_MIDI              0x09
-#define AUDIO_FMT_OGG_VORBIS        0x0A
-#define AUDIO_FMT_FLAC              0x0B
+#define AUDIO_FMT_OGG_VORBIS        0x0a
+#define AUDIO_FMT_FLAC              0x0b
 
 /* Audio Sub-Format Types ***************************************************/
 
@@ -172,11 +172,11 @@
 #define AUDIO_SUBFMT_PCM_S8         0x07
 #define AUDIO_SUBFMT_PCM_U16_LE     0x08
 #define AUDIO_SUBFMT_PCM_S16_BE     0x09
-#define AUDIO_SUBFMT_PCM_S16_LE     0x0A
-#define AUDIO_SUBFMT_PCM_U16_BE     0x0B
-#define AUDIO_SUBFMT_MIDI_0         0x0C
-#define AUDIO_SUBFMT_MIDI_1         0x0D
-#define AUDIO_SUBFMT_MIDI_2         0x0E
+#define AUDIO_SUBFMT_PCM_S16_LE     0x0a
+#define AUDIO_SUBFMT_PCM_U16_BE     0x0b
+#define AUDIO_SUBFMT_MIDI_0         0x0c
+#define AUDIO_SUBFMT_MIDI_1         0x0d
+#define AUDIO_SUBFMT_MIDI_2         0x0e
 
 /* Supported Sampling Rates *************************************************/
 
@@ -192,6 +192,17 @@
 #define AUDIO_SAMP_RATE_160K        0x0200
 #define AUDIO_SAMP_RATE_172K        0x0400
 #define AUDIO_SAMP_RATE_192K        0x0800
+
+/* Audio Sub-sampling Ratios  ***********************************************/
+
+#define AUDIO_SUBSAMPLE_NONE        0
+#define AUDIO_SUBSAMPLE_2X          2
+#define AUDIO_SUBSAMPLE_4X          4
+#define AUDIO_SUBSAMPLE_8X          8
+#define AUDIO_SUBSAMPLE_16X         16
+
+#define AUDIO_SUBSAMPLE_MIN         AUDIO_SUBSAMPLE_2X
+#define AUDIO_SUBSAMPLE_MAX         AUDIO_SUBSAMPLE_16X
 
 /* Supported Bit Rates *************************************************/
 
@@ -230,6 +241,8 @@
 #define AUDIO_PU_UPDOWNMIX          0x01
 #define AUDIO_PU_DOLBY_PROLOGIC     0x02
 #define AUDIO_PU_STEREO_EXTENDER    0x03
+#define AUDIO_PU_SUBSAMPLE_FORWARD  0x04
+#define AUDIO_PU_SUBSAMPLE_REWIND   0x05
 
 /* Stereo Extender PU Controls **********************************************/
 
@@ -249,7 +262,7 @@
 
 /* Audio Pipeline Buffer (AP Buffer) flags **********************************/
 
-#define AUDIO_ABP_ALIGNMENT         0x000F  /* Mask to define buffer alignment */
+#define AUDIO_ABP_ALIGNMENT         0x000f  /* Mask to define buffer alignment */
 #define AUDIO_ABP_CANDMA            0x0010  /* Set if the data is DMA'able */
 #define AUDIO_ABP_STATIC            0x0020  /* Set if statically allocated */
 #define AUDIO_ABP_ACTIVE            0x0040  /* Set if this buffer is still active.
@@ -276,9 +289,10 @@
 
 /* Audio Pipeline Buffer flags */
 
-#define AUDIO_APB_OUTPUT_ENQUEUED   0x0001;
-#define AUDIO_APB_OUTPUT_PROCESS    0x0002;
-#define AUDIO_APB_DEQUEUED          0x0004;
+#define AUDIO_APB_OUTPUT_ENQUEUED   (1 << 0)
+#define AUDIO_APB_OUTPUT_PROCESS    (1 << 1)
+#define AUDIO_APB_DEQUEUED          (1 << 2)
+#define AUDIO_APB_FINAL             (1 << 3) /* Last buffer in the stream */
 
 /****************************************************************************
  * Public Types
@@ -287,9 +301,9 @@
 /* Define the size of AP Buffer sample count base on CONFIG */
 
 #ifdef CONFIG_AUDIO_LARGE_BUFFERS
-typedef uint32_t  apb_samp_t;
+typedef uint32_t apb_samp_t;
 #else
-typedef uint16_t  apb_samp_t;
+typedef uint16_t apb_samp_t;
 #endif
 
 /* This structure is used to describe the audio device capabilities */
@@ -300,10 +314,19 @@ struct audio_caps_s
   uint8_t ac_type;          /* Capabilities (device) type */
   uint8_t ac_subtype;       /* Capabilities sub-type, if needed */
   uint8_t ac_channels;      /* Number of channels (1, 2, 5, 7) */
-  uint8_t ac_format[2];     /* Audio data format(s) for this device */
-  uint8_t ac_controls[4];   /* Device specific controls. For AUDIO_DEVICE_QUERY,
-                             * this field reports the device type supported
-                             * by this lower-half driver. */
+
+  union                     /* Audio data format(s) for this device */
+  {
+    uint8_t  b[2];
+    uint16_t hw;
+  } ac_format;
+
+  union                     /* Device specific controls. For AUDIO_DEVICE_QUERY, */
+  {                         /*   this field reports the device type supported */
+    uint8_t  b[4];          /*   by this lower-half driver. */
+    uint16_t hw[2];
+    uint32_t w;
+  } ac_controls;
 };
 
 struct audio_caps_desc_s
@@ -375,8 +398,7 @@ struct audio_msg_s
   } u;
 };
 
-
-/* Strucure defining the built-in sounds */
+/* Structure defining the built-in sounds */
 
 #ifdef CONFIG_AUDIO_BUILTIN_SOUNDS
 struct audio_sound_s
@@ -390,7 +412,7 @@ struct audio_sound_s
 
 #endif
 
-/* Structure for allocating, freeing and enqueuing audio pipeline
+/* Structure for allocating, freeing and enqueueing audio pipeline
  * buffers via the AUDIOIOC_ALLOCBUFFER, AUDIOIOC_FREEBUFFER,
  * and AUDIOIOC_ENQUEUEBUFFER ioctls.
  */
@@ -404,7 +426,7 @@ struct audio_buf_desc_s
   union
   {
     FAR struct ap_buffer_s  *pBuffer;     /* Buffer to free / enqueue */
-    FAR struct ap_buffer_s  **ppBuffer;   /* Pointer to receive alloced buffer */
+    FAR struct ap_buffer_s  **ppBuffer;   /* Pointer to receive allocated buffer */
   } u;
 };
 
@@ -467,7 +489,7 @@ struct audio_ops_s
   /* Start audio streaming in the configured mode.  For input and synthesis
    * devices, this means it should begin sending streaming audio data.  For output
    * or processing type device, it means it should begin processing of any enqueued
-   * Audio Pipline Buffers.
+   * Audio Pipeline Buffers.
    */
 
 #ifdef CONFIG_AUDIO_MULTI_SESSION
@@ -510,7 +532,7 @@ struct audio_ops_s
    * lower-half driver with the opportunity to perform special buffer
    * allocation if needed, such as allocating from a specific memory
    * region (DMA-able, etc.).  If not supplied, then the top-half
-   * driver will perform a standard kumalloc using normal user-space
+   * driver will perform a standard kumm_malloc using normal user-space
    * memory region.
    */
 
@@ -568,7 +590,7 @@ struct audio_ops_s
    */
 
 #ifdef CONFIG_AUDIO_MULTI_SESSION
-  CODE int (*reserve)(FAR struct audio_lowerhalf_s *dev, FAR void **psession );
+  CODE int (*reserve)(FAR struct audio_lowerhalf_s *dev, FAR void **psession);
 #else
   CODE int (*reserve)(FAR struct audio_lowerhalf_s *dev);
 #endif
@@ -576,7 +598,7 @@ struct audio_ops_s
   /* Release a session.  */
 
 #ifdef CONFIG_AUDIO_MULTI_SESSION
-  CODE int (*release)(FAR struct audio_lowerhalf_s *dev, FAR void *session );
+  CODE int (*release)(FAR struct audio_lowerhalf_s *dev, FAR void *session);
 #else
   CODE int (*release)(FAR struct audio_lowerhalf_s *dev);
 #endif

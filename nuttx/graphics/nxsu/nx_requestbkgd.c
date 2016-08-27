@@ -46,7 +46,7 @@
 #include "nxfe.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -115,7 +115,7 @@ int nx_requestbkgd(NXHANDLE handle, FAR const struct nx_callback_s *cb,
   FAR struct nxfe_state_s *fe = (FAR struct nxfe_state_s *)handle;
   FAR struct nxbe_state_s *be = &fe->be;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!fe || !cb)
     {
       errno = EINVAL;
@@ -138,7 +138,7 @@ int nx_requestbkgd(NXHANDLE handle, FAR const struct nx_callback_s *cb,
 
   /* Provide the mouse settings to the client */
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
   nxsu_mousereport(&be->bkgd);
 #endif
 

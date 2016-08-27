@@ -43,7 +43,7 @@
 #include <debug.h>
 #include <errno.h>
 
-#include <nuttx/fs/ramdisk.h>
+#include <nuttx/drivers/ramdisk.h>
 
 #include "nsh.h"
 
@@ -55,12 +55,14 @@
 
 #ifdef CONFIG_NSH_ARCHROMFS
 #  include <arch/board/nsh_romfsimg.h>
-#else
+#elif defined(CONFIG_NSH_CUSTOMROMFS)
+#  include CONFIG_NSH_CUSTOMROMFS_HEADER
+#else /* if defined(CONFIG_NSH_DEFAULTROMFS) */
 #  include "nsh_romfsimg.h"
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -101,24 +103,23 @@ int nsh_romfsetc(void)
                          NSECTORS(romfs_img_len), CONFIG_NSH_ROMFSSECTSIZE);
   if (ret < 0)
     {
-      dbg("nsh: romdisk_register failed: %d\n", -ret);
+      ferr("ERROR: romdisk_register failed: %d\n", -ret);
       return ERROR;
     }
 
   /* Mount the file system */
 
-  vdbg("Mounting ROMFS filesystem at target=%s with source=%s\n",
-       CONFIG_NSH_ROMFSMOUNTPT, MOUNT_DEVNAME);
+  finfo("Mounting ROMFS filesystem at target=%s with source=%s\n",
+        CONFIG_NSH_ROMFSMOUNTPT, MOUNT_DEVNAME);
 
   ret = mount(MOUNT_DEVNAME, CONFIG_NSH_ROMFSMOUNTPT, "romfs", MS_RDONLY, NULL);
   if (ret < 0)
     {
-      dbg("nsh: mount(%s,%s,romfs) failed: %d\n",
-          MOUNT_DEVNAME, CONFIG_NSH_ROMFSMOUNTPT, errno);
+      ferr("ERROR: mount(%s,%s,romfs) failed: %d\n",
+           MOUNT_DEVNAME, CONFIG_NSH_ROMFSMOUNTPT, errno);
       return ERROR;
     }
   return OK;
 }
 
 #endif /* CONFIG_NSH_ROMFSETC */
-

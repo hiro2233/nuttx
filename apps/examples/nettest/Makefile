@@ -42,17 +42,25 @@ include $(APPDIR)/Make.defs
 TARG_ASRCS =
 TARG_AOBJS = $(TARG_ASRCS:.S=$(OBJEXT))
 
-TARG_CSRCS = nettest.c
-ifeq ($(CONFIG_EXAMPLES_NETTEST_SERVER),y)
+TARG_CSRCS =
+ifeq ($(CONFIG_EXAMPLES_NETTEST_LOOPBACK),y)
+TARG_CSRCS += nettest_server.c nettest_client.c
+else ifeq ($(CONFIG_EXAMPLES_NETTEST_SERVER),y)
 TARG_CSRCS += nettest_server.c
 else
 TARG_CSRCS += nettest_client.c
 endif
+TARG_MAINSRC = nettest.c
 
 TARG_COBJS = $(TARG_CSRCS:.c=$(OBJEXT))
+TARG_MAINOBJ = $(TARG_MAINSRC:.c=$(OBJEXT))
 
-TARG_SRCS = $(TARG_ASRCS) $(TARG_CSRCS)
+TARG_SRCS = $(TARG_ASRCS) $(TARG_CSRCS) $(TARG_CSRCS)
 TARG_OBJS = $(TARG_AOBJS) $(TARG_COBJS)
+
+ifneq ($(CONFIG_BUILD_KERNEL),y)
+  TARG_OBJS += $(TARG_MAINOBJ)
+endif
 
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
   TARG_BIN = ..\..\libapps$(LIBEXT)
@@ -64,24 +72,35 @@ else
 endif
 endif
 
-HOSTCFLAGS += -DNETTEST_HOST=1
-ifeq ($(CONFIG_EXAMPLES_NETTEST_SERVER),y)
-HOSTCFLAGS += -DCONFIG_EXAMPLES_NETTEST_SERVER=1 -DCONFIG_EXAMPLES_NETTEST_CLIENTIP="$(CONFIG_EXAMPLES_NETTEST_CLIENTIP)"
-endif
-ifeq ($(CONFIG_EXAMPLES_NETTEST_PERFORMANCE),y)
-HOSTCFLAGS += -DCONFIG_EXAMPLES_NETTEST_PERFORMANCE=1
+ifneq ($(CONFIG_EXAMPLES_NETTEST_LOOPBACK),y)
+  HOSTCFLAGS += -DNETTEST_HOST=1
+  ifeq ($(CONFIG_EXAMPLES_NETTEST_SERVER),y)
+    HOSTCFLAGS += -DCONFIG_EXAMPLES_NETTEST_SERVER=1 -DCONFIG_EXAMPLES_NETTEST_CLIENTIP="$(CONFIG_EXAMPLES_NETTEST_CLIENTIP)"
+  endif
+  ifeq ($(CONFIG_EXAMPLES_NETTEST_PERFORMANCE),y)
+  HOSTCFLAGS += -DCONFIG_EXAMPLES_NETTEST_PERFORMANCE=1
+  endif
+
+  HOST_SRCS = host.c
+  ifeq ($(CONFIG_EXAMPLES_NETTEST_SERVER),y)
+  HOST_SRCS += nettest_client.c
+  else
+  HOST_SRCS += nettest_server.c
+  endif
+
+  HOSTOBJEXT ?= .hobj
+  HOST_OBJS = $(HOST_SRCS:.c=$(HOSTOBJEXT))
+  HOST_BIN = host
 endif
 
-HOST_SRCS = host.c
-ifeq ($(CONFIG_EXAMPLES_NETTEST_SERVER),y)
-HOST_SRCS += nettest_client.c
+ifeq ($(WINTOOL),y)
+  INSTALL_DIR = "${shell cygpath -w $(BIN_DIR)}"
 else
-HOST_SRCS += nettest_server.c
+  INSTALL_DIR = $(BIN_DIR)
 endif
 
-HOSTOBJEXT ?= .hobj
-HOST_OBJS = $(HOST_SRCS:.c=$(HOSTOBJEXT))
-HOST_BIN = host
+CONFIG_XYZ_PROGNAME ?= nettest$(EXEEXT)
+PROGNAME = $(CONFIG_XYZ_PROGNAME)
 
 ROOTDEPPATH = --dep-path .
 
@@ -101,20 +120,41 @@ all: .built $(HOST_BIN)
 $(TARG_AOBJS): %$(OBJEXT): %.S
 	$(call ASSEMBLE, $<, $@)
 
-$(TARG_COBJS): %$(OBJEXT): %.c
+$(TARG_COBJS) $(TARG_MAINOBJ): %$(OBJEXT): %.c
 	$(call COMPILE, $<, $@)
 
+ifneq ($(CONFIG_EXAMPLES_NETTEST_LOOPBACK),y)
 $(HOST_OBJS): %$(HOSTOBJEXT): %.c
 	@echo "CC:  $<"
-	@$(HOSTCC) -c $(HOSTCFLAGS) $< -o $@
+	$(Q) $(HOSTCC) -c $(HOSTCFLAGS) $< -o $@
+endif
 
-$(HOST_BIN): $(HOST_OBJS)
+config.h: $(TOPDIR)/include/nuttx/config.h
+	@echo "CP:  $<"
+	$(Q) cp $< $@
+
+ifneq ($(CONFIG_EXAMPLES_NETTEST_LOOPBACK),y)
+$(HOST_BIN): config.h $(HOST_OBJS)
 	@echo "LD:  $@"
-	@$(HOSTCC) $(HOSTLDFLAGS) $(HOST_OBJS) -o $@
+	$(Q) $(HOSTCC) $(HOSTLDFLAGS) $(HOST_OBJS) -o $@
+endif
 
-.built: $(TARG_OBJS)
+.built: config.h $(TARG_OBJS)
 	$(call ARCHIVE, $(TARG_BIN), $(TARG_OBJS))
-	@touch .built
+	$(Q) touch .built
+
+ifeq ($(CONFIG_BUILD_KERNEL),y)
+$(BIN_DIR)$(DELIM)$(PROGNAME): $(OBJS) $(TARG_MAINOBJ)
+	@echo "LD: $(PROGNAME)"
+	$(Q) $(LD) $(LDELFFLAGS) $(LDLIBPATH) -o $(INSTALL_DIR)$(DELIM)$(PROGNAME) $(ARCHCRT0OBJ) $(TARG_MAINOBJ) $(LDLIBS)
+	$(Q) $(NM) -u  $(INSTALL_DIR)$(DELIM)$(PROGNAME)
+
+install: $(BIN_DIR)$(DELIM)$(PROGNAME)
+
+else
+install:
+
+endif
 
 ifeq ($(CONFIG_NSH_BUILTIN_APPS),y)
 $(BUILTIN_REGISTRY)$(DELIM)$(APPNAME)_main.bdat: $(DEPCONFIG) Makefile
@@ -125,17 +165,20 @@ else
 context:
 endif
 
-.depend: Makefile $(TARG_SRCS)
+.depend: Makefile config.h $(TARG_SRCS)
 	@$(MKDEP) $(ROOTDEPPATH) "$(CC)" -- $(CFLAGS) -- $(TARG_SRCS) >Make.dep
 	@touch $@
 
 depend: .depend
 
 clean:
+ifneq ($(CONFIG_EXAMPLES_NETTEST_LOOPBACK),y)
 	$(call DELFILE, *$(HOSTOBJEXT))
 	$(call DELFILE, $(HOST_BIN))
+endif
 	$(call DELFILE, .built)
 	$(call DELFILE, *.dSYM)
+	$(call DELFILE, config.h)
 	$(call CLEAN)
 
 distclean: clean
@@ -144,3 +187,5 @@ distclean: clean
 
 -include Make.dep
 
+.PHONY: preconfig
+preconfig:

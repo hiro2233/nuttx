@@ -80,7 +80,7 @@
  *   If the hardware supports a controllable OLED a power supply, this
  *   configuration shold be defined.  (See st7567_power() below).
  * CONFIG_LCD_ST7567DEBUG - Enable detailed ST7567 debst7567 output
- *   (CONFIG_DEBUG and CONFIG_VERBOSE must also be enabled).
+ *   (CONFIG_DEBUG_FEATURES and CONFIG_VERBOSE must also be enabled).
  *
  * Required LCD driver settings:
  * CONFIG_LCD_ST7567 - Enable ST7567 support
@@ -123,12 +123,12 @@
 
 /* Verbose debst7567 must also be enabled to use the extra OLED debst7567 */
 
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_VERBOSE
+#ifndef CONFIG_DEBUG_FEATURES
+#  undef CONFIG_DEBUG_INFO
 #  undef CONFIG_DEBUG_GRAPHICS
 #endif
 
-#ifndef CONFIG_DEBUG_VERBOSE
+#ifndef CONFIG_DEBUG_INFO
 #  undef CONFIG_LCD_ST7567DEBUG
 #endif
 
@@ -206,14 +206,6 @@
 #define LS_BIT          (1 << 0)
 #define MS_BIT          (1 << 7)
 
-/* Debst7567 ******************************************************************************/
-
-#ifdef CONFIG_LCD_ST7567DEBUG
-# define st7567dbg(format, ...)  vdbg(format, ##__VA_ARGS__)
-#else
-# define st7567dbg(x...)
-#endif
-
 /**************************************************************************************
  * Private Type Definition
  **************************************************************************************/
@@ -232,10 +224,10 @@ struct st7567_dev_s
   uint8_t contrast;
   uint8_t powered;
 
- /* The ST7567 does not support reading from the display memory in SPI mode.
-  * Since there is 1 BPP and access is byte-by-byte, it is necessary to keep
-  * a shadow copy of the framebuffer memory.
-  */
+  /* The ST7567 does not support reading from the display memory in SPI mode.
+   * Since there is 1 BPP and access is byte-by-byte, it is necessary to keep
+   * a shadow copy of the framebuffer memory.
+   */
 
   uint8_t fb[ST7567_FBSIZE];
 };
@@ -246,13 +238,8 @@ struct st7567_dev_s
 
 /* SPI helpers */
 
-#ifdef CONFIG_SPI_OWNBUS
-static inline void st7567_select(FAR struct spi_dev_s *spi);
-static inline void st7567_deselect(FAR struct spi_dev_s *spi);
-#else
 static void st7567_select(FAR struct spi_dev_s *spi);
 static void st7567_deselect(FAR struct spi_dev_s *spi);
-#endif
 
 /* LCD Data Transfer Methods */
 
@@ -315,17 +302,17 @@ static const struct fb_videoinfo_s g_videoinfo =
   .fmt     = ST7567_COLORFMT,    /* Color format: RGB16-565: RRRR RGGG GGGB BBBB */
   .xres    = ST7567_XRES,        /* Horizontal resolution in pixel columns */
   .yres    = ST7567_YRES,        /* Vertical resolution in pixel rows */
-  .nplanes = 1,              /* Number of color planes supported */
+  .nplanes = 1,                  /* Number of color planes supported */
 };
 
 /* This is the standard, NuttX Plane information object */
 
 static const struct lcd_planeinfo_s g_planeinfo =
 {
-  .putrun = st7567_putrun,             /* Put a run into LCD memory */
-  .getrun = st7567_getrun,             /* Get a run from LCD memory */
-  .buffer = (uint8_t*)g_runbuffer, /* Run scratch buffer */
-  .bpp    = ST7567_BPP,                /* Bits-per-pixel */
+  .putrun = st7567_putrun,              /* Put a run into LCD memory */
+  .getrun = st7567_getrun,              /* Get a run from LCD memory */
+  .buffer = (FAR uint8_t *)g_runbuffer, /* Run scratch buffer */
+  .bpp    = ST7567_BPP,                 /* Bits-per-pixel */
 };
 
 /* This is the standard, NuttX LCD driver object */
@@ -371,14 +358,6 @@ static struct st7567_dev_s g_st7567dev =
  *
  **************************************************************************************/
 
-#ifdef CONFIG_SPI_OWNBUS
-static inline void st7567_select(FAR struct spi_dev_s *spi)
-{
-  /* We own the SPI bus, so just select the chip */
-
-  SPI_SELECT(spi, SPIDEV_DISPLAY, true);
-}
-#else
 static void st7567_select(FAR struct spi_dev_s *spi)
 {
   /* Select ST7567 chip (locking the SPI bus in case there are multiple
@@ -394,11 +373,11 @@ static void st7567_select(FAR struct spi_dev_s *spi)
 
   SPI_SETMODE(spi, CONFIG_ST7567_SPIMODE);
   SPI_SETBITS(spi, 8);
+  (void)SPI_HWFEATURES(spi, 0);
 #ifdef CONFIG_ST7567_FREQUENCY
-  SPI_SETFREQUENCY(spi, CONFIG_ST7567_FREQUENCY);
+  (void)SPI_SETFREQUENCY(spi, CONFIG_ST7567_FREQUENCY);
 #endif
 }
-#endif
 
 /**************************************************************************************
  * Function: st7567_deselect
@@ -416,14 +395,6 @@ static void st7567_select(FAR struct spi_dev_s *spi)
  *
  **************************************************************************************/
 
-#ifdef CONFIG_SPI_OWNBUS
-static inline void st7567_deselect(FAR struct spi_dev_s *spi)
-{
-  /* We own the SPI bus, so just de-select the chip */
-
-  SPI_SELECT(spi, SPIDEV_DISPLAY, false);
-}
-#else
 static void st7567_deselect(FAR struct spi_dev_s *spi)
 {
   /* De-select ST7567 chip and relinquish the SPI bus. */
@@ -431,7 +402,6 @@ static void st7567_deselect(FAR struct spi_dev_s *spi)
   SPI_SELECT(spi, SPIDEV_DISPLAY, false);
   SPI_LOCK(spi, false);
 }
-#endif
 
 /**************************************************************************************
  * Name:  st7567_putrun
@@ -461,7 +431,7 @@ static int st7567_putrun(fb_coord_t row, fb_coord_t col, FAR const uint8_t *buff
   uint8_t i;
   int pixlen;
 
-  gvdbg("row: %d col: %d npixels: %d\n", row, col, npixels);
+  ginfo("row: %d col: %d npixels: %d\n", row, col, npixels);
   DEBUGASSERT(buffer);
 
   /* Clip the run to the display */
@@ -609,7 +579,7 @@ static int st7567_getrun(fb_coord_t row, fb_coord_t col, FAR uint8_t *buffer,
   uint8_t i;
   int     pixlen;
 
-  gvdbg("row: %d col: %d npixels: %d\n", row, col, npixels);
+  ginfo("row: %d col: %d npixels: %d\n", row, col, npixels);
   DEBUGASSERT(buffer);
 
   /* Clip the run to the display */
@@ -720,7 +690,7 @@ static int st7567_getvideoinfo(FAR struct lcd_dev_s *dev,
                               FAR struct fb_videoinfo_s *vinfo)
 {
   DEBUGASSERT(dev && vinfo);
-  gvdbg("fmt: %d xres: %d yres: %d nplanes: %d\n",
+  ginfo("fmt: %d xres: %d yres: %d nplanes: %d\n",
          g_videoinfo.fmt, g_videoinfo.xres, g_videoinfo.yres, g_videoinfo.nplanes);
   memcpy(vinfo, &g_videoinfo, sizeof(struct fb_videoinfo_s));
   return OK;
@@ -738,7 +708,7 @@ static int st7567_getplaneinfo(FAR struct lcd_dev_s *dev, unsigned int planeno,
                               FAR struct lcd_planeinfo_s *pinfo)
 {
   DEBUGASSERT(dev && pinfo && planeno == 0);
-  gvdbg("planeno: %d bpp: %d\n", planeno, g_planeinfo.bpp);
+  ginfo("planeno: %d bpp: %d\n", planeno, g_planeinfo.bpp);
   memcpy(pinfo, &g_planeinfo, sizeof(struct lcd_planeinfo_s));
   return OK;
 }
@@ -756,7 +726,7 @@ static int st7567_getpower(struct lcd_dev_s *dev)
 {
   struct st7567_dev_s *priv = (struct st7567_dev_s *)dev;
   DEBUGASSERT(priv);
-  gvdbg("powered: %s\n", st7567_powerstring(priv->powered));
+  ginfo("powered: %s\n", st7567_powerstring(priv->powered));
   return priv->powered;
 }
 
@@ -774,7 +744,7 @@ static int st7567_setpower(struct lcd_dev_s *dev, int power)
   struct st7567_dev_s *priv = (struct st7567_dev_s *)dev;
 
   DEBUGASSERT(priv && (unsigned)power <= CONFIG_LCD_MAXPOWER);
-  gvdbg("power: %s powered: %s\n",
+  ginfo("power: %s powered: %s\n",
         st7567_powerstring(power), st7567_powerstring(priv->powered));
 
   /* Select and lock the device */
@@ -828,7 +798,7 @@ static int st7567_setcontrast(struct lcd_dev_s *dev, unsigned int contrast)
 {
   struct st7567_dev_s *priv = (struct st7567_dev_s *)dev;
 
-  gvdbg("contrast: %d\n", contrast);
+  ginfo("contrast: %d\n", contrast);
   DEBUGASSERT(priv);
 
   if (contrast > 255)
@@ -937,7 +907,7 @@ FAR struct lcd_dev_s *st7567_initialize(FAR struct spi_dev_s *spi, unsigned int 
 
   FAR struct st7567_dev_s  *priv = &g_st7567dev;
 
-  gvdbg("Initializing\n");
+  ginfo("Initializing\n");
   DEBUGASSERT(spi && devno == 0);
 
   /* Save the reference to the SPI device */

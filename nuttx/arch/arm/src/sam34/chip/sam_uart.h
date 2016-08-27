@@ -260,6 +260,12 @@
 
 /* UART Mode Register and USART Mode Register (UART MODE) */
 
+#ifdef CONFIG_ARCH_CHIP_SAM4CM
+#  define UART_MR_OPT_EN             (1 << 0)  /* Bit 0: UART Optical Interface Enable (UART only) */
+#  define UART_MR_OPT_RXINV          (1 << 1)  /* Bit 1: UART Receive Data Inverted (UART only) */
+#  define UART_MR_OPT_MDINV          (1 << 2)  /* Bit 2: UART Modulated Data Inverted (UART only) */
+#endif
+
 #define UART_MR_MODE_SHIFT           (0)       /* Bits 0-3: (USART only) */
 #define UART_MR_MODE_MASK            (15 << UART_MR_MODE_SHIFT)
 #  define UART_MR_MODE_NORMAL        (0  << UART_MR_MODE_SHIFT) /* Normal */
@@ -274,6 +280,7 @@
 #endif
 #  define UART_MR_MODE_SPIMSTR       (14 << UART_MR_MODE_SHIFT) /* SPI Master (SPI mode only) */
 #  define UART_MR_MODE_SPISLV        (15 << UART_MR_MODE_SHIFT) /* SPI Slave (SPI mode only) */
+
 #define UART_MR_USCLKS_SHIFT         (4)       /* Bits 4-5: Clock Selection (USART only) */
 #define UART_MR_USCLKS_MASK          (3 << UART_MR_USCLKS_SHIFT)
 #  define UART_MR_USCLKS_MCK         (0 << UART_MR_USCLKS_SHIFT) /* MCK */
@@ -306,6 +313,10 @@
 #  define UART_MR_CHMODE_ECHO        (1 << UART_MR_CHMODE_SHIFT) /* Automatic Echo */
 #  define UART_MR_CHMODE_LLPBK       (2 << UART_MR_CHMODE_SHIFT) /* Local Loopback */
 #  define UART_MR_CHMODE_RLPBK       (3 << UART_MR_CHMODE_SHIFT) /* Remote Loopback */
+#ifdef CONFIG_ARCH_CHIP_SAM4CM
+#  define UART_MR_OPT_CLKDIV_SHIFT   (16)      /* Bits 16-20: Optical Link Clock Divider (UART only) */
+#  define UART_MR_OPT_CLKDIV_MASK    (31 << UART_MR_OPT_CLKDIV_SHIFT)
+#endif
 #define UART_MR_MSBF                 (1 << 16) /* Bit 16: Most Significant Bit first (USART only) */
 #define UART_MR_CPOL                 (1 << 16) /* Bit 16: SPI Clock Polarity (USART SPI mode only) */
 #define UART_MR_MODE9                (1 << 17) /* Bit 17: 9-bit Character Length (USART only) */
@@ -320,6 +331,27 @@
 #define UART_MR_DSNACK               (1 << 21) /* Bit 21: Disable Successive NACK (USART only) */
 #define UART_MR_VARSYNC              (1 << 22) /* Bit 22: Variable Synchronization of Command/Data Sync Start Frame Delimiter (USART only) */
 #define UART_MR_INVDATA              (1 << 23) /* Bit 23: INverted Data (USART only) */
+
+#ifdef CONFIG_ARCH_CHIP_SAM4CM
+#  define UART_MR_OPT_OPT_DUTY_SHIFT   (24)      /* Bits 24-26: Optical Link Modulation Clock Duty Cycle (UART only) */
+#  define UART_MR_OPT_OPT_DUTY_MASK    (7 << UART_MR_OPT_OPT_DUTY_SHIFT)
+#    define UART_MR_OPT_OPT_DUTY_50    (0 << UART_MR_OPT_OPT_DUTY_SHIFT)
+#    define UART_MR_OPT_OPT_DUTY_43P75 (1 << UART_MR_OPT_OPT_DUTY_SHIFT)
+#    define UART_MR_OPT_OPT_DUTY_37P5  (2 << UART_MR_OPT_OPT_DUTY_SHIFT)
+#    define UART_MR_OPT_OPT_DUTY_31P25 (3 << UART_MR_OPT_OPT_DUTY_SHIFT)
+#    define UART_MR_OPT_OPT_DUTY_25    (4 << UART_MR_OPT_OPT_DUTY_SHIFT)
+#    define UART_MR_OPT_OPT_DUTY_18P75 (5 << UART_MR_OPT_OPT_DUTY_SHIFT)
+#    define UART_MR_OPT_OPT_DUTY_12P5  (6 << UART_MR_OPT_OPT_DUTY_SHIFT)
+#    define UART_MR_OPT_OPT_DUTY_6P25  (7 << UART_MR_OPT_OPT_DUTY_SHIFT)
+#  define UART_MR_OPT_CMPTH_SHIFT          (28)
+#  define UART_MR_OPT_CMPTH_MASK           (7 << UART_MR_OPT_CMPTH_SHIFT)
+#    define UART_MR_OPT_CMPTH_VDDIO_DIV2   (0 << UART_MR_OPT_CMPTH_SHIFT)
+#    define UART_MR_OPT_CMPTH_VDDIO_DIV2P5 (1 << UART_MR_OPT_CMPTH_SHIFT)
+#    define UART_MR_OPT_CMPTH_VDDIO_DIV3P3 (2 << UART_MR_OPT_CMPTH_SHIFT)
+#    define UART_MR_OPT_CMPTH_VDDIO_DIV5   (3 << UART_MR_OPT_CMPTH_SHIFT)
+#    define UART_MR_OPT_CMPTH_VDDIO_DIV10  (4 << UART_MR_OPT_CMPTH_SHIFT)
+#endif
+
 #define UART_MR_MAXITER_SHIFT        (24)      /* Bits 24-26: Max iterations (ISO7816 T=0 (USART only) */
 #define UART_MR_MAXITER_MASK         (7 << UART_MR_MAXITER_SHIFT)
 #  define UART_MR_MAXITER(n)         ((uint32_t)(n) << UART_MR_MAXITER_SHIFT)
@@ -481,27 +513,27 @@
 /* LIN Mode Register (USART only) */
 
 #if defined(CONFIG_ARCH_CHIP_SAM3X) || defined(CONFIG_ARCH_CHIP_SAM3A)
-#  define UART_LINMR_
-#  define UART_LINMR_NACT_SHIFT          (0)       /* Bits 0-1: LIN Node Action */
-#  define UART_LINMR_NACT_MASK           (3 << UART_LINMR_NACT_SHIFT)
-#    define UART_LINMR_NACT_PUBLISH      (0 << UART_LINMR_NACT_SHIFT) /* USART transmits response */
-#    define UART_LINMR_NACT_SUBSCRIBE    (1 << UART_LINMR_NACT_SHIFT) /* USART receives response */
-#    define UART_LINMR_NACT_IGNORE       (2 << UART_LINMR_NACT_SHIFT) /* USART does not transmit or receive response */
-#  define UART_LINMR_PARDIS              (1 << 2)  /* Bit 2:  Parity Disable */
-#  define UART_LINMR_CHKDIS              (1 << 3)  /* Bit 3:  Checksum Disable */
-#  define UART_LINMR_CHKTYP              (1 << 4)  /* Bit 4:  Checksum Type */
-#  define UART_LINMR_DLM                 (1 << 5)  /* Bit 5:  Data Length Mode */
-#  define UART_LINMR_FSDIS               (1 << 6)  /* Bit 6:  Frame Slot Mode Disable */
-#  define UART_LINMR_WKUPTYP             (1 << 7)  /* Bit 7:  Wakeup Signal Type */
-#  define UART_LINMR_DLC_SHIFT           (8)       /* Bits 8-15: Data Length Control */
-#  define UART_LINMR_DLC_MASK            (0xff << UART_LINMR_DLC_SHIFT)
-#  define UART_LINMR_PDCM                (1 << 0)  /* Bit 0:  PDC Mode */
+#  define UART_LINMR_NACT_SHIFT       (0)       /* Bits 0-1: LIN Node Action */
+#  define UART_LINMR_NACT_MASK        (3 << UART_LINMR_NACT_SHIFT)
+#    define UART_LINMR_NACT_PUBLISH   (0 << UART_LINMR_NACT_SHIFT) /* USART transmits response */
+#    define UART_LINMR_NACT_SUBSCRIBE (1 << UART_LINMR_NACT_SHIFT) /* USART receives response */
+#    define UART_LINMR_NACT_IGNORE    (2 << UART_LINMR_NACT_SHIFT) /* USART does not transmit or receive response */
+#  define UART_LINMR_PARDIS          (1 << 2)  /* Bit 2:  Parity Disable */
+#  define UART_LINMR_CHKDIS          (1 << 3)  /* Bit 3:  Checksum Disable */
+#  define UART_LINMR_CHKTYP          (1 << 4)  /* Bit 4:  Checksum Type */
+#  define UART_LINMR_DLM             (1 << 5)  /* Bit 5:  Data Length Mode */
+#  define UART_LINMR_FSDIS           (1 << 6)  /* Bit 6:  Frame Slot Mode Disable */
+#  define UART_LINMR_WKUPTYP         (1 << 7)  /* Bit 7:  Wakeup Signal Type */
+#  define UART_LINMR_DLC_SHIFT       (8)       /* Bits 8-15: Data Length Control */
+#  define UART_LINMR_DLC_MASK        (0xff << UART_LINMR_DLC_SHIFT)
+#    define UART_LINMR_DLC(n)        ((uint32_t)(n) << UART_LINMR_DLC_SHIFT)
+#  define UART_LINMR_PDCM            (1 << 16) /* Bit 16: PDC Mode */
 #endif
 
 /* LIN Identifier Register (USART only) */
 
 #if defined(CONFIG_ARCH_CHIP_SAM3X) || defined(CONFIG_ARCH_CHIP_SAM3A)
-#  define UART_LINIR_MASK                0xff      /* Bits 0-7: Identifier Character */
+#  define UART_LINIR_MASK            0xff      /* Bits 0-7: Identifier Character */
 #endif
 
 /* USART Write Protect Mode Register (USART only) */
@@ -509,7 +541,8 @@
 #define UART_WPMR_WPEN               (1 << 0)  /* Bit 0: Write Protect Enable (USART only) */
 #define UART_WPMR_WPKEY_SHIFT        (8)       /* Bits 8-31: Write Protect KEY (USART only) */
 #define UART_WPMR_WPKEY_MASK         (0x00ffffff << UART_WPMR_WPKEY_SHIFT)
-#  define UART_WPMR_WPKEY            (0x00555341 << UART_WPMR_WPKEY_SHIFT)
+#  define UART_WPMR_WPKEY            (0x00554152 << UART_WPMR_WPKEY_SHIFT)
+#  define USART_WPMR_WPKEY           (0x00555341 << UART_WPMR_WPKEY_SHIFT)
 
 /* USART Write Protect Status Register (USART only) */
 

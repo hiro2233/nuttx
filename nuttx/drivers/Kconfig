@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 config DISABLE_POLL
@@ -10,6 +10,9 @@ config DISABLE_POLL
 		The sizes of drivers can be reduced if the poll() method is not
 		supported.  If you do not use poll() or select(), then you can
 		select DISABLE_POLL to reduce the code footprint by a small amount.
+
+		This selection disables the poll() interface as well as interfaces
+		the derive from poll() such as select().
 
 config DEV_NULL
 	bool "Enable /dev/null"
@@ -24,16 +27,113 @@ config ARCH_HAVE_RNG
 
 config DEV_RANDOM
 	bool "Enable /dev/random"
-	default n
+	default y
 	depends on ARCH_HAVE_RNG
+	---help---
+		Enable support for /dev/urandom provided by a hardware TRNG.
 
-config LOOP
-	bool "Enable loop device"
+config DEV_URANDOM
+	bool "Enable /dev/urandom"
 	default n
 	---help---
-		Supports the standard loop device that can be used to export a
-		file (or character device) as a block device.  See losetup() and
-		loteardown() in include/nuttx/fs/fs.h.
+		Enable support for /dev/urandom provided by either a hardware TRNG or
+		by a software PRNG implementation.
+
+		NOTE:  This option may not be cryptographially secure and should not
+		be enabled if you are concerned about cyptographically secure
+		pseudo-random numbers (CPRNG) and do not know the characteristics
+		of the software PRNG impelementation!
+
+if DEV_URANDOM
+
+choice
+	prompt "/dev/urandom algorithm"
+	default DEV_URANDOM_ARCH if ARCH_HAVE_RNG
+	default DEV_URANDOM_XORSHIFT128 if !ARCH_HAVE_RNG
+
+config DEV_URANDOM_XORSHIFT128
+	bool "xorshift128"
+	---help---
+		xorshift128 is a pseudorandom number generator that is simple,
+		portable, and can also be used on 8-bit and 16-bit MCUs.
+
+		NOTE: Not cyptographically secure
+
+config DEV_URANDOM_CONGRUENTIAL
+	bool "Conguential"
+	---help---
+		Use the same congruential general used with srand().  This algorithm
+		is computationally more intense and uses double precision floating
+		point.  NOTE: Good randomness from the congruential generator also
+		requires that you also select CONFIG_LIB_RAND_ORDER > 2
+
+		NOTE: Not cyptographically secure
+
+config DEV_URANDOM_ARCH
+	bool "Architecture-specific"
+	depends on ARCH_HAVE_RNG
+	---help---
+		The implementation of /dev/urandom is provided in archtecture-
+		specific logic using hardware TRNG logic.  architecture-specific
+		logic must provide the whole implementation in this case, including
+		the function devurandom_register().  In this case, /dev/urandom may
+		refer to the same driver as /dev/random.
+
+		NOTE: May or may not be cyptographically secure, depending upon the
+		implementation.
+
+endchoice # /dev/urandom algorithm
+endif # DEV_URANDOM
+
+source drivers/loop/Kconfig
+
+menu "Buffering"
+
+config DRVR_WRITEBUFFER
+	bool "Enable write buffer support"
+	default n
+	---help---
+		Enable generic write buffering support that can be used by a variety
+		of drivers.
+
+if DRVR_WRITEBUFFER
+
+config DRVR_WRDELAY
+	int "Write flush delay"
+	default 350
+	---help---
+		If there is no write activity for this configured amount of time,
+		then the contents will be automatically flushed to the media.  This
+		reduces the likelihood that data will be stuck in the write buffer
+		at the time of power down.
+
+endif # DRVR_WRITEBUFFER
+
+config DRVR_READAHEAD
+	bool "Enable read-ahead buffer support"
+	default n
+	---help---
+		Enable generic read-ahead buffering support that can be used by a
+		variety of drivers.
+
+if DRVR_WRITEBUFFER || DRVR_READAHEAD
+
+config DRVR_READBYTES
+	bool "Support byte read method"
+	default y if MTD_BYTE_WRITE
+	default n if !MTD_BYTE_WRITE
+
+config DRVR_REMOVABLE
+	bool "Support removable media"
+	default n
+
+config DRVR_INVALIDATE
+	bool "Support cache invalidation"
+	default n
+
+endif # DRVR_WRITEBUFFER || DRVR_READAHEAD
+
+endmenu # Buffering
 
 config RAMDISK
 	bool "RAM Disk Support"
@@ -41,22 +141,43 @@ config RAMDISK
 	---help---
 		Can be used to set up a block of memory or (read-only) FLASH as
 		a block driver that can be mounted as a files system.  See
-		include/nuttx/fs/ramdisk.h.
+		include/nuttx/drivers/ramdisk.h.
 
 menuconfig CAN
 	bool "CAN Driver Support"
 	default n
 	---help---
 		This selection enables building of the "upper-half" CAN driver.
-		See include/nuttx/can.h for further CAN driver information.
+		See include/nuttx/drivers/can.h for further CAN driver information.
 
 if CAN
+
 config CAN_EXTID
 	bool "CAN extended IDs"
 	default n
 	---help---
-		Enables support for the 29-bit extended ID.  Default Standard 11-bit
+		Enables support for the 28-bit extended ID.  Default Standard 11-bit
 		IDs.
+
+config ARCH_HAVE_CAN_ERRORS
+	bool
+	default n
+
+config CAN_ERRORS
+	bool "CAN error reporting"
+	default n
+	depends on ARCH_HAVE_CAN_ERRORS
+	---help---
+		Support CAN error reporting.  If this option is selected then CAN
+		error reporting is enabled.  In the event of an error, the ch_error
+		bit will be set in the CAN message and the following message payload
+		will include a more detailed description of certain errors.
+
+config CAN_FD
+	bool "CAN FD"
+	default n
+	---help---
+		Enables support for the CAN_FD mode.
 
 config CAN_FIFOSIZE
 	int "CAN driver I/O buffer size"
@@ -70,6 +191,70 @@ config CAN_NPENDINGRTR
 	---help---
 		The size of the list of pending RTR requests. Default: 4
 
+config CAN_TXREADY
+	bool "can_txready interface"
+	default n
+	select SCHED_WORKQUEUE
+	---help---
+		This selection enables the can_txready() interface.  This interface
+		is needed only for CAN hardware that supports queing of outgoing
+		messages in a H/W FIFO.
+
+		The CAN upper half driver also supports a queue of output messages
+		in a S/W FIFO.  Messages are added to that queue when when
+		can_write() is called and removed from the queue in can_txdone()
+		when each TX message is complete.
+
+		After each message is added to the S/W FIFO, the CAN upper half
+		driver will attempt to send the message by calling into the lower
+		half driver.  That send will not be performed if the lower half
+		driver is busy, i.e., if dev_txready() returns false.  In that
+		case, the number of messages in the S/W FIFO can grow.  If the
+		S/W FIFO becomes full, then can_write() will wait for space in
+		the S/W FIFO.
+
+		If the CAN hardware does not support a H/W FIFO then busy means
+		that the hardware is actively sending the message and is
+		guaranteed to become non busy (i.e, dev_txready()) when the
+		send transfer completes and can_txdone() is called.  So the call
+		to can_txdone() means that the transfer has completed and also
+		that the hardware is ready to accept another transfer.
+
+		If the CAN hardware supports a H/W FIFO, can_txdone() is not
+		called when the tranfer is complete, but rather when the
+		transfer is queued in the H/W FIFO.  When the H/W FIFO becomes
+		full, then dev_txready() will report false and the number of
+		queued messages in the S/W FIFO will grow.
+
+		There is no mechanism in this case to inform the upper half
+		driver when the hardware is again available, when there is
+		again space in the H/W FIFO.  can_txdone() will not be called
+		again.  If the S/W FIFO becomes full, then the upper half
+		driver will wait for space to become available, but there is
+		no event to awaken it and the driver will hang.
+
+		Enabling this feature adds support for the can_txready()
+		interface.  This function is called from the lower half
+		driver's CAN interrupt handler each time a TX transfer
+		completes.  This is a sure indication that the H/W FIFO is
+		no longer full.  can_txready() will then awaken the
+		can_write() logic and the hang condition is avoided.
+
+choice
+	prompt "TX Ready Work Queue"
+	default CAN_TXREADY_HIPRI
+	depends on CAN_TXREADY
+
+config CAN_TXREADY_LOPRI
+	bool "Low-priority work queue"
+	select SCHED_LPWORK
+
+config CAN_TXREADY_HIPRI
+	bool "High-priority work queue"
+	select SCHED_HPWORK
+
+endchoice # TX Ready Work Queue
+
 config CAN_LOOPBACK
 	bool "CAN loopback mode"
 	default n
@@ -78,9 +263,21 @@ config CAN_LOOPBACK
 		driver does support loopback mode, the setting will enable it. (If the
 		driver does not, this setting will have no effect).
 
+config CAN_NPOLLWAITERS
+	int "Number of poll waiters"
+	default 2
+	depends on !DISABLE_POLL
+	---help---
+		The maximum number of threads that may be waiting on the
+		poll method.
+
 endif # CAN
 
 config ARCH_HAVE_PWM_PULSECOUNT
+	bool
+	default n
+
+config ARCH_HAVE_PWM_MULTICHAN
 	bool
 	default n
 
@@ -89,9 +286,10 @@ menuconfig PWM
 	default n
 	---help---
 		This selection enables building of the "upper-half" PWM driver.
-		See include/nuttx/pwm.h for further PWM driver information.
+		See include/nuttx/drivers/pwm.h for further PWM driver information.
 
 if PWM
+
 config PWM_PULSECOUNT
 	bool "PWM Pulse Count Support"
 	default n
@@ -101,6 +299,26 @@ config PWM_PULSECOUNT
 		This might be used, for example to support a stepper motor.  If the
 		hardware will support a fixed pulse count, then this configuration
 		should be set to enable the capability.
+
+config PWM_MULTICHAN
+	bool "PWM Multiple Output Channel Support"
+	default n
+	depends on ARCH_HAVE_PWM_MULTICHAN
+	depends on !PWM_PULSECOUNT
+	---help---
+		Enables support for multiple output channels per timer.
+
+if PWM_MULTICHAN
+
+config PWM_NCHANNELS
+	int "Number of Output Channels Per Timer"
+	default 1
+	range 1 4
+	---help---
+		Specifies the number of output channels per timer.  Each timer
+		may support fewer output channels than this value.
+
+endif # PWM_MULTICHAN
 
 endif # PWM
 
@@ -113,41 +331,11 @@ menuconfig I2C
 	default n
 	---help---
 		This selection enables building of the "upper-half" I2C driver.
-		See include/nuttx/i2c.h for further I2C driver information.
+		See include/nuttx/i2c/i2c_master.h for further I2C driver information.
 
 if I2C
-
-config I2C_SLAVE
-	bool "I2C Slave"
-	default n
-
-config I2C_TRANSFER
-	bool "Support the I2C transfer() method"
-	default n
-
-config I2C_WRITEREAD
-	bool "Support the I2C writeread() method"
-	default n
-
-config I2C_POLLED
-	bool "Polled I2C (no interrupts)"
-	default n
-
-config I2C_TRACE
-	bool "Enable I2C trace debug"
-	default n
-
-config I2C_NTRACE
-	int "Number of I2C trace records"
-	default 32
-	depends on I2C_TRACE
-
-config I2C_RESET
-	bool "Support up_i2creset"
-	default n
-	depends on ARCH_HAVE_I2CRESET
-
-endif # I2C
+source drivers/i2c/Kconfig
+endif
 
 menuconfig SPI
 	bool "SPI Driver Support"
@@ -159,7 +347,7 @@ menuconfig SPI
 
 if SPI
 source drivers/spi/Kconfig
-endif # SPI
+endif
 
 menuconfig I2S
 	bool "I2S Driver Support"
@@ -172,88 +360,7 @@ menuconfig I2S
 if I2S
 endif # I2S
 
-menuconfig RTC
-	bool "RTC Driver Support"
-	default n
-	---help---
-		This selection enables configuration of a real time clock (RTCdriver.
-		See include/nuttx/rtc.h for further watchdog timer driver information.
-		Most RTC drivers are MCU specific and may require other specific
-		settings.
-
-if RTC
-
-config RTC_DATETIME
-	bool "Date/Time RTC Support"
-	default n
-	---help---
-		There are two general types of RTC:  (1) A simple battery backed
-		counter that keeps the time when power is down, and (2) a full
-		date / time RTC the provides the date and time information, often in
-		BCD format.  If RTC_DATETIME is selected, it specifies this second kind
-		of RTC. In this case, the RTC is used to "seed" the normal NuttX timer
-		and the NuttX system timer provides for higher resolution time.
-
-if !RTC_DATETIME
-
-config RTC_HIRES
-	bool "Hi-Res RTC Support"
-	default n
-	---help---
-		If RTC_DATETIME not selected, then the simple, battery backed counter
-		is used.  There are two different implementations of such simple
-		counters based on the time resolution of the counter: The typical RTC
-		keeps time to resolution of 1 second, usually supporting a 32-bit
-		time_t value.  In this case, the RTC is used to "seed" the normal NuttX
-		timer and the NuttX timer provides for higherresoution time.
-
-		If RTC_HIRES is enabled in the NuttX configuration, then the RTC
-		provides higher resolution time and completely replaces the system
-		timer for purpose of date and time.
-
-config RTC_FREQUENCY
-	int "Hi-Res RTC frequency"
-	default 1
-	depends on RTC_HIRES
-	---help---
-		If RTC_HIRES is defined, then the frequency of the high resolution RTC
-		must be provided.  If RTC_HIRES is not defined, RTC_FREQUENCY is
-		assumed to be one Hz.
-
-endif # !RTC_DATETIME
-
-config RTC_ALARM
-	bool "RTC Alarm Support"
-	default n
-	---help---
-		Enable if the RTC hardware supports setting of an alarm.  A callback
-		function will be executed when the alarm goes off.
-
-endif # RTC
-
-menuconfig WATCHDOG
-	bool "Watchdog Timer Support"
-	default n
-	---help---
-		This selection enables building of the "upper-half" watchdog timer
-		driver. See include/nuttx/watchdog.h for further watchdog timer driver
-		information.
-
-if WATCHDOG
-
-config WATCHDOG_DEVPATH
-	string "Watchdog Device Path"
-	default "/dev/watchdog0"
-
-endif # WATCHDOG
-
-menuconfig TIMER
-	bool "Timer Support"
-	default n
-	---help---
-		This selection enables building of the "upper-half" timer
-		driver. See include/nuttx/timer.h for further timer driver
-		information.
+source drivers/timers/Kconfig
 
 menuconfig ANALOG
 	bool "Analog Device(ADC/DAC) Support"
@@ -272,10 +379,12 @@ menuconfig AUDIO_DEVICES
 	bool "Audio Device Support"
 	default n
 	---help---
-		Enable support for audio device drivers.
-		This includes drivers for MP3, WMA and Ogg Vorbis encoding,
-		decoding, as well as drivers for interfacing with external
-		DSP chips to perform custom audio functions.
+		Enable support for audio device drivers.  This includes drivers for
+		MP3, WMA and Ogg Vorbis encoding, decoding, as well as drivers for
+		interfacing with external DSP chips to perform custom audio functions.
+
+		NOTE: All of these drivers depend on support from the audio subsystem
+		enabled with the AUDIO selection.
 
 if AUDIO_DEVICES
 source drivers/audio/Kconfig
@@ -297,8 +406,8 @@ menuconfig BCH
 	---help---
 		Contains logic that may be used to convert a block driver into
 		a character driver.  This is the complementary conversion as that
-		performed by loop.c.  See include/nuttx/fs/fs.h for registration
-		information.
+		performed by loop.c.  See include/nuttx/drivers/drivers.h for
+		registration information.
 
 if BCH
 source drivers/bch/Kconfig
@@ -316,21 +425,9 @@ if INPUT
 source drivers/input/Kconfig
 endif # INPUT
 
-menuconfig LCD
-	bool "LCD Driver Support"
-	default n
-	select NX_LCDDRIVER
-	---help---
-		Drivers for parallel and serial LCD and OLED type devices.  These
-		drivers support interfaces as defined in include/nuttx/lcd/lcd.h
-
-		This selection is necessary to enable support for LCD drivers in
-		drivers/lcd as well as for board-specific LCD drivers in the configs/
-		subdirectories.
-
-if LCD
+source drivers/ioexpander/Kconfig
 source drivers/lcd/Kconfig
-endif # LCD
+source drivers/leds/Kconfig
 
 menuconfig MMCSD
 	bool "MMC/SD Driver Support"
@@ -343,6 +440,16 @@ menuconfig MMCSD
 if MMCSD
 source drivers/mmcsd/Kconfig
 endif # MMCSD
+
+menuconfig MODEM
+	bool "Modem Support"
+	default n
+	---help---
+		Enable modem support.
+
+if MODEM
+source drivers/modem/Kconfig
+endif # MODEM
 
 menuconfig MTD
 	bool "Memory Technology Device (MTD) Support"
@@ -360,6 +467,16 @@ menuconfig MTD
 if MTD
 source drivers/mtd/Kconfig
 endif # MTD
+
+menuconfig EEPROM
+	bool "EEPROM support"
+	default n
+	---help---
+		This directory holds implementations of EEPROM drivers.
+
+if EEPROM
+source drivers/eeprom/Kconfig
+endif
 
 menuconfig NETDEVICES
 	bool "Network Device/PHY Support"
@@ -392,25 +509,7 @@ if PIPES
 source drivers/pipes/Kconfig
 endif # PIPES
 
-config PM
-	bool "Power management (PM) driver interfaces"
-	default n
-	---help---
-		Power management (PM) driver interfaces.  These interfaces are used
-		to manage power usage of a platform by monitoring driver activity
-		and by placing drivers into reduce power usage modes when the
-		drivers are not active.
-
-menuconfig POWER
-	bool "Power Management Support"
-	default n
-	---help---
-		Enable building of power-related devices (battery monitors, chargers,
-		etc).
-
-if POWER
 source drivers/power/Kconfig
-endif # POWER
 
 menuconfig SENSORS
 	bool "Sensor Device Support"
@@ -471,16 +570,29 @@ if USBHOST
 source drivers/usbhost/Kconfig
 endif # USBHOST
 
-menuconfig WIRELESS
+config HAVE_USBTRACE
+	bool
+	default n
+
+menuconfig USBMONITOR
+	bool "USB Monitor"
+	default n
+	depends on HAVE_USBTRACE
+	---help---
+		If USB device tracing (USBDEV_TRACE) AND/OR USB host tracing
+		(USBHOST_TRACE) are enabled then this option will select the USB
+		monitor.  The USB monitor is a daemon that will periodically collect
+		the buffered USB trace data and dump it to the SYSLOG device.
+
+if USBMONITOR
+source drivers/usbmonitor/Kconfig
+endif # USBMONITOR
+
+menuconfig DRIVERS_WIRELESS
 	bool "Wireless Device Support"
 	default n
 	---help---
 		Drivers for various wireless devices.
 
-if WIRELESS
 source drivers/wireless/Kconfig
-endif # WIRELESS
-
-comment "System Logging Device Options"
-
 source drivers/syslog/Kconfig

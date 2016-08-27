@@ -1,7 +1,7 @@
-/***********************************************************************
+/****************************************************************************
  * examples/ostest/posixtimer.c
  *
- *   Copyright (C) 2007-2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ***********************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Included Files
- **************************************************************************/
+ ****************************************************************************/
 
 #include <stdio.h>
 #include <unistd.h>
@@ -45,9 +45,9 @@
 #include <errno.h>
 #include "ostest.h"
 
-/**************************************************************************
+/****************************************************************************
  * Private Definitions
- **************************************************************************/
+ ****************************************************************************/
 
 #ifndef NULL
 # define NULL (void*)0
@@ -56,16 +56,16 @@
 #define MY_TIMER_SIGNAL 17
 #define SIGVALUE_INT  42
 
-/**************************************************************************
+/****************************************************************************
  * Private Data
- **************************************************************************/
+ ****************************************************************************/
 
 static sem_t sem;
 static int g_nsigreceived = 0;
 
-/**************************************************************************
+/****************************************************************************
  * Private Functions
- **************************************************************************/
+ ****************************************************************************/
 
 static void timer_expiration(int signo, siginfo_t *info, void *ucontext)
 {
@@ -134,13 +134,13 @@ static void timer_expiration(int signo, siginfo_t *info, void *ucontext)
 
 }
 
-/**************************************************************************
+/****************************************************************************
  * Public Functions
- **************************************************************************/
+ ****************************************************************************/
 
 void timer_test(void)
 {
-  sigset_t           sigset;
+  sigset_t           set;
   struct sigaction   act;
   struct sigaction   oact;
   struct sigevent    notify;
@@ -156,9 +156,9 @@ void timer_test(void)
 
   printf("timer_test: Unmasking signal %d\n" , MY_TIMER_SIGNAL);
 
-  (void)sigemptyset(&sigset);
-  (void)sigaddset(&sigset, MY_TIMER_SIGNAL);
-  status = sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+  (void)sigemptyset(&set);
+  (void)sigaddset(&set, MY_TIMER_SIGNAL);
+  status = sigprocmask(SIG_UNBLOCK, &set, NULL);
   if (status != OK)
     {
       printf("timer_test: ERROR sigprocmask failed, status=%d\n",
@@ -187,9 +187,13 @@ void timer_test(void)
 
   printf("timer_test: Creating timer\n" );
 
-  notify.sigev_notify          = SIGEV_SIGNAL;
-  notify.sigev_signo           = MY_TIMER_SIGNAL;
-  notify.sigev_value.sival_int = SIGVALUE_INT;
+  notify.sigev_notify            = SIGEV_SIGNAL;
+  notify.sigev_signo             = MY_TIMER_SIGNAL;
+  notify.sigev_value.sival_int   = SIGVALUE_INT;
+#ifdef CONFIG_SIG_EVTHREAD
+  notify.sigev_notify_function   = NULL;
+  notify.sigev_notify_attributes = NULL;
+#endif
 
   status = timer_create(CLOCK_REALTIME, &notify, &timerid);
   if (status != OK)
@@ -254,7 +258,7 @@ errorout:
 
   /* Detach the signal handler */
 
-  act.sa_sigaction = SIG_DFL;
+  act.sa_handler = SIG_DFL;
   status = sigaction(MY_TIMER_SIGNAL, &act, &oact);
 
   printf("timer_test: done\n" );

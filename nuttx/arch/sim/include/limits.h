@@ -1,4 +1,4 @@
-/************************************************************
+/****************************************************************************
  * arch/sim/include/limits.h
  *
  *   Copyright (C) 2007, 2009, 2012 Gregory Nutt. All rights reserved.
@@ -31,18 +31,18 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************/
+ ****************************************************************************/
 
 #ifndef __ARCH_SIM_INCLUDE_LIMITS_H
 #define __ARCH_SIM_INCLUDE_LIMITS_H
 
-/************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************/
+ ****************************************************************************/
 
-/************************************************************
- * Definitions
- ************************************************************/
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
 #define CHAR_BIT    8
 #define SCHAR_MIN   (-SCHAR_MAX - 1)
@@ -77,10 +77,15 @@
 #define LLONG_MAX   9223372036854775807LL
 #define ULLONG_MAX  18446744073709551615ULL
 
-/* A pointer is 4 bytes */
+/* A pointer is 4 or 8 bytes */
 
 #define PTR_MIN     (-PTR_MAX - 1)
-#define PTR_MAX     2147483647
-#define UPTR_MAX    4294967295U
+#if !defined(CONFIG_HOST_X86_64) || defined(CONFIG_SIM_M32)
+#  define PTR_MAX   2147483647
+#  define UPTR_MAX  4294967295U
+#else
+#  define PTR_MAX   9223372036854775807LL
+#  define UPTR_MAX  18446744073709551615ULL
+#endif
 
 #endif /* __ARCH_SIM_INCLUDE_LIMITS_H  */

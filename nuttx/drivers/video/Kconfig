@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 config VIDEO_OV2640
@@ -104,7 +104,7 @@ endchoice
 config OV2640_REGDEBUG
 	bool "Register level debug output"
 	default n
-	depends on DEBUG
+	depends on DEBUG_FEATURES
 	---help---
 		Enable details, register level debug output.
 

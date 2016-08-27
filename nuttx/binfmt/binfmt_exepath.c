@@ -124,7 +124,7 @@ EXEPATH_HANDLE exepath_init(void)
 
   /* Allocate a container for the PATH variable contents */
 
-  exepath = (FAR struct exepath_s *)kmalloc(SIZEOF_EXEPATH_S(strlen(path) + 1));
+  exepath = (FAR struct exepath_s *)kmm_malloc(SIZEOF_EXEPATH_S(strlen(path) + 1));
   if (!exepath)
     {
       /* Ooops.. we are out of memory */
@@ -142,7 +142,7 @@ EXEPATH_HANDLE exepath_init(void)
   return (EXEPATH_HANDLE)exepath;
 }
 
- /****************************************************************************
+/****************************************************************************
  * Name: exepath_next
  *
  * Description:
@@ -161,7 +161,7 @@ EXEPATH_HANDLE exepath_init(void)
  *   is marked executable).
  *
  *   NOTE: The string pointer return in the success case points to allocated
- *   memory.  This memory must be freed by the called by calling kfree().
+ *   memory.  This memory must be freed by the called by calling kmm_free().
  *
  *   NULL is returned if no path is found to any file with the provided
  *   'relpath' from any absolute path in the PATH variable.  In this case,
@@ -190,7 +190,7 @@ FAR char *exepath_next(EXEPATH_HANDLE handle, FAR const char *relpath)
    * in the PATH variable have been considered.
    */
 
-  for (;;)
+  for (; ; )
     {
       /* Make sure that exepath->next points to the beginning of a string */
 
@@ -230,7 +230,7 @@ FAR char *exepath_next(EXEPATH_HANDLE handle, FAR const char *relpath)
         }
 
       pathlen  = strlen(path) + strlen(relpath) + 2;
-      fullpath = (FAR char *)kmalloc(pathlen);
+      fullpath = (FAR char *)kmm_malloc(pathlen);
       if (!fullpath)
         {
           /* Failed to allocate memory */
@@ -244,7 +244,7 @@ FAR char *exepath_next(EXEPATH_HANDLE handle, FAR const char *relpath)
 
       /* Verify that a regular file exists at this path */
 
-      ret = stat(fullpath, &buf);;
+      ret = stat(fullpath, &buf);
       if (ret == OK && S_ISREG(buf.st_mode))
         {
           return fullpath;
@@ -254,7 +254,7 @@ FAR char *exepath_next(EXEPATH_HANDLE handle, FAR const char *relpath)
        * continue to try the next path.
        */
 
-       kfree(fullpath);
+       kmm_free(fullpath);
     }
 
   /* We will not get here */
@@ -279,7 +279,7 @@ FAR char *exepath_next(EXEPATH_HANDLE handle, FAR const char *relpath)
 
 void exepath_release(EXEPATH_HANDLE handle)
 {
-  kfree(handle);
+  kmm_free(handle);
 }
 
 #endif /* !CONFIG_BINFMT_DISABLE && CONFIG_BINFMT_EXEPATH */

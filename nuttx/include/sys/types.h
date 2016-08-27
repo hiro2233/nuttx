@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/sys/types.h
  *
- *   Copyright (C) 2007-2009, 2011-2012, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011-2012, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -94,8 +94,9 @@
 #define PRIOR_OTHER_MIN   0
 #define PRIOR_OTHER_MAX 255
 
-/* Scheduling Priorities.  NOTE:  Only the idle task can take
- * the true minimum priority. */
+/* Scheduling Priorities.  NOTE:  Only the idle task can take the true
+ * minimum priority.
+ */
 
 #define SCHED_PRIORITY_MAX     255
 #define SCHED_PRIORITY_DEFAULT 100
@@ -141,10 +142,14 @@ typedef int16_t      ssize_t;
 typedef uint16_t     rsize_t;
 
 #else /* CONFIG_SMALL_MEMORY */
+/* As a general rule, the size of size_t should be the same as the size of
+ * uintptr_t: 32-bits on a machine with 32-bit addressing but 64-bits on a
+ * machine with 64-bit addressing.
+ */
 
-typedef uint32_t     size_t;
-typedef int32_t      ssize_t;
-typedef uint32_t     rsize_t;
+typedef uintptr_t    size_t;
+typedef intptr_t     ssize_t;
+typedef uintptr_t    rsize_t;
 
 #endif /* CONFIG_SMALL_MEMORY */
 
@@ -174,6 +179,13 @@ typedef int16_t      pid_t;
  */
 
 typedef int16_t      id_t;
+
+/* Unix requires a key of type key_t defined in file sys/types.h for requesting
+ * resources such as shared memory segments, message queues and semaphores. A key
+ * is simply an integer of type key_t
+ */
+
+typedef int16_t      key_t;
 
 /* Signed integral type of the result of subtracting two pointers */
 
@@ -232,14 +244,44 @@ typedef uint32_t     clock_t;
 typedef uint32_t     useconds_t;
 typedef int32_t      suseconds_t;
 
+#ifdef CONFIG_SMP
+/* This is the smallest integer type that will hold a bitset of all CPUs */
+
+#if (CONFIG_SMP_NCPUS <= 8)
+typedef volatile uint8_t cpu_set_t;
+#elif (CONFIG_SMP_NCPUS <= 16)
+typedef volatile uint16_t cpu_set_t;
+#elif (CONFIG_SMP_NCPUS <= 32)
+typedef volatile uint32_t cpu_set_t;
+#else
+#  error SMP: Extensions needed to support this number of CPUs
+#endif
+#endif /* CONFIG_SMP */
+
+/* BSD types provided only to support porting to NuttX. */
+
+typedef unsigned char  u_char;
+typedef unsigned short u_short;
+typedef unsigned int   u_int;
+typedef unsigned long  u_long;
+
+/* SYSV types provided only to support porting to NuttX.  */
+
+typedef unsigned char  unchar;
+typedef unsigned short ushort;
+typedef unsigned int   uint;
+typedef unsigned long  ulong;
+typedef signed char    s_char;
+typedef FAR char      *caddr_t;
+
 /* Task entry point */
 
-typedef CODE int (*main_t)(int argc, char *argv[]);
+typedef CODE int (*main_t)(int argc, FAR char *argv[]);
 
-#endif
+#endif /* __ASSEMBLY__ */
 
 /****************************************************************************
- * Global Function Prototypes
+ * Public Function Prototypes
  ****************************************************************************/
 
 #endif /* __INCLUDE_SYS_TYPES_H */

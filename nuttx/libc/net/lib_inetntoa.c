@@ -1,7 +1,7 @@
 /****************************************************************************
  * libc/net/lib_inetntoa.c
  *
- *   Copyright (C) 2007-2008, 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2008, 2011-2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,20 +38,23 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#include <stdio.h>
-#include <arpa/inet.h>
 
-#ifndef CONFIG_NET_IPv6
+#include <stdio.h>
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
+#ifdef CONFIG_NET_IPv4
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
  * Name: inet_ntoa
  *
  * Description:
- *   The inet_ntoa() function converts the Internet host address in given in
+ *   The inet_ntoa() function converts the Internet host address given in
  *   network byte order to a string in standard numbers-and-dots notation.
  *   The string is returned in a statically allocated buffer, which subsequent
  *   calls will overwrite.
@@ -62,18 +65,17 @@
 FAR char *inet_ntoa(struct in_addr in)
 {
   static char buffer[INET_ADDRSTRLEN+2];
-  FAR char *ptr = (FAR char*)&in.s_addr;
-  sprintf(buffer, "%d.%d.%d.%d", ptr[0], ptr[1], ptr[2], ptr[3]);
+  FAR unsigned char *ptr = (FAR unsigned char *)&in.s_addr;
+  sprintf(buffer, "%u.%u.%u.%u", ptr[0], ptr[1], ptr[2], ptr[3]);
   return buffer;
 }
 #else
 FAR char *_inet_ntoa(in_addr_t in)
 {
   static char buffer[INET_ADDRSTRLEN+2];
-  FAR char *ptr = (FAR char*)&in;
-  sprintf(buffer, "%d.%d.%d.%d", ptr[0], ptr[1], ptr[2], ptr[3]);
+  FAR unsigned char *ptr = (FAR unsigned char *)&in;
+  sprintf(buffer, "%u.%u.%u.%u", ptr[0], ptr[1], ptr[2], ptr[3]);
   return buffer;
 }
 #endif
-#endif /* !CONFIG_NET_IPv6 */
-
+#endif /* CONFIG_NET_IPv4 */

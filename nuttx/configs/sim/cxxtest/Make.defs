@@ -50,11 +50,11 @@ ARCHCPUFLAGS = -fno-builtin
 ifeq ($(CONFIG_UCLIBCXX_EXCEPTION),y)
   ARCHCPUFLAGSXX = -fno-builtin
 else
-  ARCHCPUFLAGSXX = -fno-builtin -fno-exceptions
+  ARCHCPUFLAGSXX = -fno-builtin -fno-exceptions -fcheck-new
 endif
 ARCHPICFLAGS = -fpic
-ARCHWARNINGS = -Wall -Wstrict-prototypes -Wshadow
-ARCHWARNINGSXX = -Wall -Wshadow
+ARCHWARNINGS = -Wall -Wstrict-prototypes -Wshadow -Wundef
+ARCHWARNINGSXX = -Wall -Wshadow -Wundef
 ARCHDEFINES =
 ARCHINCLUDES = -I. -isystem $(TOPDIR)/include
 ARCHINCLUDESXX = -I. -isystem $(TOPDIR)/include -isystem $(TOPDIR)/include/cxx -isystem $(TOPDIR)/include/uClibc++
@@ -82,6 +82,21 @@ CXXFLAGS = $(ARCHWARNINGSXX) $(ARCHOPTIMIZATION) \
 CPPFLAGS = $(ARCHINCLUDES) $(ARCHDEFINES) $(EXTRADEFINES)
 AFLAGS = $(CFLAGS) -D__ASSEMBLY__
 
+
+# ELF module definitions
+
+CELFFLAGS = $(CFLAGS)
+CXXELFFLAGS = $(CXXFLAGS)
+
+LDELFFLAGS = -r -e main
+ifeq ($(WINTOOL),y)
+  LDELFFLAGS += -T "${shell cygpath -w $(TOPDIR)/configs/$(CONFIG_ARCH_BOARD)/scripts/gnu-elf.ld}"
+else
+  LDELFFLAGS += -T $(TOPDIR)/configs/$(CONFIG_ARCH_BOARD)/scripts/gnu-elf.ld
+endif
+
+
+ASMEXT = .S
 OBJEXT = .o
 LIBEXT = .a
 
@@ -111,7 +126,7 @@ ifeq ($(CONFIG_SIM_M32),y)
   LDFLAGS += -m32
 endif
 
-MKDEP = $(TOPDIR)/tools/mkdeps.sh
+MKDEP = $(TOPDIR)/tools/mkdeps$(HOSTEXEEXT)
 
 HOSTCC = gcc
 HOSTINCLUDES = -I.

@@ -57,6 +57,7 @@
 #include <stdbool.h>
 #include <semaphore.h>
 #include <errno.h>
+#include <assert.h>
 #include <debug.h>
 
 #include <arch/board/board.h>
@@ -319,12 +320,12 @@
 #ifdef CONFIG_SAMA5_ADC_DMA
 #  define DMA_FLAGS \
      DMACH_FLAG_FIFOCFG_LARGEST | \
-     ((SAM_IRQ_ADC << DMACH_FLAG_PERIPHPID_SHIFT) | DMACH_FLAG_PERIPHAHB_AHB_IF2 | \
+     DMACH_FLAG_PERIPHPID(SAM_IRQ_ADC) | DMACH_FLAG_PERIPHAHB_AHB_IF2 | \
      DMACH_FLAG_PERIPHH2SEL | DMACH_FLAG_PERIPHISPERIPH |  \
      DMACH_FLAG_PERIPHWIDTH_16BITS | DMACH_FLAG_PERIPHCHUNKSIZE_1 | \
-     ((0x3f) << DMACH_FLAG_MEMPID_SHIFT) | DMACH_FLAG_MEMAHB_AHB_IF0 | \
+     DMACH_FLAG_MEMPID_MAX | DMACH_FLAG_MEMAHB_AHB_IF0 | \
      DMACH_FLAG_MEMWIDTH_16BITS | DMACH_FLAG_MEMINCREMENT | \
-     DMACH_FLAG_MEMCHUNKSIZE_1)
+     DMACH_FLAG_MEMCHUNKSIZE_1 | DMACH_FLAG_MEMBURST_4)
 #endif
 
 /* Pick an unused channel number */
@@ -370,6 +371,10 @@
 
 #define SAMA5_ADC_SAMPLES (CONFIG_SAMA5_ADC_DMASAMPLES * SAMA5_NCHANNELS)
 
+#ifndef CONFIG_DEBUG_ANALOG_INFO
+#  undef CONFIG_SAMA5_ADC_REGDEBUG
+#endif
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -378,6 +383,7 @@
 
 struct sam_adc_s
 {
+  FAR const struct adc_callback_s *cb;
   sem_t exclsem;         /* Supports exclusive access to the ADC interface */
   bool initialized;      /* The ADC driver is already initialized */
   uint32_t frequency;    /* ADC clock frequency */
@@ -421,7 +427,7 @@ struct sam_adc_s
  ****************************************************************************/
 /* Register operations ******************************************************/
 
-#if defined(CONFIG_SAMA5_ADC_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_SAMA5_ADC_REGDEBUG
 static bool sam_adc_checkreg(struct sam_adc_s *priv, bool wr,
                              uint32_t regval, uintptr_t address);
 #endif
@@ -446,6 +452,8 @@ static int  sam_adc_interrupt(int irq, void *context);
 /* ADC methods */
 
 #ifdef SAMA5_ADC_HAVE_CHANNELS
+static int  sam_adc_bind(FAR struct adc_dev_s *dev,
+                         FAR const struct adc_callback_s *callback);
 static void sam_adc_reset(struct adc_dev_s *dev);
 static int  sam_adc_setup(struct adc_dev_s *dev);
 static void sam_adc_shutdown(struct adc_dev_s *dev);
@@ -477,6 +485,7 @@ static void sam_adc_channels(struct sam_adc_s *priv);
 
 static const struct adc_ops_s g_adcops =
 {
+  .ao_bind     = sam_adc_bind,
   .ao_reset    = sam_adc_reset,
   .ao_setup    = sam_adc_setup,
   .ao_shutdown = sam_adc_shutdown,
@@ -539,7 +548,7 @@ static bool sam_adc_checkreg(struct sam_adc_s *priv, bool wr,
         {
           /* Yes... show how many times we did it */
 
-          lldbg("...[Repeats %d times]...\n", priv->ntimes);
+          ainfo("...[Repeats %d times]...\n", priv->ntimes);
         }
 
       /* Save information about the new access */
@@ -599,7 +608,7 @@ static void sam_adc_dmadone(void *arg)
   int chan;
   int i;
 
-  avdbg("ready=%d enabled=%d\n", priv->enabled, priv->ready);
+  ainfo("ready=%d enabled=%d\n", priv->enabled, priv->ready);
   ASSERT(priv != NULL && !priv->ready);
 
   /* If the DMA transfer is not enabled, just ignore the data (and do not start
@@ -652,7 +661,7 @@ static void sam_adc_dmadone(void *arg)
        * newly DMAed data from RAM.
        */
 
-      cp15_invalidate_dcache((uintptr_t)buffer,
+      arch_invalidate_dcache((uintptr_t)buffer,
                              (uintptr_t)buffer + SAMA5_ADC_SAMPLES * sizeof(uint16_t));
 
       /* Process each sample */
@@ -664,9 +673,15 @@ static void sam_adc_dmadone(void *arg)
           chan   = (int)((*buffer & ADC_LCDR_CHANB_MASK) >> ADC_LCDR_CHANB_SHIFT);
           sample = ((*buffer & ADC_LCDR_DATA_MASK) >> ADC_LCDR_DATA_SHIFT);
 
-          /* And give the sample data to the ADC upper half */
+          /* Verify that the upper-half driver has bound its callback functions */
 
-          (void)adc_receive(priv->dev, chan, sample);
+          if (priv->cb != NULL)
+            {
+              /* Give the sample data to the ADC upper half */
+
+              DEBUGASSERT(priv->cb->au_receive != NULL);
+              priv->cb->au_receive(priv->dev, chan, sample);
+            }
         }
     }
 
@@ -714,7 +729,7 @@ static void sam_adc_dmacallback(DMA_HANDLE handle, void *arg, int result)
   struct sam_adc_s *priv = (struct sam_adc_s *)arg;
   int ret;
 
-  allvdbg("ready=%d enabled=%d\n", priv->enabled, priv->ready);
+  ainfo("ready=%d enabled=%d\n", priv->enabled, priv->ready);
   DEBUGASSERT(priv->ready);
 
   /* Check of the bottom half is keeping up with us.
@@ -740,7 +755,7 @@ static void sam_adc_dmacallback(DMA_HANDLE handle, void *arg, int result)
       ret = work_queue(HPWORK, &priv->work, sam_adc_dmadone, priv, 0);
       if (ret != 0)
         {
-          alldbg("ERROR: Failed to queue work: %d\n", ret);
+          aerr("ERROR: Failed to queue work: %d\n", ret);
         }
     }
 
@@ -787,7 +802,7 @@ static int sam_adc_dmasetup(FAR struct sam_adc_s *priv, FAR uint8_t *buffer,
   uint32_t paddr;
   uint32_t maddr;
 
-  avdbg("buffer=%p buflen=%d\n", buffer, (int)buflen);
+  ainfo("buffer=%p buflen=%d\n", buffer, (int)buflen);
   DEBUGASSERT(priv != NULL && buffer != NULL && buflen > 0);
   DEBUGASSERT(((uint32_t)buffer & 3) == 0);
 
@@ -838,7 +853,7 @@ static void sam_adc_endconversion(void *arg)
   int chan;
 
   ASSERT(priv != NULL);
-  avdbg("pending=%08x\n", priv->pending);
+  ainfo("pending=%08x\n", priv->pending);
 
   /* Get the set of unmasked, pending ADC interrupts */
 
@@ -858,7 +873,17 @@ static void sam_adc_endconversion(void *arg)
           /* Read the ADC sample and pass it to the upper half */
 
           regval = sam_adc_getreg(priv, SAM_ADC_CDR(chan));
-          (void)adc_receive(priv->dev, chan, regval & ADC_CDR_DATA_MASK);
+
+          /* Verify that the upper-half driver has bound its callback functions */
+
+          if (priv->cb != NULL)
+            {
+              /* Perform the data received callback */
+
+              DEBUGASSERT(priv->cb->au_receive != NULL);
+              priv->cb->au_receive(priv->dev, chan, regval & ADC_CDR_DATA_MASK);
+            }
+
           pending &= ~bit;
         }
     }
@@ -936,7 +961,7 @@ static int sam_adc_interrupt(int irq, void *context)
       ret = work_queue(HPWORK, &priv->work, sam_adc_endconversion, priv, 0);
       if (ret != 0)
         {
-          alldbg("ERROR: Failed to queue work: %d\n", ret);
+          aerr("ERROR: Failed to queue work: %d\n", ret);
         }
 
       pending &= ~ADC_INT_EOCALL;
@@ -954,6 +979,26 @@ static int sam_adc_interrupt(int irq, void *context)
 /****************************************************************************
  * ADC methods
  ****************************************************************************/
+
+/****************************************************************************
+ * Name: sam_adc_bind
+ *
+ * Description:
+ *   Bind the upper-half driver callbacks to the lower-half implementation.  This
+ *   must be called early in order to receive ADC event notifications.
+ *
+ ****************************************************************************/
+
+static int sam_adc_bind(FAR struct adc_dev_s *dev,
+                        FAR const struct adc_callback_s *callback)
+{
+  struct sam_adc_s *priv = (struct sam_adc_s *)dev->ad_priv;
+
+  DEBUGASSERT(priv != NULL);
+  priv->cb = callback;
+  return OK;
+}
+
 /****************************************************************************
  * Name: sam_adc_reset
  *
@@ -970,7 +1015,7 @@ static void sam_adc_reset(struct adc_dev_s *dev)
 #endif
   uint32_t regval;
 
-  avdbg("Resetting..\n");
+  ainfo("Resetting..\n");
 
   /* NOTE: We can't really reset the ADC hardware without losing the
    * touchscreen configuration.
@@ -1040,7 +1085,7 @@ static int sam_adc_setup(struct adc_dev_s *dev)
   struct sam_adc_s *priv = (struct sam_adc_s *)dev->ad_priv;
   uint32_t regval;
 
-  avdbg("Setup\n");
+  ainfo("Setup\n");
 
   /* Enable channel number tag.  This bit will force the channel number (CHNB)
    * to be included in the LDCR register content.
@@ -1111,7 +1156,7 @@ static void sam_adc_shutdown(struct adc_dev_s *dev)
   struct sam_adc_s *priv = (struct sam_adc_s *)dev->ad_priv;
 #endif
 
-  avdbg("Shutdown\n");
+  ainfo("Shutdown\n");
 
   /* Reset the ADC peripheral */
 
@@ -1140,7 +1185,7 @@ static void sam_adc_rxint(struct adc_dev_s *dev, bool enable)
   struct sam_adc_s *priv = (struct sam_adc_s *)dev->ad_priv;
 #endif
 
-  avdbg("enable=%d\n", enable);
+  ainfo("enable=%d\n", enable);
 
 #ifdef CONFIG_SAMA5_ADC_DMA
   /* Ignore redundant requests */
@@ -1191,7 +1236,7 @@ static int sam_adc_ioctl(struct adc_dev_s *dev, int cmd, unsigned long arg)
 #endif
   int ret = OK;
 
-  avdbg("cmd=%d arg=%ld\n", cmd, arg);
+  ainfo("cmd=%d arg=%ld\n", cmd, arg);
 
   switch (cmd)
     {
@@ -1233,9 +1278,10 @@ static int sam_adc_settimer(struct sam_adc_s *priv, uint32_t frequency,
   uint32_t tcclks;
   uint32_t mode;
   uint32_t fdiv;
+  uint32_t regval;
   int ret;
 
-  avdbg("frequency=%ld channel=%d\n", (long)frequency, channel);
+  ainfo("frequency=%ld channel=%d\n", (long)frequency, channel);
   DEBUGASSERT(priv && frequency > 0);
 
   /* Configure TC for a 1Hz frequency and trigger on RC compare. */
@@ -1243,7 +1289,7 @@ static int sam_adc_settimer(struct sam_adc_s *priv, uint32_t frequency,
   ret = sam_tc_divisor(frequency, &div, &tcclks);
   if (ret < 0)
     {
-      adbg("ERROR: sam_tc_divisor failed: %d\n", ret);
+      aerr("ERROR: sam_tc_divisor failed: %d\n", ret);
       return ret;
     }
 
@@ -1262,12 +1308,12 @@ static int sam_adc_settimer(struct sam_adc_s *priv, uint32_t frequency,
   priv->tc = sam_tc_allocate(channel, mode);
   if (!priv->tc)
     {
-      adbg("ERROR: Failed to allocate channel %d mode %08x\n", channel, mode);
+      aerr("ERROR: Failed to allocate channel %d mode %08x\n", channel, mode);
       return -EINVAL;
     }
 
   /* The divider returned by sam_tc_divisor() is the reload value that will
-   * achieve a 1HZ rate.  We need to multiply this to get the desired
+   * achieve a 1Hz rate.  We need to multiply this to get the desired
    * frequency.  sam_tc_divisor() should have already assure that we can
    * do this without overflowing a 32-bit unsigned integer.
    */
@@ -1275,12 +1321,18 @@ static int sam_adc_settimer(struct sam_adc_s *priv, uint32_t frequency,
   fdiv = div * frequency;
   DEBUGASSERT(div > 0 && div <= fdiv); /* Will check for integer overflow */
 
+  /* Calculate the actual counter value from this divider and the tc input
+   * frequency.
+   */
+
+  regval = sam_tc_infreq() / fdiv;
+
   /* Set up TC_RA and TC_RC.  The frequency is determined by RA and RC:  TIOA is
    * cleared on RA match; TIOA is set on RC match.
    */
 
-  sam_tc_setregister(priv->tc, TC_REGA, fdiv << 1);
-  sam_tc_setregister(priv->tc, TC_REGC, fdiv);
+  sam_tc_setregister(priv->tc, TC_REGA, regval >> 1);
+  sam_tc_setregister(priv->tc, TC_REGC, regval);
 
   /* And start the timer */
 
@@ -1302,7 +1354,7 @@ static void sam_adc_freetimer(struct sam_adc_s *priv)
 {
   /* Is a timer allocated? */
 
-  avdbg("tc=%p\n", priv->tc);
+  ainfo("tc=%p\n", priv->tc);
 
   if (priv->tc)
     {
@@ -1329,7 +1381,7 @@ static int sam_adc_trigger(struct sam_adc_s *priv)
   int ret = OK;
 
 #if defined(CONFIG_SAMA5_ADC_SWTRIG)
-  avdbg("Setup software trigger\n");
+  ainfo("Setup software trigger\n");
 
   /* Configure the software trigger */
 
@@ -1345,7 +1397,7 @@ static int sam_adc_trigger(struct sam_adc_s *priv)
   sam_adc_putreg(priv, SAM_ADC_TRGR, regval);
 
 #elif defined(CONFIG_SAMA5_ADC_ADTRG)
-  avdbg("Setup ADTRG trigger\n");
+  ainfo("Setup ADTRG trigger\n");
 
   /* Configure the trigger via the external ADTRG signal */
 
@@ -1372,7 +1424,7 @@ static int sam_adc_trigger(struct sam_adc_s *priv)
   sam_adc_putreg(priv, SAM_ADC_TRGR, regval);
 
 #elif defined(CONFIG_SAMA5_ADC_TIOATRIG)
-  avdbg("Setup timer/counter trigger\n");
+  ainfo("Setup timer/counter trigger\n");
 
   /* Start the timer */
 
@@ -1388,7 +1440,7 @@ static int sam_adc_trigger(struct sam_adc_s *priv)
 #endif
   if (ret < 0)
     {
-      adbg("ERROR: sam_adc_settimer failed: %d\n", ret);
+      aerr("ERROR: sam_adc_settimer failed: %d\n", ret);
       return ret;
     }
 
@@ -1452,7 +1504,7 @@ static void sam_adc_autocalibrate(struct sam_adc_s *priv)
 #ifdef CONFIG_SAMA5_ADC_AUTOCALIB
   uint32_t regval;
 
-  avdbg("Entry\n");
+  ainfo("Entry\n");
 
   /* Launch an automatic calibration of the ADC cell on next sequence */
 
@@ -1479,7 +1531,7 @@ static void sam_adc_offset(struct sam_adc_s *priv)
 {
   uint32_t regval = 0;
 
-  avdbg("Entry\n");
+  ainfo("Entry\n");
 
 #ifdef CONFIG_SAMA5_ADC_ANARCH
   /* Set the offset for each enabled channel.  This centers the analog signal
@@ -1570,10 +1622,10 @@ static void sam_adc_offset(struct sam_adc_s *priv)
    * used for all channel.
    */
 
-#if CONFIG_SAMA5_ADC_OFFSET
+#ifdef CONFIG_SAMA5_ADC_OFFSET
   regval |= ADC_COR_OFF0;
 #endif
-#if CONFIG_SAMA5_ADC_DIFFMODE
+#ifdef CONFIG_SAMA5_ADC_DIFFMODE
   regval |= ADC_COR_DIFF0;
 #endif
 #endif
@@ -1596,7 +1648,7 @@ static void sam_adc_gain(struct sam_adc_s *priv)
 #ifdef CONFIG_SAMA5_ADC_ANARCH
   uint32_t regval;
 
-  avdbg("Entry\n");
+  ainfo("Entry\n");
 
   /* Set the gain for each enabled channel */
 
@@ -1642,7 +1694,7 @@ static void sam_adc_gain(struct sam_adc_s *priv)
   sam_adc_putreg(priv, SAM_ADC_CGR, regval);
 
 #else
-  avdbg("Gain=%d\n", CONFIG_SAMA5_ADC_GAIN);
+  ainfo("Gain=%d\n", CONFIG_SAMA5_ADC_GAIN);
 
   /* Set GAIN0 only.  GAIN0 will be used for all channels. */
 
@@ -1663,7 +1715,7 @@ static void sam_adc_analogchange(struct sam_adc_s *priv)
 {
   uint32_t regval;
 
-  avdbg("Entry\n");
+  ainfo("Entry\n");
 
   /* Enable/disable the analog change feature */
 
@@ -1706,7 +1758,7 @@ static void sam_adc_setseqr(int chan, uint32_t *seqr1, uint32_t *seqr2, int seq)
       *seqr1 |= ADC_SEQR1_USCH(seq, chan);
     }
 
-  avdbg("chan=%d seqr1=%08x seqr2=%08x seq=%d\n", chan, *seqr1, *seqr2, seq);
+  ainfo("chan=%d seqr1=%08x seqr2=%08x seq=%d\n", chan, *seqr1, *seqr2, seq);
 }
 #endif
 
@@ -1718,7 +1770,7 @@ static void sam_adc_sequencer(struct sam_adc_s *priv)
   uint32_t seqr2;
   int seq;
 
-  avdbg("Setup sequencer\n");
+  ainfo("Setup sequencer\n");
 
   /* Set user configured channel sequence */
 
@@ -1807,7 +1859,7 @@ static void sam_adc_sequencer(struct sam_adc_s *priv)
 #else
   uint32_t regval;
 
-  avdbg("Disable sequencer\n");
+  ainfo("Disable sequencer\n");
 
   /* Disable the sequencer */
 
@@ -1830,7 +1882,7 @@ static void sam_adc_channels(struct sam_adc_s *priv)
 {
   uint32_t regval;
 
-  avdbg("Entry\n");
+  ainfo("Entry\n");
 
   /* Enable channels. */
 
@@ -1899,7 +1951,7 @@ static void sam_adc_channels(struct sam_adc_s *priv)
  *   Initialize the adc
  *
  * Returned Value:
- *   Valid can device structure reference on succcess; a NULL on failure
+ *   Valid can device structure reference on success; a NULL on failure
  *
  ****************************************************************************/
 
@@ -1910,13 +1962,13 @@ struct adc_dev_s *sam_adc_initialize(void)
   uint32_t mck;
   int ret;
 
-  /* Have we already been initialzed?  If yes, than just hand out the
+  /* Have we already been initialized?  If yes, than just hand out the
    * interface one more time.
    */
 
   if (!priv->initialized)
     {
-      avdbg("Initializing...\n");
+      ainfo("Initializing...\n");
 
       /* Disable ADC peripheral clock */
 
@@ -1973,6 +2025,7 @@ struct adc_dev_s *sam_adc_initialize(void)
       /* Initialize the private ADC device data structure */
 
       sem_init(&priv->exclsem,  0, 1);
+      priv->cb  = NULL;
       priv->dev = &g_adcdev;
 
 #ifdef CONFIG_SAMA5_ADC_DMA
@@ -2007,7 +2060,7 @@ struct adc_dev_s *sam_adc_initialize(void)
         }
       else
         {
-          adbg("ERROR: Cannot realize ADC input frequency\n");
+          aerr("ERROR: Cannot realize ADC input frequency\n");
           return NULL;
         }
 
@@ -2016,7 +2069,7 @@ struct adc_dev_s *sam_adc_initialize(void)
       regval |= PMC_PCR_PID(SAM_PID_ADC) | PMC_PCR_CMD | PMC_PCR_EN;
       sam_adc_putreg(priv, SAM_PMC_PCR, regval);
 
-      /* Enable the ADC peripheral clock*/
+      /* Enable the ADC peripheral clock */
 
       sam_adc_enableclk();
 
@@ -2059,7 +2112,7 @@ struct adc_dev_s *sam_adc_initialize(void)
       ret = irq_attach(SAM_IRQ_ADC, sam_adc_interrupt);
       if (ret < 0)
         {
-          adbg("ERROR: Failed to attach IRQ %d: %d\n", SAM_IRQ_ADC, ret);
+          aerr("ERROR: Failed to attach IRQ %d: %d\n", SAM_IRQ_ADC, ret);
           return NULL;
         }
 
@@ -2078,7 +2131,7 @@ struct adc_dev_s *sam_adc_initialize(void)
 
   /* Return a pointer to the device structure */
 
-  avdbg("Returning %p\n", &g_adcdev);
+  ainfo("Returning %p\n", &g_adcdev);
   return &g_adcdev;
 }
 
@@ -2094,7 +2147,7 @@ void sam_adc_lock(FAR struct sam_adc_s *priv)
 {
   int ret;
 
-  avdbg("Locking\n");
+  ainfo("Locking\n");
 
   do
     {
@@ -2119,7 +2172,7 @@ void sam_adc_lock(FAR struct sam_adc_s *priv)
 
 void sam_adc_unlock(FAR struct sam_adc_s *priv)
 {
-  avdbg("Unlocking\n");
+  ainfo("Unlocking\n");
   sem_post(&priv->exclsem);
 }
 
@@ -2138,7 +2191,7 @@ uint32_t sam_adc_getreg(struct sam_adc_s *priv, uintptr_t address)
 
   if (sam_adc_checkreg(priv, false, regval, address))
     {
-      lldbg("%08x->%08x\n", address, regval);
+      ainfo("%08x->%08x\n", address, regval);
     }
 
   return regval;
@@ -2158,7 +2211,7 @@ void sam_adc_putreg(struct sam_adc_s *priv, uintptr_t address, uint32_t regval)
 {
   if (sam_adc_checkreg(priv, true, regval, address))
     {
-      lldbg("%08x<-%08x\n", address, regval);
+      ainfo("%08x<-%08x\n", address, regval);
     }
 
   putreg32(regval, address);

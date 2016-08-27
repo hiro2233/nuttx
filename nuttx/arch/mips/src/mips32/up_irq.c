@@ -44,23 +44,11 @@
 #include <arch/mips32/cp0.h>
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: irqsave
+ * Name: up_irq_save
  *
  * Description:
  *   Save the current interrupt state and disable interrupts.
@@ -73,7 +61,7 @@
  *
  ****************************************************************************/
 
-irqstate_t irqsave(void)
+irqstate_t up_irq_save(void)
 {
   register irqstate_t status;
   register irqstate_t ret;
@@ -87,11 +75,11 @@ irqstate_t irqsave(void)
 }
 
 /****************************************************************************
- * Name: irqrestore
+ * Name: up_irq_restore
  *
  * Description:
  *   Restore the previous interrutp state (i.e., the one previously returned
- *   by irqsave())
+ *   by up_irq_save())
  *
  * Input Parameters:
  *   state - The interrupt state to be restored.
@@ -101,7 +89,7 @@ irqstate_t irqsave(void)
  *
  ****************************************************************************/
 
-void irqrestore(irqstate_t irqstate)
+void up_irq_restore(irqstate_t irqstate)
 {
   register irqstate_t status;
 

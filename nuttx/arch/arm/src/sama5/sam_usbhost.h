@@ -80,6 +80,9 @@ enum usbhost_trace1codes_e
   OHCI_TRACE1_EDALLOC_FAILED,       /* OHCI ERROR: Failed to allocate ED */
   OHCI_TRACE1_TDALLOC_FAILED,       /* OHCI ERROR: Failed to allocate TD */
   OHCI_TRACE1_IRQATTACH,            /* OHCI ERROR: Failed to attach IRQ */
+#ifdef CONFIG_USBHOST_ASYNCH
+  OHCI_TRACE1_BADTDSTATUS,          /* OHCI ERROR: Bad asynch TD completion status */
+#endif
 
 #ifdef HAVE_USBHOST_TRACE_VERBOSE
   OHCI_VTRACE1_PHYSED,              /* OHCI physed */
@@ -91,6 +94,7 @@ enum usbhost_trace1codes_e
   OHCI_VTRACE1_ALREADYDISCONN,      /* OHCI Already disconnected */
   OHCI_VTRACE1_RHSC,                /* OHCI Root Hub Status Change */
   OHCI_VTRACE1_WDHINTR,             /* OHCI Writeback Done Head interrupt */
+  OHCI_VTRACE1_CLASSENUM,           /* OHCI Enumerate the device */
   OHCI_VTRACE1_ENUMDISCONN,         /* OHCI RHport Not connected */
   OHCI_VTRACE1_INITIALIZING,        /* OHCI Initializing Stack */
   OHCI_VTRACE1_INITIALIZED,         /* OHCI Initialized */
@@ -132,6 +136,7 @@ enum usbhost_trace1codes_e
   EHCI_VTRACE1_TOPHALF,             /* EHCI Interrupt top half */
   EHCI_VTRACE1_AAINTR,              /* EHCI Async Advance Interrupt */
   EHCI_VTRACE1_USBINTR,             /* EHCI USB Interrupt (USBINT) Interrupt */
+  EHCI_VTRACE1_CLASSENUM,           /* EHCI Enumerate the device */
   EHCI_VTRACE1_ENUM_DISCONN,        /* EHCI Enumeration not connected */
   EHCI_VTRACE1_INITIALIZING,        /* EHCI Initializing EHCI Stack */
   EHCI_VTRACE1_HCCPARAMS,           /* EHCI HCCPARAMS */
@@ -149,19 +154,22 @@ enum usbhost_trace1codes_e
   OHCI_TRACE2_CLASSENUM_FAILED,     /* OHCI usbhost_enumerate() failed */
 
 #ifdef HAVE_USBHOST_TRACE_VERBOSE
+  OHCI_VTRACE2_EP0CONFIG,           /* OHCI EP0 configuration */
   OHCI_VTRACE2_INTERVAL,            /* OHCI interval */
   OHCI_VTRACE2_MININTERVAL,         /* OHCI MIN interval/offset */
   OHCI_VTRACE2_RHPORTST,            /* OHCI RHPORTST */
   OHCI_VTRACE2_CONNECTED,           /* OHCI RHPort connected */
   OHCI_VTRACE2_DISCONNECTED,        /* OHCI RHPort disconnected */
-  OHCI_VTRACE2_WAKEUP,              /* OHCI RHPort connected */
-  OHCI_VTRACE2_CLASSENUM,           /* OHCI Enumerate the device */
-  OHCI_VTRACE2_EP0CONFIGURE,        /* OHCI RHPort EP0 CTRL */
+  OHCI_VTRACE2_WAKEUP,              /* OHCI RHPort connected wakeup */
+  OHCI_VTRACE2_EP0CTRLED,           /* OHCI RHPort EP0 CTRL */
   OHCI_VTRACE2_EPALLOC,             /* OHCI EP CTRL */
   OHCI_VTRACE2_CTRLIN,              /* OHCI CTRLIN */
   OHCI_VTRACE2_CTRLOUT,             /* OHCI CTRLOUT */
   OHCI_VTRACE2_TRANSFER,            /* OHCI EP buflen */
   OHCI_VTRACE2_INITCONNECTED,       /* OHCI RHPort Device connected */
+#ifdef CONFIG_USBHOST_HUB
+  OHCI_VTRACE2_HUBWAKEUP,           /* EHCI Hub Port connected wakeup */
+#endif
 #endif
 #endif
 
@@ -171,6 +179,7 @@ enum usbhost_trace1codes_e
   EHCI_TRACE2_CLASSENUM_FAILED,     /* EHCI usbhost_enumerate() failed */
 
 #ifdef HAVE_USBHOST_TRACE_VERBOSE
+  EHCI_VTRACE2_EP0CONFIG,           /* EHCI EP0 configuration */
   EHCI_VTRACE2_ASYNCXFR,            /* EHCI Async transfer */
   EHCI_VTRACE2_INTRXFR,             /* EHCI Interrupt Transfer */
   EHCI_VTRACE2_IOCCHECK,            /* EHCI IOC */
@@ -178,7 +187,6 @@ enum usbhost_trace1codes_e
   EHCI_VTRACE2_PORTSC_CONNECTED,    /* EHCI RHPort connected */
   EHCI_VTRACE2_PORTSC_DISCONND,     /* EHCI RHport disconnected */
   EHCI_VTRACE2_MONWAKEUP,           /* EHCI RHPort connected wakeup */
-  EHCI_VTRACE2_CLASSENUM,           /* EHCI RHPort CLASS enumeration */
   EHCI_VTRACE2_EPALLOC,             /* EHCI EPALLOC */
   EHCI_VTRACE2_CTRLINOUT,           /* EHCI CTRLIN/OUT */
   EHCI_VTRACE2_HCIVERSION,          /* EHCI HCIVERSION */
@@ -222,7 +230,7 @@ extern "C"
  * Public Functions
  ************************************************************************************/
 
-/*******************************************************************************
+/************************************************************************************
  * Name: sam_ohci_initialize
  *
  * Description:
@@ -245,14 +253,14 @@ extern "C"
  * - Class drivers should be initialized prior to calling this function.
  *   Otherwise, there is a race condition if the device is already connected.
  *
- *******************************************************************************/
+ ************************************************************************************/
 
 #ifdef CONFIG_SAMA5_OHCI
 struct usbhost_connection_s;
 FAR struct usbhost_connection_s *sam_ohci_initialize(int controller);
 #endif
 
-/*******************************************************************************
+/************************************************************************************
  * Name: sam_ohci_tophalf
  *
  * Description:
@@ -260,13 +268,13 @@ FAR struct usbhost_connection_s *sam_ohci_initialize(int controller);
  *   EHCI will manage the common UHPHS interrupt and will forward the interrupt
  *   event to this function.
  *
- *******************************************************************************/
+ ************************************************************************************/
 
 #ifdef CONFIG_SAMA5_OHCI
 int sam_ohci_tophalf(int irq, FAR void *context);
 #endif
 
-/*******************************************************************************
+/************************************************************************************
  * Name: sam_ehci_initialize
  *
  * Description:
@@ -289,7 +297,7 @@ int sam_ohci_tophalf(int irq, FAR void *context);
  * - Class drivers should be initialized prior to calling this function.
  *   Otherwise, there is a race condition if the device is already connected.
  *
- *******************************************************************************/
+ ************************************************************************************/
 
 #ifdef CONFIG_SAMA5_EHCI
 struct usbhost_connection_s;

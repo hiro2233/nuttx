@@ -1,4 +1,4 @@
-/***********************************************************************
+/****************************************************************************
  * sem.c
  *
  *   Copyright (C) 2007-2009 Gregory Nutt. All rights reserved.
@@ -31,7 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ***********************************************************************/
+ ****************************************************************************/
+
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
 
 #include <stdio.h>
 #include <pthread.h>
@@ -39,15 +43,27 @@
 #include <sched.h>
 #include "ostest.h"
 
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
 #ifndef NULL
 # define NULL (void*)0
 #endif
 
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
 static sem_t sem;
+
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
 
 static void *waiter_func(void *parameter)
 {
-  int id = (int)parameter;
+  int id  = (int)((intptr_t)parameter);
   int status;
   int value;
 
@@ -89,7 +105,7 @@ static void *waiter_func(void *parameter)
 
 static void *poster_func(void *parameter)
 {
-  int id = (int)parameter;
+  int id  = (int)((intptr_t)parameter);
   int status;
   int value;
 
@@ -137,6 +153,10 @@ static void *poster_func(void *parameter)
   return NULL;
 
 }
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
 
 void sem_test(void)
 {

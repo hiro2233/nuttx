@@ -1,6 +1,5 @@
 /****************************************************************************
  * arch/z80/include/z8/types.h
- * include/arch/chip/types.h
  *
  *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -46,7 +45,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -93,14 +92,14 @@ typedef unsigned long      _uint32_t;
 typedef signed int         _intptr_t;
 typedef unsigned int       _uintptr_t;
 
-/* This is the size of the interrupt state save returned by irqsave() */
+/* This is the size of the interrupt state save returned by up_irq_save() */
 
 typedef _uint8_t           irqstate_t;
 
 #endif /* __ASSEMBLY__ */
 
 /****************************************************************************
- * Global Function Prototypes
+ * Public Function Prototypes
  ****************************************************************************/
 
 #endif /* __ARCH_Z80_INCLUDE_Z8_IRQ_H */

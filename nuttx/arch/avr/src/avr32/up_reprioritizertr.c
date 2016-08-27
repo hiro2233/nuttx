@@ -1,7 +1,7 @@
 /****************************************************************************
  *  arch/avr/src/avr32/up_reprioritizertr.c
  *
- *   Copyright (C) 2010, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,21 +44,11 @@
 #include <sched.h>
 #include <debug.h>
 #include <nuttx/arch.h>
+#include <nuttx/sched.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
+#include "group/group.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -102,10 +92,10 @@ void up_reprioritize_rtr(struct tcb_s *tcb, uint8_t priority)
     }
   else
     {
-      struct tcb_s *rtcb = (struct tcb_s*)g_readytorun.head;
+      struct tcb_s *rtcb = this_task();
       bool switch_needed;
 
-      slldbg("TCB=%p PRI=%d\n", tcb, priority);
+      sinfo("TCB=%p PRI=%d\n", tcb, priority);
 
       /* Remove the tcb task from the ready-to-run list.
        * sched_removereadytorun will return true if we just
@@ -142,24 +132,33 @@ void up_reprioritize_rtr(struct tcb_s *tcb, uint8_t priority)
               sched_mergepending();
             }
 
-         /* Are we in an interrupt handler? */
+          /* Update scheduler parameters */
 
-          if (current_regs)
+          sched_suspend_scheduler(rtcb);
+
+          /* Are we in an interrupt handler? */
+
+          if (g_current_regs)
             {
               /* Yes, then we have to do things differently.
-               * Just copy the current_regs into the OLD rtcb.
+               * Just copy the g_current_regs into the OLD rtcb.
                */
 
                up_savestate(rtcb->xcp.regs);
 
               /* Restore the exception context of the rtcb at the (new) head
-               * of the g_readytorun task list.
+               * of the ready-to-run task list.
                */
 
-              rtcb = (struct tcb_s*)g_readytorun.head;
-              slldbg("New Active Task TCB=%p\n", rtcb);
+              rtcb = this_task();
 
-              /* Then switch contexts */
+              /* Update scheduler parameters */
+
+              sched_resume_scheduler(rtcb);
+
+              /* Then switch contexts.  Any necessary address environment
+               * changes will be made when the interrupt returns.
+               */
 
               up_restorestate(rtcb->xcp.regs);
             }
@@ -172,7 +171,23 @@ void up_reprioritize_rtr(struct tcb_s *tcb, uint8_t priority)
                * ready to run list.
                */
 
-              struct tcb_s *nexttcb = (struct tcb_s*)g_readytorun.head;
+              struct tcb_s *nexttcb = this_task();
+
+#ifdef CONFIG_ARCH_ADDRENV
+              /* Make sure that the address environment for the previously
+               * running task is closed down gracefully (data caches dump,
+               * MMU flushed) and set up the address environment for the new
+               * thread at the head of the ready-to-run list.
+               */
+
+              (void)group_addrenv(nexttcb);
+#endif
+              /* Update scheduler parameters */
+
+              sched_resume_scheduler(nexttcb);
+
+              /* Then switch contexts */
+
               up_switchcontext(rtcb->xcp.regs, nexttcb->xcp.regs);
 
               /* up_switchcontext forces a context switch to the task at the

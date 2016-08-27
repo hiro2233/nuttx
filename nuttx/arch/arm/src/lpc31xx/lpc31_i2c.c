@@ -1,9 +1,9 @@
-/*******************************************************************************
+/****************************************************************************
  * arch/arm/src/lpc31xx/lpc31_i2c.c
  *
  *   Author: David Hewson
  *
- *   Copyright (C) 2010-2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010-2011, 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,11 +33,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *******************************************************************************/
+ ****************************************************************************/
 
-/*******************************************************************************
+/****************************************************************************
  * Included Files
- *******************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
@@ -50,12 +50,12 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/i2c.h>
+#include <nuttx/wdog.h>
+#include <nuttx/i2c/i2c_master.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <arch/board/board.h>
 
-#include "wdog.h"
 #include "chip.h"
 #include "up_arch.h"
 #include "up_internal.h"
@@ -64,9 +64,9 @@
 #include "lpc31_evntrtr.h"
 #include "lpc31_syscreg.h"
 
-/*******************************************************************************
- * Definitions
- *******************************************************************************/
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -79,18 +79,17 @@
  ****************************************************************************/
 struct lpc31_i2cdev_s
 {
-    struct i2c_dev_s  dev;        /* Generic I2C device */
-    struct i2c_msg_s  msg;        /* a single message for legacy read/write */
+    struct i2c_master_s dev;      /* Generic I2C device */
     unsigned int      base;       /* Base address of registers */
     uint16_t          clkid;      /* Clock for this device */
     uint16_t          rstid;      /* Reset for this device */
     uint16_t          irqid;      /* IRQ for this device */
 
     sem_t             mutex;      /* Only one thread can access at a time */
-
     sem_t             wait;       /* Place to wait for state machine completion */
     volatile uint8_t  state;      /* State of state machine */
-    WDOG_ID           timeout;    /* watchdog to timeout when bus hung */
+    WDOG_ID           timeout;    /* Watchdog to timeout when bus hung */
+    uint32_t          frequency;  /* Current I2C frequency */
 
     struct i2c_msg_s *msgs;       /* remaining transfers - first one is in progress */
     unsigned int      nmsg;       /* number of transfer remaining */
@@ -109,271 +108,80 @@ struct lpc31_i2cdev_s
 static struct lpc31_i2cdev_s i2cdevices[2];
 
 /****************************************************************************
- * Private Functions
+ * Private Function Prototypes
  ****************************************************************************/
 
 static int  i2c_interrupt(int irq, FAR void *context);
 static void i2c_progress(struct lpc31_i2cdev_s *priv);
 static void i2c_timeout(int argc, uint32_t arg, ...);
-static void i2c_reset(struct lpc31_i2cdev_s *priv);
+static void i2c_hwreset(struct lpc31_i2cdev_s *priv);
+static void i2c_setfrequency(struct lpc31_i2cdev_s *priv, uint32_t frequency);
+static int  i2c_transfer(FAR struct i2c_master_s *dev,
+                         FAR struct i2c_msg_s *msgs, int count);
+#ifdef CONFIG_I2C_RESET
+static int  i2c_reset(FAR struct i2c_master_s * dev);
+#endif
 
 /****************************************************************************
- * Public Functions
+ * Private Data
  ****************************************************************************/
-
-/****************************************************************************
- * I2C device operations
- ****************************************************************************/
-
-static uint32_t i2c_setfrequency(FAR struct i2c_dev_s *dev, uint32_t frequency);
-static int      i2c_setaddress(FAR struct i2c_dev_s *dev, int addr, int nbits);
-static int      i2c_write(FAR struct i2c_dev_s *dev, const uint8_t *buffer, int buflen);
-static int      i2c_read(FAR struct i2c_dev_s *dev, uint8_t *buffer, int buflen);
-static int      i2c_transfer(FAR struct i2c_dev_s *dev, FAR struct i2c_msg_s *msgs, int count);
 
 struct i2c_ops_s lpc31_i2c_ops =
 {
-  .setfrequency = i2c_setfrequency,
-  .setaddress   = i2c_setaddress,
-  .write        = i2c_write,
-  .read         = i2c_read,
-#ifdef CONFIG_I2C_TRANSFER
-  .transfer     = i2c_transfer
+  .transfer = i2c_transfer
+#ifdef CONFIG_I2C_RESET
+  , .reset  = i2c_reset
 #endif
 };
 
-/*******************************************************************************
- * Name: up_i2cinitialize
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: i2c_setfrequency
  *
  * Description:
- *   Initialise an I2C device
+ *   Set the frequency for the next transfer
  *
- *******************************************************************************/
+ ****************************************************************************/
 
-struct i2c_dev_s *up_i2cinitialize(int port)
+static void i2c_setfrequency(struct lpc31_i2cdev_s *priv, uint32_t frequency)
 {
-  struct lpc31_i2cdev_s *priv = &i2cdevices[port];
-
-  priv->base  = (port == 0) ? LPC31_I2C0_VBASE : LPC31_I2C1_VBASE;
-  priv->clkid = (port == 0) ? CLKID_I2C0PCLK     : CLKID_I2C1PCLK;
-  priv->rstid = (port == 0) ? RESETID_I2C0RST    : RESETID_I2C1RST;
-  priv->irqid = (port == 0) ? LPC31_IRQ_I2C0   : LPC31_IRQ_I2C1;
-
-  sem_init(&priv->mutex, 0, 1);
-  sem_init(&priv->wait, 0, 0);
-
-  /* Enable I2C system clocks */
-
-  lpc31_enableclock(priv->clkid);
-
-  /* Reset I2C blocks */
-
-  lpc31_softreset(priv->rstid);
-
-  /* Soft reset the device */
-
-  i2c_reset(priv);
-
-  /* Allocate a watchdog timer */
-  priv->timeout = wd_create();
-
-  DEBUGASSERT(priv->timeout != 0);
-
-  /* Attach Interrupt Handler */
-  irq_attach(priv->irqid, i2c_interrupt);
-
-  /* Enable Interrupt Handler */
-  up_enable_irq(priv->irqid);
-
-  /* Install our operations */
-  priv->dev.ops = &lpc31_i2c_ops;
-
-  return &priv->dev;
-}
-
-/*******************************************************************************
- * Name: up_i2cuninitalize
- *
- * Description:
- *   Uninitialise an I2C device
- *
- *******************************************************************************/
-
-void up_i2cuninitalize(struct lpc31_i2cdev_s *priv)
-{
-  /* Disable All Interrupts, soft reset the device */
-
-  i2c_reset(priv);
-
-  /* Detach Interrupt Handler */
-
-  irq_detach(priv->irqid);
-
-  /* Reset I2C blocks */
-
-  lpc31_softreset(priv->rstid);
-
-  /* Disable I2C system clocks */
-
-  lpc31_disableclock(priv->clkid);
-}
-
-/*******************************************************************************
- * Name: lpc31_i2c_setfrequency
- *
- * Description:
- *   Set the frequence for the next transfer
- *
- *******************************************************************************/
-
-static uint32_t i2c_setfrequency(FAR struct i2c_dev_s *dev, uint32_t frequency)
-{
-  struct lpc31_i2cdev_s *priv = (struct lpc31_i2cdev_s *) dev;
-
-  uint32_t freq = lpc31_clkfreq(priv->clkid, DOMAINID_AHB0APB1);
-
-  if (freq > 100000)
+  if (frequency != priv->frequency)
     {
-      /* asymetric per 400Khz I2C spec */
+      uint32_t freq = lpc31_clkfreq(priv->clkid, DOMAINID_AHB0APB1);
 
-      putreg32(((47 * freq) / (83 + 47)) / frequency, priv->base + LPC31_I2C_CLKHI_OFFSET);
-      putreg32(((83 * freq) / (83 + 47)) / frequency, priv->base + LPC31_I2C_CLKLO_OFFSET);
+      if (freq > 100000)
+        {
+          /* asymetric per 400Khz I2C spec */
+
+          putreg32(((47 * freq) / (83 + 47)) / frequency,
+                   priv->base + LPC31_I2C_CLKHI_OFFSET);
+          putreg32(((83 * freq) / (83 + 47)) / frequency,
+                   priv->base + LPC31_I2C_CLKLO_OFFSET);
+        }
+      else
+        {
+          /* 50/50 mark space ratio */
+
+          putreg32(((50 * freq) / 100) / frequency,
+                   priv->base + LPC31_I2C_CLKLO_OFFSET);
+          putreg32(((50 * freq) / 100) / frequency,
+                   priv->base + LPC31_I2C_CLKHI_OFFSET);
+        }
+
+      priv->frequency = frequency;
     }
-  else
-    {
-      /* 50/50 mark space ratio */
-
-      putreg32(((50 * freq) / 100) / frequency, priv->base + LPC31_I2C_CLKLO_OFFSET);
-      putreg32(((50 * freq) / 100) / frequency, priv->base + LPC31_I2C_CLKHI_OFFSET);
-    }
-
-  /* FIXME: This function should return the actual selected frequency */
-
-  return frequency;
 }
 
-/*******************************************************************************
- * Name: lpc31_i2c_setaddress
- *
- * Description:
- *   Set the I2C slave address for a subsequent read/write
- *
- *******************************************************************************/
-
-static int i2c_setaddress(FAR struct i2c_dev_s *dev, int addr, int nbits)
-{
-  struct lpc31_i2cdev_s *priv = (struct lpc31_i2cdev_s *) dev;
-
-  DEBUGASSERT(dev != NULL);
-  DEBUGASSERT(nbits == 7 || nbits == 10);
-
-  priv->msg.addr  = addr;
-  priv->msg.flags = (nbits == 7) ? 0 : I2C_M_TEN;
-
-  return OK;
-}
-
-/*******************************************************************************
- * Name: lpc31_i2c_write
- *
- * Description:
- *   Send a block of data on I2C using the previously selected I2C
- *   frequency and slave address.
- *
- *******************************************************************************/
-
-static int i2c_write(FAR struct i2c_dev_s *dev, const uint8_t *buffer, int buflen)
-{
-  struct lpc31_i2cdev_s *priv = (struct lpc31_i2cdev_s *) dev;
-  int ret;
-
-  DEBUGASSERT(dev != NULL);
-
-  priv->msg.flags &= ~I2C_M_READ;
-  priv->msg.buffer = (uint8_t*)buffer;
-  priv->msg.length = buflen;
-
-  ret = i2c_transfer(dev, &priv->msg, 1);
-
-  return ret == 1 ? OK : -ETIMEDOUT;
-}
-
-/*******************************************************************************
- * Name: lpc31_i2c_read
- *
- * Description:
- *   Receive a block of data on I2C using the previously selected I2C
- *   frequency and slave address.
- *
- *******************************************************************************/
-
-static int i2c_read(FAR struct i2c_dev_s *dev, uint8_t *buffer, int buflen)
-{
-  struct lpc31_i2cdev_s *priv = (struct lpc31_i2cdev_s *) dev;
-  int ret;
-
-  DEBUGASSERT(dev != NULL);
-
-  priv->msg.flags |= I2C_M_READ;
-  priv->msg.buffer = buffer;
-  priv->msg.length = buflen;
-
-  ret = i2c_transfer(dev, &priv->msg, 1);
-
-  return ret == 1 ? OK : -ETIMEDOUT;
-}
-
-/*******************************************************************************
- * Name: i2c_transfer
- *
- * Description:
- *   Perform a sequence of I2C transfers
- *
- *******************************************************************************/
-
-static int i2c_transfer(FAR struct i2c_dev_s *dev, FAR struct i2c_msg_s *msgs, int count)
-{
-  struct lpc31_i2cdev_s *priv = (struct lpc31_i2cdev_s *) dev;
-  irqstate_t flags;
-  int ret;
-
-  sem_wait(&priv->mutex);
-  flags = irqsave();
-
-  priv->state = I2C_STATE_START;
-  priv->msgs  = msgs;
-  priv->nmsg  = count;
-
-  i2c_progress(priv);
-
-  /* start a watchdog to timeout the transfer if
-   * the bus is locked up...
-   */
-
-  wd_start(priv->timeout, I2C_TIMEOUT, i2c_timeout, 1, (uint32_t)priv);
-
-  while (priv->state != I2C_STATE_DONE)
-    {
-      sem_wait(&priv->wait);
-    }
-
-  wd_cancel(priv->timeout);
-
-  ret = count - priv->nmsg;
-
-  irqrestore(flags);
-  sem_post(&priv->mutex);
-
-  return ret;
-}
-
-/*******************************************************************************
+/****************************************************************************
  * Name: i2c_interrupt
  *
  * Description:
  *   The I2C Interrupt Handler
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static int i2c_interrupt(int irq, FAR void *context)
 {
@@ -390,13 +198,13 @@ static int i2c_interrupt(int irq, FAR void *context)
   return OK;
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: i2c_progress
  *
  * Description:
  *   Progress any remaining I2C transfers
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void i2c_progress(struct lpc31_i2cdev_s *priv)
 {
@@ -411,7 +219,7 @@ static void i2c_progress(struct lpc31_i2cdev_s *priv)
     {
       /* Perform a soft reset */
 
-      i2c_reset(priv);
+      i2c_hwreset(priv);
 
       /* FIXME: automatic retry? */
 
@@ -581,7 +389,7 @@ out:
               priv->nmsg++;
             }
 
-          i2c_reset(priv);
+          i2c_hwreset(priv);
         }
 
       priv->state = I2C_STATE_DONE;
@@ -589,19 +397,19 @@ out:
     }
 }
 
-/*******************************************************************************
+/****************************************************************************
  * Name: i2c_timeout
  *
  * Description:
  *   Watchdog timer for timeout of I2C operation
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 static void i2c_timeout(int argc, uint32_t arg, ...)
 {
   struct lpc31_i2cdev_s *priv = (struct lpc31_i2cdev_s *) arg;
 
-  irqstate_t flags = irqsave();
+  irqstate_t flags = enter_critical_section();
 
   if (priv->state != I2C_STATE_DONE)
     {
@@ -619,7 +427,7 @@ static void i2c_timeout(int argc, uint32_t arg, ...)
 
       /* Soft reset the USB controller */
 
-      i2c_reset(priv);
+      i2c_hwreset(priv);
 
       /* Mark the transfer as finished */
 
@@ -627,17 +435,18 @@ static void i2c_timeout(int argc, uint32_t arg, ...)
       sem_post(&priv->wait);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
-/*******************************************************************************
- * Name: i2c_reset
+/****************************************************************************
+ * Name: i2c_hwreset
  *
  * Description:
  *   Perform a soft reset of the I2C controller
  *
- *******************************************************************************/
-static void i2c_reset(struct lpc31_i2cdev_s *priv)
+ ****************************************************************************/
+
+static void i2c_hwreset(struct lpc31_i2cdev_s *priv)
 {
   putreg32(I2C_CTRL_RESET, priv->base + LPC31_I2C_CTRL_OFFSET);
 
@@ -645,4 +454,166 @@ static void i2c_reset(struct lpc31_i2cdev_s *priv)
 
   while ((getreg32(priv->base + LPC31_I2C_CTRL_OFFSET) & I2C_CTRL_RESET) != 0)
       ;
+}
+
+/****************************************************************************
+ * Name: i2c_transfer
+ *
+ * Description:
+ *   Perform a sequence of I2C transfers
+ *
+ ****************************************************************************/
+
+static int i2c_transfer(FAR struct i2c_master_s *dev, FAR struct i2c_msg_s *msgs, int count)
+{
+  struct lpc31_i2cdev_s *priv = (struct lpc31_i2cdev_s *) dev;
+  irqstate_t flags;
+  int ret;
+
+  /* Get exclusive access to the I2C bus */
+
+  sem_wait(&priv->mutex);
+  flags = enter_critical_section();
+
+  /* Set up for the transfer */
+
+  priv->state = I2C_STATE_START;
+  priv->msgs  = msgs;
+  priv->nmsg  = count;
+
+  /* Configure the I2C frequency.
+   * REVISIT: Note that the frequency is set only on the first message.
+   * This could be extended to support different transfer frequencies for
+   * each message segment.
+   */
+
+  i2c_setfrequency(priv, msgs->frequency);
+
+  /* Start the transfer */
+
+  i2c_progress(priv);
+
+  /* Start a watchdog to timeout the transfer if the bus is locked up... */
+
+  wd_start(priv->timeout, I2C_TIMEOUT, i2c_timeout, 1, (uint32_t)priv);
+
+  /* Wait for the transfer to complete */
+
+  while (priv->state != I2C_STATE_DONE)
+    {
+      sem_wait(&priv->wait);
+    }
+
+  wd_cancel(priv->timeout);
+  ret = count - priv->nmsg;
+
+  leave_critical_section(flags);
+  sem_post(&priv->mutex);
+  return ret;
+}
+
+/************************************************************************************
+ * Name: i2c_reset
+ *
+ * Description:
+ *   Perform an I2C bus reset in an attempt to break loose stuck I2C devices.
+ *
+ * Input Parameters:
+ *   dev   - Device-specific state data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_I2C_RESET
+static int i2c_reset(FAR struct i2c_master_s * dev)
+{
+  return OK;
+}
+#endif /* CONFIG_I2C_RESET */
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: lpc31_i2cbus_initialize
+ *
+ * Description:
+ *   Initialise an I2C device
+ *
+ ****************************************************************************/
+
+struct i2c_master_s *lpc31_i2cbus_initialize(int port)
+{
+  struct lpc31_i2cdev_s *priv = &i2cdevices[port];
+
+  priv->base  = (port == 0) ? LPC31_I2C0_VBASE : LPC31_I2C1_VBASE;
+  priv->clkid = (port == 0) ? CLKID_I2C0PCLK   : CLKID_I2C1PCLK;
+  priv->rstid = (port == 0) ? RESETID_I2C0RST  : RESETID_I2C1RST;
+  priv->irqid = (port == 0) ? LPC31_IRQ_I2C0   : LPC31_IRQ_I2C1;
+
+  sem_init(&priv->mutex, 0, 1);
+  sem_init(&priv->wait, 0, 0);
+
+  /* Enable I2C system clocks */
+
+  lpc31_enableclock(priv->clkid);
+
+  /* Reset I2C blocks */
+
+  lpc31_softreset(priv->rstid);
+
+  /* Soft reset the device */
+
+  i2c_hwreset(priv);
+
+  /* Allocate a watchdog timer */
+
+  priv->timeout = wd_create();
+  DEBUGASSERT(priv->timeout != 0);
+
+  /* Attach Interrupt Handler */
+
+  irq_attach(priv->irqid, i2c_interrupt);
+
+  /* Enable Interrupt Handler */
+
+  up_enable_irq(priv->irqid);
+
+  /* Install our operations */
+
+  priv->dev.ops = &lpc31_i2c_ops;
+  return &priv->dev;
+}
+
+/****************************************************************************
+ * Name: lpc31_i2cbus_uninitialize
+ *
+ * Description:
+ *   Uninitialise an I2C device
+ *
+ ****************************************************************************/
+
+int lpc31_i2cbus_uninitialize(FAR struct i2c_master_s *dev)
+{
+  struct lpc31_i2cdev_s *priv = (struct lpc31_i2cdev_s *)dev;
+
+  /* Disable All Interrupts, soft reset the device */
+
+  i2c_hwreset(priv);
+
+  /* Detach Interrupt Handler */
+
+  irq_detach(priv->irqid);
+
+  /* Reset I2C blocks */
+
+  lpc31_softreset(priv->rstid);
+
+  /* Disable I2C system clocks */
+
+  lpc31_disableclock(priv->clkid);
+  return OK;
 }

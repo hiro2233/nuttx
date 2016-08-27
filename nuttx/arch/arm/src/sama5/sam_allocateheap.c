@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sama5/sam_allocateheap.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,8 +45,8 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/kmalloc.h>
-#include <nuttx/userspace.h>
 
 #include <arch/board/board.h>
 
@@ -56,8 +56,31 @@
 #include "mmu.h"
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
+/* Configuration ************************************************************/
+/* Terminology.  In the flat build (CONFIG_BUILD_FLAT=y), there is only a
+ * single heap access with the standard allocations (malloc/free).  This
+ * heap is referred to as the user heap.  In the protected build
+ * (CONFIG_BUILD_PROTECTED=y) where an MPU is used to protect a region of
+ * otherwise flat memory, there will be two allocators:  One that allocates
+ * protected (kernel) memory and one that allocates unprotected (user)
+ * memory.  These are referred to as the kernel and user heaps,
+ * respectively.
+ *
+ * The ARMv7 has no MPU but does have an MMU.  With this MMU, it can support
+ * the kernel build (CONFIG_BUILD_KERNEL=y).  In this configuration, there
+ * is one kernel heap but multiple user heaps:  One per task group.  However,
+ * in this case, we need only be concerned about initializing the single
+ * kernel heap here.
+ */
+
+#if defined(CONFIG_BUILD_KERNEL)
+#  define MM_ADDREGION kmm_addregion
+#else
+#  define MM_ADDREGION umm_addregion
+#endif
+
 /* The Primary Heap *********************************************************/
 /* The physical address of the primary heap is defined by CONFIG_RAM_START,
  * CONFIG_RAM_SIZE, and CONFIG_RAM_END where:
@@ -79,15 +102,64 @@
  * the RAM region beginning at CONFIG_RAM_START.  The "usable" top would
  * exclude, for example, any memory reserved at the top of the for the 16KB
  * page table.
+ *
+ * A special may occur when we execute from DRAM.  In that case,
+ * CONFIG_RAM_VSTART must be set to the (virtual) start of DRAM and
+ * CONFIG_RAM_SIZE must be set to the size of the DRAM.  These settings are
+ * necessary to provide the DRAM MMU mappings when the system boots and, by
+ * default, the DRAM memory will be added to the heap all the way up to
+ * CONFIG_RAM_VEND
+ *
+ * However, there are certain cases where you may want to reserve a block of
+ * DRAM for other purposes such a large DMA buffer or an LCD framebuffer.
+ * In those cases, the CONFIG_SAMA5_DDRCS_RESERVE can select a different end
+ * of the DRAM memory to add to the heap.  If CONFIG_SAMA5_DDRCS_RESERVE is
+ * selected, then the setting CONFIG_SAMA5_DDRCS_HEAP_END provides the end
+ * (plus one) (virtual) address of memory to be added to the heap; DRAM after
+ * this address will not be part of the heap and so will be available for
+ * other purposes
+ *
+ *   NOTE: There is way to reserve memory before the start of the program
+ *   in DRAM using this mechanism.  That configuration is possible, but
+ *   not using this configuration setting.
  */
 
 /* Memory Regions ***********************************************************/
+/* Check if we have been asked to reserve memory at the end of the primary
+ * memory region.  This option is only available if we are executing from
+ * DRAM and only if CONFIG_SAMA5_DDRCS_RESERVE is selected.
+ */
+
+#ifdef CONFIG_SAMA5_DDRCS_RESERVE
+
+  /* CONFIG_SAMA5_DDRCS_HEAP_END specifies the end (plus one) of the DRAM
+   * to add to the heap.  Memory starting at CONFIG_SAMA5_DDRCS_HEAP_END
+   * and extending to CONFIG_RAM_VEND is then available for other purposes.
+   */
+
+#  if !defined(CONFIG_SAMA5_DDRCS_HEAP_END)
+#    error CONFIG_SAMA5_DDRCS_HEAP_END must be defined in this configuration
+#  elif CONFIG_SAMA5_DDRCS_HEAP_END > CONFIG_RAM_VEND
+#    error CONFIG_SAMA5_DDRCS_HEAP_END is beyond CONFIG_RAM_VEND
+#  elif CONFIG_SAMA5_DDRCS_HEAP_END < CONFIG_RAM_VSTART
+#    error CONFIG_SAMA5_DDRCS_HEAP_END is before CONFIG_RAM_VSTART
+# endif
+
+#  define SAMA5_PRIMARY_HEAP_END CONFIG_SAMA5_DDRCS_HEAP_END
+#else
+  /* Otherwise, add the RAM all the way to the the end of the primary memory
+   * region to the heap.
+   */
+
+#  define SAMA5_PRIMARY_HEAP_END CONFIG_RAM_VEND
+#endif
+
 /* We cannot use the memory for heap if it is not enabled.  Or, if it is
  * enabled, but does not hold SDRAM, SRAM, or PSRAM.
  *
  * We cannot add the region if it is if we are executing from it!  In that
  * case, the remainder of the memory will automatically be added to the heap
- * based on g_idle_topstack and CONFIG_RAM_VEND.
+ * based on g_idle_topstack and SAMA5_PRIMARY_HEAP_END.
  */
 
 #if defined(CONFIG_SAMA5_BOOT_ISRAM)
@@ -124,7 +196,7 @@
 #endif
 
 /* The heap space in the primary memory region is added automatically when
- * up_allocate heap is called.  So if the memory region is the primary region,
+ * up_allocate_heap is called.  So if the memory region is the primary region,
  * it should not be added to the heap (again).
  */
 
@@ -165,112 +237,41 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_allocate_heap
+ * Name: up_allocate_heap/up_allocate_kheap
  *
  * Description:
  *   This function will be called to dynamically set aside the heap region.
- *
- *   For the kernel build (CONFIG_NUTTX_KERNEL=y) with both kernel- and
- *   user-space heaps (CONFIG_MM_KERNEL_HEAP=y), this function provides the
- *   size of the unprotected, user-space heap.
- *
- *   If a protected kernel-space heap is provided, the kernel heap must be
- *   allocated by an analogous up_allocate_kheap(). A custom version of this
- *   file is needed if memory protection of the kernel heap is required.
- *
- *   The following memory map is assumed for the flat build:
- *
- *     .data region.  Size determined at link time.
- *     .bss  region  Size determined at link time.
- *     IDLE thread stack.  Size determined by CONFIG_IDLETHREAD_STACKSIZE.
- *     Heap.  Extends to the end of SRAM.
- *
- *   The following memory map is assumed for the kernel build:
- *
- *     Kernel .data region.  Size determined at link time.
- *     Kernel .bss  region  Size determined at link time.
- *     Kernel IDLE thread stack.  Size determined by CONFIG_IDLETHREAD_STACKSIZE.
- *     Padding for alignment
- *     User .data region.  Size determined at link time.
- *     User .bss region  Size determined at link time.
- *     Kernel heap.  Size determined by CONFIG_MM_KERNEL_HEAPSIZE.
- *     User heap.  Extends to the end of SRAM.
+ *   For the flat build, this heap is referred to as the user heap (for
+ *   compatibility with other platforms).  For the kernel build
+ *   (CONFIG_BUILD_KERNEL=y) this is referred to a the kernel heap.
  *
  ****************************************************************************/
 
+#if defined(CONFIG_BUILD_KERNEL)
+void up_allocate_kheap(FAR void **heap_start, size_t *heap_size)
+#else
 void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
+#endif
 {
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
-  /* Get the unaligned size and position of the user-space heap.
-   * This heap begins after the user-space .bss section at an offset
-   * of CONFIG_MM_KERNEL_HEAPSIZE (subject to alignment).
-   */
-
-  uintptr_t ubase = (uintptr_t)USERSPACE->us_bssend + CONFIG_MM_KERNEL_HEAPSIZE;
-  size_t    usize = CONFIG_RAM_VEND - ubase;
-  int       log2;
-
-  DEBUGASSERT(ubase < (uintptr_t)CONFIG_RAM_VEND);
-
-  /* Return the user-space heap settings */
-
-  board_led_on(LED_HEAPALLOCATE);
-  *heap_start = (FAR void*)ubase;
-  *heap_size  = usize;
-
-#elif defined(CONFIG_BOOT_SDRAM_DATA)
+#if defined(CONFIG_BOOT_SDRAM_DATA)
   /* In this case, the IDLE stack is in ISRAM, but data is in SDRAM.  The
    * heap is at the end of BSS through the configured end of SDRAM.
    */
 
-  board_led_on(LED_HEAPALLOCATE);
-  *heap_start = (FAR void*)&_ebss;
-  *heap_size  = CONFIG_RAM_VEND - (size_t)&_ebss;
+  board_autoled_on(LED_HEAPALLOCATE);
+  *heap_start = (FAR void *)&_ebss;
+  *heap_size  = SAMA5_PRIMARY_HEAP_END - (size_t)&_ebss;
 
 #else
   /* Both data and the heap are in ISRAM.  The heap is then from the end of
    * IDLE stack through the configured end of ISRAM.
    */
 
-  board_led_on(LED_HEAPALLOCATE);
-  *heap_start = (FAR void*)g_idle_topstack;
-  *heap_size  = CONFIG_RAM_VEND - g_idle_topstack;
+  board_autoled_on(LED_HEAPALLOCATE);
+  *heap_start = (FAR void *)g_idle_topstack;
+  *heap_size  = SAMA5_PRIMARY_HEAP_END - g_idle_topstack;
 #endif
 }
-
-/****************************************************************************
- * Name: up_allocate_kheap
- *
- * Description:
- *   For the kernel build (CONFIG_NUTTX_KERNEL=y) with both kernel- and
- *   user-space heaps (CONFIG_MM_KERNEL_HEAP=y), this function allocates
- *   the kernel-space heap.  A custom version of this function is need if
- *   memory protection of the kernel heap is required.
- *
- ****************************************************************************/
-
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
-void up_allocate_kheap(FAR void **heap_start, size_t *heap_size)
-{
-  /* Get the unaligned size and position of the user-space heap.
-   * This heap begins after the user-space .bss section at an offset
-   * of CONFIG_MM_KERNEL_HEAPSIZE (subject to alignment).
-   */
-
-  uintptr_t ubase = (uintptr_t)USERSPACE->us_bssend + CONFIG_MM_KERNEL_HEAPSIZE;
-  size_t    usize = CONFIG_RAM_VEND - ubase;
-  int       log2;
-
-  DEBUGASSERT(ubase < (uintptr_t)CONFIG_RAM_VEND);
-
-  /* Return the kernel heap settings (i.e., the part of the heap region
-   * that was not dedicated to the user heap).
-   */
-
-  *heap_start = (FAR void*)USERSPACE->us_bssend;
-  *heap_size  = ubase - (uintptr_t)USERSPACE->us_bssend;
-}
-#endif
 
 /****************************************************************************
  * Name: up_addregion
@@ -292,16 +293,9 @@ void up_addregion(void)
   vaddr = (uintptr_t)SAM_ISRAM0_VADDR
   size  = SAM_ISRAM0_SIZE + SAM_ISRAM1_SIZE;
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
-  /* Allow user-mode access to the ISRAM heap */
-
-  sam_uheap(vaddr, size);
-
-#endif
-
   /* Add the ISRAM user heap region. */
 
-  kumm_addregion((void *)vaddr, size);
+  MM_ADDREGION((void *)vaddr, size);
   nregions--;
 #endif
 
@@ -311,22 +305,16 @@ void up_addregion(void)
       vaddr = (uintptr_t)SAM_DDRCS_VSECTION + SAMA5_DDRCS_HEAP_OFFSET;
       size  = SAMA5_DDRCS_HEAP_SIZE;
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
-      /* Allow user-mode access to the DDR-SDRAM heap */
-
-      sam_uheap(vaddr, size);
-#endif
-
       /* Add the DDR-SDRAM user heap region. */
 
-      kumm_addregion((void *)vaddr, size);
+      MM_ADDREGION((void *)vaddr, size);
       nregions--;
     }
   else
     {
-      lldbg("ERROR: SDRAM memory not added to heap.  CONFIG_MM_NREGIONS=%d\n",
-            CONFIG_MM_REGIONS);
-      lldbg("       Increase the size of CONFIG_MM_NREGIONS\n");
+      serr("ERROR: SDRAM memory not added to heap.  CONFIG_MM_NREGIONS=%d\n",
+           CONFIG_MM_REGIONS);
+      serr("       Increase the size of CONFIG_MM_NREGIONS\n");
     }
 #endif
 
@@ -336,22 +324,16 @@ void up_addregion(void)
       vaddr = (uintptr_t)SAM_EBICS0_VSECTION + SAMA5_EBICS0_HEAP_OFFSET;
       size  = SAMA5_EBICS0_HEAP_SIZE;
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
-      /* Allow user-mode access to the EBICS0 heap */
-
-      sam_uheap(vaddr, size);
-#endif
-
       /* Add the EBICS0 user heap region. */
 
-      kumm_addregion((void *)vaddr, size);
+      MM_ADDREGION((void *)vaddr, size);
       nregions--;
     }
   else
     {
-      lldbg("ERROR: CS0 memory not added to heap.  CONFIG_MM_NREGIONS=%d\n",
-            CONFIG_MM_REGIONS);
-      lldbg("       Increase the size of CONFIG_MM_NREGIONS\n");
+      serr("ERROR: CS0 memory not added to heap.  CONFIG_MM_NREGIONS=%d\n",
+           CONFIG_MM_REGIONS);
+      serr("       Increase the size of CONFIG_MM_NREGIONS\n");
     }
 #endif
 
@@ -361,22 +343,16 @@ void up_addregion(void)
       vaddr = (uintptr_t)SAM_EBICS1_VSECTION + SAMA5_EBICS1_HEAP_OFFSET;
       size  = SAMA5_EBICS1_HEAP_SIZE;
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
-      /* Allow user-mode access to the EBICS1 heap */
-
-      sam_uheap(vaddr, size);
-#endif
-
       /* Add the EBICS1 user heap region. */
 
-      kumm_addregion((void *)vaddr, size);
+      MM_ADDREGION((void *)vaddr, size);
       nregions--;
     }
   else
     {
-      lldbg("ERROR: CS1 memory not added to heap.  CONFIG_MM_NREGIONS=%d\n",
-            CONFIG_MM_REGIONS);
-      lldbg("       Increase the size of CONFIG_MM_NREGIONS\n");
+      serr("ERROR: CS1 memory not added to heap.  CONFIG_MM_NREGIONS=%d\n",
+           CONFIG_MM_REGIONS);
+      serr("       Increase the size of CONFIG_MM_NREGIONS\n");
     }
 #endif
 
@@ -386,22 +362,16 @@ void up_addregion(void)
       vaddr = (uintptr_t)SAM_EBICS2_VSECTION + SAMA5_EBICS2_HEAP_OFFSET;
       size  = SAMA5_EBICS2_HEAP_SIZE;
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
-      /* Allow user-mode access to the EBICS2 heap */
-
-      sam_uheap(vaddr, size);
-#endif
-
       /* Add the EBICS2 user heap region. */
 
-      kumm_addregion((void *)vaddr, size);
+      MM_ADDREGION((void *)vaddr, size);
       nregions--;
     }
   else
     {
-      lldbg("ERROR: CS2 memory not added to heap.  CONFIG_MM_NREGIONS=%d\n",
-            CONFIG_MM_REGIONS);
-      lldbg("       Increase the size of CONFIG_MM_NREGIONS\n");
+      serr("ERROR: CS2 memory not added to heap.  CONFIG_MM_NREGIONS=%d\n",
+           CONFIG_MM_REGIONS);
+      serr("       Increase the size of CONFIG_MM_NREGIONS\n");
     }
 #endif
 
@@ -411,22 +381,16 @@ void up_addregion(void)
       vaddr = (uintptr_t)SAM_EBICS3_VSECTION + SAMA5_EBICS3_HEAP_OFFSET;
       size  = SAMA5_EBICS3_HEAP_SIZE;
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
-      /* Allow user-mode access to the EBICS3 heap */
-
-      sam_uheap(vaddr, size);
-#endif
-
       /* Add the EBICS3 user heap region. */
 
-      kumm_addregion(vaddr, size);
+      MM_ADDREGION(vaddr, size);
       nregions--;
     }
   else
     {
-      lldbg("ERROR: CS3 memory not added to heap.  CONFIG_MM_NREGIONS=%d\n",
-            CONFIG_MM_REGIONS);
-      lldbg("       Increase the size of CONFIG_MM_NREGIONS\n");
+      serr("ERROR: CS3 memory not added to heap.  CONFIG_MM_NREGIONS=%d\n",
+           CONFIG_MM_REGIONS);
+      serr("       Increase the size of CONFIG_MM_NREGIONS\n");
     }
 #endif
 
@@ -434,9 +398,9 @@ void up_addregion(void)
 
   if (nregions > 0)
     {
-      lldbg("ERROR: Not all regions added to heap: %d added, but CONFIG_MM_NREGIONS=%d\n",
-            CONFIG_MM_REGIONS - nregions, CONFIG_MM_REGIONS);
-      lldbg("       Decrease the size of CONFIG_MM_NREGIONS\n");
+      serr("ERROR: Not all regions added to heap: %d added, but CONFIG_MM_NREGIONS=%d\n",
+           CONFIG_MM_REGIONS - nregions, CONFIG_MM_REGIONS);
+      serr("       Decrease the size of CONFIG_MM_NREGIONS\n");
     }
 }
 #endif

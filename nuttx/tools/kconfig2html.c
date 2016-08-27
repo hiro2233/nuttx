@@ -58,7 +58,7 @@
 #define SCRATCH_SIZE     2048
 #define MAX_DEPENDENCIES 100
 #define MAX_LEVELS       100
-#define MAX_SELECT       16
+#define MAX_SELECT       64
 #define MAX_DEFAULTS     128
 #define TAB_SIZE         4
 #define VAR_SIZE         80
@@ -2245,33 +2245,44 @@ static char *parse_kconfigfile(FILE *stream, const char *kconfigdir)
                 {
                   /* Get the relative path from the Kconfig file line */
 
-                  char *relpath = get_token();
+                  char *source = get_token();
 
                   /* Remove optional quoting */
 
-                  relpath = dequote(relpath);
-                  if (relpath)
+                  source = dequote(source);
+                  if (source)
                     {
-                      char *subdir = dirname(relpath);
+                      char *subdir = dirname(source);
                       char *dirpath;
 
-                      /* Check if the directory path contains $APPSDIR */
+                      /* Check for an absolute path */
 
-                      char *appsdir = strstr(subdir, "$APPSDIR");
-                      if (appsdir)
+                      if (source[0] == '/')
                         {
-                          char *tmp = appsdir + strlen("$APPSDIR");
-
-                          *appsdir = '\0';
-                          asprintf(&dirpath, "%s/%s%s%s", g_kconfigroot, subdir, g_appsdir, tmp);
+                          dirpath = strdup(subdir);
                         }
                       else
                         {
-                          asprintf(&dirpath, "%s/%s", g_kconfigroot, subdir);
+                          /* Check if the directory path contains $APPSDIR */
+
+                          char *appsdir = strstr(subdir, "$APPSDIR");
+                          if (appsdir)
+                            {
+                              char *tmp = appsdir + strlen("$APPSDIR");
+
+                              *appsdir = '\0';
+                              asprintf(&dirpath, "%s/%s%s%s",
+                                       g_kconfigroot, subdir, g_appsdir, tmp);
+                            }
+                          else
+                            {
+                              asprintf(&dirpath, "%s/%s", g_kconfigroot, subdir);
+                            }
+
                         }
 
                       debug("parse_kconfigfile: Recursing for TOKEN_SOURCE\n");
-                      debug("  relpath:     %s\n", relpath);
+                      debug("  source:      %s\n", source);
                       debug("  subdir:      %s\n", subdir);
                       debug("  dirpath:     %s\n", dirpath);
 
@@ -2624,7 +2635,7 @@ int main(int argc, char **argv, char **envp)
   body("  That configuration tool uses <code>Kconfig</code> files that can be found through the NuttX source tree.\n");
   body("  Each <code>Kconfig</code> files contains declarations of configuration variables.\n");
   body("  Each configuration variable provides one configuration option for the NuttX RTOS.\n");
-  body("  This configurable options are descrived in this document.\n");
+  body("  This configurable options are described in this document.\n");
   body("</p>\n");
   body("<p>\n");
   body("  <b>Main Menu</b>.\n");
@@ -2633,10 +2644,10 @@ int main(int argc, char **argv, char **envp)
   body("  The main menu is the name give to the opening menu display after this command is executed.\n");
   body("</p>\n");
   body("<p>\n");
-  body("  <b>Mainenance Note</b>.\n");
-  body("  This documenation was auto-generated using the <a href=\"http://sourceforge.net/p/nuttx/git/ci/master/tree/nuttx/tools/kconfig2html.c\">kconfig2html</a> tool\n");
+  body("  <b>Maintenance Note</b>.\n");
+  body("  This documentation was auto-generated using the <a href=\"https://bitbucket.org/nuttx/nuttx/src/master/tools/kconfig2html.c\">kconfig2html</a> tool\n");
   body("  That tool analyzes the NuttX <code>Kconfig</code> files and generates this HTML document.\n");
-  body("  This HTML document file should not be editted manually.\n");
+  body("  This HTML document file should not be edited manually.\n");
   body("  In order to make changes to this document, you should instead modify the <code>Kconfig</code> file(s) that were used to generated this document and then execute the <code>kconfig2html</code> again to regenerate the HTML document file.\n");
   body("</p>\n");
 

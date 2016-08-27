@@ -1,7 +1,7 @@
 ############################################################################
 # apps/netutils/Makefile
 #
-#   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2011-2012, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -33,35 +33,6 @@
 #
 ############################################################################
 
--include $(TOPDIR)/.config	# Current configuration
+MENUDESC = "Network Utilities"
 
-# Sub-directories
-
-SUBDIRS  = json codecs
-ifeq ($(CONFIG_NET),y)
-SUBDIRS += uiplib dhcpc dhcpd discover dnsclient ftpc ftpd smtp telnetd
-SUBDIRS += webclient webserver tftpc thttpd xmlrpc
-endif
-
-all: nothing
-
-.PHONY: nothing context depend clean distclean
-
-define SDIR_template
-$(1)_$(2):
-	$(Q) $(MAKE) -C $(1) $(2) TOPDIR="$(TOPDIR)" APPDIR="$(APPDIR)"
-endef
-
-$(foreach SDIR, $(SUBDIRS), $(eval $(call SDIR_template,$(SDIR),depend)))
-$(foreach SDIR, $(SUBDIRS), $(eval $(call SDIR_template,$(SDIR),clean)))
-$(foreach SDIR, $(SUBDIRS), $(eval $(call SDIR_template,$(SDIR),distclean)))
-
-nothing:
-
-context:
-
-depend: $(foreach SDIR, $(SUBDIRS), $(SDIR)_depend)
-
-clean: $(foreach SDIR, $(SUBDIRS), $(SDIR)_clean)
-
-distclean: $(foreach SDIR, $(SUBDIRS), $(SDIR)_distclean)
+include $(APPDIR)/Directory.mk

@@ -6,7 +6,7 @@
  *
  * This file is a part of NuttX:
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2014 Gregory Nutt. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -45,58 +45,137 @@
 #include <rgmp/string.h>
 #include <rgmp/arch/arch.h>
 
-#include <nuttx/sched.h>
-#include <nuttx/kmalloc.h>
-#include <nuttx/arch.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <arch/irq.h>
 #include <arch/arch.h>
-#include <os_internal.h>
+
+#include <nuttx/sched.h>
+#include <nuttx/kmalloc.h>
+#include <nuttx/arch.h>
+#include <nuttx/drivers/drivers.h>
+#include <nuttx/sched_note.h>
+#include <nuttx/serial/pty.h>
+#include <nuttx/syslog/syslog.h>
+#include <nuttx/crypto/crypto.h>
+#include <nuttx/power/pm.h>
+
+#include "task/task.h"
+#include "sched/sched.h"
+#include "group/group.h"
 
 struct tcb_s *current_task = NULL;
 
-
-/**
- * This function is called in non-interrupt context
+/* This function is called in non-interrupt context
  * to switch tasks.
  * Assumption: global interrupt is disabled.
  */
+
 static inline void up_switchcontext(struct tcb_s *ctcb, struct tcb_s *ntcb)
 {
-    // do nothing if two tasks are the same
-    if (ctcb == ntcb)
-        return;
+  // do nothing if two tasks are the same
 
-    // this function can not be called in interrupt
-    if (up_interrupt_context()) {
-        panic("%s: try to switch context in interrupt\n", __func__);
-    }
+  if (ctcb == ntcb)
+    return;
 
-    // start switch
-    current_task = ntcb;
-    rgmp_context_switch(ctcb ? &ctcb->xcp.ctx : NULL, &ntcb->xcp.ctx);
+  // this function can not be called in interrupt
+
+  if (up_interrupt_context()) {
+     panic("%s: try to switch context in interrupt\n", __func__);
+  }
+
+  // start switch
+
+  current_task = ntcb;
+  rgmp_context_switch(ctcb ? &ctcb->xcp.ctx : NULL, &ntcb->xcp.ctx);
 }
 
 void up_initialize(void)
 {
-    extern pidhash_t g_pidhash[];
-    extern void vdev_init(void);
-    extern void nuttx_arch_init(void);
+  extern pidhash_t g_pidhash[];
+  extern void vdev_init(void);
+  extern void nuttx_arch_init(void);
 
-    // initialize the current_task to g_idletcb
-    current_task = g_pidhash[PIDHASH(0)].tcb;
+  /* Initialize the current_task to g_idletcb */
 
-    // OS memory alloc system is ready
-    use_os_kmalloc = 1;
+  current_task = g_pidhash[PIDHASH(0)].tcb;
 
-    // rgmp vdev init
-    vdev_init();
+  /* OS memory alloc system is ready */
 
-    nuttx_arch_init();
+  use_os_kmalloc = 1;
 
-    // enable interrupt
-    local_irq_enable();
+  /* rgmp vdev init */
+
+  vdev_init();
+
+  nuttx_arch_init();
+
+#ifdef CONFIG_PM
+  /* Initialize the power management subsystem.  This MCU-specific function
+   * must be called *very* early in the initialization sequence *before* any
+   * other device drivers are initialized (since they may attempt to register
+   * with the power management subsystem).
+   */
+
+  up_pminitialize();
+#endif
+
+#if CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_PSEUDOTERM_SUSV1)
+  /* Register the master pseudo-terminal multiplexor device */
+
+  (void)ptmx_register();
+#endif
+
+  /* Early initialization of the system logging device.  Some SYSLOG channel
+   * can be initialized early in the initialization sequence because they
+   * depend on only minimal OS initialization.
+   */
+
+  syslog_initialize(SYSLOG_INIT_EARLY);
+
+  /* Register devices */
+
+#if CONFIG_NFILE_DESCRIPTORS > 0
+
+#if defined(CONFIG_DEV_NULL)
+  devnull_register();   /* Standard /dev/null */
+#endif
+
+#if defined(CONFIG_DEV_RANDOM)
+  devrandom_register(); /* Standard /dev/random */
+#endif
+
+#if defined(CONFIG_DEV_URANDOM)
+  devurandom_register();   /* Standard /dev/urandom */
+#endif
+
+#if defined(CONFIG_DEV_ZERO)
+  devzero_register();   /* Standard /dev/zero */
+#endif
+
+#if defined(CONFIG_DEV_LOOP)
+  loop_register();      /* Standard /dev/loop */
+#endif
+#endif /* CONFIG_NFILE_DESCRIPTORS */
+
+#if defined(CONFIG_SCHED_INSTRUMENTATION_BUFFER) && \
+    defined(CONFIG_DRIVER_NOTE)
+  note_register();      /* Non-standard /dev/note */
+#endif
+
+#if defined(CONFIG_CRYPTO)
+  /* Initialize the HW crypto and /dev/crypto */
+
+  up_cryptoinitialize();
+#endif
+
+#if CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_CRYPTO_CRYPTODEV)
+  devcrypto_register();
+#endif
+
+  /* Enable interrupt */
+
+  local_irq_enable();
 }
 
 void up_idle(void)
@@ -124,15 +203,15 @@ int up_create_stack(struct tcb_s *tcb, size_t stack_size, uint8_t ttype)
 
     /* Allocate the memory for the stack */
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#if defined(CONFIG_BUILD_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
     /* Use the kernel allocator if this is a kernel thread */
 
     if (ttype == TCB_FLAG_TTYPE_KERNEL) {
-        stack_alloc_ptr = (uint32_t *)kmalloc(stack_size);
+        stack_alloc_ptr = (uint32_t *)kmm_malloc(stack_size);
     } else
 #endif
     {
-        stack_alloc_ptr = (uint32_t*)kumalloc(adj_stack_size);
+        stack_alloc_ptr = (uint32_t*)kumm_malloc(adj_stack_size);
     }
     if (stack_alloc_ptr) {
         /* This is the address of the last word in the allocation */
@@ -168,7 +247,6 @@ int up_use_stack(struct tcb_s *tcb, void *stack, size_t stack_size)
     return OK;
 }
 
-#ifdef CONFIG_NUTTX_KERNEL
 FAR void *up_stack_frame(FAR struct tcb_s *tcb, size_t frame_size)
 {
   uintptr_t topaddr;
@@ -197,24 +275,23 @@ FAR void *up_stack_frame(FAR struct tcb_s *tcb, size_t frame_size)
 
   return (FAR void *)(topaddr + sizeof(uint32_t));
 }
-#endif
 
 void up_release_stack(struct tcb_s *dtcb, uint8_t ttype)
 {
   /* Is there a stack allocated? */
 
   if (dtcb->stack_alloc_ptr) {
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#if defined(CONFIG_BUILD_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
       /* Use the kernel allocator if this is a kernel thread */
 
       if (ttype == TCB_FLAG_TTYPE_KERNEL) {
-          kfree(dtcb->stack_alloc_ptr);
+          kmm_free(dtcb->stack_alloc_ptr);
       } else
 #endif
       {
         /* Use the user-space allocator if this is a task or pthread */
 
-        kufree(dtcb->stack_alloc_ptr);
+        kumm_free(dtcb->stack_alloc_ptr);
       }
   }
 
@@ -248,47 +325,82 @@ void up_release_stack(struct tcb_s *dtcb, uint8_t ttype)
  *     hold the blocked task TCB.
  *
  ****************************************************************************/
+
 void up_block_task(struct tcb_s *tcb, tstate_t task_state)
 {
-    /* Verify that the context switch can be performed */
-    if ((tcb->task_state < FIRST_READY_TO_RUN_STATE) ||
-        (tcb->task_state > LAST_READY_TO_RUN_STATE)) {
-        warn("%s: task sched error\n", __func__);
-        return;
+  /* Verify that the context switch can be performed */
+
+  if ((tcb->task_state < FIRST_READY_TO_RUN_STATE) ||
+      (tcb->task_state > LAST_READY_TO_RUN_STATE))
+    {
+      _warn("%s: task sched error\n", __func__);
+      return;
     }
-    else {
-        struct tcb_s *rtcb = current_task;
-        bool switch_needed;
+  else
+    {
+      struct tcb_s *rtcb = current_task;
+      bool switch_needed;
 
-        /* Remove the tcb task from the ready-to-run list.  If we
-         * are blocking the task at the head of the task list (the
-         * most likely case), then a context switch to the next
-         * ready-to-run task is needed. In this case, it should
-         * also be true that rtcb == tcb.
-         */
-        switch_needed = sched_removereadytorun(tcb);
+      /* Remove the tcb task from the ready-to-run list.  If we
+       * are blocking the task at the head of the task list (the
+       * most likely case), then a context switch to the next
+       * ready-to-run task is needed. In this case, it should
+       * also be true that rtcb == tcb.
+       */
 
-        /* Add the task to the specified blocked task list */
-        sched_addblocked(tcb, (tstate_t)task_state);
+      switch_needed = sched_removereadytorun(tcb);
 
-        /* Now, perform the context switch if one is needed */
-        if (switch_needed) {
-            struct tcb_s *nexttcb;
-            // this part should not be executed in interrupt context
-            if (up_interrupt_context()) {
-                panic("%s: %d\n", __func__, __LINE__);
+      /* Add the task to the specified blocked task list */
+
+      sched_addblocked(tcb, (tstate_t)task_state);
+
+      /* Now, perform the context switch if one is needed */
+
+      if (switch_needed)
+        {
+          struct tcb_s *nexttcb;
+
+          /* Update scheduler parameters */
+
+          sched_suspend_scheduler(rtcb);
+
+          /* this part should not be executed in interrupt context */
+
+          if (up_interrupt_context())
+            {
+              panic("%s: %d\n", __func__, __LINE__);
             }
-            // If there are any pending tasks, then add them to the g_readytorun
-            // task list now. It should be the up_realease_pending() called from
-            // sched_unlock() to do this for disable preemption. But it block
-            // itself, so it's OK.
-            if (g_pendingtasks.head) {
-                warn("Disable preemption failed for task block itself\n");
-                sched_mergepending();
+
+          /* If there are any pending tasks, then add them to the ready-to-run
+           * task list now. It should be the up_realease_pending() called from
+           * sched_unlock() to do this for disable preemption. But it block
+           * itself, so it's OK.
+           */
+
+          if (g_pendingtasks.head)
+            {
+              _warn("Disable preemption failed for task block itself\n");
+              sched_mergepending();
             }
-            nexttcb = (struct tcb_s*)g_readytorun.head;
-            // context switch
-            up_switchcontext(rtcb, nexttcb);
+
+          nexttcb = this_task();
+
+#ifdef CONFIG_ARCH_ADDRENV
+          /* Make sure that the address environment for the previously
+           * running task is closed down gracefully (data caches dump,
+           * MMU flushed) and set up the address environment for the new
+           * thread at the head of the ready-to-run list.
+           */
+
+          (void)group_addrenv(nexttcb);
+#endif
+          /* Reset scheduler parameters */
+
+          sched_resume_scheduler(nexttcb);
+
+          /* context switch */
+
+          up_switchcontext(rtcb, nexttcb);
         }
     }
 }
@@ -308,110 +420,185 @@ void up_block_task(struct tcb_s *tcb, tstate_t task_state)
  *     ready to run taks, executed.
  *
  ****************************************************************************/
+
 void up_unblock_task(struct tcb_s *tcb)
 {
-    /* Verify that the context switch can be performed */
-    if ((tcb->task_state < FIRST_BLOCKED_STATE) ||
-        (tcb->task_state > LAST_BLOCKED_STATE)) {
-        warn("%s: task sched error\n", __func__);
-        return;
+  /* Verify that the context switch can be performed */
+
+  if ((tcb->task_state < FIRST_BLOCKED_STATE) ||
+      (tcb->task_state > LAST_BLOCKED_STATE))
+    {
+      _warn("%s: task sched error\n", __func__);
+      return;
     }
-    else {
-        struct tcb_s *rtcb = current_task;
+  else
+    {
+      struct tcb_s *rtcb = current_task;
 
-        /* Remove the task from the blocked task list */
-        sched_removeblocked(tcb);
+      /* Remove the task from the blocked task list */
 
-        /* Reset its timeslice.  This is only meaningful for round
-         * robin tasks but it doesn't here to do it for everything
-         */
-#if CONFIG_RR_INTERVAL > 0
-        tcb->timeslice = CONFIG_RR_INTERVAL / MSEC_PER_TICK;
+      sched_removeblocked(tcb);
+
+      /* Add the task in the correct location in the prioritized
+       * ready-to-run task list.
+       */
+
+      if (sched_addreadytorun(tcb) && !up_interrupt_context())
+        {
+          /* The currently active task has changed! */
+          /* Update scheduler parameters */
+
+          sched_suspend_scheduler(rtcb);
+
+          /* Are we in an interrupt handler? */
+
+          struct tcb_s *nexttcb = this_task();
+
+#ifdef CONFIG_ARCH_ADDRENV
+          /* Make sure that the address environment for the previously
+           * running task is closed down gracefully (data caches dump,
+           * MMU flushed) and set up the address environment for the new
+           * thread at the head of the ready-to-run list.
+
+          (void)group_addrenv(nexttcb);
 #endif
+          /* Update scheduler parameters */
 
-        // Add the task in the correct location in the prioritized
-        // g_readytorun task list.
-        if (sched_addreadytorun(tcb) && !up_interrupt_context()) {
-            /* The currently active task has changed! */
-            struct tcb_s *nexttcb = (struct tcb_s*)g_readytorun.head;
-            // context switch
-            up_switchcontext(rtcb, nexttcb);
+          sched_resume_scheduler(nexttcb);
+
+          /* context switch */
+
+          up_switchcontext(rtcb, nexttcb);
         }
     }
 }
 
-/**
- * This function is called from sched_unlock() which will check not
+/* This function is called from sched_unlock() which will check not
  * in interrupt context and disable interrupt.
  */
+
 void up_release_pending(void)
 {
-    struct tcb_s *rtcb = current_task;
+  struct tcb_s *rtcb = current_task;
 
-    /* Merge the g_pendingtasks list into the g_readytorun task list */
+  /* Merge the g_pendingtasks list into the ready-to-run task list */
 
-    if (sched_mergepending()) {
-        /* The currently active task has changed! */
-        struct tcb_s *nexttcb = (struct tcb_s*)g_readytorun.head;
+  if (sched_mergepending())
+    {
+      struct tcb_s *nexttcb = this_task();
 
-        // context switch
-        up_switchcontext(rtcb, nexttcb);
+      /* The currently active task has changed!  We will need to switch
+       * contexts.
+       *
+       * Update scheduler parameters.
+       */
+
+      sched_suspend_scheduler(rtcb);
+
+#ifdef CONFIG_ARCH_ADDRENV
+      /* Make sure that the address environment for the previously
+       * running task is closed down gracefully (data caches dump,
+       * MMU flushed) and set up the address environment for the new
+       * thread at the head of the ready-to-run list.
+       */
+
+      (void)group_addrenv(nexttcb);
+#endif
+      /* Update scheduler parameters */
+
+      sched_resume_scheduler(nexttcb);
+
+      /* context switch */
+
+      up_switchcontext(rtcb, nexttcb);
     }
 }
 
 void up_reprioritize_rtr(struct tcb_s *tcb, uint8_t priority)
 {
-    /* Verify that the caller is sane */
+  /* Verify that the caller is sane */
 
-    if (tcb->task_state < FIRST_READY_TO_RUN_STATE ||
-        tcb->task_state > LAST_READY_TO_RUN_STATE
+  if (tcb->task_state < FIRST_READY_TO_RUN_STATE ||
+      tcb->task_state > LAST_READY_TO_RUN_STATE
 #if SCHED_PRIORITY_MIN > UINT8_MIN
-        || priority < SCHED_PRIORITY_MIN
+      || priority < SCHED_PRIORITY_MIN
 #endif
 #if SCHED_PRIORITY_MAX < UINT8_MAX
-        || priority > SCHED_PRIORITY_MAX
+      || priority > SCHED_PRIORITY_MAX
 #endif
-        ) {
-        warn("%s: task sched error\n", __func__);
-        return;
+      )
+    {
+      _warn("%s: task sched error\n", __func__);
+      return;
     }
-    else {
-        struct tcb_s *rtcb = current_task;
-        bool switch_needed;
+  else
+    {
+      struct tcb_s *rtcb = current_task;
+      bool switch_needed;
 
-        /* Remove the tcb task from the ready-to-run list.
-         * sched_removereadytorun will return true if we just
-         * remove the head of the ready to run list.
-         */
-        switch_needed = sched_removereadytorun(tcb);
+      /* Remove the tcb task from the ready-to-run list.
+       * sched_removereadytorun will return true if we just
+       * remove the head of the ready to run list.
+       */
 
-        /* Setup up the new task priority */
-        tcb->sched_priority = (uint8_t)priority;
+      switch_needed = sched_removereadytorun(tcb);
 
-        /* Return the task to the specified blocked task list.
-         * sched_addreadytorun will return true if the task was
-         * added to the new list.  We will need to perform a context
-         * switch only if the EXCLUSIVE or of the two calls is non-zero
-         * (i.e., one and only one the calls changes the head of the
-         * ready-to-run list).
-         */
-        switch_needed ^= sched_addreadytorun(tcb);
+      /* Setup up the new task priority */
 
-        /* Now, perform the context switch if one is needed */
-        if (switch_needed && !up_interrupt_context()) {
-            struct tcb_s *nexttcb;
-            // If there are any pending tasks, then add them to the g_readytorun
-            // task list now. It should be the up_realease_pending() called from
-            // sched_unlock() to do this for disable preemption. But it block
-            // itself, so it's OK.
-            if (g_pendingtasks.head) {
-                warn("Disable preemption failed for reprioritize task\n");
-                sched_mergepending();
+      tcb->sched_priority = (uint8_t)priority;
+
+      /* Return the task to the specified blocked task list.
+       * sched_addreadytorun will return true if the task was
+       * added to the new list.  We will need to perform a context
+       * switch only if the EXCLUSIVE or of the two calls is non-zero
+       * (i.e., one and only one the calls changes the head of the
+       * ready-to-run list).
+       */
+
+      switch_needed ^= sched_addreadytorun(tcb);
+
+      /* Now, perform the context switch if one is needed */
+
+      if (switch_needed && !up_interrupt_context())
+        {
+          struct tcb_s *nexttcb;
+
+          /* If there are any pending tasks, then add them to the ready-to-run
+           * task list now. It should be the up_realease_pending() called from
+           * sched_unlock() to do this for disable preemption. But it block
+           * itself, so it's OK.
+           */
+
+          if (g_pendingtasks.head)
+            {
+              _warn("Disable preemption failed for reprioritize task\n");
+              sched_mergepending();
             }
 
-            nexttcb = (struct tcb_s*)g_readytorun.head;
-            // context switch
-            up_switchcontext(rtcb, nexttcb);
+          /* Update scheduler parameters */
+
+          sched_suspend_scheduler(rtcb);
+
+          /* Get the TCB of the new task to run */
+
+          nexttcb = this_task();
+
+#ifdef CONFIG_ARCH_ADDRENV
+          /* Make sure that the address environment for the previously
+           * running task is closed down gracefully (data caches dump,
+           * MMU flushed) and set up the address environment for the new
+           * thread at the head of the ready-to-run list.
+           */
+
+          (void)group_addrenv(nexttcb);
+#endif
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(nexttcb);
+
+          /* context switch */
+
+          up_switchcontext(rtcb, nexttcb);
         }
     }
 }
@@ -428,7 +615,17 @@ void _exit(int status)
      * head of the list.
      */
 
-    tcb = (struct tcb_s*)g_readytorun.head;
+    tcb = this_task();
+
+#ifdef CONFIG_ARCH_ADDRENV
+    /* Make sure that the address environment for the previously running
+     * task is closed down gracefully (data caches dump, MMU flushed) and
+     * set up the address environment for the new thread at the head of
+     * the ready-to-run list.
+     */
+
+    (void)group_addrenv(tcb);
+#endif
 
     /* Then switch contexts */
 
@@ -438,6 +635,10 @@ void _exit(int status)
 void up_assert(const uint8_t *filename, int line)
 {
     fprintf(stderr, "Assertion failed at file:%s line: %d\n", filename, line);
+
+#ifdef CONFIG_BOARD_CRASHDUMP
+    board_crashdump(up_getsp(), this_task(), filename, line);
+#endif
 
     // in interrupt context or idle task means kernel error
     // which will stop the OS

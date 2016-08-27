@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/net/cs89x0.h
  *
- *   Copyright (C) 2009, 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2012, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,34 +42,12 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <wdog.h>
+
+#include <nuttx/wdog.h>
 
 /****************************************************************************
  * Public Types
  ****************************************************************************/
-
-/* This structure returns driver statistics (if enabled) */
-
-#ifdef CONFIG_C89x0_STATISTICS
-struct cs89x0_statistics_s
-{
-  uint32_t tx_packets;
-  uint32_t tx_errors;
-  uint32_t tx_carriererrors;
-  uint32_t tx_heartbeaterrors;
-  uint32_t tx_windowerrors;
-  uint32_t tx_abortederrors;
-  uint32_t rx_missederrors;
-  uint32_t rx_packets;
-  uint32_t rx_errors;
-  uint32_t rx_lengtherrors;
-  uint32_t rx_crcerrors;
-  uint32_t rx_frameerrors;
-  uint32_t rx_dropped;
-  uint32_t rx_missederrors;
-  uint32_t collisions;
-};
-#endif
 
 /* This structure encapsulates all state information for a single hardware
  * interface. It includes values that must be provided by the user to in
@@ -108,15 +86,9 @@ struct cs89x0_driver_s
   uint32_t  cs_txunderrun;     /* Count of Tx underrun errors */
 #endif
 
-  /* This holds the information visible to uIP/NuttX */
+  /* This holds the information visible to the NuttX network */
 
-  struct uip_driver_s cs_dev;  /* Interface understood by uIP */
-
-  /* Driver statistics */
-
-#ifdef CONFIG_C89x0_STATISTICS
-  struct cs89x0_statistics_s cs_stats;
-#endif
+  struct net_driver_s cs_dev;  /* Interface understood by the network */
 };
 
 /****************************************************************************
@@ -125,7 +97,8 @@ struct cs89x0_driver_s
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -158,7 +131,7 @@ extern "C" {
 
 /* Initialize the CS89x0 chip and driver */
 
-EXTERN int cs89x0_initialize(FAR const cs89x0_driver_s *cs89x0, int devno);
+int cs89x0_initialize(FAR const cs89x0_driver_s *cs89x0, int devno);
 
 #undef EXTERN
 #ifdef __cplusplus

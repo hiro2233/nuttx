@@ -1,7 +1,7 @@
 /****************************************************************************
- * common/up_internal.h
+ * arch/z16/src/common/up_internal.h
  *
- *   Copyright (C) 2008-2009, 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2011-2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,8 +33,8 @@
  *
  ****************************************************************************/
 
-#ifndef __UP_INTERNAL_H
-#define __UP_INTERNAL_H
+#ifndef __ARCH_Z16_SRC_COMMON_UP_INTERNAL_H
+#define __ARCH_Z16_SRC_COMMON_UP_INTERNAL_H
 
 /****************************************************************************
  * Included Files
@@ -44,7 +44,7 @@
 #include "chip/chip.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Bring-up debug configurations.  These are here (vs defconfig)
@@ -58,7 +58,11 @@
 #undef  CONFIG_SUPPRESS_UART_CONFIG   /* Do not reconfig UART */
 #undef  CONFIG_DUMP_ON_EXIT           /* Dump task state on exit */
 #undef  CONFIG_Z16_LOWPUTC            /* Support up_lowputc for debug */
-#undef  CONFIG_Z16_LOWGETC            /* support up_lowgetc for debug */
+#undef  CONFIG_Z16_LOWGETC            /* support z16_lowgetc for debug */
+
+#ifndef CONFIG_DEBUG_SCHED_INFO
+#  undef CONFIG_DUMP_ON_EXIT          /* Needs CONFIG_DEBUG_SCHED_INFO */
+#endif
 
 /* Determine which (if any) console driver to use.  If a console is enabled
  * and no other console device is specified, then a serial console is
@@ -98,18 +102,11 @@
 #  define USE_SERIALDRIVER 1
 #endif
 
-/* Determine which device to use as the system logging device */
-
-#ifndef CONFIG_SYSLOG
-#  undef CONFIG_SYSLOG_CHAR
-#  undef CONFIG_RAMLOG_SYSLOG
-#endif
-
 /* Macros for portability */
 
-#define IN_INTERRUPT             (current_regs != NULL)
-#define SAVE_IRQCONTEXT(tcb)     up_copystate((tcb)->xcp.regs, (FAR chipreg_t*)current_regs)
-#define SET_IRQCONTEXT(tcb)      do { current_regs = (tcb)->xcp.regs; } while (0)
+#define IN_INTERRUPT             (g_current_regs != NULL)
+#define SAVE_IRQCONTEXT(tcb)     up_copystate((tcb)->xcp.regs, (FAR chipreg_t*)g_current_regs)
+#define SET_IRQCONTEXT(tcb)      do { g_current_regs = (tcb)->xcp.regs; } while (0)
 #define SAVE_USERCONTEXT(tcb)    up_saveusercontext((tcb)->xcp.regs)
 #define RESTORE_USERCONTEXT(tcb) up_restoreusercontext((tcb)->xcp.regs)
 #define SIGNAL_RETURN(regs)      up_restoreusercontext(regs)
@@ -123,7 +120,7 @@ typedef void (*up_vector_t)(void);
 #endif
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 #ifndef __ASSEMBLY__
@@ -132,7 +129,7 @@ typedef void (*up_vector_t)(void);
  * interrupt processing.
  */
 
-extern volatile FAR chipreg_t *current_regs;
+extern volatile FAR chipreg_t *g_current_regs;
 #endif
 
 /****************************************************************************
@@ -143,16 +140,16 @@ extern volatile FAR chipreg_t *current_regs;
 
 /* Defined in files with the same name as the function */
 
-extern void up_copystate(FAR chipreg_t *dest, FAR chipreg_t *src);
-extern FAR chipreg_t *up_doirq(int irq, FAR chipreg_t *regs);
-extern void up_restoreusercontext(FAR chipreg_t *regs);
-extern void up_irqinitialize(void);
-extern int  up_saveusercontext(FAR chipreg_t *regs);
-extern void up_sigdeliver(void);
-extern int  up_timerisr(int irq, FAR chipreg_t *regs);
+void up_copystate(FAR chipreg_t *dest, FAR chipreg_t *src);
+FAR chipreg_t *up_doirq(int irq, FAR chipreg_t *regs);
+void up_restoreusercontext(FAR chipreg_t *regs);
+void up_irqinitialize(void);
+int  up_saveusercontext(FAR chipreg_t *regs);
+void up_sigdeliver(void);
+int  up_timerisr(int irq, FAR chipreg_t *regs);
 
 #if defined(CONFIG_Z16_LOWPUTC) || defined(CONFIG_Z16_LOWGETC)
-extern void up_lowputc(char ch);
+void up_lowputc(char ch);
 #else
 # define up_lowputc(ch)
 #endif
@@ -166,51 +163,39 @@ void up_addregion(void);
 /* Defined in up_serial.c */
 
 #ifdef USE_SERIALDRIVER
-extern void up_earlyserialinit(void);
-extern void up_serialinit(void);
+void up_earlyserialinit(void);
+void up_serialinit(void);
 #endif
 
 #ifdef USE_LOWCONSOLE
-extern void lowconsole_init(void);
+void lowconsole_init(void);
 #endif
 
 /* Defined in up_timerisr.c */
 
-extern void up_timerinit(void);
+void up_timer_initialize(void);
 
 /* Defined in up_irq.c */
 
-extern void up_maskack_irq(int irq);
-
-/* Defined in board/up_leds.c */
-
-#ifdef CONFIG_ARCH_LEDS
-extern void board_led_initialize(void);
-extern void board_led_on(int led);
-extern void board_led_off(int led);
-#else
-# define board_led_initialize()
-# define board_led_on(led)
-# define board_led_off(led)
-#endif
+void up_ack_irq(int irq);
 
 /* Defined in board/up_network.c */
 
 #ifdef CONFIG_NET
-extern void up_netinitialize(void);
+void up_netinitialize(void);
 #else
 # define up_netinitialize()
 #endif
 
 /* Return the current value of the stack pointer (used in stack dump logic) */
 
-extern chipreg_t up_getsp(void);
+chipreg_t up_getsp(void);
 
 /* Dump stack and registers */
 
 #ifdef CONFIG_ARCH_STACKDUMP
-extern void up_stackdump(void);
-extern void up_registerdump(void);
+void up_stackdump(void);
+void up_registerdump(void);
 #else
 # define up_stackdump()
 # define up_registerdump()
@@ -218,4 +203,4 @@ extern void up_registerdump(void);
 
 #endif /* __ASSEMBLY__ */
 
-#endif  /* __UP_INTERNAL_H */
+#endif  /* __ARCH_Z16_SRC_COMMON_UP_INTERNAL_H */

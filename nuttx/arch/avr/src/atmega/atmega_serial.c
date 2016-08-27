@@ -58,11 +58,10 @@
 
 #include "up_arch.h"
 #include "up_internal.h"
-#include "os_internal.h"
-#include "atmega_internal.h"
+#include "atmega.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Some sanity checks *******************************************************/
@@ -81,27 +80,30 @@
 
 /* Which USART with be tty0/console and which tty1? */
 
+#undef CONSOLE_DEV
+#undef TTYS0_DEV
+#undef TTYS1_DEV
+
 #if defined(CONFIG_USART0_SERIAL_CONSOLE)
 #  define CONSOLE_DEV     g_usart0port     /* USART0 is console */
 #  define TTYS0_DEV       g_usart0port     /* USART0 is ttyS0 */
 #  ifdef CONFIG_AVR_USART1
 #    define TTYS1_DEV     g_usart1port     /* USART1 is ttyS1 */
-#  else
-#    undef TTYS1_DEV                       /* No ttyS1 */
 #  endif
 #elif defined(CONFIG_USART1_SERIAL_CONSOLE)
 #  define CONSOLE_DEV     g_usart1port     /* USART1 is console */
 #  define TTYS0_DEV       g_usart1port     /* USART1 is ttyS0 */
 #  ifdef CONFIG_AVR_USART0
 #    define TTYS1_DEV     g_usart0port     /* USART0 is ttyS1 */
-#  else
-#    undef TTYS1_DEV                       /* No ttyS1 */
 #  endif
+#elif defined(CONFIG_AVR_USART0)
+#  define TTYS0_DEV       g_usart0port     /* USART0 is ttyS0 */
+#  ifdef CONFIG_AVR_USART1
+#    define TTYS1_DEV     g_usart1port     /* USART1 is ttyS1 */
+#  endif
+#elif defined(CONFIG_AVR_USART1)
+#  define TTYS0_DEV       g_usart1port     /* USART1 is ttyS1 */
 #endif
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
 
 /****************************************************************************
  * Private Function Prototypes
@@ -142,7 +144,7 @@ static bool usart1_txempty(struct uart_dev_s *dev);
 #endif
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 /* USART0 operations */
@@ -388,7 +390,7 @@ static int usart0_attach(struct uart_dev_s *dev)
 
   (void)irq_attach(ATMEGA_IRQ_U0RX, usart0_rxinterrupt);
   (void)irq_attach(ATMEGA_IRQ_U0DRE, usart0_txinterrupt);
-//  (void)irq_attach(ATMEGA_IRQ_U0TX, usart0_txinterrupt);
+//(void)irq_attach(ATMEGA_IRQ_U0TX, usart0_txinterrupt);
   return OK;
 }
 #endif
@@ -410,7 +412,7 @@ static int usart1_attach(struct uart_dev_s *dev)
 
   (void)irq_attach(ATMEGA_IRQ_U1RX, usart1_rxinterrupt);
   (void)irq_attach(ATMEGA_IRQ_U1DRE, usart1_txinterrupt);
-//  (void)irq_attach(ATMEGA_IRQ_U1TX, usart1_txinterrupt);
+//(void)irq_attach(ATMEGA_IRQ_U1TX, usart1_txinterrupt);
   return OK;
 }
 #endif
@@ -451,7 +453,7 @@ static void usart1_detach(struct uart_dev_s *dev)
 
   (void)irq_detach(ATMEGA_IRQ_U1RX);
   (void)irq_detach(ATMEGA_IRQ_U1DRE);
-//  (void)irq_detach(ATMEGA_IRQ_U1TX);
+//(void)irq_detach(ATMEGA_IRQ_U1TX);
 }
 #endif
 
@@ -474,9 +476,9 @@ static int usart0_rxinterrupt(int irq, void *context)
 
   if ((ucsr0a & (1 << RXC0)) != 0)
     {
-       /* Received data ready... process incoming bytes */
+      /* Received data ready... process incoming bytes */
 
-       uart_recvchars(&g_usart0port);
+      uart_recvchars(&g_usart0port);
     }
 
   return OK;
@@ -492,9 +494,9 @@ static int usart1_rxinterrupt(int irq, void *context)
 
   if ((ucsr1a & (1 << RXC1)) != 0)
     {
-       /* Received data ready... process incoming bytes */
+      /* Received data ready... process incoming bytes */
 
-       uart_recvchars(&g_usart1port);
+      uart_recvchars(&g_usart1port);
     }
 
   return OK;
@@ -522,9 +524,9 @@ static int usart0_txinterrupt(int irq, void *context)
 
   if ((ucsr0a & (1 << UDRE0)) != 0)
     {
-       /* Transmit data regiser empty ... process outgoing bytes */
+      /* Transmit data regiser empty ... process outgoing bytes */
 
-       uart_xmitchars(&g_usart0port);
+      uart_xmitchars(&g_usart0port);
     }
 
   return OK;
@@ -542,9 +544,9 @@ static int usart1_txinterrupt(int irq, void *context)
 
   if ((ucsr1a & (1 << UDRE1)) != 0)
     {
-       /* Transmit data regiser empty ... process outgoing bytes */
+      /* Transmit data regiser empty ... process outgoing bytes */
 
-       uart_xmitchars(&g_usart1port);
+      uart_xmitchars(&g_usart1port);
     }
 
   return OK;
@@ -562,12 +564,13 @@ static int usart1_txinterrupt(int irq, void *context)
 #ifdef CONFIG_AVR_USART0
 static int usart0_ioctl(struct file *filep, int cmd, unsigned long arg)
 {
-#if 0 /* Reserved for future growth */
+#ifdef CONFIG_SERIAL_TERMIOS
   int ret = OK;
 
   switch (cmd)
     {
-    case xxx: /* Add commands here */
+     case TCGETS:
+     case TCSETS:
       break;
 
     default:
@@ -585,12 +588,13 @@ static int usart0_ioctl(struct file *filep, int cmd, unsigned long arg)
 #ifdef CONFIG_AVR_USART1
 static int usart1_ioctl(struct file *filep, int cmd, unsigned long arg)
 {
-#if 0 /* Reserved for future growth */
+#ifdef CONFIG_SERIAL_TERMIOS
   int ret = OK;
 
   switch (cmd)
     {
-    case xxx: /* Add commands here */
+     case TCGETS:
+     case TCSETS:
       break;
 
     default:
@@ -766,7 +770,7 @@ static void usart0_txint(struct uart_dev_s *dev, bool enable)
    *      written.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable)
     {
       /* Set to receive an interrupt when the TX data register is empty */
@@ -789,7 +793,7 @@ static void usart0_txint(struct uart_dev_s *dev, bool enable)
       UCSR0B &= ~((1 << UDRIE0) | (1 << TXCIE0));
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 #endif
 
@@ -808,7 +812,7 @@ static void usart1_txint(struct uart_dev_s *dev, bool enable)
    *      written.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable)
     {
       /* Set to receive an interrupt when the TX data register is empty */
@@ -831,7 +835,7 @@ static void usart1_txint(struct uart_dev_s *dev, bool enable)
       UCSR1B &= ~((1 << UDRIE1) | (1 << TXCIE1));
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 #endif
 
@@ -898,7 +902,7 @@ void up_earlyserialinit(void)
 {
   /* Disable all USARTS */
 
-#ifdef CONFIG_AVR_USART1
+#ifdef CONFIG_AVR_USART0
   usart0_disableusartint(NULL);
 #endif
 #ifdef CONFIG_AVR_USART1
@@ -950,9 +954,6 @@ void up_serialinit(void)
  *
  ****************************************************************************/
 
-#ifdef HAVE_SERIAL_CONSOLE
-#endif
-
 int up_putc(int ch)
 {
 #ifdef HAVE_SERIAL_CONSOLE
@@ -961,7 +962,7 @@ int up_putc(int ch)
 #if defined(CONFIG_USART0_SERIAL_CONSOLE)
   usart0_disableusartint(&imr);
 #else
-  usart1_cdisableusartint(&imr);
+  usart1_disableusartint(&imr);
 #endif
 
   /* Check for LF */

@@ -1,5 +1,5 @@
-/***************************************************************************
- * z16f/z16f_sysexec.c
+/****************************************************************************
+ * arch/z16/src/1`z16f/z16f_sysexec.c
  *
  *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ***************************************************************************/
+ ****************************************************************************/
 
-/***************************************************************************
+/****************************************************************************
  * Included Files
- ***************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
@@ -45,38 +45,19 @@
 #include <nuttx/arch.h>
 
 #include "chip/chip.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
-/***************************************************************************
- * Definitions
- ***************************************************************************/
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
 
-#ifdef CONFIG_ARCH_LOWPUTC
-#  define SYSDBG lowsyslog
-#else
-#  define SYSDBG syslog
-#endif
-
-/***************************************************************************
- * Private Types
- ***************************************************************************/
-
-/***************************************************************************
- * Private Functions
- ***************************************************************************/
-
-/***************************************************************************
- * Global Functions
- ***************************************************************************/
-
-/***************************************************************************
+/****************************************************************************
  * Function:  z16f_sysexec
  *
  * Description:
  *   Handle a Z16F system execption
  *
- ***************************************************************************/
+ ****************************************************************************/
 
 void z16f_sysexec(FAR chipreg_t *regs)
 {
@@ -86,7 +67,7 @@ void z16f_sysexec(FAR chipreg_t *regs)
    * diagnostics.
    */
 
-  current_regs = regs;
+  g_current_regs = regs;
 
   /* The cause of the system exception is indicated in the SYSEXCPH&L
    * registers
@@ -95,42 +76,42 @@ void z16f_sysexec(FAR chipreg_t *regs)
   excp = getreg16(Z16F_SYSEXCP);
   if ((excp & Z16F_SYSEXCP_SPOVF) != 0)
     {
-      SYSDBG("SP OVERFLOW\n");
+      err("ERROR: SP OVERFLOW\n");
     }
 
   if ((excp & Z16F_SYSEXCP_PCOVF) != 0)
     {
-      SYSDBG("PC OVERFLOW\n");
+      err("ERROR: PC OVERFLOW\n");
     }
 
   if ((excp & Z16F_SYSEXCP_DIV0) != 0)
     {
-      SYSDBG("Divide by zero\n");
+      err("ERROR: Divide by zero\n");
     }
 
   if ((excp & Z16F_SYSEXCP_DIVOVF) != 0)
     {
-      SYSDBG("Divide overflow\n");
+      err("ERROR: Divide overflow\n");
     }
 
   if ((excp & Z16F_SYSEXCP_ILL) != 0)
     {
-      SYSDBG("Illegal instruction\n");
+      err("ERROR: Illegal instruction\n");
     }
 
   if ((excp & Z16F_SYSEXCP_WDTOSC) != 0)
     {
-      SYSDBG("WDT oscillator failure\n");
+      err("ERROR: WDT oscillator failure\n");
     }
 
   if ((excp & Z16F_SYSEXCP_PRIOSC) != 0)
     {
-      SYSDBG("Primary Oscillator Failure\n");
+      err("ERROR: Primary Oscillator Failure\n");
     }
 
   if ((excp & Z16F_SYSEXCP_WDT) != 0)
     {
-      SYSDBG("Watchdog timeout\n");
+      err("ERROR: Watchdog timeout\n");
       z16f_reset();
     }
 

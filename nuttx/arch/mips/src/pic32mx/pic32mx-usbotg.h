@@ -45,7 +45,7 @@
 #include "pic32mx-memorymap.h"
 
 /************************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* Register Offsets *****************************************************************/
 
@@ -347,7 +347,8 @@ struct usbotg_bdtentry_s
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

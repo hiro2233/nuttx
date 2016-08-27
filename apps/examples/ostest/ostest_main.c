@@ -1,7 +1,7 @@
 /****************************************************************************
  * apps/examples/ostest/ostest_main.c
  *
- *   Copyright (C) 2007-2009, 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011-2012, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,6 +39,7 @@
 
 #include <nuttx/config.h>
 
+#include <sys/wait.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,12 +49,16 @@
 #include <sched.h>
 #include <errno.h>
 
+#ifdef CONFIG_EXAMPLES_OSTEST_POWEROFF
+#include <sys/boardctl.h>
+#endif
+
 #include <nuttx/init.h>
 
 #include "ostest.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define PRIORITY         100
@@ -223,7 +228,11 @@ static void show_environment(bool var1_valid, bool var2_valid, bool var3_valid)
  * Name: user_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 static int user_main(int argc, char *argv[])
+#endif
 {
   int i;
 
@@ -265,6 +274,7 @@ static int user_main(int argc, char *argv[])
                  i, g_argv[i-1], argv[i]);
         }
     }
+
   check_test_memory_usage();
 
   /* If retention of child status is enable, then suppress it for this task.
@@ -292,8 +302,9 @@ static int user_main(int argc, char *argv[])
   }
 #endif
 
-  /* Check environment variables */
 #ifndef CONFIG_DISABLE_ENVIRON
+  /* Check environment variables */
+
   show_environment(true, true, true);
 
   unsetenv(g_var1_name);
@@ -302,6 +313,13 @@ static int user_main(int argc, char *argv[])
 
   clearenv();
   show_environment(false, false, false);
+  check_test_memory_usage();
+#endif
+
+#ifdef CONFIG_TLS
+  /* Test TLS */
+
+  tls_test();
   check_test_memory_usage();
 #endif
 
@@ -321,8 +339,16 @@ static int user_main(int argc, char *argv[])
       check_test_memory_usage();
 #endif
 
+#ifdef CONFIG_FS_AIO
+      /* Check asynchronous I/O */
+
+      printf("\nuser_main: AIO test\n");
+      aio_test();
+      check_test_memory_usage();
+#endif
+
 #ifdef  CONFIG_ARCH_FPU
-  /* Check that the FPU is properly supported during context switching */
+      /* Check that the FPU is properly supported during context switching */
 
       printf("\nuser_main: FPU test\n");
       fpu_test();
@@ -373,6 +399,17 @@ static int user_main(int argc, char *argv[])
       printf("\nuser_main: semaphore test\n");
       sem_test();
       check_test_memory_usage();
+
+      printf("\nuser_main: timed semaphore test\n");
+      semtimed_test();
+      check_test_memory_usage();
+
+#ifdef CONFIG_FS_NAMED_SEMAPHORES
+      printf("\nuser_main: Named semaphore test\n");
+      nsem_test();
+      check_test_memory_usage();
+
+#endif
 #endif
 
 #ifndef CONFIG_DISABLE_PTHREAD
@@ -387,7 +424,7 @@ static int user_main(int argc, char *argv[])
 #endif
 #endif
 
-#if !defined(CONFIG_DISABLE_SIGNALS) && !defined(CONFIG_DISABLE_PTHREAD) && !defined(CONFIG_DISABLE_CLOCK)
+#if !defined(CONFIG_DISABLE_SIGNALS) && !defined(CONFIG_DISABLE_PTHREAD)
       /* Verify pthreads and condition variable timed waits */
 
       printf("\nuser_main: timed wait test\n");
@@ -403,7 +440,7 @@ static int user_main(int argc, char *argv[])
       check_test_memory_usage();
 #endif
 
-#if !defined(CONFIG_DISABLE_MQUEUE) && !defined(CONFIG_DISABLE_PTHREAD) && !defined(CONFIG_DISABLE_CLOCK)
+#if !defined(CONFIG_DISABLE_MQUEUE) && !defined(CONFIG_DISABLE_PTHREAD)
       /* Verify pthreads and message queues */
 
       printf("\nuser_main: timed message queue test\n");
@@ -412,19 +449,37 @@ static int user_main(int argc, char *argv[])
 #endif
 
 #ifndef CONFIG_DISABLE_SIGNALS
+      /* Verify that we can modify the signal mask */
+
+      printf("\nuser_main: sigprocmask test\n");
+      sigprocmask_test();
+      check_test_memory_usage();
+
       /* Verify signal handlers */
 
       printf("\nuser_main: signal handler test\n");
       sighand_test();
       check_test_memory_usage();
+
+      printf("\nuser_main: nested signal handler test\n");
+      signest_test();
+      check_test_memory_usage();
 #endif
 
 #if !defined(CONFIG_DISABLE_POSIX_TIMERS) && !defined(CONFIG_DISABLE_SIGNALS)
-      /* Verify posix timers */
+      /* Verify posix timers (with SIGEV_SIGNAL) */
 
       printf("\nuser_main: POSIX timer test\n");
       timer_test();
       check_test_memory_usage();
+
+#ifdef CONFIG_SIG_EVTHREAD
+      /* Verify posix timers (with SIGEV_THREAD) */
+
+      printf("\nuser_main: SIGEV_THREAD timer test\n");
+      sigev_thread_test();
+      check_test_memory_usage();
+#endif
 #endif
 
 #if !defined(CONFIG_DISABLE_PTHREAD) && CONFIG_RR_INTERVAL > 0
@@ -432,6 +487,14 @@ static int user_main(int argc, char *argv[])
 
       printf("\nuser_main: round-robin scheduler test\n");
       rr_test();
+      check_test_memory_usage();
+#endif
+
+#if !defined(CONFIG_DISABLE_PTHREAD) && defined(CONFIG_SCHED_SPORADIC)
+      /* Verify sporadic scheduling */
+
+      printf("\nuser_main: sporadic scheduler test\n");
+      sporadic_test();
       check_test_memory_usage();
 #endif
 
@@ -506,13 +569,22 @@ static void stdio_test(void)
  * Public Functions
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
 /****************************************************************************
+int main(int argc, FAR char **argv)
  * ostest_main
+#else
  ****************************************************************************/
 
+#endif
 int ostest_main(int argc, FAR char *argv[])
 {
   int result;
+#ifdef CONFIG_EXAMPLES_OSTEST_WAITRESULT
+  int ostest_result = ERROR;
+#else
+  int ostest_result = OK;
+#endif
 
   /* Verify that stdio works first */
 
@@ -552,22 +624,38 @@ int ostest_main(int argc, FAR char *argv[])
 
   /* Verify that we can spawn a new task */
 
-#ifndef CONFIG_CUSTOM_STACK
   result = task_create("ostest", PRIORITY, STACKSIZE, user_main,
                        (FAR char * const *)g_argv);
-#else
-  result = task_create("ostest", PRIORITY, user_main,
-                       (FAR char * const *)g_argv);
-#endif
   if (result == ERROR)
     {
       printf("ostest_main: ERROR Failed to start user_main\n");
+      ostest_result = ERROR;
     }
   else
     {
       printf("ostest_main: Started user_main at PID=%d\n", result);
+
+#ifdef CONFIG_EXAMPLES_OSTEST_WAITRESULT
+      /* Wait for the test to complete to get the test result */
+
+      if (waitpid(result, &ostest_result, 0) != result)
+        {
+          printf("ostest_main: ERROR Failed to wait for user_main to terminate\n");
+          ostest_result = ERROR;
+        }
+#endif
     }
 
-  printf("ostest_main: Exiting\n");
-  return 0;
+  printf("ostest_main: Exiting with status %d\n", ostest_result);
+
+#ifdef CONFIG_EXAMPLES_OSTEST_POWEROFF
+  /* Power down, providing the test result.  This is really only an
+   *interesting case when used with the NuttX simulator.  In that case,
+   * test management logic can received the result of the test.
+   */
+
+  boardctl(BOARDIOC_POWEROFF, ostest_result);
+#endif
+
+  return ostest_result;
 }

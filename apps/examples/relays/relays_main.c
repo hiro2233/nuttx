@@ -54,14 +54,14 @@
 #ifdef CONFIG_ARCH_RELAYS
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #ifndef CONFIG_EXAMPLES_RELAYS_NRELAYS
 #  define CONFIG_EXAMPLES_RELAYS_NRELAYS  2
 #endif
 
- /****************************************************************************
+/****************************************************************************
  * Private Types
  ****************************************************************************/
 
@@ -85,7 +85,11 @@
  * Name: relays_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int relays_main(int argc, char *argv[])
+#endif
 {
   char *stat = NULL;
   char *no = NULL;
@@ -94,7 +98,6 @@ int relays_main(int argc, char *argv[])
   uint32_t r_stat;
   int option;
   int n = -1;
-  int ret = -1;
   int i;
 
   while ((option = getopt(argc, argv, ":n:")) != ERROR)

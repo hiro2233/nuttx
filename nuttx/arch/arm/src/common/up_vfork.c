@@ -50,7 +50,7 @@
 #include <arch/irq.h>
 
 #include "up_vfork.h"
-#include "os_internal.h"
+#include "sched/sched.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -72,10 +72,6 @@
 #    define CONFIG_STACK_ALIGNMENT 4
 #  endif
 #endif
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -102,7 +98,7 @@
  *      - Allocation of the child task's TCB.
  *      - Initialization of file descriptors and streams
  *      - Configuration of environment variables
- *      - Setup the intput parameters for the task.
+ *      - Setup the input parameters for the task.
  *      - Initialization of the TCB (including call to up_initial_state()
  *   4) up_vfork() provides any additional operating context. up_vfork must:
  *      - Allocate and initialize the stack
@@ -113,7 +109,7 @@
  *
  * task_vforkabort() may be called if an error occurs between steps 3 and 6.
  *
- * Input Paremeters:
+ * Input Parameters:
  *   context - Caller context information saved by vfork()
  *
  * Return:
@@ -126,7 +122,7 @@
 
 pid_t up_vfork(const struct vfork_s *context)
 {
-  struct tcb_s *parent = (FAR struct tcb_s *)g_readytorun.head;
+  struct tcb_s *parent = this_task();
   struct task_tcb_s *child;
   size_t stacksize;
   uint32_t newsp;
@@ -134,12 +130,12 @@ pid_t up_vfork(const struct vfork_s *context)
   uint32_t stackutil;
   int ret;
 
-  svdbg("vfork context [%p]:\n", context);
-  svdbg("  r4:%08x r5:%08x r6:%08x r7:%08x\n",
+  sinfo("vfork context [%p]:\n", context);
+  sinfo("  r4:%08x r5:%08x r6:%08x r7:%08x\n",
         context->r4, context->r5, context->r6, context->r7);
-  svdbg("  r8:%08x r9:%08x r10:%08x\n",
+  sinfo("  r8:%08x r9:%08x r10:%08x\n",
         context->r8, context->r9, context->r10);
-  svdbg("  fp:%08x sp:%08x lr:%08x\n",
+  sinfo("  fp:%08x sp:%08x lr:%08x\n",
         context->fp, context->sp, context->lr);
 
   /* Allocate and initialize a TCB for the child task. */
@@ -147,15 +143,15 @@ pid_t up_vfork(const struct vfork_s *context)
   child = task_vforksetup((start_t)(context->lr & ~1));
   if (!child)
     {
-      sdbg("task_vforksetup failed\n");
+      serr("ERROR: task_vforksetup failed\n");
       return (pid_t)ERROR;
     }
 
-  svdbg("Parent=%p Child=%p\n", parent, child);
+  sinfo("TCBs: Parent=%p Child=%p\n", parent, child);
 
   /* Get the size of the parent task's stack.  Due to alignment operations,
    * the adjusted stack size may be smaller than the stack size originally
-   * requrested.
+   * requested.
    */
 
   stacksize = parent->adj_stack_size + CONFIG_STACK_ALIGNMENT - 1;
@@ -166,7 +162,7 @@ pid_t up_vfork(const struct vfork_s *context)
                         parent->flags & TCB_FLAG_TTYPE_MASK);
   if (ret != OK)
     {
-      sdbg("up_create_stack failed: %d\n", ret);
+      serr("ERROR: up_create_stack failed: %d\n", ret);
       task_vforkabort(child, -ret);
       return (pid_t)ERROR;
     }
@@ -180,9 +176,9 @@ pid_t up_vfork(const struct vfork_s *context)
   DEBUGASSERT((uint32_t)parent->adj_stack_ptr > context->sp);
   stackutil = (uint32_t)parent->adj_stack_ptr - context->sp;
 
-  svdbg("stacksize:%d stackutil:%d\n", stacksize, stackutil);
+  sinfo("Parent: stacksize:%d stackutil:%d\n", stacksize, stackutil);
 
-  /* Make some feeble effort to perserve the stack contents.  This is
+  /* Make some feeble effort to preserve the stack contents.  This is
    * feeble because the stack surely contains invalid pointers and other
    * content that will not work in the child context.  However, if the
    * user follows all of the caveats of vfork() usage, even this feeble
@@ -205,17 +201,17 @@ pid_t up_vfork(const struct vfork_s *context)
       newfp = context->fp;
     }
 
-  svdbg("Old stack base:%08x SP:%08x FP:%08x\n",
+  sinfo("Parent: stack base:%08x SP:%08x FP:%08x\n",
         parent->adj_stack_ptr, context->sp, context->fp);
-  svdbg("New stack base:%08x SP:%08x FP:%08x\n",
+  sinfo("Child:  stack base:%08x SP:%08x FP:%08x\n",
         child->cmn.adj_stack_ptr, newsp, newfp);
 
- /* Update the stack pointer, frame pointer, and volatile registers.  When
-  * the child TCB was initialized, all of the values were set to zero.
-  * up_initial_state() altered a few values, but the return value in R0
-  * should be cleared to zero, providing the indication to the newly started
-  * child thread.
-  */
+  /* Update the stack pointer, frame pointer, and volatile registers.  When
+   * the child TCB was initialized, all of the values were set to zero.
+   * up_initial_state() altered a few values, but the return value in R0
+   * should be cleared to zero, providing the indication to the newly started
+   * child thread.
+   */
 
   child->cmn.xcp.regs[REG_R4]  = context->r4;  /* Volatile register r4 */
   child->cmn.xcp.regs[REG_R5]  = context->r5;  /* Volatile register r5 */
@@ -226,6 +222,53 @@ pid_t up_vfork(const struct vfork_s *context)
   child->cmn.xcp.regs[REG_R10] = context->r10; /* Volatile register r10 */
   child->cmn.xcp.regs[REG_FP]  = newfp;        /* Frame pointer */
   child->cmn.xcp.regs[REG_SP]  = newsp;        /* Stack pointer */
+
+#ifdef CONFIG_LIB_SYSCALL
+  /* If we got here via a syscall, then we are going to have to setup some
+   * syscall return information as well.
+   */
+
+  if (parent->xcp.nsyscalls > 0)
+    {
+      int index;
+      for (index = 0; index < parent->xcp.nsyscalls; index++)
+        {
+          child->cmn.xcp.syscall[index].sysreturn =
+            parent->xcp.syscall[index].sysreturn;
+
+          /* REVISIT:  This logic is *not* common. */
+
+#if defined(CONFIG_ARCH_CORTEXA5) || defined(CONFIG_ARCH_CORTEXA8) || \
+    defined(CONFIG_ARCH_CORTEXA9)
+#  ifdef CONFIG_BUILD_KERNEL
+
+          child->cmn.xcp.syscall[index].cpsr =
+            parent->xcp.syscall[index].cpsr;
+
+#  endif
+
+#elif defined(CONFIG_ARCH_CORTEXR4) || defined(CONFIG_ARCH_CORTEXR4F) || \
+      defined(CONFIG_ARCH_CORTEXR5) || defined(CONFIG_ARCH_CORTEXR5F) || \
+      defined(CONFIG_ARCH_CORTEXR7) || defined(CONFIG_ARCH_CORTEXR7F)
+#  ifdef CONFIG_BUILD_PROTECTED
+
+          child->cmn.xcp.syscall[index].cpsr =
+            parent->xcp.syscall[index].cpsr;
+
+#  endif
+#elif defined(CONFIG_ARCH_CORTEXM3) || defined(CONFIG_ARCH_CORTEXM4) || \
+      defined(CONFIG_ARCH_CORTEXM0) || defined(CONFIG_ARCH_CORTEXM7)
+
+          child->cmn.xcp.syscall[index].excreturn =
+            parent->xcp.syscall[index].excreturn;
+#else
+#  error Missing logic
+#endif
+        }
+
+      child->cmn.xcp.nsyscalls = parent->xcp.nsyscalls;
+    }
+#endif
 
   /* And, finally, start the child task.  On a failure, task_vforkstart()
    * will discard the TCB by calling task_vforkabort().

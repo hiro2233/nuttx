@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/stm32vldiscovery/src/stm32_leds.c
  *
- *   Copyright (C) 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012-2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *           Freddie Chopin <freddie_chopin@op.pl>
  *
@@ -44,8 +44,9 @@
 #include <stdbool.h>
 #include <debug.h>
 
-#include <arch/board/board.h>
+#include <nuttx/board.h>
 #include <nuttx/power/pm.h>
+#include <arch/board/board.h>
 
 #include "chip.h"
 #include "up_arch.h"
@@ -54,40 +55,24 @@
 #include "stm32vldiscovery.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg  lldbg
-#  define ledvdbg llvdbg
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: stm32_ledinit
+ * Name: stm32_led_initialize
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void stm32_ledinit(void)
+void stm32_led_initialize(void)
 {
   stm32_configgpio(GPIO_LED1);    /* Configure LED1 GPIO for output */
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  ****************************************************************************/
 
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   if (led == 1)
    {
@@ -96,10 +81,10 @@ void board_led_on(int led)
 }
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  ****************************************************************************/
 
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   if (led == 0)
     {

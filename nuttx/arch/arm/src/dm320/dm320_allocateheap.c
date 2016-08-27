@@ -1,7 +1,7 @@
-/************************************************************
+/****************************************************************************
  * dm320/dm320_allocateheap.c
  *
- *   Copyright (C) 2007, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,47 +31,48 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************/
+ ****************************************************************************/
 
-/************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <sys/types.h>
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
 #include "up_arch.h"
 #include "up_internal.h"
 
-/************************************************************
- * Private Definitions
- ************************************************************/
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
-/************************************************************
+/****************************************************************************
  * Private Data
- ************************************************************/
+ ****************************************************************************/
 
-/************************************************************
+/****************************************************************************
  * Private Functions
- ************************************************************/
+ ****************************************************************************/
 
-/************************************************************
+/****************************************************************************
  * Public Functions
- ************************************************************/
+ ****************************************************************************/
 
-/************************************************************
+/****************************************************************************
  * Name: up_allocate_heap
  *
  * Description:
  *   This function will be called to dynamically set aside
  *   the heap region.
  *
- *   For the kernel build (CONFIG_NUTTX_KERNEL=y) with both
+ *   For the kernel build (CONFIG_BUILD_KERNEL=y) with both
  *   kernel- and user-space heaps (CONFIG_MM_KERNEL_HEAP=y),
  *   this function provides the size of the unprotected,
  *   user-space heap.
@@ -80,11 +81,11 @@
  *   heap must be allocated (and protected) by an analogous
  *   up_allocate_kheap().
  *
- ************************************************************/
+ ****************************************************************************/
 
 void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 {
-  board_led_on(LED_HEAPALLOCATE);
-  *heap_start = (FAR void*)g_idle_topstack;
+  board_autoled_on(LED_HEAPALLOCATE);
+  *heap_start = (FAR void *)g_idle_topstack;
   *heap_size  = (DM320_SDRAM_VADDR + CONFIG_RAM_SIZE) - g_idle_topstack;
 }

@@ -1,7 +1,7 @@
-/**************************************************************************
- * up_internal.h
+/****************************************************************************
+ * arch/sim/src/up_internal.h
  *
- *   Copyright (C) 2007, 2009, 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2011-2012, 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,23 +31,34 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- **************************************************************************/
+ ****************************************************************************/
 
-#ifndef __ARCH_UP_INTERNAL_H
-#define __ARCH_UP_INTERNAL_H
+#ifndef __ARCH_SIM_SRC_UP_INTERNAL_H
+#define __ARCH_SIM_SRC_UP_INTERNAL_H
 
-/**************************************************************************
+/****************************************************************************
  * Included Files
- **************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <nuttx/compiler.h>
-#include <sys/types.h>
-#include <nuttx/irq.h>
 
-/**************************************************************************
+#ifndef __ASSEMBLY__
+#  include <sys/types.h>
+#  include <stdbool.h>
+#  include <netinet/in.h>
+
+#  include <nuttx/irq.h>
+#  include <arch/irq.h>
+#  ifdef CONFIG_SMP
+#    include <nuttx/sched.h>
+#    include <arch/spinlock.h>
+#  endif
+#endif
+
+/****************************************************************************
  * Pre-processor Definitions
- **************************************************************************/
+ ****************************************************************************/
 /* Configuration **********************************************************/
 
 #ifndef CONFIG_SIM_X11FB
@@ -55,12 +66,20 @@
 #    error "CONFIG_SIM_TOUCHSCREEN depends on CONFIG_SIM_X11FB"
 #    undef CONFIG_SIM_TOUCHSCREEN
 #  endif
+#  ifdef CONFIG_SIM_AJOYSTICK
+#    error "CONFIG_SIM_AJOYSTICK depends on CONFIG_SIM_X11FB"
+#    undef CONFIG_SIM_AJOYSTICK
+#  endif
 #endif
 
 #ifndef CONFIG_INPUT
 #  ifdef CONFIG_SIM_TOUCHSCREEN
 #    error "CONFIG_SIM_TOUCHSCREEN depends on CONFIG_INPUT"
 #    undef CONFIG_SIM_TOUCHSCREEN
+#  endif
+#  ifdef CONFIG_SIM_AJOYSTICK
+#    error "CONFIG_SIM_AJOYSTICK depends on CONFIG_INPUT"
+#    undef CONFIG_SIM_AJOYSTICK
 #  endif
 #endif
 
@@ -77,36 +96,68 @@
 #  endif
 #endif
 
-/* Determine which device to use as the system logging device */
+/* The design for how we signal UART data availability is up in the air */
 
-#ifndef CONFIG_SYSLOG
-#  undef CONFIG_SYSLOG_CHAR
-#  undef CONFIG_RAMLOG_SYSLOG
-#endif
+#undef CONFIG_SIM_UART_DATAPOST
 
 /* Context Switching Definitions ******************************************/
+
+#if defined(CONFIG_HOST_X86_64) && !defined(CONFIG_SIM_M32)
+   /* Storage order: %rbx, %rsp, %rbp, %r12, %r13, %r14, %r15, %rip */
+
+#  ifdef __ASSEMBLY__
+#    define JB_RBX (0*8)
+#    define JB_RSP (1*8)
+#    define JB_RBP (2*8)
+#    define JB_R12 (3*8)
+#    define JB_R13 (4*8)
+#    define JB_R14 (5*8)
+#    define JB_R15 (6*8)
+#    define JB_RSI (7*8)
+
+#  else
+#    define JB_RBX (0)
+#    define JB_RSP (1)
+#    define JB_RBP (2)
+#    define JB_R12 (3)
+#    define JB_R13 (4)
+#    define JB_R14 (5)
+#    define JB_R15 (6)
+#    define JB_RSI (7)
+
+#  endif /* __ASSEMBLY__ */
+
+/* Compatibility definitions */
+
+#  define JB_SP    JB_RSP
+#  define JB_PC    JB_RSI
+
+#else
 /* Storage order: %ebx, $esi, %edi, %ebp, sp, and return PC */
 
-#ifdef __ASSEMBLY__
-#  define JB_EBX (0*4)
-#  define JB_ESI (1*4)
-#  define JB_EDI (2*4)
-#  define JB_EBP (3*4)
-#  define JB_SP  (4*4)
-#  define JB_PC  (5*4)
-#else
-#  define JB_EBX (0)
-#  define JB_ESI (1)
-#  define JB_EDI (2)
-#  define JB_EBP (3)
-#  define JB_SP  (4)
-#  define JB_PC  (5)
-#endif /* __ASSEMBLY__ */
+#  ifdef __ASSEMBLY__
+#    define JB_EBX (0*4)
+#    define JB_ESI (1*4)
+#    define JB_EDI (2*4)
+#    define JB_EBP (3*4)
+#    define JB_SP  (4*4)
+#    define JB_PC  (5*4)
+
+#  else
+#    define JB_EBX (0)
+#    define JB_ESI (1)
+#    define JB_EDI (2)
+#    define JB_EBP (3)
+#    define JB_SP  (4)
+#    define JB_PC  (5)
+
+#  endif /* __ASSEMBLY__ */
+#endif /* CONFIG_HOST_X86_64 && !CONFIG_SIM_M32 */
 
 /* Simulated Heap Definitions **********************************************/
 /* Size of the simulated heap */
 
-#if CONFIG_MM_SMALL
+#ifdef CONFIG_MM_SMALL
 #  define SIM_HEAP_SIZE (64*1024)
 #else
 #  define SIM_HEAP_SIZE (4*1024*1024)
@@ -127,108 +178,178 @@
 #define SECTORS_PER_CLUSTER 4
 #define LOGICAL_SECTOR_SIZE 512
 
-/**************************************************************************
+/****************************************************************************
  * Public Types
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
- * Public Variables
- **************************************************************************/
+/****************************************************************************
+ * Public Data
+ ****************************************************************************/
 
 #ifndef __ASSEMBLY__
 
 #ifdef CONFIG_SIM_X11FB
 extern int g_x11initialized;
-#ifdef CONFIG_SIM_TOUCHSCREEN
+#if defined(CONFIG_SIM_TOUCHSCREEN) || defined(CONFIG_SIM_AJOYSTICK)
 extern volatile int g_eventloop;
 #endif
 #endif
 
-/**************************************************************************
+#if defined(CONFIG_DEV_CONSOLE) && !defined(CONFIG_SIM_UART_DATAPOST)
+extern volatile int g_uart_data_available;
+#endif
+
+/****************************************************************************
  * Public Function Prototypes
- **************************************************************************/
+ ****************************************************************************/
 
-/* up_setjmp.S ************************************************************/
+/* up_setjmp32.S **********************************************************/
 
-extern int  up_setjmp(int *jb);
-extern void up_longjmp(int *jb, int val) noreturn_function;
+int  up_setjmp(xcpt_reg_t *jb);
+void up_longjmp(xcpt_reg_t *jb, int val) noreturn_function;
+
+/* up_simsmp.c ************************************************************/
+
+#ifdef CONFIG_SMP
+int sim_cpu0_initialize(void);
+void sim_cpu0_start(void);
+#endif
+
+/* up_smpsignal.c *********************************************************/
+
+#ifdef CONFIG_SMP
+void sim_cpu_pause(int cpu, FAR volatile spinlock_t *wait,
+                   FAR volatile unsigned char *paused);
+#endif
+
+/* up_smphook.c ***********************************************************/
+
+#ifdef CONFIG_SMP
+void sim_smp_hook(void);
+#endif
+
+/* up_tickless.c **********************************************************/
+
+#ifdef CONFIG_SCHED_TICKLESS
+void up_timer_update(void);
+#endif
 
 /* up_devconsole.c ********************************************************/
 
-extern void up_devconsole(void);
-extern void up_registerblockdevice(void);
+void up_devconsole(void);
+void up_registerblockdevice(void);
+
+/* up_simuart.c ***********************************************************/
+
+void simuart_start(void);
+int simuart_putc(int ch);
+int simuart_getc(void);
+bool simuart_checkc(void);
+void simuart_terminate(void);
+
+/* up_uartwait.c **********************************************************/
+
+void simuart_initialize(void);
+void simuart_post(void);
+void simuart_wait(void);
 
 /* up_deviceimage.c *******************************************************/
 
-extern char *up_deviceimage(void);
-
-/* up_stdio.c *************************************************************/
-
-extern size_t up_hostread(void *buffer, size_t len);
-extern size_t up_hostwrite(const void *buffer, size_t len);
+char *up_deviceimage(void);
 
 /* up_netdev.c ************************************************************/
 
 #ifdef CONFIG_NET
-extern unsigned long up_getwalltime( void );
+unsigned long up_getwalltime( void );
 #endif
 
-/* up_x11framebuffer.c ******************************************************/
+/* up_x11framebuffer.c ****************************************************/
 
 #ifdef CONFIG_SIM_X11FB
-extern int up_x11initialize(unsigned short width, unsigned short height,
-                            void **fbmem, unsigned int *fblen, unsigned char *bpp,
-                            unsigned short *stride);
+int up_x11initialize(unsigned short width, unsigned short height,
+                     void **fbmem, unsigned int *fblen, unsigned char *bpp,
+                     unsigned short *stride);
 #ifdef CONFIG_FB_CMAP
-extern int up_x11cmap(unsigned short first, unsigned short len,
-                      unsigned char *red, unsigned char *green,
-                      unsigned char *blue, unsigned char  *transp);
+int up_x11cmap(unsigned short first, unsigned short len,
+               unsigned char *red, unsigned char *green,
+               unsigned char *blue, unsigned char  *transp);
 #endif
 #endif
 
-/* up_eventloop.c ***********************************************************/
+/* up_eventloop.c *********************************************************/
 
-#if defined(CONFIG_SIM_X11FB) && defined(CONFIG_SIM_TOUCHSCREEN)
-extern void up_x11events(void);
+#if defined(CONFIG_SIM_X11FB) && \
+   (defined(CONFIG_SIM_TOUCHSCREEN) || defined(CONFIG_SIM_AJOYSTICK))
+void up_x11events(void);
 #endif
 
-/* up_eventloop.c ***********************************************************/
+/* up_eventloop.c *********************************************************/
 
-#if defined(CONFIG_SIM_X11FB) && defined(CONFIG_SIM_TOUCHSCREEN)
-extern int up_buttonevent(int x, int y, int buttons);
+#if defined(CONFIG_SIM_X11FB) && \
+   (defined(CONFIG_SIM_TOUCHSCREEN) || defined(CONFIG_SIM_AJOYSTICK))
+int up_buttonevent(int x, int y, int buttons);
+#endif
+
+/* up_ajoystick.c *********************************************************/
+
+#ifdef CONFIG_SIM_AJOYSTICK
+int sim_ajoy_initialize(void);
+#endif
+
+/* up_ioexpander.c ********************************************************/
+
+#ifdef CONFIG_SIM_IOEXPANDER
+struct ioexpander_dev_s;
+FAR struct ioexpander_dev_s *sim_ioexpander_initialize(void);
 #endif
 
 /* up_tapdev.c ************************************************************/
 
-#if defined(CONFIG_NET) && !defined(__CYGWIN__)
-extern void tapdev_init(void);
-extern unsigned int tapdev_read(unsigned char *buf, unsigned int buflen);
-extern void tapdev_send(unsigned char *buf, unsigned int buflen);
+#if defined(CONFIG_NET_ETHERNET) && !defined(__CYGWIN__)
+void tapdev_init(void);
+unsigned int tapdev_read(unsigned char *buf, unsigned int buflen);
+void tapdev_send(unsigned char *buf, unsigned int buflen);
+void tapdev_ifup(in_addr_t ifaddr);
+void tapdev_ifdown(void);
 
-#define netdev_init()           tapdev_init()
-#define netdev_read(buf,buflen) tapdev_read(buf,buflen)
-#define netdev_send(buf,buflen) tapdev_send(buf,buflen)
+#  define netdev_init()           tapdev_init()
+#  define netdev_read(buf,buflen) tapdev_read(buf,buflen)
+#  define netdev_send(buf,buflen) tapdev_send(buf,buflen)
+#  define netdev_ifup(ifaddr)     tapdev_ifup(ifaddr)
+#  define netdev_ifdown()         tapdev_ifdown()
 #endif
 
 /* up_wpcap.c *************************************************************/
 
-#if defined(CONFIG_NET) && defined(__CYGWIN__)
-extern void wpcap_init(void);
-extern unsigned int wpcap_read(unsigned char *buf, unsigned int buflen);
-extern void wpcap_send(unsigned char *buf, unsigned int buflen);
+#if defined(CONFIG_NET_ETHERNET) && defined(__CYGWIN__)
+void wpcap_init(void);
+unsigned int wpcap_read(unsigned char *buf, unsigned int buflen);
+void wpcap_send(unsigned char *buf, unsigned int buflen);
 
-#define netdev_init()           wpcap_init()
-#define netdev_read(buf,buflen) wpcap_read(buf,buflen)
-#define netdev_send(buf,buflen) wpcap_send(buf,buflen)
+#  define netdev_init()           wpcap_init()
+#  define netdev_read(buf,buflen) wpcap_read(buf,buflen)
+#  define netdev_send(buf,buflen) wpcap_send(buf,buflen)
+#  define netdev_ifup(ifaddr)     {}
+#  define netdev_ifdown()         {}
 #endif
 
-/* up_uipdriver.c *********************************************************/
+/* up_netdriver.c *********************************************************/
 
-#ifdef CONFIG_NET
-extern int uipdriver_init(void);
-extern int uipdriver_setmacaddr(unsigned char *macaddr);
-extern void uipdriver_loop(void);
+#ifdef CONFIG_NET_ETHERNET
+int netdriver_init(void);
+int netdriver_setmacaddr(unsigned char *macaddr);
+void netdriver_loop(void);
+#endif
+
+#ifdef CONFIG_SIM_SPIFLASH
+struct spi_dev_s;
+struct spi_dev_s *up_spiflashinitialize(FAR const char *name);
+#endif
+
+#ifdef CONFIG_SIM_QSPIFLASH
+struct qspi_dev_s;
+struct qspi_dev_s *up_qspiflashinitialize(void);
 #endif
 
 #endif /* __ASSEMBLY__ */
-#endif /* __ARCH_UP_INTERNAL_H */
+#endif /* __ARCH_SIM_SRC_UP_INTERNAL_H */

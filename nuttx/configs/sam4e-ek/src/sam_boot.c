@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/sam4e-ek/src/sam_boot.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,14 +41,11 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
 #include "sam4e-ek.h"
-
-/************************************************************************************
- * Pre-processor Definitions
- ************************************************************************************/
 
 /************************************************************************************
  * Private Functions
@@ -69,10 +66,10 @@
 #ifdef CONFIG_SAM34_USART1
 static inline void board_config_usart1(void)
 {
-#if defined(CONFIG_USART1_ISUART)
-  (void)sam_configgpio(GPIO_RS232_ENABLE);
-#else /* if defined(CONFIG_USART1_RS485) */
+#if defined(CONFIG_USART1_RS485)
   (void)sam_configgpio(GPIO_RS485_ENABLE);
+#else /* if defined(CONFIG_USART1_SERIALDRIVER) */
+  (void)sam_configgpio(GPIO_RS232_ENABLE);
 #endif
 }
 #else
@@ -100,20 +97,32 @@ void sam_boardinitialize(void)
   board_config_usart1();
 
   /* Configure SPI chip selects if 1) SPI is not disabled, and 2) the weak function
-   * sam_spiinitialize() has been brought into the link.
+   * sam_spidev_initialize() has been brought into the link.
    */
 
 #ifdef CONFIG_SAM34_SPI0
-  if (sam_spiinitialize)
+  if (sam_spidev_initialize)
     {
-      sam_spiinitialize();
+      sam_spidev_initialize();
+    }
+#endif
+
+  /* Configure board resources to support networkingif the 1) networking is enabled,
+   * 2) the EMAC module is enabled, and 2) the weak function sam_netinitialize()
+   * has been brought into the build.
+   */
+
+#ifdef HAVE_NETWORK
+  if (sam_netinitialize)
+    {
+      sam_netinitialize();
     }
 #endif
 
   /* Configure on-board LEDs if LED support has been selected. */
 
 #ifdef CONFIG_ARCH_LEDS
-  board_led_initialize();
+  board_autoled_initialize();
 #endif
 }
 
@@ -138,8 +147,8 @@ void board_initialize(void)
    * but the initialization function must run in kernel space.
    */
 
-#if defined(CONFIG_NSH_LIBRARY) && !defined(CONFIG_NSH_ARCHINIT)
-  (void)nsh_archinitialize();
+#if defined(CONFIG_NSH_LIBRARY) && !defined(CONFIG_LIB_BOARDCTL)
+  (void)board_app_initialize(0);
 #endif
 }
 #endif /* CONFIG_BOARD_INITIALIZE */

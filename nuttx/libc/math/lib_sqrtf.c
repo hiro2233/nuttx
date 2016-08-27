@@ -1,4 +1,4 @@
-/************************************************************************
+/****************************************************************************
  * libc/math/lib_sqrtf.c
  *
  * This file is a part of NuttX:
@@ -23,11 +23,11 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- ************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <nuttx/compiler.h>
@@ -35,11 +35,11 @@
 #include <math.h>
 #include <errno.h>
 
-#include "lib_internal.h"
+#include "libc.h"
 
-/************************************************************************
+/****************************************************************************
  * Public Functions
- ************************************************************************/
+ ****************************************************************************/
 
 float sqrtf(float x)
 {
@@ -47,25 +47,25 @@ float sqrtf(float x)
 
   /* Filter out invalid/trivial inputs */
 
-  if (x < 0.0)
+  if (x < 0.0F)
     {
       set_errno(EDOM);
-      return NAN;
+      return NAN_F;
     }
 
   if (isnan(x))
     {
-      return NAN;
+      return NAN_F;
     }
 
-  if (isinf(x))
+  if (isinf_f(x))
     {
-      return INFINITY;
+      return INFINITY_F;
     }
 
-  if (x == 0.0)
+  if (x == 0.0F)
     {
-      return 0.0;
+      return 0.0F;
     }
 
   /* Guess square root (using bit manipulation) */
@@ -76,9 +76,9 @@ float sqrtf(float x)
    * definitely optimal
    */
 
-  y = 0.5 * (y + x / y);
-  y = 0.5 * (y + x / y);
-  y = 0.5 * (y + x / y);
+  y = 0.5F * (y + x / y);
+  y = 0.5F * (y + x / y);
+  y = 0.5F * (y + x / y);
 
   return y;
 }

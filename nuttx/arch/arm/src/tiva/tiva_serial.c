@@ -58,7 +58,6 @@
 #include "chip.h"
 #include "up_arch.h"
 #include "up_internal.h"
-#include "os_internal.h"
 
 #include "tiva_lowputc.h"
 
@@ -110,13 +109,16 @@
 #    define UART4_ASSIGNED      1
 #elif defined(CONFIG_UART5_SERIAL_CONSOLE)
 #    define CONSOLE_DEV         g_uart5port /* UART5 is console */
-#    define TTYS5_DEV           g_uart5port /* UART5 is ttyS0 */
+#    define TTYS0_DEV           g_uart5port /* UART5 is ttyS0 */
+#    define UART5_ASSIGNED      1
 #elif defined(CONFIG_UART6_SERIAL_CONSOLE)
 #    define CONSOLE_DEV         g_uart6port /* UART6 is console */
-#    define TTYS5_DEV           g_uart6port /* UART6 is ttyS0 */
+#    define TTYS0_DEV           g_uart6port /* UART6 is ttyS0 */
+#    define UART6_ASSIGNED      1
 #elif defined(CONFIG_UART7_SERIAL_CONSOLE)
 #    define CONSOLE_DEV         g_uart7port /* UART7 is console */
-#    define TTYS5_DEV           g_uart7port /* UART7 is ttyS0 */
+#    define TTYS0_DEV           g_uart7port /* UART7 is ttyS0 */
+#    define UART7_ASSIGNED      1
 #else
 #  undef CONSOLE_DEV                        /* No console */
 #  if defined(CONFIG_TIVA_UART0)
@@ -303,13 +305,13 @@
 
 struct up_dev_s
 {
-  uint32_t uartbase; /* Base address of UART registers */
-  uint32_t baud;     /* Configured baud */
-  uint32_t im;       /* Saved IM value */
-  uint8_t  irq;      /* IRQ associated with this UART */
-  uint8_t  parity;   /* 0=none, 1=odd, 2=even */
-  uint8_t  bits;     /* Number of bits (7 or 8) */
-  bool    stopbits2; /* true: Configure with 2 stop bits instead of 1 */
+  uint32_t uartbase;  /* Base address of UART registers */
+  uint32_t baud;      /* Configured baud */
+  uint32_t im;        /* Saved IM value */
+  uint8_t  irq;       /* IRQ associated with this UART */
+  uint8_t  parity;    /* 0=none, 1=odd, 2=even */
+  uint8_t  bits;      /* Number of bits (7 or 8) */
+  bool     stopbits2; /* true: Configure with 2 stop bits instead of 1 */
 };
 
 /****************************************************************************
@@ -331,7 +333,7 @@ static bool up_txready(struct uart_dev_s *dev);
 static bool up_txempty(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -686,7 +688,7 @@ static inline void up_restoreuartint(struct up_dev_s *priv, uint32_t im)
 #ifdef HAVE_SERIAL_CONSOLE
 static inline void up_waittxnotfull(struct up_dev_s *priv)
 {
-  int tmp;
+  volatile int tmp;
 
   /* Limit how long we will wait for the TX available condition */
 
@@ -720,7 +722,7 @@ static inline void up_waittxnotfull(struct up_dev_s *priv)
 
 static int up_setup(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint32_t lcrh;
   uint32_t ctl;
 #ifndef CONFIG_SUPPRESS_UART_CONFIG
@@ -813,7 +815,7 @@ static int up_setup(struct uart_dev_s *dev)
         lcrh |= UART_LCRH_PEN;
         break;
       case 2:
-        lcrh |= UART_LCRH_PEN|UART_LCRH_EPS;
+        lcrh |= UART_LCRH_PEN | UART_LCRH_EPS;
         break;
     }
 
@@ -829,9 +831,10 @@ static int up_setup(struct uart_dev_s *dev)
    * any character is received.
    */
 
-  up_serialout(priv, TIVA_UART_IFLS_OFFSET, UART_IFLS_TXIFLSEL_18th|UART_IFLS_RXIFLSEL_18th);
+  up_serialout(priv, TIVA_UART_IFLS_OFFSET,
+               UART_IFLS_TXIFLSEL_18th | UART_IFLS_RXIFLSEL_18th);
 
-  /* Flush the Rx and Tx FIFOs -- How do you do that?*/
+  /* Flush the Rx and Tx FIFOs -- How do you do that? */
 
   /* Enable Rx interrupts from the UART except for Tx interrupts.  We don't want
    * Tx interrupts until we have something to send.  We will check for serial
@@ -839,7 +842,7 @@ static int up_setup(struct uart_dev_s *dev)
    * yet because the interrupt is still disabled at the interrupt controller.
    */
 
-  up_serialout(priv, TIVA_UART_IM_OFFSET, UART_IM_RXIM|UART_IM_RTIM);
+  up_serialout(priv, TIVA_UART_IM_OFFSET, UART_IM_RXIM | UART_IM_RTIM);
 
   /* Enable the FIFOs */
 
@@ -854,7 +857,7 @@ static int up_setup(struct uart_dev_s *dev)
 #ifdef CONFIG_SUPPRESS_UART_CONFIG
   ctl = up_serialin(priv, TIVA_UART_CTL_OFFSET);
 #endif
-  ctl |= (UART_CTL_UARTEN|UART_CTL_TXE|UART_CTL_RXE);
+  ctl |= (UART_CTL_UARTEN | UART_CTL_TXE | UART_CTL_RXE);
   up_serialout(priv, TIVA_UART_CTL_OFFSET, ctl);
 
   /* Set up the cache IM value */
@@ -874,7 +877,7 @@ static int up_setup(struct uart_dev_s *dev)
 
 static void up_shutdown(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_disableuartint(priv, NULL);
 }
 
@@ -895,7 +898,7 @@ static void up_shutdown(struct uart_dev_s *dev)
 
 static int up_attach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   int ret;
 
   /* Attach and enable the IRQ */
@@ -903,12 +906,13 @@ static int up_attach(struct uart_dev_s *dev)
   ret = irq_attach(priv->irq, up_interrupt);
   if (ret == OK)
     {
-       /* Enable the interrupt (RX and TX interrupts are still disabled
-        * in the UART
-        */
+      /* Enable the interrupt (RX and TX interrupts are still disabled
+       * in the UART
+       */
 
-       up_enable_irq(priv->irq);
+      up_enable_irq(priv->irq);
     }
+
   return ret;
 }
 
@@ -924,7 +928,7 @@ static int up_attach(struct uart_dev_s *dev)
 
 static void up_detach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_disable_irq(priv->irq);
   irq_detach(priv->irq);
 }
@@ -1010,7 +1014,7 @@ static int up_interrupt(int irq, void *context)
       PANIC();
     }
 
-  priv = (struct up_dev_s*)dev->priv;
+  priv = (struct up_dev_s *)dev->priv;
 
   /* Loop until there are no characters to be transferred or,
    * until we have been looping for a long time.
@@ -1028,25 +1032,26 @@ static int up_interrupt(int irq, void *context)
 
       /* Handle incoming, receive bytes (with or without timeout) */
 
-      if ((mis & (UART_MIS_RXMIS|UART_MIS_RTMIS)) != 0)
+      if ((mis & (UART_MIS_RXMIS | UART_MIS_RTMIS)) != 0)
         {
-           /* Rx buffer not empty ... process incoming bytes */
+          /* Rx buffer not empty ... process incoming bytes */
 
-           uart_recvchars(dev);
-           handled = true;
+          uart_recvchars(dev);
+          handled = true;
         }
 
       /* Handle outgoing, transmit bytes */
 
       if ((mis & UART_MIS_TXMIS) != 0)
         {
-           /* Tx FIFO not full ... process outgoing bytes */
+          /* Tx FIFO not full ... process outgoing bytes */
 
-           uart_xmitchars(dev);
-           handled = true;
+          uart_xmitchars(dev);
+          handled = true;
         }
     }
-    return OK;
+
+  return OK;
 }
 
 /****************************************************************************
@@ -1070,7 +1075,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 #ifdef CONFIG_SERIAL_TIOCSERGSTRUCT
     case TIOCSERGSTRUCT:
       {
-         struct up_dev_s *user = (struct up_dev_s*)arg;
+         struct up_dev_s *user = (struct up_dev_s *)arg;
          if (!user)
            {
              ret = -EINVAL;
@@ -1103,7 +1108,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
 static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint32_t rxd;
 
   /* Get the Rx byte + 4 bits of error information.  Return those in status */
@@ -1126,7 +1131,7 @@ static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 
 static void up_rxint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   if (enable)
     {
       /* Receive an interrupt when their is anything in the Rx FIFO (or an Rx
@@ -1134,12 +1139,12 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
        */
 
 #ifndef CONFIG_SUPPRESS_SERIAL_INTS
-      priv->im |= (UART_IM_RXIM|UART_IM_RTIM);
+      priv->im |= (UART_IM_RXIM | UART_IM_RTIM);
 #endif
     }
   else
     {
-      priv->im &= ~(UART_IM_RXIM|UART_IM_RTIM);
+      priv->im &= ~(UART_IM_RXIM | UART_IM_RTIM);
     }
   up_serialout(priv, TIVA_UART_IM_OFFSET, priv->im);
 }
@@ -1154,7 +1159,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
 
 static bool up_rxavailable(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   return ((up_serialin(priv, TIVA_UART_FR_OFFSET) & UART_FR_RXFE) == 0);
 }
 
@@ -1168,7 +1173,7 @@ static bool up_rxavailable(struct uart_dev_s *dev)
 
 static void up_send(struct uart_dev_s *dev, int ch)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_serialout(priv, TIVA_UART_DR_OFFSET, (uint32_t)ch);
 }
 
@@ -1182,10 +1187,10 @@ static void up_send(struct uart_dev_s *dev, int ch)
 
 static void up_txint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable)
     {
       /* Set to receive an interrupt when the TX fifo is half emptied */
@@ -1214,7 +1219,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
       priv->im &= ~UART_IM_TXIM;
       up_serialout(priv, TIVA_UART_IM_OFFSET, priv->im);
     }
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -1227,7 +1232,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
 
 static bool up_txready(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   return ((up_serialin(priv, TIVA_UART_FR_OFFSET) & UART_FR_TXFF) == 0);
 }
 
@@ -1241,7 +1246,7 @@ static bool up_txready(struct uart_dev_s *dev)
 
 static bool up_txempty(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   return ((up_serialin(priv, TIVA_UART_FR_OFFSET) & UART_FR_TXFE) != 0);
 }
 
@@ -1290,7 +1295,7 @@ void up_earlyserialinit(void)
   up_disableuartint(TTYS7_DEV.priv, NULL);
 #endif
 
-  /* Configuration whichever one is the console */
+  /* Configure whichever one is the console */
 
 #ifdef HAVE_SERIAL_CONSOLE
   CONSOLE_DEV.isconsole = true;
@@ -1352,12 +1357,10 @@ void up_serialinit(void)
 int up_putc(int ch)
 {
 #ifdef HAVE_SERIAL_CONSOLE
-  struct up_dev_s *priv = (struct up_dev_s*)CONSOLE_DEV.priv;
+  struct up_dev_s *priv = (struct up_dev_s *)CONSOLE_DEV.priv;
   uint32_t im;
 
   up_disableuartint(priv, &im);
-  up_waittxnotfull(priv);
-  up_serialout(priv, TIVA_UART_DR_OFFSET, (uint32_t)ch);
 
   /* Check for LF */
 
@@ -1368,6 +1371,9 @@ int up_putc(int ch)
       up_waittxnotfull(priv);
       up_serialout(priv, TIVA_UART_DR_OFFSET, (uint32_t)'\r');
     }
+
+  up_waittxnotfull(priv);
+  up_serialout(priv, TIVA_UART_DR_OFFSET, (uint32_t)ch);
 
   up_waittxnotfull(priv);
   up_restoreuartint(priv, im);

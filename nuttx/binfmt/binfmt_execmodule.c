@@ -1,7 +1,7 @@
 /****************************************************************************
  * binfmt/binfmt_execmodule.c
  *
- *   Copyright (C) 2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2013-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,10 +48,12 @@
 
 #include <nuttx/arch.h>
 #include <nuttx/kmalloc.h>
+#include <nuttx/mm/mm.h>
+#include <nuttx/mm/shm.h>
 #include <nuttx/binfmt/binfmt.h>
 
-#include "os_internal.h"
-#include "binfmt_internal.h"
+#include "sched/sched.h"
+#include "binfmt.h"
 
 #ifndef CONFIG_BINFMT_DISABLE
 
@@ -107,7 +109,7 @@ static void exec_ctors(FAR void *arg)
 
   for (i = 0; i < binp->nctors; i++)
     {
-      bvdbg("Calling ctor %d at %p\n", i, (FAR void *)ctor);
+      binfo("Calling ctor %d at %p\n", i, (FAR void *)ctor);
 
       (*ctor)();
       ctor++;
@@ -135,69 +137,116 @@ static void exec_ctors(FAR void *arg)
 int exec_module(FAR const struct binary_s *binp)
 {
   FAR struct task_tcb_s *tcb;
-#ifndef CONFIG_CUSTOM_STACK
-  FAR uint32_t *stack;
+#if defined(CONFIG_ARCH_ADDRENV) && defined(CONFIG_BUILD_KERNEL)
+  save_addrenv_t oldenv;
 #endif
+  FAR uint32_t *stack;
   pid_t pid;
-  int err;
+  int errcode;
   int ret;
 
   /* Sanity checking */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!binp || !binp->entrypt || binp->stacksize <= 0)
     {
-      err = EINVAL;
+      errcode = EINVAL;
       goto errout;
     }
 #endif
 
-  bdbg("Executing %s\n", binp->filename);
+  binfo("Executing %s\n", binp->filename);
 
   /* Allocate a TCB for the new task. */
 
-  tcb = (FAR struct task_tcb_s*)kzalloc(sizeof(struct task_tcb_s));
+  tcb = (FAR struct task_tcb_s *)kmm_zalloc(sizeof(struct task_tcb_s));
   if (!tcb)
     {
-      err = ENOMEM;
+      errcode = ENOMEM;
       goto errout;
     }
 
-  /* Allocate the stack for the new task (always from the user heap) */
+#if defined(CONFIG_ARCH_ADDRENV) && defined(CONFIG_BUILD_KERNEL)
+  /* Instantiate the address environment containing the user heap */
 
-#ifndef CONFIG_CUSTOM_STACK
-  stack = (FAR uint32_t*)kumalloc(binp->stacksize);
-  if (!tcb)
+  ret = up_addrenv_select(&binp->addrenv, &oldenv);
+  if (ret < 0)
     {
-      err = ENOMEM;
+      berr("ERROR: up_addrenv_select() failed: %d\n", ret);
+      errcode = -ret;
       goto errout_with_tcb;
+    }
+
+  /* Initialize the user heap */
+
+  umm_initialize((FAR void *)CONFIG_ARCH_HEAP_VBASE,
+                 up_addrenv_heapsize(&binp->addrenv));
+#endif
+
+  /* Allocate the stack for the new task.
+   *
+   * REVISIT:  This allocation is currently always from the user heap.  That
+   * will need to change if/when we want to support dynamic stack allocation.
+   */
+
+  stack = (FAR uint32_t *)kumm_malloc(binp->stacksize);
+  if (!stack)
+    {
+      errcode = ENOMEM;
+      goto errout_with_addrenv;
     }
 
   /* Initialize the task */
 
   ret = task_init((FAR struct tcb_s *)tcb, binp->filename, binp->priority,
                   stack, binp->stacksize, binp->entrypt, binp->argv);
-#else
-  /* Initialize the task */
-
-  ret = task_init((FAR struct tcb_s *)tcb, binp->filename, binp->priority,
-                  stack, binp->entrypt, binp->argv);
-#endif
   if (ret < 0)
     {
-      err = errno;
-      bdbg("task_init() failed: %d\n", err);
-      goto errout_with_stack;
+      errcode = get_errno();
+      berr("task_init() failed: %d\n", errcode);
+      goto errout_with_addrenv;
     }
+
+  /* We can free the argument buffer now.
+   * REVISIT:  It is good to free up memory as soon as possible, but
+   * unfortunately here 'binp' is 'const'.  So to do this properly, we will
+   * have to make some more extensive changes.
+   */
+
+  binfmt_freeargv((FAR struct binary_s *)binp);
 
   /* Note that tcb->flags are not modified.  0=normal task */
   /* tcb->flags |= TCB_FLAG_TTYPE_TASK; */
 
+#if defined(CONFIG_ARCH_ADDRENV) && defined(CONFIG_BUILD_KERNEL)
+  /* Allocate the kernel stack */
+
+  ret = up_addrenv_kstackalloc(&tcb->cmn);
+  if (ret < 0)
+    {
+      berr("ERROR: up_addrenv_select() failed: %d\n", ret);
+      errcode = -ret;
+      goto errout_with_tcbinit;
+    }
+#endif
+
+#if defined(CONFIG_BUILD_KERNEL) && defined(CONFIG_MM_SHM)
+  /* Initialize the shared memory virtual page allocator */
+
+  ret = shm_group_initialize(tcb->cmn.group);
+  if (ret < 0)
+    {
+      berr("ERROR: shm_group_initialize() failed: %d\n", ret);
+      errcode = -ret;
+      goto errout_with_tcbinit;
+    }
+#endif
+
+#ifdef CONFIG_PIC
   /* Add the D-Space address as the PIC base address.  By convention, this
    * must be the first allocated address space.
    */
 
-#ifdef CONFIG_PIC
   tcb->cmn.dspace = binp->alloc[0];
 
   /* Re-initialize the task's initial state to account for the new PIC base */
@@ -205,24 +254,28 @@ int exec_module(FAR const struct binary_s *binp)
   up_initial_state(&tcb->cmn);
 #endif
 
-  /* Assign the address environment to the task */
+#ifdef CONFIG_ARCH_ADDRENV
+  /* Assign the address environment to the new task group */
 
-#ifdef CONFIG_ADDRENV
-  ret = up_addrenv_assign(binp->addrenv, &tcb->cmn);
+  ret = up_addrenv_clone(&binp->addrenv, &tcb->cmn.group->tg_addrenv);
   if (ret < 0)
     {
-      err = -ret;
-      bdbg("up_addrenv_assign() failed: %d\n", ret);
-      goto errout_with_stack;
+      errcode = -ret;
+      berr("ERROR: up_addrenv_clone() failed: %d\n", ret);
+      goto errout_with_tcbinit;
     }
+
+  /* Mark that this group has an address environment */
+
+  tcb->cmn.group->tg_flags |= GROUP_FLAG_ADDRENV;
 #endif
 
+#ifdef CONFIG_BINFMT_CONSTRUCTORS
   /* Setup a start hook that will execute all of the C++ static constructors
    * on the newly created thread.  The struct binary_s must persist at least
    * until the new task has been started.
    */
 
-#ifdef CONFIG_BINFMT_CONSTRUCTORS
   task_starthook(tcb, exec_ctors, (FAR void *)binp);
 #endif
 
@@ -235,30 +288,43 @@ int exec_module(FAR const struct binary_s *binp)
   ret = task_activate((FAR struct tcb_s *)tcb);
   if (ret < 0)
     {
-      err = errno;
-      bdbg("task_activate() failed: %d\n", err);
-      goto errout_with_stack;
+      errcode = get_errno();
+      berr("task_activate() failed: %d\n", errcode);
+      goto errout_with_tcbinit;
     }
+
+#if defined(CONFIG_ARCH_ADDRENV) && defined(CONFIG_BUILD_KERNEL)
+  /* Restore the address environment of the caller */
+
+  ret = up_addrenv_restore(&oldenv);
+  if (ret < 0)
+    {
+      berr("ERROR: up_addrenv_select() failed: %d\n", ret);
+      errcode = -ret;
+      goto errout_with_tcbinit;
+    }
+#endif
 
   return (int)pid;
 
-errout_with_stack:
-#ifndef CONFIG_CUSTOM_STACK
+errout_with_tcbinit:
   tcb->cmn.stack_alloc_ptr = NULL;
   sched_releasetcb(&tcb->cmn, TCB_FLAG_TTYPE_TASK);
-  kufree(stack);
-#else
-  sched_releasetcb(&tcb->cmn, TCB_FLAG_TTYPE_TASK);
-#endif
+  kumm_free(stack);
   goto errout;
 
+errout_with_addrenv:
+#if defined(CONFIG_ARCH_ADDRENV) && defined(CONFIG_BUILD_KERNEL)
+  (void)up_addrenv_restore(&oldenv);
+
 errout_with_tcb:
-  kfree(tcb);
+#endif
+  kmm_free(tcb);
+
 errout:
-  errno = err;
-  bdbg("returning errno: %d\n", err);
+  set_errno(errcode);
+  berr("returning errno: %d\n", errcode);
   return ERROR;
 }
 
 #endif /* CONFIG_BINFMT_DISABLE */
-

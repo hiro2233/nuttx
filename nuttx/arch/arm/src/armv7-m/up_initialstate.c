@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/armv7-m/up_initialstate.c
  *
- *   Copyright (C) 2009, 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -93,6 +93,12 @@ void up_initial_state(struct tcb_s *tcb)
 
   xcp->regs[REG_SP]      = (uint32_t)tcb->adj_stack_ptr;
 
+#ifdef CONFIG_ARMV7M_STACKCHECK
+  /* Set the stack limit value */
+
+  xcp->regs[REG_R10]     = (uint32_t)tcb->stack_alloc_ptr + 64;
+#endif
+
   /* Save the task entry point (stripping off the thumb bit) */
 
   xcp->regs[REG_PC]      = (uint32_t)tcb->start & ~1;
@@ -126,31 +132,41 @@ void up_initial_state(struct tcb_s *tcb)
 #endif
 #endif /* CONFIG_PIC */
 
-#if defined(CONFIG_ARMV7M_CMNVECTOR) || defined(CONFIG_NUTTX_KERNEL)
+#if (defined(CONFIG_ARMV7M_CMNVECTOR) && !defined(CONFIG_ARMV7M_LAZYFPU)) || \
+    defined(CONFIG_BUILD_PROTECTED)
   /* All tasks start via a stub function in kernel space.  So all
-   * tasks must start in privileged thread mode.  If CONFIG_NUTTX_KERNEL
+   * tasks must start in privileged thread mode.  If CONFIG_BUILD_PROTECTED
    * is defined, then that stub function will switch to unprivileged
    * mode before transferring control to the user task.
    */
 
   xcp->regs[REG_EXC_RETURN] = EXC_RETURN_PRIVTHR;
 
-#endif /* CONFIG_ARMV7M_CMNVECTOR || CONFIG_NUTTX_KERNEL */
+#endif /* (CONFIG_ARMV7M_CMNVECTOR && !CONFIG_ARMV7M_LAZYFPU) || CONFIG_BUILD_PROTECTED */
 
-#if defined(CONFIG_ARMV7M_CMNVECTOR) && defined(CONFIG_ARCH_FPU)
+#if defined(CONFIG_ARMV7M_CMNVECTOR) && !defined(CONFIG_ARMV7M_LAZYFPU) && \
+    defined(CONFIG_ARCH_FPU)
 
-  xcp->regs[REG_FPSCR] = 0; // XXX initial FPSCR should be configurable
+  xcp->regs[REG_FPSCR] = 0;      /* REVISIT: Initial FPSCR should be configurable */
   xcp->regs[REG_FPReserved] = 0;
 
-#endif /* CONFIG_ARMV7M_CMNVECTOR && CONFIG_ARCH_FPU */
+#endif /* CONFIG_ARMV7M_CMNVECTOR && !CONFIG_ARMV7M_LAZYFPU && CONFIG_ARCH_FPU */
 
   /* Enable or disable interrupts, based on user configuration */
 
 #ifdef CONFIG_SUPPRESS_INTERRUPTS
+
 #ifdef CONFIG_ARMV7M_USEBASEPRI
   xcp->regs[REG_BASEPRI] = NVIC_SYSH_DISABLE_PRIORITY;
 #else
   xcp->regs[REG_PRIMASK] = 1;
 #endif
+
+#else /* CONFIG_SUPPRESS_INTERRUPTS */
+
+#ifdef CONFIG_ARMV7M_USEBASEPRI
+  xcp->regs[REG_BASEPRI] = NVIC_SYSH_PRIORITY_MIN;
+#endif
+
 #endif /* CONFIG_SUPPRESS_INTERRUPTS */
 }

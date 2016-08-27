@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/olimex-lpc-h3131/src/lpc31_boot.c
  *
- *   Copyright (C) 2031 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,15 +41,16 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
 #include "up_internal.h"
-#include "lpc31_internal.h"
+#include "lpc31.h"
 #include "lpc_h3131.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /************************************************************************************
@@ -79,13 +80,13 @@ void lpc31_boardinitialize(void)
 #endif
 
   /* Configure SPI chip selects if 1) SPI is not disabled, and 2) the weak function
-   * lpc31_spiinitialize() has been brought into the link.
+   * lpc31_spidev_intialize() has been brought into the link.
    */
 
 #if defined(CONFIG_LPC31_SPI)
-  if (lpc31_spiinitialize)
+  if (lpc31_spidev_intialize)
     {
-      lpc31_spiinitialize();
+      lpc31_spidev_intialize();
     }
 #endif
 
@@ -113,5 +114,5 @@ void lpc31_boardinitialize(void)
 
   /* Configure on-board LEDs in all cases */
 
-  board_led_initialize();
+  board_autoled_initialize();
 }

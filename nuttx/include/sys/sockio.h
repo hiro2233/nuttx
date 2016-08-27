@@ -49,7 +49,7 @@
 #include <nuttx/net/ioctl.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define IMSFNAMSIZ 8
@@ -109,7 +109,8 @@ struct ip_msfilter
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

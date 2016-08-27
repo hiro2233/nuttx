@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sama5/sam_pck.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,8 +53,6 @@
 
 #include "sam_pck.h"
 
-#ifdef CONFIG_SAMA5_ISI
-
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -91,6 +89,8 @@
  *
  * Input Parameters:
  *   pckid - Identifies the programmable clock output (0, 1, or 2)
+ *   clocksrc - MCK or SCK.  If MCK is selected, the logic will automatically
+ *     select the PLLACK clock if it seems like a better choice.
  *   frequency - Defines the desired frequency.  The exact frequency may
  *     not be attainable.  In this case, frequency is interpreted to be
  *     a not-to-exceed frequency.
@@ -100,75 +100,125 @@
  *
  ****************************************************************************/
 
-uint32_t sam_pck_configure(enum pckid_e pckid, uint32_t frequency)
+uint32_t sam_pck_configure(enum pckid_e pckid, enum pckid_clksrc_e clksrc,
+                           uint32_t frequency)
 {
   uint32_t regval;
   uint32_t clkin;
   uint32_t actual;
+#ifdef SAMA5_HAVE_PCK_INT_PRES
+  uint32_t pres;
+#endif
 
-  /* Pick a clock source.  Several are possible but only MCK or PLLA is
-   * chosen here.
+  /* Pick a clock source.  Several are possible but only MCK, PLLA, the
+   * MAINCK,or SCK are supported here.
    */
 
-  DEBUGASSERT(BOARD_MCK_FREQUENCY < BOARD_PLLA_FREQUENCY);
-  if (frequency <= BOARD_MCK_FREQUENCY ||
-      frequency < BOARD_PLLA_FREQUENCY / 64)
+   switch (clksrc)
     {
-      regval = PMC_PCK_CSS_MCK;
-      clkin  = BOARD_MCK_FREQUENCY;
-    }
-  else
-    {
-      regval = PMC_PCK_CSS_PLLA;
-      clkin  = BOARD_PLLA_FREQUENCY;
+    case PCKSRC_MCK: /* Source clock = MCK or PLLACK */
+      {
+        /* Pick either the MCK or the PLLACK, whichever will best realize
+         * the target frequency.
+         */
+
+        DEBUGASSERT(BOARD_MCK_FREQUENCY < BOARD_PLLA_FREQUENCY);
+
+        /* Pick the PLLACK if it seems like a better choice */
+
+        if (frequency <= BOARD_MCK_FREQUENCY ||
+            frequency < BOARD_PLLA_FREQUENCY / 64)
+          {
+            regval = PMC_PCK_CSS_MCK;
+            clkin  = BOARD_MCK_FREQUENCY;
+          }
+        else
+          {
+            regval = PMC_PCK_CSS_PLLA;
+            clkin  = BOARD_PLLA_FREQUENCY;
+          }
+      }
+      break;
+
+    case PCKSRC_MAINCK: /* Source clock = MAIN clock */
+      regval = PMC_PCK_CSS_MAIN;
+      clkin  = BOARD_MAINCK_FREQUENCY;
+      break;
+
+    case PCKSRC_SCK: /* Source clock = SCK */
+      regval = PMC_PCK_CSS_SLOW;
+      clkin  = BOARD_SLOWCLK_FREQUENCY;
+      break;
+
+    default:
+      _err("ERROR: Unknown clock source\n");
+      return 0;
     }
 
+#ifdef SAMA5_HAVE_PCK_INT_PRES
+  /* Programmable Clock frequency is selected clock freqency divided by PRES + 1 */
+
+  pres = clkin / frequency;
+  if (pres < 1)
+    {
+      pres = 1;
+    }
+  else if (pres > 256)
+    {
+      pres = 256;
+    }
+
+  regval |= PMC_PCK_PRES(pres - 1);
+  actual  = clkin / pres;
+
+#else
   /* The the larger smallest divisor that does not exceed the requested
    * frequency.
    */
 
-  if (frequency > clkin)
+  if (frequency >= clkin)
     {
       regval |= PMC_PCK_PRES_DIV1;
       actual  = clkin;
     }
-  else if (frequency > (clkin >> 1))
+  else if (frequency >= (clkin >> 1))
     {
       regval |= PMC_PCK_PRES_DIV2;
-      actual = clkin >> 1;
+      actual  = clkin >> 1;
     }
-  else if (frequency > (clkin >> 2))
+  else if (frequency >= (clkin >> 2))
     {
       regval |= PMC_PCK_PRES_DIV4;
-      actual = clkin >> 2;
+      actual  = clkin >> 2;
     }
-  else if (frequency > (clkin >> 3))
+  else if (frequency >= (clkin >> 3))
     {
       regval |= PMC_PCK_PRES_DIV8;
-      actual = clkin >> 3;
+      actual  = clkin >> 3;
     }
-  else if (frequency > (clkin >> 4))
+  else if (frequency >= (clkin >> 4))
     {
       regval |= PMC_PCK_PRES_DIV16;
-      actual = clkin >> 4;
+      actual  = clkin >> 4;
     }
-  else if (frequency > (clkin >> 5))
+  else if (frequency >= (clkin >> 5))
     {
       regval |= PMC_PCK_PRES_DIV32;
-      actual = clkin >> 5;
+      actual  = clkin >> 5;
     }
-  else if (frequency > (clkin >> 6))
+  else if (frequency >= (clkin >> 6))
     {
       regval |= PMC_PCK_PRES_DIV64;
-      actual = clkin >> 6;
+      actual  = clkin >> 6;
     }
   else
     {
-      sdbg("ERROR: frequency cannot be realized.\n");
-      sdbg("       frequency=%d MCK=%d\n",
-           frequency, clkin);
+      serr("ERROR: frequency cannot be realized.\n");
+      serr("       frequency=%lu clkin=%lu\n",
+           (unsigned long)frequency, (unsigned long)clkin);
       return 0;
     }
+#endif
 
   /* Disable the programmable clock, configure the PCK output pin, then set
    * the selected configuration.
@@ -178,19 +228,25 @@ uint32_t sam_pck_configure(enum pckid_e pckid, uint32_t frequency)
     {
     case PCK0:
       putreg32(PMC_PCK0, SAM_PMC_SCDR);
+#ifdef PIO_PMC_PCK0
       (void)sam_configpio(PIO_PMC_PCK0);
+#endif
       putreg32(regval, SAM_PMC_PCK0);
       break;
 
     case PCK1:
       putreg32(PMC_PCK1, SAM_PMC_SCDR);
+#ifdef PIO_PMC_PCK1
       (void)sam_configpio(PIO_PMC_PCK1);
+#endif
       putreg32(regval, SAM_PMC_PCK1);
       break;
 
     case PCK2:
       putreg32(PMC_PCK2, SAM_PMC_SCDR);
+#ifdef PIO_PMC_PCK2
       (void)sam_configpio(PIO_PMC_PCK2);
+#endif
       putreg32(regval, SAM_PMC_PCK2);
       break;
 
@@ -237,5 +293,3 @@ void sam_pck_enable(enum pckid_e pckid, bool enable)
 
   putreg32(regval, regaddr);
 }
-
-#endif /* CONFIG_SAMA5_ISI && CONFIG_SAMA5_EMAC */

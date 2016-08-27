@@ -51,12 +51,10 @@
 #include <nuttx/binfmt/nxflat.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #undef NXFLAT_DUMP_READDATA    /* Define to dump all file data read */
-#define DUMPER syslog          /* If NXFLAT_DUMP_READDATA is defined, this
-                                * is the API used to dump data */
 
 /****************************************************************************
  * Private Constant Data
@@ -71,20 +69,21 @@
  ****************************************************************************/
 
 #if defined(NXFLAT_DUMP_READDATA)
-static inline void nxflat_dumpreaddata(char *buffer, int buflen)
+static inline void nxflat_dumpreaddata(FAR char *buffer, int buflen)
 {
-  uint32_t *buf32 = (uint32_t*)buffer;
+  FAR uint32_t *buf32 = (FAR uint32_t *)buffer;
   int i;
   int j;
 
   for (i = 0; i < buflen; i += 32)
     {
-      DUMPER("%04x:", i);
+      syslog(LOG_DEBUG, "%04x:", i);
       for (j = 0; j < 32; j += sizeof(uint32_t))
         {
-          DUMPER("  %08x", *buf32++);
+          syslog(LOG_DEBUG, "  %08x", *buf32++);
         }
-      DUMPER("\n");
+
+      syslog(LOG_DEBUG, "\n");
     }
 }
 #else
@@ -115,7 +114,7 @@ int nxflat_read(struct nxflat_loadinfo_s *loadinfo, char *buffer, int readsize, 
   int     bytesleft;   /* Number of bytes of .data left to read */
   int     bytesread;   /* Total number of bytes read */
 
-  bvdbg("Read %d bytes from offset %d\n", readsize, offset);
+  binfo("Read %d bytes from offset %d\n", readsize, offset);
 
   /* Seek to the position in the object file where the initialized
    * data is saved.
@@ -130,7 +129,7 @@ int nxflat_read(struct nxflat_loadinfo_s *loadinfo, char *buffer, int readsize, 
       if (rpos != offset)
         {
           int errval = errno;
-          bdbg("Failed to seek to position %d: %d\n", offset, errval);
+          berr("Failed to seek to position %d: %d\n", offset, errval);
           return -errval;
         }
 
@@ -142,13 +141,13 @@ int nxflat_read(struct nxflat_loadinfo_s *loadinfo, char *buffer, int readsize, 
            int errval = errno;
            if (errval != EINTR)
              {
-               bdbg("Read of .data failed: %d\n", errval);
+               berr("Read from offset %d failed: %d\n", offset, errval);
                return -errval;
              }
          }
        else if (nbytes == 0)
          {
-           bdbg("Unexpected end of file\n");
+           berr("Unexpected end of file\n");
            return -ENODATA;
          }
        else

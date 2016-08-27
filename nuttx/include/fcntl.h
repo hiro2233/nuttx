@@ -46,7 +46,7 @@
 #include <stdint.h>
 
 /********************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ********************************************************************************/
 
 /* open flag settings for open() (and related APIs) */
@@ -69,7 +69,7 @@
 /* Unsupported, but required open flags */
 
 #define O_RSYNC     0               /* Synchronize input on read */
-#define O_ACCMODE   0               /* Required by POSIX */
+#define O_ACCMODE   O_RDWR          /* Mask for access mode */
 #define O_NOCTTY    0               /* Required by POSIX */
 #define O_TEXT      0               /* Open the file in text (translated) mode. */
 
@@ -102,7 +102,7 @@
 #define F_GETSIG    6  /* Get the signal sent */
 #define F_NOTIFY    7  /* Provide notification when directory referred to by fd changes (linux)*/
 #define F_SETFD     8  /* Set the file descriptor flags to value */
-#define F_SETFL     9  /* Set  the  file status flags to the value */
+#define F_SETFL     9  /* Set the file status flags to the value */
 #define F_SETLEASE  10 /* Set or remove file lease (linux) */
 #define F_SETLK     11 /* Acquire or release a lock on range of bytes */
 #define F_SETLKW    12 /* Like F_SETLK, but wait for lock to become available */
@@ -128,6 +128,13 @@
 #define DN_RENAME   4  /* A file was renamed */
 #define DN_ATTRIB   5  /* Attributes of a file were changed */
 
+/* int creat(const char *path, mode_t mode);
+ *
+ * is equivalent to open with O_WRONLY|O_CREAT|O_TRUNC.
+ */
+
+#define creat(path, mode) open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)
+
 /********************************************************************************
  * Public Type Definitions
  ********************************************************************************/
@@ -144,26 +151,26 @@ struct flock
 };
 
 /********************************************************************************
- * Public Variables
- ********************************************************************************/
-
-/********************************************************************************
  * Public Function Prototypes
  ********************************************************************************/
 
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
 
+/********************************************************************************
+ * Public Data
+ ********************************************************************************/
+
 /* POSIX-like File System Interfaces */
 
-EXTERN int creat(const char *path, mode_t mode);
-EXTERN int open(const char *path, int oflag, ...);
-EXTERN int fcntl(int fd, int cmd, ...);
+int open(const char *path, int oflag, ...);
+int fcntl(int fd, int cmd, ...);
 
 #undef EXTERN
 #if defined(__cplusplus)

@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/stm32/stm32f20xxx_dma.c
  *
- *   Copyright (C) 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012-2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,11 +47,10 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
-#include <arch/irq.h>
 
 #include "up_arch.h"
 #include "up_internal.h"
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "chip.h"
 #include "stm32_dma.h"
 #include "stm32.h"
@@ -607,8 +606,8 @@ void stm32_dmasetup(DMA_HANDLE handle, uint32_t paddr, uint32_t maddr,
   uint32_t regoffset;
   uint32_t regval;
 
-  dmadbg("paddr: %08x maddr: %08x ntransfers: %d scr: %08x\n",
-         paddr, maddr, ntransfers, scr);
+  dmainfo("paddr: %08x maddr: %08x ntransfers: %d scr: %08x\n",
+          paddr, maddr, ntransfers, scr);
 
   /* "If the stream is enabled, disable it by resetting the EN bit in the
    * DMA_SxCR register, then read this bit in order to confirm that there is no
@@ -679,7 +678,7 @@ void stm32_dmasetup(DMA_HANDLE handle, uint32_t paddr, uint32_t maddr,
    */
 
   regval  = dmast_getreg(dmast, STM32_DMA_SCR_OFFSET);
-  regval &= ~(DMA_SCR_PL_MASK|DMA_SCR_CHSEL_MASK);
+  regval &= ~(DMA_SCR_PL_MASK | DMA_SCR_CHSEL_MASK);
   regval |= scr & DMA_SCR_PL_MASK;
   regval |= (uint32_t)dmast->channel << DMA_SCR_CHSEL_SHIFT;
   dmast_putreg(dmast, STM32_DMA_SCR_OFFSET, regval);
@@ -721,16 +720,16 @@ void stm32_dmasetup(DMA_HANDLE handle, uint32_t paddr, uint32_t maddr,
    */
 
   regval  = dmast_getreg(dmast, STM32_DMA_SCR_OFFSET);
-  regval &= ~(DMA_SCR_PFCTRL|DMA_SCR_DIR_MASK|DMA_SCR_PINC|DMA_SCR_MINC|
-              DMA_SCR_PSIZE_MASK|DMA_SCR_MSIZE_MASK|DMA_SCR_PINCOS|
-              DMA_SCR_CIRC|DMA_SCR_DBM|DMA_SCR_CT|
-              DMA_SCR_PBURST_MASK|DMA_SCR_MBURST_MASK);
-  scr    &=  (DMA_SCR_PFCTRL|DMA_SCR_DIR_MASK|DMA_SCR_PINC|DMA_SCR_MINC|
-              DMA_SCR_PSIZE_MASK|DMA_SCR_MSIZE_MASK|DMA_SCR_PINCOS|
-              DMA_SCR_DBM|DMA_SCR_CIRC|
-              DMA_SCR_PBURST_MASK|DMA_SCR_MBURST_MASK);
+  regval &= ~(DMA_SCR_PFCTRL | DMA_SCR_DIR_MASK | DMA_SCR_PINC | DMA_SCR_MINC |
+              DMA_SCR_PSIZE_MASK | DMA_SCR_MSIZE_MASK | DMA_SCR_PINCOS |
+              DMA_SCR_CIRC | DMA_SCR_DBM | DMA_SCR_CT |
+              DMA_SCR_PBURST_MASK | DMA_SCR_MBURST_MASK);
+  scr    &=  (DMA_SCR_PFCTRL | DMA_SCR_DIR_MASK | DMA_SCR_PINC | DMA_SCR_MINC |
+              DMA_SCR_PSIZE_MASK | DMA_SCR_MSIZE_MASK | DMA_SCR_PINCOS |
+              DMA_SCR_DBM | DMA_SCR_CIRC |
+              DMA_SCR_PBURST_MASK | DMA_SCR_MBURST_MASK);
   regval |= scr;
-  dmast->nonstop = (scr & (DMA_SCR_DBM|DMA_SCR_CIRC)) != 0;
+  dmast->nonstop = (scr & (DMA_SCR_DBM | DMA_SCR_CIRC)) != 0;
   dmast_putreg(dmast, STM32_DMA_SCR_OFFSET, regval);
 }
 
@@ -775,7 +774,7 @@ void stm32_dmastart(DMA_HANDLE handle, dma_callback_t callback, void *arg, bool 
        * Interrupt Enable bit (TCIE) is set.
        */
 
-      scr |= (half ? (DMA_SCR_HTIE|DMA_SCR_TEIE) : (DMA_SCR_TCIE|DMA_SCR_TEIE));
+      scr |= (half ? (DMA_SCR_HTIE | DMA_SCR_TEIE) : (DMA_SCR_TCIE | DMA_SCR_TEIE));
     }
   else
     {
@@ -974,13 +973,13 @@ bool stm32_dmacapable(uint32_t maddr, uint32_t count, uint32_t ccr)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_DMA
+#ifdef CONFIG_DEBUG_DMA_INFO
 void stm32_dmasample(DMA_HANDLE handle, struct stm32_dmaregs_s *regs)
 {
   struct stm32_dma_s *dmast = (struct stm32_dma_s *)handle;
   irqstate_t flags;
 
-  flags       = irqsave();
+  flags       = enter_critical_section();
   regs->lisr  = dmabase_getreg(dmast, STM32_DMA_LISR_OFFSET);
   regs->hisr  = dmabase_getreg(dmast, STM32_DMA_HISR_OFFSET);
   regs->scr   = dmast_getreg(dmast, STM32_DMA_SCR_OFFSET);
@@ -989,7 +988,7 @@ void stm32_dmasample(DMA_HANDLE handle, struct stm32_dmaregs_s *regs)
   regs->sm0ar = dmast_getreg(dmast, STM32_DMA_SM0AR_OFFSET);
   regs->sm1ar = dmast_getreg(dmast, STM32_DMA_SM1AR_OFFSET);
   regs->sfcr  = dmast_getreg(dmast, STM32_DMA_SFCR_OFFSET);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 #endif
 
@@ -1004,22 +1003,22 @@ void stm32_dmasample(DMA_HANDLE handle, struct stm32_dmaregs_s *regs)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_DMA
+#ifdef CONFIG_DEBUG_DMA_INFO
 void stm32_dmadump(DMA_HANDLE handle, const struct stm32_dmaregs_s *regs,
                    const char *msg)
 {
   struct stm32_dma_s *dmast = (struct stm32_dma_s *)handle;
   uint32_t dmabase = DMA_BASE(dmast->base);
 
-  dmadbg("DMA Registers: %s\n", msg);
-  dmadbg("   LISR[%08x]: %08x\n", dmabase + STM32_DMA_LISR_OFFSET, regs->lisr);
-  dmadbg("   HISR[%08x]: %08x\n", dmabase + STM32_DMA_HISR_OFFSET, regs->hisr);
-  dmadbg("    SCR[%08x]: %08x\n", dmast->base + STM32_DMA_SCR_OFFSET, regs->scr);
-  dmadbg("  SNDTR[%08x]: %08x\n", dmast->base + STM32_DMA_SNDTR_OFFSET, regs->sndtr);
-  dmadbg("   SPAR[%08x]: %08x\n", dmast->base + STM32_DMA_SPAR_OFFSET, regs->spar);
-  dmadbg("  SM0AR[%08x]: %08x\n", dmast->base + STM32_DMA_SM0AR_OFFSET, regs->sm0ar);
-  dmadbg("  SM1AR[%08x]: %08x\n", dmast->base + STM32_DMA_SM1AR_OFFSET, regs->sm1ar);
-  dmadbg("   SFCR[%08x]: %08x\n", dmast->base + STM32_DMA_SFCR_OFFSET, regs->sfcr);
+  dmainfo("DMA Registers: %s\n", msg);
+  dmainfo("   LISR[%08x]: %08x\n", dmabase + STM32_DMA_LISR_OFFSET, regs->lisr);
+  dmainfo("   HISR[%08x]: %08x\n", dmabase + STM32_DMA_HISR_OFFSET, regs->hisr);
+  dmainfo("    SCR[%08x]: %08x\n", dmast->base + STM32_DMA_SCR_OFFSET, regs->scr);
+  dmainfo("  SNDTR[%08x]: %08x\n", dmast->base + STM32_DMA_SNDTR_OFFSET, regs->sndtr);
+  dmainfo("   SPAR[%08x]: %08x\n", dmast->base + STM32_DMA_SPAR_OFFSET, regs->spar);
+  dmainfo("  SM0AR[%08x]: %08x\n", dmast->base + STM32_DMA_SM0AR_OFFSET, regs->sm0ar);
+  dmainfo("  SM1AR[%08x]: %08x\n", dmast->base + STM32_DMA_SM1AR_OFFSET, regs->sm1ar);
+  dmainfo("   SFCR[%08x]: %08x\n", dmast->base + STM32_DMA_SFCR_OFFSET, regs->sfcr);
 }
 #endif
 

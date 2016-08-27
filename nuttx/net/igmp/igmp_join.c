@@ -46,21 +46,17 @@
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip.h>
-#include <nuttx/net/uip/uip-igmp.h>
+#include <netinet/in.h>
 
-#include "uip/uip_internal.h"
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/netstats.h>
+#include <nuttx/net/ip.h>
+#include <nuttx/net/igmp.h>
+
+#include "devif/devif.h"
+#include "igmp/igmp.h"
 
 #ifdef CONFIG_NET_IGMP
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -120,7 +116,7 @@
  *
  ****************************************************************************/
 
-int igmp_joingroup(struct uip_driver_s *dev, FAR const struct in_addr *grpaddr)
+int igmp_joingroup(struct net_driver_s *dev, FAR const struct in_addr *grpaddr)
 {
   struct igmp_group_s *group;
 
@@ -128,27 +124,27 @@ int igmp_joingroup(struct uip_driver_s *dev, FAR const struct in_addr *grpaddr)
 
   /* Check if a this address is already in the group */
 
-  group = uip_grpfind(dev, &grpaddr->s_addr);
+  group = igmp_grpfind(dev, &grpaddr->s_addr);
   if (!group)
     {
        /* No... allocate a new entry */
 
-       nvdbg("Join to new group: %08x\n", grpaddr->s_addr);
-       group = uip_grpalloc(dev, &grpaddr->s_addr);
-       IGMP_STATINCR(uip_stat.igmp.joins);
+       ninfo("Join to new group: %08x\n", grpaddr->s_addr);
+       group = igmp_grpalloc(dev, &grpaddr->s_addr);
+       IGMP_STATINCR(g_netstats.igmp.joins);
 
        /* Send the Membership Report */
 
-       IGMP_STATINCR(uip_stat.igmp.report_sched);
-       uip_igmpwaitmsg(group, IGMPv2_MEMBERSHIP_REPORT);
+       IGMP_STATINCR(g_netstats.igmp.report_sched);
+       igmp_waitmsg(group, IGMPv2_MEMBERSHIP_REPORT);
 
        /* And start the timer at 10*100 msec */
 
-       uip_igmpstarttimer(group, 10);
+       igmp_starttimer(group, 10);
 
        /* Add the group (MAC) address to the ether drivers MAC filter list */
 
-       uip_addmcastmac(dev, (FAR uip_ipaddr_t *)&grpaddr->s_addr);
+       igmp_addmcastmac(dev, (FAR in_addr_t *)&grpaddr->s_addr);
        return OK;
     }
 

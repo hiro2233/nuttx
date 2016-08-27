@@ -24,24 +24,16 @@ Development Environment
 ^^^^^^^^^^^^^^^^^^^^^^^
 
   Either Linux or Cygwin on Windows can be used for the development environment.
-  The source has been built only using the GNU toolchain (see below).  Other
-  toolchains will likely cause problems. Testing was performed using the Cygwin
-  environment.
+  The source has been built only using the GNU toolchain.  Testing was performed
+  using the Cygwin environment.
 
 GNU Toolchain Options
 ^^^^^^^^^^^^^^^^^^^^^
 
-  The NuttX make system has been modified to support the following different
-  toolchain options.
-
-  1. The CodeSourcery GNU toolchain,
-  2. The devkitARM GNU toolchain, ok
-  4. The NuttX buildroot Toolchain (see below).
-
   All testing has been conducted using the NuttX buildroot toolchain.  To use
-  the CodeSourcery, devkitARM, Atollic, or AtmelStudio GNU toolchain, you simply
-  need to add one of the following configuration options to your .config (or
-  defconfig) file:
+  other toolchains, such as the CodeSourcery, devkitARM, Atollic, or AtmelStudio
+  GNU toolchain, you simply need to add one of the following configuration options
+  to your .config (or defconfig) file:
 
     CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y  : CodeSourcery under Windows
     CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYL=y  : CodeSourcery under Linux
@@ -51,8 +43,8 @@ GNU Toolchain Options
     CONFIG_ARMV7M_TOOLCHAIN_GNU_EABIL=y      : Generic GCC ARM EABI toolchain for Linux
     CONFIG_ARMV7M_TOOLCHAIN_GNU_EABIW=y      : Generic GCC ARM EABI toolchain for Windows
 
-  If you are not using CONFIG_ARMV7M_TOOLCHAIN_BUILDROOT, then you may also have to modify
-  the PATH in the setenv.h file if your make cannot find the tools.
+  You may also have to modify the PATH in the setenv.h file if your make cannot
+  find the tools.
 
   NOTE about Windows native toolchains
   ------------------------------------
@@ -79,12 +71,6 @@ GNU Toolchain Options
        make clean_context all
 
      An alias in your .bashrc file might make that less painful.
-
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
 
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
@@ -134,7 +120,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -163,11 +149,11 @@ NuttX EABI "buildroot" Toolchain
   details PLUS some special instructions that you will need to follow if you are
   building a Cortex-M3 toolchain for Cygwin under Windows.
 
-  NOTE:  Unfortunately, the 4.6.3 EABI toolchain is not compatible with the
-  the NXFLAT tools.  See the top-level TODO file (under "Binary loaders") for
-  more information about this problem. If you plan to use NXFLAT, please do not
-  use the GCC 4.6.3 EABI toochain; instead use the GCC 4.3.3 OABI toolchain.
-  See instructions below.
+  NOTE:  Unfortunately, the 4.6.3 (and later) GCC toolchain is not compatible
+  with the the NXFLAT tools.  See the top-level TODO file (under "Binary loaders")
+  for more information about this problem. If you plan to use NXFLAT, please do
+  not use the GCC 4.6.3 toochain; instead use an older toolchain (such as the GCC
+  4.3.3 OABI toolchain discussed below).
 
 NuttX OABI "buildroot" Toolchain
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -194,8 +180,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -262,7 +248,7 @@ LEDs
   * If LED1 and LED2 are statically on, then NuttX probably failed to boot
     and these LEDs will give you some indication of where the failure was
  ** The normal state is LED0=OFF, LED2=ON and LED1 faintly glowing.  This faint
-    glow is because of timer interupts that result in the LED being illuminated
+    glow is because of timer interrupts that result in the LED being illuminated
     on a small proportion of the time.
 *** LED2 may also flicker normally if signals are processed.
 
@@ -385,10 +371,10 @@ SAM3U-EK-specific Configuration Options
     CONFIG_SAM34_GPIOA_IRQ
     CONFIG_SAM34_GPIOB_IRQ
     CONFIG_SAM34_GPIOC_IRQ
-    CONFIG_USART0_ISUART
-    CONFIG_USART1_ISUART
-    CONFIG_USART2_ISUART
-    CONFIG_USART3_ISUART
+    CONFIG_USART0_SERIALDRIVER
+    CONFIG_USART1_SERIALDRIVER
+    CONFIG_USART2_SERIALDRIVER
+    CONFIG_USART3_SERIALDRIVER
     CONFIG_SAM34_NAND          - NAND memory
 
   SAM3U specific device driver settings
@@ -442,7 +428,7 @@ Configurations
     change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -600,7 +586,6 @@ Configurations
           Device Drivers
             CONFIG_SPI=y                      : Enable SPI support
             CONFIG_SPI_EXCHANGE=y             : The exchange() method is supported
-            CONFIG_SPI_OWNBUS=y               : Smaller code if this is the only SPI device
 
             CONFIG_INPUT=y                    : Enable support for input devices
             CONFIG_INPUT_ADS7843E=y           : Enable support for the XPT2046
@@ -631,8 +616,8 @@ Configurations
           debug output on UART0 can be enabled with:
 
           Build Setup:
-            CONFIG_DEBUG=y                    : Enable debug features
-            CONFIG_DEBUG_VERBOSE=y            : Enable verbose debug output
+            CONFIG_DEBUG_FEATURES=y           : Enable debug features
+            CONFIG_DEBUG_INFO=y               : Enable verbose debug output
             CONFIG_DEBUG_INPUT=y              : Enable debug output from input devices
 
     3. Enabling HSMCI support. The SAM3U-KE provides a an SD memory card

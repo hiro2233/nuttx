@@ -47,13 +47,13 @@
 
 #include <nuttx/usb/usbdev.h>
 
-#include "pic32mx-internal.h"
+#include "pic32mx.h"
 #include "sure-pic32mx.h"
 
 #if defined(CONFIG_PIC32MX_USBDEV)
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* The Sure DB_DP11215 PIC32 Storage Demo Board has a CP2102 PHY that is shared
  * between the USB and the UART-to-USB logic.  That PHY must be programmed during
@@ -117,7 +117,7 @@ void weak_function pic32mx_usbdevinitialize(void)
    */
 
 #ifdef CONFIG_USBHOST
- // pic32mx_configgpio(GPIO_USB_VBUSON);
+  //pic32mx_configgpio(GPIO_USB_VBUSON);
 #endif
 
   /* "If the host PC sends a GetStatus (device) request, the firmware must respond
@@ -132,7 +132,7 @@ void weak_function pic32mx_usbdevinitialize(void)
    */
 
 #ifdef CONFIG_USB_PWRSENSE
- // pic32mx_configgpio(GPIO_USB_PWRSENSE);
+  //pic32mx_configgpio(GPIO_USB_PWRSENSE);
 #endif
 }
 

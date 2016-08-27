@@ -60,12 +60,11 @@
 
 #include "up_arch.h"
 #include "up_internal.h"
-#include "os_internal.h"
 
 #include "pic32mx-config.h"
 #include "chip.h"
 #include "pic32mx-uart.h"
-#include "pic32mx-internal.h"
+#include "pic32mx.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -185,7 +184,7 @@ static bool up_txready(struct uart_dev_s *dev);
 static bool up_txempty(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -218,7 +217,7 @@ static char g_uart2rxbuffer[CONFIG_UART2_RXBUFSIZE];
 static char g_uart2txbuffer[CONFIG_UART2_TXBUFSIZE];
 #endif
 
-/* This describes the state of the AVR32 UART1 port. */
+/* This describes the state of the PIC32MX UART1 port. */
 
 #ifdef CONFIG_PIC32MX_UART1
 static struct up_dev_s g_uart1priv =
@@ -252,7 +251,7 @@ static uart_dev_t g_uart1port =
 };
 #endif
 
-/* This describes the state of the AVR32 UART2 port. */
+/* This describes the state of the PIC32MX UART2 port. */
 
 #ifdef CONFIG_PIC32MX_UART2
 static struct up_dev_s g_uart2priv =
@@ -318,10 +317,10 @@ static void up_restoreuartint(struct uart_dev_s *dev, uint8_t im)
 
   /* Re-enable/re-disable interrupts corresponding to the state of bits in im */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   up_rxint(dev, RX_ENABLED(im));
   up_txint(dev, TX_ENABLED(im));
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -330,16 +329,16 @@ static void up_restoreuartint(struct uart_dev_s *dev, uint8_t im)
 
 static void up_disableuartint(struct uart_dev_s *dev, uint8_t *im)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (im)
    {
      *im = priv->im;
    }
   up_restoreuartint(dev, 0);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -354,7 +353,7 @@ static void up_disableuartint(struct uart_dev_s *dev, uint8_t *im)
 static int up_setup(struct uart_dev_s *dev)
 {
 #ifndef CONFIG_SUPPRESS_UART_CONFIG
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Configure the UART as an RS-232 UART */
 
@@ -382,7 +381,7 @@ static int up_setup(struct uart_dev_s *dev)
 
 static void up_shutdown(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Disable interrupts */
 
@@ -410,7 +409,7 @@ static void up_shutdown(struct uart_dev_s *dev)
 
 static int up_attach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Attach the IRQ */
 
@@ -429,7 +428,7 @@ static int up_attach(struct uart_dev_s *dev)
 
 static void up_detach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Disable interrupts */
 
@@ -476,7 +475,7 @@ static int up_interrupt(int irq, void *context)
     {
       PANIC();
     }
-  priv = (struct up_dev_s*)dev->priv;
+  priv = (struct up_dev_s *)dev->priv;
   DEBUGASSERT(priv);
 
   /* Loop until there are no characters to be transferred or,
@@ -495,14 +494,14 @@ static int up_interrupt(int irq, void *context)
        *  - Overflow condition for the receive buffer OERR (UxSTA bit 1) occurs
        */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
       if (up_pending_irq(priv->irqe))
         {
            /* Clear the pending error interrupt */
 
            up_clrpend_irq(priv->irqe);
-           lldbg("ERROR: interrrupt STA: %08x\n",
-                 up_serialin(priv, PIC32MX_UART_STA_OFFSET));
+           _err("ERROR: interrupt STA: %08x\n",
+               up_serialin(priv, PIC32MX_UART_STA_OFFSET));
            handled = true;
         }
 #endif
@@ -514,23 +513,23 @@ static int up_interrupt(int irq, void *context)
 
       if (up_pending_irq(priv->irqrx))
         {
-           /* Process incoming bytes */
+          /* Process incoming bytes */
 
-           uart_recvchars(dev);
-           handled = true;
+          uart_recvchars(dev);
+          handled = true;
 
-           /* Clear the pending RX interrupt if the receive buffer is empty.
-            * Note that interrupts can be lost if the interrupt condition is
-            * still true when the interrupt is cleared.  Keeping the RX
-            * interrupt pending too long is not a problem because the
-            * upper half driver will disable RX interrupts if it no
-            * longer has space to buffer the serial data.
-            */
+          /* Clear the pending RX interrupt if the receive buffer is empty.
+           * Note that interrupts can be lost if the interrupt condition is
+           * still true when the interrupt is cleared.  Keeping the RX
+           * interrupt pending too long is not a problem because the
+           * upper half driver will disable RX interrupts if it no
+           * longer has space to buffer the serial data.
+           */
 
-           if ((up_serialin(priv, PIC32MX_UART_STA_OFFSET) & UART_STA_URXDA) == 0)
-             {
-               up_clrpend_irq(priv->irqrx);
-             }
+          if ((up_serialin(priv, PIC32MX_UART_STA_OFFSET) & UART_STA_URXDA) == 0)
+            {
+              up_clrpend_irq(priv->irqrx);
+            }
         }
 
       /* Handle outgoing, transmit bytes  The RT FIFO is configured to
@@ -550,23 +549,23 @@ static int up_interrupt(int irq, void *context)
 
       if (up_pending_irq(priv->irqtx))
         {
-           /* Process outgoing bytes */
+          /* Process outgoing bytes */
 
-           uart_xmitchars(dev);
-           handled = true;
+          uart_xmitchars(dev);
+          handled = true;
 
-           /* Clear the pending TX interrupt if the TX FIFO is empty.
-            * Note that interrupts can be lost if the interrupt condition is
-            * still true when the interrupt is cleared.  Keeping the TX
-            * interrupt pending too long is not a problem:  Upper level logic
-            * will disable the TX interrupt when there is no longer anything
-            * to be sent.
-            */
+          /* Clear the pending TX interrupt if the TX FIFO is empty.
+           * Note that interrupts can be lost if the interrupt condition is
+           * still true when the interrupt is cleared.  Keeping the TX
+           * interrupt pending too long is not a problem:  Upper level logic
+           * will disable the TX interrupt when there is no longer anything
+           * to be sent.
+           */
 
-           if ((up_serialin(priv, PIC32MX_UART_STA_OFFSET) & UART_STA_UTRMT) != 0)
-             {
-               up_clrpend_irq(priv->irqtx);
-             }
+          if ((up_serialin(priv, PIC32MX_UART_STA_OFFSET) & UART_STA_UTRMT) != 0)
+            {
+              up_clrpend_irq(priv->irqtx);
+            }
         }
     }
 
@@ -593,8 +592,8 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
   inode = filep->f_inode;
   dev   = inode->i_private;
 
-  DEBUGASSERT(dev, dev->priv)
-  priv = (struct up_dev_s*)dev->priv;
+  DEBUGASSERT(dev, dev->priv);
+  priv = (struct up_dev_s *)dev->priv;
 
   switch (cmd)
     {
@@ -603,7 +602,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
     case TCGETS:
       {
-        struct termios *termiosp = (struct termios*)arg;
+        struct termios *termiosp = (struct termios *)arg;
 
         if (!termiosp)
           {
@@ -622,7 +621,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
     case TCSETS:
       {
-        struct termios *termiosp = (struct termios*)arg;
+        struct termios *termiosp = (struct termios *)arg;
 
         if (!termiosp)
           {
@@ -664,7 +663,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
 static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Return status information */
 
@@ -688,11 +687,11 @@ static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 
 static void up_rxint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   irqstate_t flags;
   uint8_t im;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   im = priv->im;
   if (enable)
     {
@@ -701,7 +700,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
        */
 
 #ifndef CONFIG_SUPPRESS_SERIAL_INTS
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
       up_enable_irq(priv->irqe);
 #endif
       up_enable_irq(priv->irqrx);
@@ -710,14 +709,14 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
     }
   else
     {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
       up_disable_irq(priv->irqe);
 #endif
       up_disable_irq(priv->irqrx);
       DISABLE_RX(im);
     }
   priv->im = im;
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -730,7 +729,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
 
 static bool up_rxavailable(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Return true is data is available in the receive data buffer */
 
@@ -747,7 +746,7 @@ static bool up_rxavailable(struct uart_dev_s *dev)
 
 static void up_send(struct uart_dev_s *dev, int ch)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_serialout(priv, PIC32MX_UART_TXREG_OFFSET, (uint32_t)ch);
 }
 
@@ -761,11 +760,11 @@ static void up_send(struct uart_dev_s *dev, int ch)
 
 static void up_txint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   irqstate_t flags;
   uint8_t im;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   im = priv->im;
   if (enable)
     {
@@ -791,7 +790,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
     }
 
   priv->im = im;
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -804,7 +803,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
 
 static bool up_txready(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Return TRUE if the Transmit buffer register is not full */
 
@@ -821,7 +820,7 @@ static bool up_txready(struct uart_dev_s *dev)
 
 static bool up_txempty(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Return TRUE if the Transmit shift register is empty */
 

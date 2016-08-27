@@ -50,15 +50,14 @@
 #include <arch/irq.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
-#include "at32uc3_internal.h"
+#include "at32uc3.h"
 
 #include "chip.h"
 #include "at32uc3_intc.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* These symbols are exported from up_exceptions.S:
@@ -83,7 +82,7 @@ extern uint32_t avr32_int3;
  * Public Data
  ****************************************************************************/
 
-volatile uint32_t *current_regs;
+volatile uint32_t *g_current_regs;
 
 /****************************************************************************
  * Private Types
@@ -177,8 +176,8 @@ static int up_getgrp(unsigned int irq)
 
 static int avr32_xcptn(int irq, FAR void *context)
 {
-  (void)irqsave();
-  lldbg("PANIC!!! Exception IRQ: %d\n", irq);
+  (void)up_irq_save();
+  _alert("PANIC!!! Exception IRQ: %d\n", irq);
   PANIC();
   return 0;
 }
@@ -212,20 +211,20 @@ void up_irqinitialize(void)
    */
 
   for (group = 0; group < AVR32_IRQ_MAXGROUPS; group++)
-   {
-     putreg32(g_ipr[0], AVR32_INTC_IPR(group));
-   }
+    {
+      putreg32(g_ipr[0], AVR32_INTC_IPR(group));
+    }
 
   /* currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  g_current_regs = NULL;
 
   /* Attach the exception handlers */
 
   for (irq = 0; irq < AVR32_IRQ_NEVENTS; irq++)
     {
-	  irq_attach(irq, avr32_xcptn);
-	}
+      irq_attach(irq, avr32_xcptn);
+    }
 
   /* Initialize GPIO interrupt facilities */
 
@@ -241,7 +240,7 @@ void up_irqinitialize(void)
   /* And finally, enable interrupts */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
-  irqrestore(0);
+  up_irq_restore(0);
 #endif
 }
 
@@ -322,11 +321,11 @@ unsigned int avr32_intirqno(unsigned int level)
           mask <<= 1;
         }
 
-       lldbg("Spurious interrupt: group=%d IRR=%08x\n", group, irr);
+       _err("ERROR: Spurious interrupt: group=%d IRR=%08x\n", group, irr);
        return -ENODEV;
     }
 
-  lldbg("Bad group: %d\n", group);
+  _err("ERROR: Bad group: %d\n", group);
   return AVR32_IRQ_BADVECTOR;
 }
 

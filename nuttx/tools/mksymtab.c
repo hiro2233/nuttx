@@ -1,7 +1,7 @@
 /****************************************************************************
  * tools/mksymtab.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@
 #include "csvparser.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define MAX_HEADER_FILES 500
@@ -222,6 +222,7 @@ int main(int argc, char **argv, char **envp)
 
   fprintf(outstream, "/* %s: Auto-generated symbol table.  Do not edit */\n\n", symtab);
   fprintf(outstream, "#include <nuttx/config.h>\n");
+  fprintf(outstream, "#include <nuttx/compiler.h>\n");
   fprintf(outstream, "#include <nuttx/binfmt/symtab.h>\n\n");
 
   /* Output all of the require header files */
@@ -233,7 +234,7 @@ int main(int argc, char **argv, char **envp)
 
   /* Now the symbol table itself */
 
-  fprintf(outstream, "\nstruct symtab_s %s[] =\n", SYMTAB_NAME);
+  fprintf(outstream, "\nconst struct symtab_s %s[] =\n", SYMTAB_NAME);
   fprintf(outstream, "{\n");
 
   /* Parse each line in the CVS file */

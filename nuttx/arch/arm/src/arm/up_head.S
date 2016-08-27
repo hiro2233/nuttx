@@ -158,7 +158,7 @@
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* RX_NSECTIONS determines the number of 1Mb sections to map for the
@@ -208,7 +208,7 @@
 
 /* This macro will modify r0, r1, r2 and r14 */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 	.macro	showprogress, code
 	mov		r0, #\code
 	bl		up_lowputc
@@ -609,9 +609,9 @@ __start:
 
 	/* Perform early C-level, platform-specific initialization */
 
-	bl		up_boot
+	bl		arm_boot
 
-#ifdef CONFIG_DEBUG_STACK
+#ifdef CONFIG_STACK_COLORATION
 	/* Write a known value to the IDLE thread stack to support stack
 	 * monitoring logic
 	 */
@@ -678,7 +678,7 @@ __start:
 	.long	_edata
 #endif
 
-#ifdef CONFIG_DEBUG_STACK
+#ifdef CONFIG_STACK_COLORATION
 	.type	.Lstkinit, %object
 .Lstkinit:
 	.long	_ebss					/* Beginning of the IDLE stack, then words of IDLE stack */

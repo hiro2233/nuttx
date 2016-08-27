@@ -44,13 +44,13 @@
 
 #ifndef __ASSEMBLY__
 #  include <stdint.h>
-#  ifdef CONFIG_GPIO_IRQ
+#  ifdef CONFIG_SAMDL_GPIOIRQ
 #    include <arch/irq.h>
 #  endif
 #endif
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
@@ -179,7 +179,7 @@
  *   BOARD_DFLL_FINEVALUE           - Value
  *
  * Closed loop mode only:
- *   BOARD_DFLL_GCLKGEN          - See GCLK_CLKCTRL_GEN* definitions
+ *   BOARD_DFLL_GCLKGEN             - GCLK index
  *   BOARD_DFLL_MULTIPLIER          - Value
  *   BOARD_DFLL_MAXCOARSESTEP       - Value
  *   BOARD_DFLL_MAXFINESTEP         - Value
@@ -199,7 +199,7 @@
 
 /* DFLL closed loop mode configuration */
 
-#define BOARD_DFLL_SRCGCLKGEN         GCLK_CLKCTRL_GEN1
+#define BOARD_DFLL_SRCGCLKGEN         1
 #define BOARD_DFLL_MULTIPLIER         6
 #define BOARD_DFLL_QUICKLOCK          1
 #define BOARD_DFLL_TRACKAFTERFINELOCK 1
@@ -359,7 +359,7 @@
  * to all SERCOM modules.
  */
 
-#define BOARD_SERCOM_SLOW_GCLKGEN    (GCLK_CLKCTRL_GEN0 >> GCLK_CLKCTRL_GEN_SHIFT)
+#define BOARD_SERCOM05_SLOW_GCLKGEN  0
 
 /* SERCOM0 SPI is available on EXT1
  *
@@ -371,7 +371,8 @@
  *  18  PA7  SERCOM0 PAD3  SPI SCK
  */
 
-#define BOARD_SERCOM0_GCLKGEN        GCLK_CLKCTRL_GEN0
+#define BOARD_SERCOM0_GCLKGEN        0
+#define BOARD_SERCOM0_SLOW_GCLKGEN   BOARD_SERCOM05_SLOW_GCLKGEN
 #define BOARD_SERCOM0_MUXCONFIG      (SPI_CTRLA_DOPO_DOPAD231 | SPI_CTRLA_DIPAD0)
 #define BOARD_SERCOM0_PINMAP_PAD0    PORT_SERCOM0_PAD0_2 /* SPI_MISO */
 #define BOARD_SERCOM0_PINMAP_PAD1    0                   /* microSD_SS */
@@ -390,7 +391,8 @@
  *  18  PA19 SERCOM1 PAD3  SPI SCK
  */
 
-#define BOARD_SERCOM1_GCLKGEN        GCLK_CLKCTRL_GEN0
+#define BOARD_SERCOM1_GCLKGEN        0
+#define BOARD_SERCOM1_SLOW_GCLKGEN   BOARD_SERCOM05_SLOW_GCLKGEN
 #define BOARD_SERCOM1_MUXCONFIG      (SPI_CTRLA_DOPO_DOPAD231 | SPI_CTRLA_DIPAD0)
 #define BOARD_SERCOM1_PINMAP_PAD0    PORT_SERCOM1_PAD0_1 /* SPI_MISO */
 #define BOARD_SERCOM1_PINMAP_PAD1    0                   /* microSD_SS */
@@ -408,7 +410,8 @@
  *   PA25 SERCOM3 / USART RXD
  */
 
-#define BOARD_SERCOM3_GCLKGEN        GCLK_CLKCTRL_GEN0
+#define BOARD_SERCOM3_GCLKGEN        0
+#define BOARD_SERCOM3_SLOW_GCLKGEN   BOARD_SERCOM05_SLOW_GCLKGEN
 #define BOARD_SERCOM3_MUXCONFIG      (USART_CTRLA_RXPAD3 | USART_CTRLA_TXPAD2)
 #define BOARD_SERCOM3_PINMAP_PAD0    0
 #define BOARD_SERCOM3_PINMAP_PAD1    0
@@ -432,7 +435,8 @@
  * configurations.
  */
 
-#define BOARD_SERCOM4_GCLKGEN        GCLK_CLKCTRL_GEN0
+#define BOARD_SERCOM4_GCLKGEN        0
+#define BOARD_SERCOM4_SLOW_GCLKGEN   BOARD_SERCOM05_SLOW_GCLKGEN
 
 #if defined(CONFIG_SAMD20_XPLAINED_USART4_EXT1)
 #  define BOARD_SERCOM4_MUXCONFIG    (USART_CTRLA_RXPAD1 | USART_CTRLA_TXPAD0)
@@ -466,7 +470,8 @@
  *  18  PB23 SERCOM5 PAD3  SPI SCK
  */
 
-#define BOARD_SERCOM5_GCLKGEN        GCLK_CLKCTRL_GEN0
+#define BOARD_SERCOM5_GCLKGEN        0
+#define BOARD_SERCOM5_SLOW_GCLKGEN   BOARD_SERCOM05_SLOW_GCLKGEN
 #define BOARD_SERCOM5_MUXCONFIG      (SPI_CTRLA_DOPO_DOPAD231 | SPI_CTRLA_DIPAD0)
 #define BOARD_SERCOM5_PINMAP_PAD0    PORT_SERCOM5_PAD0_1 /* SPI_MISO */
 #define BOARD_SERCOM5_PINMAP_PAD1    0                         /* microSD_SS */
@@ -485,12 +490,12 @@
  * PA14 to GND.
  */
 
-/* LED index values for use with sam_setled() */
+/* LED index values for use with board_userled() */
 
 #define BOARD_STATUS_LED             0
 #define BOARD_NLEDS                  1
 
-/* LED bits for use with sam_setleds() */
+/* LED bits for use with board_userled_all() */
 
 #define BOARD_STATUS LED_BIT         (1 << BOARD_STATUS_LED)
 
@@ -545,6 +550,7 @@ extern "C"
 /************************************************************************************
  * Public Function Prototypes
  ************************************************************************************/
+
 /************************************************************************************
  * Name: sam_boardinitialize
  *
@@ -556,22 +562,6 @@ extern "C"
  ************************************************************************************/
 
 void sam_boardinitialize(void);
-
-/************************************************************************************
- * Name:  sam_ledinit, sam_setled, and sam_setleds
- *
- * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board LEDs.  If
- *   CONFIG_ARCH_LEDS is not defined, then the following interfaces are available to
- *   control the LEDs from user applications.
- *
- ************************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-void sam_ledinit(void);
-void sam_setled(int led, bool ledon);
-void sam_setleds(uint8_t ledset);
-#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

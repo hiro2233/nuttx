@@ -40,7 +40,7 @@
 #include "ftpc_config.h"
 
 #include <debug.h>
-#include <apps/ftpc.h>
+#include "netutils/ftpc.h"
 
 #include "ftpc_internal.h"
 
@@ -79,13 +79,12 @@
 int ftpc_chmod(SESSION handle, FAR const char *path, FAR const char *mode)
 {
   FAR struct ftpc_session_s *session = (FAR struct ftpc_session_s *)handle;
-  int ret;
 
   /* Does the server support the size CHMOD command? */
 
   if (FTPC_HAS_CHMOD(session))
     {
-      ret = ftpc_cmd(session, "SITE CHMOD %s %s", path, mode);
+      (void)ftpc_cmd(session, "SITE CHMOD %s %s", path, mode);
 
       /* Check for "502 Command not implemented" */
 
@@ -100,7 +99,7 @@ int ftpc_chmod(SESSION handle, FAR const char *path, FAR const char *mode)
     }
   else
     {
-      ndbg("Server does not support SITE CHMOD\n");
+      nwarn("WARNING: Server does not support SITE CHMOD\n");
     }
 
   return ERROR;

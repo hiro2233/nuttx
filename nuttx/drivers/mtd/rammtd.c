@@ -169,10 +169,10 @@ static void *ram_write(FAR void *dest, FAR const void *src, size_t len)
        * erased state.
        */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
       if (newvalue != srcvalue)
         {
-          dbg("ERROR: Bad write: source=%02x dest=%02x result=%02x\n",
+          _err("ERROR: Bad write: source=%02x dest=%02x result=%02x\n",
               srcvalue, oldvalue, newvalue);
         }
 #endif
@@ -395,7 +395,7 @@ static int ram_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
             {
               /* Return (void*) base address of device memory */
 
-              *ppv = (FAR void*)priv->start;
+              *ppv = (FAR void *)priv->start;
               ret  = OK;
             }
         }
@@ -443,24 +443,24 @@ FAR struct mtd_dev_s *rammtd_initialize(FAR uint8_t *start, size_t size)
 
   /* Create an instance of the RAM MTD device state structure */
 
-  priv = (FAR struct ram_dev_s *)kzalloc(sizeof(struct ram_dev_s));
+  priv = (FAR struct ram_dev_s *)kmm_zalloc(sizeof(struct ram_dev_s));
   if (!priv)
     {
-      fdbg("Failed to allocate the RAM MTD state structure\n");
+      ferr("ERROR: Failed to allocate the RAM MTD state structure\n");
       return NULL;
     }
 
   /* Force the size to be an even number of the erase block size */
 
   nblocks = size / CONFIG_RAMMTD_ERASESIZE;
-  if (nblocks <= 0)
+  if (nblocks < 1)
     {
-      fdbg("Need to provide at least one full erase block\n");
+      ferr("ERROR: Need to provide at least one full erase block\n");
       return NULL;
     }
 
   /* Perform initialization as necessary. (unsupported methods were
-   * nullified by kzalloc).
+   * nullified by kmm_zalloc).
    */
 
   priv->mtd.erase  = ram_erase;

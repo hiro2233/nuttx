@@ -1,7 +1,7 @@
 /********************************************************************************
  * arch/arm/src/str71x/str71x_decodeirq.c
  *
- *   Copyright (C) 2008-2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,20 +40,20 @@
 #include <nuttx/config.h>
 
 #include <stdint.h>
-#include <nuttx/irq.h>
-#include <nuttx/arch.h>
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
+#include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 /********************************************************************************
- * Pre-procesor Definitions
+ * Pre-processor Definitions
  ********************************************************************************/
 
 /********************************************************************************
@@ -90,9 +90,9 @@
 void up_decodeirq(uint32_t *regs)
 {
 #ifdef CONFIG_SUPPRESS_INTERRUPTS
-  board_led_on(LED_INIRQ);
-  lowsyslog("Unexpected IRQ\n");
-  current_regs = regs;
+  board_autoled_on(LED_INIRQ);
+  CURRENT_REGS = regs;
+  err("ERROR: Unexpected IRQ\n");
   PANIC();
 #else
   unsigned int irq;
@@ -101,47 +101,43 @@ void up_decodeirq(uint32_t *regs)
    * info from CIC register without the setup).
    */
 
-  board_led_on(LED_INIRQ);
+  board_autoled_on(LED_INIRQ);
   irq = getreg32(STR71X_EIC_IVR);
 
   /* Verify that the resulting IRQ number is valid */
 
   if (irq < NR_IRQS)
     {
-      uint32_t* savestate;
+      uint32_t *savestate;
 
       /* Current regs non-zero indicates that we are processing an interrupt;
-       * current_regs is also used to manage interrupt level context switches.
+       * CURRENT_REGS is also used to manage interrupt level context switches.
        */
 
-      savestate     = (uint32_t*)current_regs;
-      current_regs = regs;
+      savestate     = (uint32_t *)CURRENT_REGS;
+      CURRENT_REGS = regs;
 
-      /* Mask and acknowledge the interrupt */
+      /* Acknowledge the interrupt */
 
-      up_maskack_irq(irq);
+      up_ack_irq(irq);
 
       /* Deliver the IRQ */
 
       irq_dispatch(irq, regs);
 
-      /* Restore the previous value of current_regs.  NULL would indicate that
+      /* Restore the previous value of CURRENT_REGS.  NULL would indicate that
        * we are no longer in an interrupt handler.  It will be non-NULL if we
        * are returning from a nested interrupt.
        */
 
-      current_regs = savestate;
-
-      /* Unmask the last interrupt (global interrupts are still disabled) */
-
-      up_enable_irq(irq);
+      CURRENT_REGS = savestate;
     }
-#if CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   else
     {
       PANIC(); /* Normally never happens */
     }
 #endif
-  board_led_off(LED_INIRQ);
+  board_autoled_off(LED_INIRQ);
 #endif
 }

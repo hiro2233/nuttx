@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/mips/include/mips32/irq.h
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,7 +48,7 @@
 #include <arch/types.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 /* The global pointer (GP) does not need to be saved in the "normal," flat
@@ -57,7 +57,7 @@
  */
 
 #undef MIPS32_SAVE_GP
-#if defined(CONFIG_NUTTX_KERNEL) || defined(CONFIG_NXFLAT)
+#if defined(CONFIG_BUILD_KERNEL) || defined(CONFIG_NXFLAT)
 #  define MIPS32_SAVE_GP 1
 #endif
 
@@ -316,7 +316,7 @@
 
 /* This structure represents the return state from a system call */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_KERNEL
 struct xcpt_syscall_s
 {
   uint32_t sysreturn;   /* The return PC */
@@ -343,7 +343,7 @@ struct xcptcontext
   uint32_t saved_epc;    /* Trampoline PC */
   uint32_t saved_status; /* Status with interrupts disabled. */
 
-# ifdef CONFIG_NUTTX_KERNEL
+# ifdef CONFIG_BUILD_KERNEL
   /* This is the saved address to use when returning from a user-space
    * signal handler.
    */
@@ -353,7 +353,7 @@ struct xcptcontext
 # endif
 #endif
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_KERNEL
   /* The following array holds information needed to return from each nested
    * system call.
    */
@@ -497,7 +497,7 @@ static inline void cp0_putcause(uint32_t cause)
 }
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -506,16 +506,23 @@ static inline void cp0_putcause(uint32_t cause)
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
 
 /****************************************************************************
- * Name: irqsave
+ * Name: up_irq_save
  *
  * Description:
  *   Save the current interrupt state and disable interrupts.
+ *
+ *   NOTE: This function should never be called from application code and,
+ *   as a general rule unless you really know what you are doing, this
+ *   function should not be called directly from operation system code either:
+ *   Typically, the wrapper functions, enter_critical_section() is probably
+ *   what you really want.
  *
  * Input Parameters:
  *   None
@@ -525,14 +532,20 @@ extern "C" {
  *
  ****************************************************************************/
 
-EXTERN irqstate_t irqsave(void);
+irqstate_t up_irq_save(void);
 
 /****************************************************************************
- * Name: irqrestore
+ * Name: up_irq_restore
  *
  * Description:
  *   Restore the previous interrupt state (i.e., the one previously returned
- *   by irqsave())
+ *   by up_irq_save())
+ *
+ *   NOTE: This function should never be called from application code and,
+ *   as a general rule unless you really know what you are doing, this
+ *   function should not be called directly from operation system code either:
+ *   Typically, the wrapper functions, leave_critical_section() is probably
+ *   what you really want.
  *
  * Input Parameters:
  *   state - The interrupt state to be restored.
@@ -542,7 +555,7 @@ EXTERN irqstate_t irqsave(void);
  *
  ****************************************************************************/
 
-EXTERN void irqrestore(irqstate_t irqtate);
+void up_irq_restore(irqstate_t irqtate);
 
 #undef EXTERN
 #ifdef __cplusplus

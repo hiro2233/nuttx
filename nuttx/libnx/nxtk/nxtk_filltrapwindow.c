@@ -46,7 +46,7 @@
 #include <nuttx/nx/nx.h>
 #include <nuttx/nx/nxtk.h>
 
-#include "nxtk_internal.h"
+#include "nxtk.h"
 
 /****************************************************************************
  * Pre-Processor Definitions
@@ -96,7 +96,7 @@ int nxtk_filltrapwindow(NXTKWINDOW hfwnd,
   struct nxgl_rect_s relclip;
   struct nxgl_trapezoid_s reltrap;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!hfwnd || !trap || !color)
     {
       set_errno(EINVAL);

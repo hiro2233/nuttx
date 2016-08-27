@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/dm320/dm320_framebuffer.c
  *
- *   Copyright (C) 2008-2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,17 +45,18 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <nuttx/video/fb.h>
+#include <nuttx/irq.h>
 #include <nuttx/kmalloc.h>
+#include <nuttx/video/fb.h>
 #include <nuttx/nx/nxglib.h>
 
 #include "up_arch.h"
 #include "dm320_memorymap.h"
 #include "dm320_osd.h"
 
-/************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- ************************************************************************/
+ ****************************************************************************/
 
 /* Configuration ********************************************************/
 
@@ -471,7 +472,7 @@
 #ifdef CONFIG_FB_HWCURSOR
 #  define DM320_RECTCURSOR_SETUP \
    ((CONFIG_DM320_CURSORLINEHEIGHT << 1) | \
-    (CONFIG_DM320_CURSORLINEWIDTH <<4) | \
+    (CONFIG_DM320_CURSORLINEWIDTH << 4) | \
     (CONFIG_DM320_CURSORCLUT << 8))
 #endif
 
@@ -675,10 +676,10 @@ static int dm320_allocvideomemory(void)
 {
 #ifndef CONFIG_DM320_VID0_DISABLE
 #ifndef CONFIG_DM320_DISABLE_PINGPONG
-  g_vid0base   = (FAR void *)kmalloc(2 * DM320_VID0_FBLEN);
-  g_vid0ppbase = (FAR char*)g_vid0base + DM320_VID0_FBLEN;
+  g_vid0base   = (FAR void *)kmm_malloc(2 * DM320_VID0_FBLEN);
+  g_vid0ppbase = (FAR char *)g_vid0base + DM320_VID0_FBLEN;
 #else
-  g_vid0base   = (FAR void *)kmalloc(DM320_VID0_FBLEN);
+  g_vid0base   = (FAR void *)kmm_malloc(DM320_VID0_FBLEN);
 #endif
   if (!g_vid0base)
     {
@@ -687,7 +688,7 @@ static int dm320_allocvideomemory(void)
 #endif
 
 #ifndef CONFIG_DM320_VID1_DISABLE
-  g_vid1base = (FAR void *)kmalloc(DM320_VID1_FBLEN);
+  g_vid1base = (FAR void *)kmm_malloc(DM320_VID1_FBLEN);
   if (!g_vid1base)
     {
       goto errout;
@@ -695,7 +696,7 @@ static int dm320_allocvideomemory(void)
 #endif
 
 #ifndef CONFIG_DM320_OSD0_DISABLE
-  g_osd0base = (FAR void *)kmalloc(DM320_OSD0_FBLEN);
+  g_osd0base = (FAR void *)kmm_malloc(DM320_OSD0_FBLEN);
   if (!g_osd0base)
     {
       goto errout;
@@ -703,7 +704,7 @@ static int dm320_allocvideomemory(void)
 #endif
 
 #ifndef CONFIG_DM320_OSD1_DISABLE
-  g_osd1base = (FAR void *)kmalloc(DM320_OSD1_FBLEN);
+  g_osd1base = (FAR void *)kmm_malloc(DM320_OSD1_FBLEN);
   if (!g_osd1base)
     {
       goto errout;
@@ -726,7 +727,7 @@ static void dm320_freevideomemory(void)
 #ifndef CONFIG_DM320_VID0_DISABLE
   if (g_vid0base)
     {
-      kfree(g_vid0base);
+      kmm_free(g_vid0base);
       g_vid0base = NULL;
 #ifndef CONFIG_DM320_DISABLE_PINGPONG
       g_vid0ppbase = NULL;
@@ -737,7 +738,7 @@ static void dm320_freevideomemory(void)
 #ifndef CONFIG_DM320_VID1_DISABLE
   if (g_vid1base != 0)
     {
-      kfree(g_vid1base);
+      kmm_free(g_vid1base);
       g_vid1base = NULL;
     }
 #endif
@@ -745,7 +746,7 @@ static void dm320_freevideomemory(void)
 #ifndef CONFIG_DM320_OSD0_DISABLE
   if (g_osd0base != 0)
     {
-      kfree(g_osd0base);
+      kmm_free(g_osd0base);
       g_osd0base = NULL;
     }
 #endif
@@ -753,7 +754,7 @@ static void dm320_freevideomemory(void)
 #ifndef CONFIG_DM320_OSD1_DISABLE
   if (g_osd1base != 0)
     {
-      kfree(g_osd1base);
+      kmm_free(g_osd1base);
       g_osd1base = NULL;
     }
 #endif
@@ -767,15 +768,15 @@ static void dm320_disable(void)
 {
   /* Disable all planes */
 
-  gvdbg("Inactivate OSD:\n");
+  ginfo("Inactivate OSD:\n");
 
   putreg16(0, DM320_OSD_OSDWIN0MD); /* Win0 mode = 0 (1:active) */
   putreg16(0, DM320_OSD_OSDWIN1MD); /* Win1 mode = 0 (1:active) */
   putreg16(0, DM320_OSD_RECTCUR);   /* Rectangular cursor mode = 0 (1:active) */
 
-  gvdbg("DM320_OSD_OSDWIN0MD:   %04x\n", getreg16(DM320_OSD_OSDWIN0MD));
-  gvdbg("DM320_OSD_OSDWIN1MD:   %04x\n", getreg16(DM320_OSD_OSDWIN1MD));
-  gvdbg("DM320_OSD_RECTCUR:     %04x\n", getreg16(DM320_OSD_RECTCUR));
+  ginfo("DM320_OSD_OSDWIN0MD:   %04x\n", getreg16(DM320_OSD_OSDWIN0MD));
+  ginfo("DM320_OSD_OSDWIN1MD:   %04x\n", getreg16(DM320_OSD_OSDWIN1MD));
+  ginfo("DM320_OSD_RECTCUR:     %04x\n", getreg16(DM320_OSD_RECTCUR));
 }
 
 /****************************************************************************
@@ -790,17 +791,17 @@ static void dm320_hwinitialize(void)
 
   /* Initialize the main video to correct the origin */
 
-  gvdbg("Setup main video origin:\n");
+  ginfo("Setup main video origin:\n");
 
   putreg16(CONFIG_DM320_BASEX, DM320_OSD_BASEPX);
   putreg16(CONFIG_DM320_BASEY, DM320_OSD_BASEPY);
 
-  gvdbg("DM320_OSD_BASEPX:      %04x\n", getreg16(DM320_OSD_BASEPX));
-  gvdbg("DM320_OSD_BASEPY:      %04x\n", getreg16(DM320_OSD_BASEPY));
+  ginfo("DM320_OSD_BASEPX:      %04x\n", getreg16(DM320_OSD_BASEPX));
+  ginfo("DM320_OSD_BASEPY:      %04x\n", getreg16(DM320_OSD_BASEPY));
 
   /* Set up the frame buffer address registers */
 
-  gvdbg("Setup framebuffer addresses:\n");
+  ginfo("Setup framebuffer addresses:\n");
 
 
   putreg16(((dm320_osd1upperoffset() << 8) |
@@ -808,9 +809,9 @@ static void dm320_hwinitialize(void)
   putreg16(dm320_osd0loweroffset(), DM320_OSD_OSDWIN0ADL);
   putreg16(dm320_osd1loweroffset(), DM320_OSD_OSDWIN1ADL);
 
-  gvdbg("DM320_OSD_OSDWINADH:   %04x\n", getreg16(DM320_OSD_OSDWINADH));
-  gvdbg("DM320_OSD_OSDWIN0ADL:  %04x\n", getreg16(DM320_OSD_OSDWIN0ADL));
-  gvdbg("DM320_OSD_OSDWIN1ADL:  %04x\n", getreg16(DM320_OSD_OSDWIN1ADL));
+  ginfo("DM320_OSD_OSDWINADH:   %04x\n", getreg16(DM320_OSD_OSDWINADH));
+  ginfo("DM320_OSD_OSDWIN0ADL:  %04x\n", getreg16(DM320_OSD_OSDWIN0ADL));
+  ginfo("DM320_OSD_OSDWIN1ADL:  %04x\n", getreg16(DM320_OSD_OSDWIN1ADL));
 
   /* Set up VID WIN0 */
 
@@ -819,19 +820,19 @@ static void dm320_hwinitialize(void)
 #endif
 
 #ifndef CONFIG_DM320_VID0_DISABLE
-  gvdbg("Initialize video win0:\n");
+  ginfo("Initialize video win0:\n");
   putreg16(dm320_vid0loweroffset(), DM320_OSD_VIDWIN0ADL);
 
-  gvdbg("DM320_OSD_VIDWINADH:   %04x\n", getreg16(DM320_OSD_VIDWINADH));
-  gvdbg("DM320_OSD_VIDWIN0ADL:  %04x\n", getreg16(DM320_OSD_VIDWIN0ADL));
+  ginfo("DM320_OSD_VIDWINADH:   %04x\n", getreg16(DM320_OSD_VIDWINADH));
+  ginfo("DM320_OSD_VIDWIN0ADL:  %04x\n", getreg16(DM320_OSD_VIDWIN0ADL));
   dm320_blankscreen((uint8_t *)g_vid0base, DM320_VID0_FBLEN);
 
 #ifndef CONFIG_DM320_DISABLE_PINGPONG
   putreg16(dm320_vid0ppupperoffset(), DM320_OSD_PPVWIN0ADH);
   putreg16(dm320_vid0pploweroffset(), DM320_OSD_PPVWIN0ADL);
 
-  gvdbg("DM320_OSD_PPVWIN0ADH:  %04x\n", getreg16(DM320_OSD_PPVWIN0ADH));
-  gvdbg("DM320_OSD_PPVWIN0ADL:  %04x\n", getreg16(DM320_OSD_PPVWIN0ADL));
+  ginfo("DM320_OSD_PPVWIN0ADH:  %04x\n", getreg16(DM320_OSD_PPVWIN0ADH));
+  ginfo("DM320_OSD_PPVWIN0ADL:  %04x\n", getreg16(DM320_OSD_PPVWIN0ADL));
   dm320_blankscreen((uint8_t *)g_vid0ppbase, DM320_VID0_FBLEN);
 #endif
 
@@ -841,21 +842,21 @@ static void dm320_hwinitialize(void)
   putreg16(CONFIG_DM320_VID0_XRES, DM320_OSD_VIDWIN0XL);
   putreg16(CONFIG_DM320_VID0_YRES, DM320_OSD_VIDWIN0YL);
 
-  gvdbg("DM320_OSD_VIDWIN0XP:   %04x\n", getreg16(DM320_OSD_VIDWIN0XP));
-  gvdbg("DM320_OSD_VIDWIN0YP:   %04x\n", getreg16(DM320_OSD_VIDWIN0YP));
-  gvdbg("DM320_OSD_VIDWIN0OFST: %04x\n", getreg16(DM320_OSD_VIDWIN0OFST));
-  gvdbg("DM320_OSD_VIDWIN0XL:   %04x\n", getreg16(DM320_OSD_VIDWIN0XL));
-  gvdbg("DM320_OSD_VIDWIN0YL:   %04x\n", getreg16(DM320_OSD_VIDWIN0YL));
+  ginfo("DM320_OSD_VIDWIN0XP:   %04x\n", getreg16(DM320_OSD_VIDWIN0XP));
+  ginfo("DM320_OSD_VIDWIN0YP:   %04x\n", getreg16(DM320_OSD_VIDWIN0YP));
+  ginfo("DM320_OSD_VIDWIN0OFST: %04x\n", getreg16(DM320_OSD_VIDWIN0OFST));
+  ginfo("DM320_OSD_VIDWIN0XL:   %04x\n", getreg16(DM320_OSD_VIDWIN0XL));
+  ginfo("DM320_OSD_VIDWIN0YL:   %04x\n", getreg16(DM320_OSD_VIDWIN0YL));
 #endif
 
   /* Set up VID WIN1 */
 
 #ifndef CONFIG_DM320_VID1_DISABLE
-  gvdbg("Initialize video win1:\n");
+  ginfo("Initialize video win1:\n");
   putreg16(dm320_vid1loweroffset(), DM320_OSD_VIDWIN1ADL);
 
-  gvdbg("DM320_OSD_VIDWINADH:   %04x\n", getreg16(DM320_OSD_VIDWINADH));
-  gvdbg("DM320_OSD_VIDWIN1ADL:  %04x\n", getreg16(DM320_OSD_VIDWIN1ADL));
+  ginfo("DM320_OSD_VIDWINADH:   %04x\n", getreg16(DM320_OSD_VIDWINADH));
+  ginfo("DM320_OSD_VIDWIN1ADL:  %04x\n", getreg16(DM320_OSD_VIDWIN1ADL));
   dm320_blankscreen((uint8_t *)g_vid1base, DM320_VID1_FBLEN);
 
   putreg16(CONFIG_DM320_VID1_XPOS, DM320_OSD_VIDWIN1XP);
@@ -864,20 +865,20 @@ static void dm320_hwinitialize(void)
   putreg16(CONFIG_DM320_VID1_XRES, DM320_OSD_VIDWIN1XL);
   putreg16(CONFIG_DM320_VID1_YRES, DM320_OSD_VIDWIN1YL);
 
-  gvdbg("DM320_OSD_VIDWIN1XP:   %04x\n", getreg16(DM320_OSD_VIDWIN1XP));
-  gvdbg("DM320_OSD_VIDWIN1YP:   %04x\n", getreg16(DM320_OSD_VIDWIN1YP));
-  gvdbg("DM320_OSD_VIDWIN1OFST: %04x\n", getreg16(DM320_OSD_VIDWIN1OFST));
-  gvdbg("DM320_OSD_VIDWIN1XL:   %04x\n", getreg16(DM320_OSD_VIDWIN1XL));
-  gvdbg("DM320_OSD_VIDWIN1YL:   %04x\n", getreg16(DM320_OSD_VIDWIN1YL));
+  ginfo("DM320_OSD_VIDWIN1XP:   %04x\n", getreg16(DM320_OSD_VIDWIN1XP));
+  ginfo("DM320_OSD_VIDWIN1YP:   %04x\n", getreg16(DM320_OSD_VIDWIN1YP));
+  ginfo("DM320_OSD_VIDWIN1OFST: %04x\n", getreg16(DM320_OSD_VIDWIN1OFST));
+  ginfo("DM320_OSD_VIDWIN1XL:   %04x\n", getreg16(DM320_OSD_VIDWIN1XL));
+  ginfo("DM320_OSD_VIDWIN1YL:   %04x\n", getreg16(DM320_OSD_VIDWIN1YL));
 #endif
 
   putreg16(DM320_VIDMODE, DM320_OSD_VIDWINMD);
-  gvdbg("DM320_OSD_VIDWINMD:    %04x\n", getreg16(DM320_OSD_VIDWINMD));
+  ginfo("DM320_OSD_VIDWINMD:    %04x\n", getreg16(DM320_OSD_VIDWINMD));
 
   /* Set up OSD WIN0 */
 
 #ifndef CONFIG_DM320_OSD0_DISABLE
-  gvdbg("Initialize OSD win0:\n");
+  ginfo("Initialize OSD win0:\n");
   dm320_blankscreen((uint8_t *)g_osd0base, DM320_OSD0_FBLEN);
 
   putreg16(CONFIG_DM320_OSD0_XPOS, DM320_OSD_OSDWIN0XP);
@@ -891,18 +892,18 @@ static void dm320_hwinitialize(void)
   putreg16(CONFIG_DM320_OSD0_YRES, DM320_OSD_OSDWIN0YL);
   putreg16(INITIAL_OSD0MODE, DM320_OSD_OSDWIN0MD);
 
-  gvdbg("DM320_OSD_OSDWIN0XP:   %04x\n", getreg16(DM320_OSD_OSDWIN0XP));
-  gvdbg("DM320_OSD_OSDWIN0YP:   %04x\n", getreg16(DM320_OSD_OSDWIN0YP));
-  gvdbg("DM320_OSD_OSDWIN0OFST: %04x\n", getreg16(DM320_OSD_OSDWIN0OFST));
-  gvdbg("DM320_OSD_OSDWIN0XL:   %04x\n", getreg16(DM320_OSD_OSDWIN0XL));
-  gvdbg("DM320_OSD_OSDWIN0YL:   %04x\n", getreg16(DM320_OSD_OSDWIN0YL));
-  gvdbg("DM320_OSD_OSDWIN0MD:   %04x\n", getreg16(DM320_OSD_OSDWIN0MD));
+  ginfo("DM320_OSD_OSDWIN0XP:   %04x\n", getreg16(DM320_OSD_OSDWIN0XP));
+  ginfo("DM320_OSD_OSDWIN0YP:   %04x\n", getreg16(DM320_OSD_OSDWIN0YP));
+  ginfo("DM320_OSD_OSDWIN0OFST: %04x\n", getreg16(DM320_OSD_OSDWIN0OFST));
+  ginfo("DM320_OSD_OSDWIN0XL:   %04x\n", getreg16(DM320_OSD_OSDWIN0XL));
+  ginfo("DM320_OSD_OSDWIN0YL:   %04x\n", getreg16(DM320_OSD_OSDWIN0YL));
+  ginfo("DM320_OSD_OSDWIN0MD:   %04x\n", getreg16(DM320_OSD_OSDWIN0MD));
 #endif
 
   /* Set up OSD WIN1 */
 
 #ifndef CONFIG_DM320_OSD1_DISABLE
-  gvdbg("Initialize OSD win1\n");
+  ginfo("Initialize OSD win1\n");
   dm320_blankscreen((uint8_t *)g_osd1base, DM320_OSD1_FBLEN);
 
   putreg16(CONFIG_DM320_OSD1_XPOS, DM320_OSD_OSDWIN1XP);
@@ -916,18 +917,18 @@ static void dm320_hwinitialize(void)
   putreg16(CONFIG_DM320_OSD1_YRES, DM320_OSD_OSDWIN1YL);
   putreg16(INITIAL_OSD1MODE, DM320_OSD_OSDWIN1MD);
 
-  gvdbg("DM320_OSD_OSDWIN1XP:   %04x\n", getreg16(DM320_OSD_OSDWIN1XP));
-  gvdbg("DM320_OSD_OSDWIN1YP:   %04x\n", getreg16(DM320_OSD_OSDWIN1YP));
-  gvdbg("DM320_OSD_OSDWIN1OFST: %04x\n", getreg16(DM320_OSD_OSDWIN1OFST));
-  gvdbg("DM320_OSD_OSDWIN1XL:   %04x\n", getreg16(DM320_OSD_OSDWIN1XL));
-  gvdbg("DM320_OSD_OSDWIN1YL:   %04x\n", getreg16(DM320_OSD_OSDWIN1YL));
-  gvdbg("DM320_OSD_OSDWIN1MD:   %04x\n", getreg16(DM320_OSD_OSDWIN1MD));
+  ginfo("DM320_OSD_OSDWIN1XP:   %04x\n", getreg16(DM320_OSD_OSDWIN1XP));
+  ginfo("DM320_OSD_OSDWIN1YP:   %04x\n", getreg16(DM320_OSD_OSDWIN1YP));
+  ginfo("DM320_OSD_OSDWIN1OFST: %04x\n", getreg16(DM320_OSD_OSDWIN1OFST));
+  ginfo("DM320_OSD_OSDWIN1XL:   %04x\n", getreg16(DM320_OSD_OSDWIN1XL));
+  ginfo("DM320_OSD_OSDWIN1YL:   %04x\n", getreg16(DM320_OSD_OSDWIN1YL));
+  ginfo("DM320_OSD_OSDWIN1MD:   %04x\n", getreg16(DM320_OSD_OSDWIN1MD));
 #endif
 
   /* Set up the rectangular cursor with defaults */
 
 #ifdef CONFIG_FB_HWCURSOR
-  gdbg("Initialize rectangular cursor\n");
+  lcdinfo("Initialize rectangular cursor\n");
 
   putreg16(0, DM320_OSD_CURXP);
   putreg16(0, DM320_OSD_CURYP);
@@ -945,11 +946,11 @@ static void dm320_hwinitialize(void)
 
   putreg16(DM320_RECTCURSOR_SETUP, DM320_OSD_RECTCUR);
 
-  gvdbg("DM320_OSD_CURXP:       %04x\n", getreg16(DM320_OSD_CURXP));
-  gvdbg("DM320_OSD_CURYP:       %04x\n", getreg16(DM320_OSD_CURYP));
-  gvdbg("DM320_OSD_CURXL:       %04x\n", getreg16(DM320_OSD_CURXL));
-  gvdbg("DM320_OSD_CURYL:       %04x\n", getreg16(DM320_OSD_CURYL));
-  gvdbg("DM320_OSD_RECTCUR:     %04x\n", getreg16(DM320_OSD_RECTCUR));
+  ginfo("DM320_OSD_CURXP:       %04x\n", getreg16(DM320_OSD_CURXP));
+  ginfo("DM320_OSD_CURYP:       %04x\n", getreg16(DM320_OSD_CURYP));
+  ginfo("DM320_OSD_CURXL:       %04x\n", getreg16(DM320_OSD_CURXL));
+  ginfo("DM320_OSD_CURYL:       %04x\n", getreg16(DM320_OSD_CURYL));
+  ginfo("DM320_OSD_RECTCUR:     %04x\n", getreg16(DM320_OSD_RECTCUR));
 #endif
 
   /* Set main window to the hardware default state.  That initial
@@ -968,7 +969,7 @@ static void dm320_hwinitialize(void)
    */
 
   putreg16(CONFIG_DM320_BKGDCLUT, DM320_OSD_OSDMODE);
-  gvdbg("DM320_OSD_OSDMODE:     %04x\n", getreg16(DM320_OSD_OSDMODE));
+  ginfo("DM320_OSD_OSDMODE:     %04x\n", getreg16(DM320_OSD_OSDMODE));
 }
 
 /****************************************************************************
@@ -979,7 +980,7 @@ static void dm320_hwinitialize(void)
 static int dm320_getvid0videoinfo(FAR struct fb_vtable_s *vtable,
                                   FAR struct fb_videoinfo_s *vinfo)
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!vtable || !vinfo)
     {
       return -EINVAL;
@@ -1002,17 +1003,18 @@ static int dm320_getvid0videoinfo(FAR struct fb_vtable_s *vtable,
 static int dm320_getvid0planeinfo(FAR struct fb_vtable_s *vtable, int planeno,
                                   FAR struct fb_planeinfo_s *pinfo)
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!vtable || !pinfo)
     {
       return -EINVAL;
     }
 #endif
 
-  pinfo->fbmem  = g_vid0base;
-  pinfo->fblen  = DM320_VID0_FBLEN;
-  pinfo->stride = DM320_VID0_STRIDE;
-  pinfo->bpp    = DM320_VID0_BPP;
+  pinfo->fbmem   = g_vid0base;
+  pinfo->fblen   = DM320_VID0_FBLEN;
+  pinfo->stride  = DM320_VID0_STRIDE;
+  pinfo->display = 0;
+  pinfo->bpp     = DM320_VID0_BPP;
   return OK;
 }
 #endif
@@ -1025,7 +1027,7 @@ static int dm320_getvid0planeinfo(FAR struct fb_vtable_s *vtable, int planeno,
 static int dm320_getvid1videoinfo(FAR struct fb_vtable_s *vtable,
                                   FAR struct fb_videoinfo_s *vinfo)
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!vtable || !vinfo)
     {
       return -EINVAL;
@@ -1048,17 +1050,18 @@ static int dm320_getvid1videoinfo(FAR struct fb_vtable_s *vtable,
 static int dm320_getvid1planeinfo(FAR struct fb_vtable_s *vtable, int planeno,
                                   FAR struct fb_planeinfo_s *pinfo)
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!vtable || !pinfo)
     {
       return -EINVAL;
     }
 #endif
 
-  pinfo->fbmem  = g_vid1base;
-  pinfo->fblen  = DM320_VID1_FBLEN;
-  pinfo->stride = DM320_VID1_STRIDE;
-  pinfo->bpp    = DM320_VID1_BPP;
+  pinfo->fbmem   = g_vid1base;
+  pinfo->fblen   = DM320_VID1_FBLEN;
+  pinfo->stride  = DM320_VID1_STRIDE;
+  pinfo->display = 1;
+  pinfo->bpp     = DM320_VID1_BPP;
   return OK;
 }
 #endif
@@ -1071,7 +1074,7 @@ static int dm320_getvid1planeinfo(FAR struct fb_vtable_s *vtable, int planeno,
 static int dm320_getosd0videoinfo(FAR struct fb_vtable_s *vtable,
                                   FAR struct fb_videoinfo_s *vinfo)
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!vtable || !vinfo)
     {
       return -EINVAL;
@@ -1098,17 +1101,18 @@ static int dm320_getosd0videoinfo(FAR struct fb_vtable_s *vtable,
 static int dm320_getosd0planeinfo(FAR struct fb_vtable_s *vtable, int planeno,
                                   FAR struct fb_planeinfo_s *pinfo)
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!vtable || !pinfo)
     {
       return -EINVAL;
     }
 #endif
 
-  pinfo->fbmem  = g_osd0base;
-  pinfo->fblen  = DM320_OSD0_FBLEN;
-  pinfo->stride = DM320_OSD0_STRIDE;
-  pinfo->bpp    = DM320_OSD0_BPP;
+  pinfo->fbmem   = g_osd0base;
+  pinfo->fblen   = DM320_OSD0_FBLEN;
+  pinfo->stride  = DM320_OSD0_STRIDE;
+  pinfo->display = 2;
+  pinfo->bpp     = DM320_OSD0_BPP;
   return OK;
 }
 #endif
@@ -1121,7 +1125,7 @@ static int dm320_getosd0planeinfo(FAR struct fb_vtable_s *vtable, int planeno,
 static int dm320_getosd1videoinfo(FAR struct fb_vtable_s *vtable,
                                   FAR struct fb_videoinfo_s *vinfo)
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!vtable || !vinfo)
     {
       return -EINVAL;
@@ -1148,17 +1152,18 @@ static int dm320_getosd1videoinfo(FAR struct fb_vtable_s *vtable,
 static int dm320_getosd1planeinfo(FAR struct fb_vtable_s *vtable, int planeno,
                                   FAR struct fb_planeinfo_s *pinfo)
 {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!vtable || !pinfo)
     {
       return -EINVAL;
     }
 #endif
 
-  pinfo->fbmem  = g_osd1base;
-  pinfo->fblen  = DM320_OSD1_FBLEN;
-  pinfo->stride = DM320_OSD1_STRIDE;
-  pinfo->bpp    = DM320_OSD1_BPP;
+  pinfo->fbmem   = g_osd1base;
+  pinfo->fblen   = DM320_OSD1_FBLEN;
+  pinfo->stride  = DM320_OSD1_STRIDE;
+  pinfo->display = 3;
+  pinfo->bpp     = DM320_OSD1_BPP;
   return OK;
 }
 #endif
@@ -1191,25 +1196,25 @@ static int dm320_putcmap(FAR struct fb_vtable_s *vtable, FAR struct fb_cmap_s *c
   int len
   int i;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!vtable || !cmap || !cmap->read || !cmap->green || !cmap->blue)
     {
       return -EINVAL;
     }
 #endif
 
-  flags = irqsave();
+  flags = enter_critical_section();
   for (i = cmap.first, len = 0; i < 256 && len < cmap.len, i++, len++)
     {
-       /* Convert the RGB to YUV */
+      /* Convert the RGB to YUV */
 
-       nxgl_rgb2yuv(cmap->red[i], cmap->green[i], cmap->blue[i], &y, &u, &v);
+      nxgl_rgb2yuv(cmap->red[i], cmap->green[i], cmap->blue[i], &y, &u, &v);
 
-       /* Program the CLUT */
+      /* Program the CLUT */
 
-       while (getreg16(DM320_OSD_MISCCTL) & 0x8);
-       putreg16(((uint16_t)y) << 8 | uint16_t(u)), DM320_OSD_CLUTRAMYCB);
-       putreg16(((uint16_t)v << 8 | i), DM320_OSD_CLUTRAMCR);
+      while (getreg16(DM320_OSD_MISCCTL) & 0x8);
+      putreg16(((uint16_t)y) << 8 | uint16_t(u)), DM320_OSD_CLUTRAMYCB);
+      putreg16(((uint16_t)v << 8 | i), DM320_OSD_CLUTRAMCR);
     }
 
   /* Select RAM clut */
@@ -1226,6 +1231,7 @@ static int dm320_putcmap(FAR struct fb_vtable_s *vtable, FAR struct fb_cmap_s *c
   putreg16(regval, DM320_OSD_OSDWIN1MD);
 #endif
 
+  leave_critical_section(flags);
   return 0;
 }
 #endif
@@ -1239,14 +1245,14 @@ static int dm320_getcursor(FAR struct fb_vtable_s *vtable, FAR struct fb_cursora
 {
   irqstate_t flags;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!vtable || !attrib)
     {
       return -EINVAL;
     }
 #endif
 
-  flags = irqsave();
+  flags = enter_critical_section();
   attrib->pos.x = getreg16(DM320_OSD_CURXP);
   attrib->pos.y = getreg16(DM320_OSD_CURYP);
 
@@ -1254,21 +1260,21 @@ static int dm320_getcursor(FAR struct fb_vtable_s *vtable, FAR struct fb_cursora
   attrib->size.w = getreg16(DM320_OSD_CURXL);
   attrib->size.h = getreg16(DM320_OSD_CURYL);
 #endif
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   attrib->mxsize.w = MAX_XRES;
   attrib->mxsize.h = MAX_YRES;
 
-  gvdbg("DM320_OSD_CURXP:       %04x\n", attrib->pos.x);
-  gvdbg("DM320_OSD_CURYP:       %04x\n", attrib->pos.y);
+  ginfo("DM320_OSD_CURXP:       %04x\n", attrib->pos.x);
+  ginfo("DM320_OSD_CURYP:       %04x\n", attrib->pos.y);
 #ifdef CONFIG_FB_HWCURSORSIZE
-  gvdbg("DM320_OSD_CURXL:       %04x\n", attrib->size.w);
-  gvdbg("DM320_OSD_CURYL:       %04x\n", attrib->size.h);
+  ginfo("DM320_OSD_CURXL:       %04x\n", attrib->size.w);
+  ginfo("DM320_OSD_CURYL:       %04x\n", attrib->size.h);
 #else
-  gvdbg("DM320_OSD_CURXL:       %04x\n", getreg16(DM320_OSD_CURXL));
-  gvdbg("DM320_OSD_CURYL:       %04x\n", getreg16(DM320_OSD_CURYL));
+  ginfo("DM320_OSD_CURXL:       %04x\n", getreg16(DM320_OSD_CURXL));
+  ginfo("DM320_OSD_CURYL:       %04x\n", getreg16(DM320_OSD_CURYL));
 #endif
-  gvdbg("DM320_OSD_RECTCUR:     %04x\n", getreg16(DM320_OSD_RECTCUR));
+  ginfo("DM320_OSD_RECTCUR:     %04x\n", getreg16(DM320_OSD_RECTCUR));
 }
 #endif
 
@@ -1282,7 +1288,7 @@ static int dm320_setcursor(FAR struct fb_vtable_s *vtable, FAR struct fb_setcurs
   irqstate_t flags;
   uint16_t regval;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!vtable || !settings)
     {
       return -EINVAL;
@@ -1291,43 +1297,43 @@ static int dm320_setcursor(FAR struct fb_vtable_s *vtable, FAR struct fb_setcurs
 
   /* Set cursor position */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if ((settings->flags & FB_CUR_SETPOSITION) != 0)
     {
-      gvdbg("x=%d y=%d\n", settings->pos.x, settings->pos.y);
+      ginfo("x=%d y=%d\n", settings->pos.x, settings->pos.y);
 
-     if (settings->pos.x > MAX_YRES)
-       {
+      if (settings->pos.x > MAX_YRES)
+        {
           settings->pos.x = MAX_YRES;
-       }
+        }
 
-     if (settings->pos.y > MAX_YRES)
-       {
-          settings->pos.y = MAX_YRES;
-       }
+      if (settings->pos.y > MAX_YRES)
+        {
+           settings->pos.y = MAX_YRES;
+        }
 
-     putreg16(settings->pos.x, DM320_OSD_CURXP);
-     putreg16(settings->pos.y, DM320_OSD_CURYP);
-   }
+      putreg16(settings->pos.x, DM320_OSD_CURXP);
+      putreg16(settings->pos.y, DM320_OSD_CURYP);
+    }
 
 #ifdef CONFIG_FB_HWCURSORSIZE
   if ((settings->flags & FB_CUR_SETSIZE) != 0)
     {
-      gvdbg("h=%d w=%d\n", settings->size.h, settings->size.w);
+      ginfo("h=%d w=%d\n", settings->size.h, settings->size.w);
 
-     if (settings->size.w > MAX_YRES)
-       {
+      if (settings->size.w > MAX_YRES)
+        {
           settings->size.w = MAX_YRES;
-       }
+        }
 
-     if (settings->size.h > MAX_YRES)
-       {
+      if (settings->size.h > MAX_YRES)
+        {
           settings->size.h = MAX_YRES;
-       }
+        }
 
-     putreg16(settings->size.w, DM320_OSD_CURXL);
-     putreg16(settings->size.h, DM320_OSD_CURYL);
-   }
+      putreg16(settings->size.w, DM320_OSD_CURXL);
+      putreg16(settings->size.h, DM320_OSD_CURYL);
+    }
 #endif
 
   regval = getreg16(DM320_OSD_RECTCUR);
@@ -1339,14 +1345,15 @@ static int dm320_setcursor(FAR struct fb_vtable_s *vtable, FAR struct fb_setcurs
     {
       regval &= ~1;
     }
-  putreg16(regval, DM320_OSD_RECTCUR);
-  irqrestore(flags);
 
-  gvdbg("DM320_OSD_CURXP:       %04x\n", getreg16(DM320_OSD_CURXP));
-  gvdbg("DM320_OSD_CURYP:       %04x\n", getreg16(DM320_OSD_CURYP));
-  gvdbg("DM320_OSD_CURXL:       %04x\n", getreg16(DM320_OSD_CURXL));
-  gvdbg("DM320_OSD_CURYL:       %04x\n", getreg16(DM320_OSD_CURYL));
-  gvdbg("DM320_OSD_RECTCUR:     %04x\n", getreg16(DM320_OSD_RECTCUR));
+  putreg16(regval, DM320_OSD_RECTCUR);
+  leave_critical_section(flags);
+
+  ginfo("DM320_OSD_CURXP:       %04x\n", getreg16(DM320_OSD_CURXP));
+  ginfo("DM320_OSD_CURYP:       %04x\n", getreg16(DM320_OSD_CURYP));
+  ginfo("DM320_OSD_CURXL:       %04x\n", getreg16(DM320_OSD_CURXL));
+  ginfo("DM320_OSD_CURYL:       %04x\n", getreg16(DM320_OSD_CURYL));
+  ginfo("DM320_OSD_RECTCUR:     %04x\n", getreg16(DM320_OSD_RECTCUR));
 }
 #endif
 
@@ -1358,25 +1365,33 @@ static int dm320_setcursor(FAR struct fb_vtable_s *vtable, FAR struct fb_setcurs
  * Name: up_fbinitialize
  *
  * Description:
- *   Initialize the video hardware
+ *   Initialize the framebuffer video hardware associated with the display.
+ *
+ * Input parameters:
+ *   display - In the case of hardware with multiple displays, this
+ *     specifies the display.  Normally this is zero.
+ *
+ * Returned Value:
+ *   Zero is returned on success; a negated errno value is returned on any
+ *   failure.
  *
  ****************************************************************************/
 
-int up_fbinitialize(void)
+int up_fbinitialize(int display)
 {
   int ret;
 
-  gvdbg("Allocating framebuffers\n");
+  ginfo("Allocating framebuffers\n");
   ret = dm320_allocvideomemory();
   if (ret != 0)
     {
-      gdbg("Failed to allocate video buffers\n");
+      lcderr("ERROR: Failed to allocate video buffers\n");
       return ret;
     }
 
   /* Initialize the hardware */
 
-  gvdbg("Initializing hardware\n");
+  ginfo("Initializing hardware\n");
   dm320_hwinitialize();
   return 0;
 }
@@ -1385,17 +1400,21 @@ int up_fbinitialize(void)
  * Name: up_fbgetvplane
  *
  * Description:
- *   Return a a reference to the framebuffer object for the specified video plane.
+ *   Return a a reference to the framebuffer object for the specified video
+ *   plane of the specified plane.  Many OSDs support multiple planes of video.
  *
  * Input parameters:
- *   None
+ *   display - In the case of hardware with multiple displays, this
+ *     specifies the display.  Normally this is zero.
+ *   vplane - Identifies the plane being queried.
  *
- * Returned value:
- *   Reference to the framebuffer object (NULL on failure)
+ * Returned Value:
+ *   A non-NULL pointer to the frame buffer access structure is returned on
+ *   success; NULL is returned on any failure.
  *
- ***************************************************************************/
+ ****************************************************************************/
 
-FAR struct fb_vtable_s *up_fbgetvplane(int vplane)
+FAR struct fb_vtable_s *up_fbgetvplane(int display, int vplane)
 {
   switch (vplane)
     {

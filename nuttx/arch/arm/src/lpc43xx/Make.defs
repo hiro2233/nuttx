@@ -1,7 +1,7 @@
 ############################################################################
 # arch/arm/src/lpc43xx/Make.defs
 #
-#   Copyright (C) 2012-2013 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2012-2015 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -36,18 +36,23 @@
 HEAD_ASRC  =
 
 CMN_ASRCS  = up_saveusercontext.S up_fullcontextrestore.S up_switchcontext.S
-CMN_ASRCS += vfork.S
+CMN_ASRCS += up_testset.S vfork.S
 
 CMN_CSRCS  = up_assert.c up_blocktask.c up_copyfullstate.c
 CMN_CSRCS += up_createstack.c up_mdelay.c up_udelay.c up_exit.c
 CMN_CSRCS += up_initialize.c up_initialstate.c up_interruptcontext.c
 CMN_CSRCS += up_memfault.c up_modifyreg8.c up_modifyreg16.c up_modifyreg32.c
 CMN_CSRCS += up_releasepending.c up_releasestack.c up_reprioritizertr.c
-CMN_CSRCS += up_schedulesigaction.c up_sigdeliver.c up_unblocktask.c
-CMN_CSRCS += up_usestack.c up_doirq.c up_hardfault.c up_svcall.c up_vfork.c
+CMN_CSRCS += up_schedulesigaction.c up_sigdeliver.c up_stackframe.c
+CMN_CSRCS += up_unblocktask.c up_usestack.c up_doirq.c up_hardfault.c
+CMN_CSRCS += up_svcall.c up_vfork.c
 
 ifeq ($(CONFIG_ARMV7M_CMNVECTOR),y)
+ifeq ($(CONFIG_ARMV7M_LAZYFPU),y)
+CMN_ASRCS += up_lazyexception.S
+else
 CMN_ASRCS += up_exception.S
+endif
 CMN_CSRCS += up_vectors.c
 endif
 
@@ -59,19 +64,21 @@ ifeq ($(CONFIG_ARCH_MEMCPY),y)
 CMN_ASRCS += up_memcpy.S
 endif
 
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
-CMN_CSRCS += up_mpu.c up_task_start.c up_pthread_start.c up_stackframe.c
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
+CMN_CSRCS += up_mpu.c up_task_start.c up_pthread_start.c
 ifneq ($(CONFIG_DISABLE_SIGNALS),y)
 CMN_CSRCS += up_signal_dispatch.c
 CMN_UASRCS += up_signal_handler.S
 endif
 endif
 
-ifeq ($(CONFIG_DEBUG_STACK),y)
+ifeq ($(CONFIG_STACK_COLORATION),y)
 CMN_CSRCS += up_checkstack.c
 endif
 
 ifeq ($(CONFIG_ELF),y)
+CMN_CSRCS += up_elf.c
+else ifeq ($(CONFIG_MODULE),y)
 CMN_CSRCS += up_elf.c
 endif
 
@@ -79,15 +86,23 @@ ifeq ($(CONFIG_ARCH_FPU),y)
 CMN_ASRCS += up_fpu.S
 ifneq ($(CONFIG_ARMV7M_CMNVECTOR),y)
 CMN_CSRCS += up_copyarmstate.c
+else ifeq ($(CONFIG_ARMV7M_LAZYFPU),y)
+CMN_CSRCS += up_copyarmstate.c
 endif
 endif
 
 CHIP_ASRCS  =
 CHIP_CSRCS  = lpc43_allocateheap.c lpc43_cgu.c lpc43_clrpend.c lpc43_gpio.c
 CHIP_CSRCS += lpc43_irq.c lpc43_pinconfig.c lpc43_rgu.c lpc43_serial.c
-CHIP_CSRCS += lpc43_start.c lpc43_timerisr.c lpc43_uart.c
+CHIP_CSRCS += lpc43_start.c lpc43_uart.c
 
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
+ifneq ($(CONFIG_SCHED_TICKLESS),y)
+CHIP_CSRCS += lpc43_timerisr.c
+else
+CHIP_CSRCS += lpc43_tickless_rit.c
+endif
+
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
 CHIP_CSRCS += lpc43_userspace.c lpc43_mpuinit.c
 endif
 
@@ -95,7 +110,7 @@ ifneq ($(CONFIG_ARCH_IDLE_CUSTOM),y)
 CHIP_CSRCS += lpc43_idle.c
 endif
 
-ifeq ($(CONFIG_DEBUG),y)
+ifeq ($(CONFIG_DEBUG_FEATURES),y)
 CHIP_CSRCS += lpc43_debug.c
 endif
 
@@ -103,12 +118,28 @@ ifeq ($(CONFIG_LPC43_GPDMA),y)
 CHIP_CSRCS += lpc43_gpdma.c
 endif
 
-ifeq ($(CONFIG_GPIO_IRQ),y)
+ifeq ($(CONFIG_LPC43_GPIO_IRQ),y)
 CHIP_CSRCS += lpc43_gpioint.c
+endif
+
+ifeq ($(CONFIG_LPC43_ETHERNET),y)
+CHIP_CSRCS += lpc43_ethernet.c
+endif
+
+ifeq ($(CONFIG_LPC43_EMC),y)
+CHIP_CSRCS += lpc43_emc.c
 endif
 
 ifeq ($(CONFIG_LPC43_SPI),y)
 CHIP_CSRCS += lpc43_spi.c
+else
+ifeq ($(CONFIG_LPC43_SSP0),y)
+CHIP_CSRCS += lpc43_spi.c
+else
+ifeq ($(CONFIG_LPC43_SSP1),y)
+CHIP_CSRCS += lpc43_spi.c
+endif
+endif
 endif
 
 ifeq ($(CONFIG_LPC43_SPIFI),y)
@@ -123,6 +154,10 @@ CHIP_CSRCS += lpc43_ssp.c
 endif
 endif
 
+ifeq ($(CONFIG_LPC43_RIT),y)
+CHIP_CSRCS += lpc43_rit.c
+endif
+
 ifeq ($(CONFIG_LPC43_I2C0),y)
 CHIP_CSRCS += lpc43_i2c.c
 else
@@ -132,7 +167,7 @@ endif
 endif
 
 ifeq ($(CONFIG_LPC43_ADC0),y)
-CHIP_CSRCS += lpc43_acc.c
+CHIP_CSRCS += lpc43_adc.c
 else
 ifeq ($(CONFIG_LPC43_ADC1),y)
 CHIP_CSRCS += lpc43_adc.c
@@ -140,16 +175,25 @@ endif
 endif
 
 ifeq ($(CONFIG_LPC43_DAC),y)
-CHIP_CSRCS += lpc43_acc.c
+CHIP_CSRCS += lpc43_adc.c
 else
 ifeq ($(CONFIG_LPC43_DAC),y)
 CHIP_CSRCS += lpc43_adc.c
 endif
 endif
 
+ifeq ($(CONFIG_LPC43_USBOTG),y)
+CHIP_CSRCS += lpc43_ehci.c
+endif
+
+ifeq ($(CONFIG_CRYPTO_AES),y)
+CHIP_CSRCS += lpc43_aes.c
+endif
+
 ifeq ($(CONFIG_LPC43_USB0),y)
 ifeq ($(CONFIG_USBDEV),y)
-CHIP_CSRCS	+= lpc31_usb0dev.c
+CHIP_CSRCS += lpc43_usb0dev.c
 endif
 endif
 
+-include chip/spifi/src/Make.defs

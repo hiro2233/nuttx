@@ -50,59 +50,41 @@
 #include "up_arch.h"
 #include "chip.h"
 #include "stm32.h"
+
 #include "stm32f4discovery.h"
 
 #if defined(CONFIG_STM32_SPI1) || defined(CONFIG_STM32_SPI2) || defined(CONFIG_STM32_SPI3)
-
-/************************************************************************************
- * Definitions
- ************************************************************************************/
-
-/* Enables debug output from this file (needs CONFIG_DEBUG too) */
-
-#undef SPI_DEBUG   /* Define to enable debug */
-#undef SPI_VERBOSE /* Define to enable verbose debug */
-
-#ifdef SPI_DEBUG
-#  define spidbg  lldbg
-#  ifdef SPI_VERBOSE
-#    define spivdbg lldbg
-#  else
-#    define spivdbg(x...)
-#  endif
-#else
-#  undef SPI_VERBOSE
-#  define spidbg(x...)
-#  define spivdbg(x...)
-#endif
-
-/************************************************************************************
- * Private Functions
- ************************************************************************************/
 
 /************************************************************************************
  * Public Functions
  ************************************************************************************/
 
 /************************************************************************************
- * Name: stm32_spiinitialize
+ * Name: stm32_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the stm32f4discovery board.
  *
  ************************************************************************************/
 
-void weak_function stm32_spiinitialize(void)
+void weak_function stm32_spidev_initialize(void)
 {
 #ifdef CONFIG_STM32_SPI1
   (void)stm32_configgpio(GPIO_CS_MEMS);    /* MEMS chip select */
 #endif
-#if defined(CONFIG_LCD_UG2864AMBAG01) || defined(CONFIG_LCD_UG2864HSWEG01)
+#if defined(CONFIG_STM32_SPI2) && defined(CONFIG_MAX31855)
+  (void)stm32_configgpio(GPIO_MAX31855_CS); /* MAX31855 chip select */
+#endif
+#if defined(CONFIG_STM32_SPI2) && defined(CONFIG_MAX6675)
+  (void)stm32_configgpio(GPIO_MAX6675_CS); /* MAX6675 chip select */
+#endif
+#if defined(CONFIG_LCD_UG2864AMBAG01) || defined(CONFIG_LCD_UG2864HSWEG01) || \
+    defined(CONFIG_LCD_SSD1351)
   (void)stm32_configgpio(GPIO_OLED_CS);    /* OLED chip select */
 # if defined(CONFIG_LCD_UG2864AMBAG01)
   (void)stm32_configgpio(GPIO_OLED_A0);    /* OLED Command/Data */
 # endif
-# if defined(CONFIG_LCD_UG2864HSWEG01)
+# if defined(CONFIG_LCD_UG2864HSWEG01) || defined(CONFIG_LCD_SSD1351)
   (void)stm32_configgpio(GPIO_OLED_DC);    /* OLED Command/Data */
 # endif
 #endif
@@ -115,7 +97,7 @@ void weak_function stm32_spiinitialize(void)
  *   The external functions, stm32_spi1/2/3select and stm32_spi1/2/3status must be
  *   provided by board-specific logic.  They are implementations of the select
  *   and status methods of the SPI interface defined by struct spi_ops_s (see
- *   include/nuttx/spi/spi.h). All other methods (including up_spiinitialize())
+ *   include/nuttx/spi/spi.h). All other methods (including stm32_spibus_initialize())
  *   are provided by common STM32 logic.  To use this common SPI logic on your
  *   board:
  *
@@ -124,9 +106,9 @@ void weak_function stm32_spiinitialize(void)
  *   2. Provide stm32_spi1/2/3select() and stm32_spi1/2/3status() functions in your
  *      board-specific logic.  These functions will perform chip selection and
  *      status operations using GPIOs in the way your board is configured.
- *   3. Add a calls to up_spiinitialize() in your low level application
+ *   3. Add a calls to stm32_spibus_initialize() in your low level application
  *      initialization logic
- *   4. The handle returned by up_spiinitialize() may then be used to bind the
+ *   4. The handle returned by stm32_spibus_initialize() may then be used to bind the
  *      SPI driver to higher level logic (e.g., calling
  *      mmcsd_spislotinitialize(), for example, will bind the SPI driver to
  *      the SPI MMC/SD driver).
@@ -136,9 +118,10 @@ void weak_function stm32_spiinitialize(void)
 #ifdef CONFIG_STM32_SPI1
 void stm32_spi1select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  spidbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
 
-#if defined(CONFIG_LCD_UG2864AMBAG01) || defined(CONFIG_LCD_UG2864HSWEG01)
+#if defined(CONFIG_LCD_UG2864AMBAG01) || defined(CONFIG_LCD_UG2864HSWEG01) || \
+    defined(CONFIG_LCD_SSD1351)
   if (devid == SPIDEV_DISPLAY)
     {
       stm32_gpiowrite(GPIO_OLED_CS, !selected);
@@ -159,7 +142,20 @@ uint8_t stm32_spi1status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 #ifdef CONFIG_STM32_SPI2
 void stm32_spi2select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  spidbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+
+#if defined(CONFIG_MAX31855)
+  if (devid == SPIDEV_TEMPERATURE)
+    {
+      stm32_gpiowrite(GPIO_MAX31855_CS, !selected);
+    }
+#endif
+#if defined(CONFIG_MAX6675)
+  if (devid == SPIDEV_TEMPERATURE)
+    {
+      stm32_gpiowrite(GPIO_MAX6675_CS, !selected);
+    }
+#endif
 }
 
 uint8_t stm32_spi2status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
@@ -171,7 +167,7 @@ uint8_t stm32_spi2status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 #ifdef CONFIG_STM32_SPI3
 void stm32_spi3select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
 {
-  spidbg("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
+  spiinfo("devid: %d CS: %s\n", (int)devid, selected ? "assert" : "de-assert");
 }
 
 uint8_t stm32_spi3status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
@@ -207,7 +203,8 @@ uint8_t stm32_spi3status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 #ifdef CONFIG_STM32_SPI1
 int stm32_spi1cmddata(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool cmd)
 {
-#if defined(CONFIG_LCD_UG2864AMBAG01) || defined(CONFIG_LCD_UG2864HSWEG01)
+#if defined(CONFIG_LCD_UG2864AMBAG01) || defined(CONFIG_LCD_UG2864HSWEG01) || \
+    defined(CONFIG_LCD_SSD1351)
   if (devid == SPIDEV_DISPLAY)
     {
       /* "This is the Data/Command control pad which determines whether the
@@ -221,7 +218,7 @@ int stm32_spi1cmddata(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool cmd)
 # if defined(CONFIG_LCD_UG2864AMBAG01)
       (void)stm32_gpiowrite(GPIO_OLED_A0, !cmd);
 # endif
-# if defined(CONFIG_LCD_UG2864HSWEG01)
+# if defined(CONFIG_LCD_UG2864HSWEG01) || defined(CONFIG_LCD_SSD1351)
       (void)stm32_gpiowrite(GPIO_OLED_DC, !cmd);
 # endif
       return OK;

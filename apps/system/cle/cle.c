@@ -39,6 +39,7 @@
 
 #include <nuttx/config.h>
 
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -52,7 +53,7 @@
 #include <nuttx/ascii.h>
 #include <nuttx/vt100.h>
 
-#include <apps/cle.h>
+#include "system/cle.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -108,28 +109,28 @@
 #ifdef CONFIG_CPP_HAVE_VARARGS
 #  if CONFIG_SYSTEM_CLE_DEBUGLEVEL > 0
 #    define cledbg(format, ...) \
-       syslog(EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
+       syslog(LOG_DEBUG, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
 #  else
 #    define cledbg(x...)
 #  endif
 
 #  if CONFIG_SYSTEM_CLE_DEBUGLEVEL > 1
-#    define clevdbg(format, ...) \
-       syslog(EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
+#    define cleinfo(format, ...) \
+       syslog(LOG_DEBUG, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
 #  else
-#    define clevdbg(x...)
+#    define cleinfo(x...)
 #  endif
 #else
 #  if CONFIG_SYSTEM_CLE_DEBUGLEVEL > 0
-#    define cledbg  syslog
+#    define cledbg  cle_debug
 #  else
 #    define cledbg  (void)
 #  endif
 
 #  if CONFIG_SYSTEM_CLE_DEBUGLEVEL > 1
-#    define clevdbg syslog
+#    define cleinfo cle_debug
 #  else
-#    define clevdbg (void)
+#    define cleinfo (void)
 #  endif
 #endif
 
@@ -170,6 +171,10 @@ struct cle_s
  * Private Function Prototypes
  ****************************************************************************/
 
+#if !defined(CONFIG_CPP_HAVE_VARARGS) && CONFIG_SYSTEM_CLE_DEBUGLEVEL > 0
+static int      cle_debug(FAR const char *fmt, ...);
+#endif
+
 /* Low-level display and data entry functions */
 
 static void     cle_write(FAR struct cle_s *priv, FAR const char *buffer,
@@ -209,6 +214,29 @@ static const char g_fmtcursorpos[] = VT100_FMT_CURSORPOS;
  ****************************************************************************/
 
 /****************************************************************************
+ * Name: cle_debug
+ *
+ * Description:
+ *   Print a debug message to the syslog
+ *
+ ****************************************************************************/
+
+#if !defined(CONFIG_CPP_HAVE_VARARGS) && CONFIG_SYSTEM_CLE_DEBUGLEVEL > 0
+static int cle_debug(FAR const char *fmt, ...)
+{
+  va_list ap;
+  int ret;
+
+  /* Let vsyslog do the real work */
+
+  va_start(ap, fmt);
+  ret = vsyslog(LOG_DEBUG, fmt, ap);
+  va_end(ap);
+  return ret;
+}
+#endif
+
+/****************************************************************************
  * Name: cle_write
  *
  * Description:
@@ -222,7 +250,7 @@ static void cle_write(FAR struct cle_s *priv, FAR const char *buffer,
   ssize_t nwritten;
   uint16_t  nremaining = buflen;
 
-  //clevdbg("buffer=%p buflen=%d\n", buffer, (int)buflen);
+  //cleinfo("buffer=%p buflen=%d\n", buffer, (int)buflen);
 
   /* Loop until all bytes have been successfully written (or until a
    * unrecoverable error is encountered)
@@ -318,7 +346,7 @@ static int cle_getch(FAR struct cle_s *priv)
 
   /* On success, return the character that was read */
 
-  clevdbg("Returning: %c[%02x]\n", isprint(buffer) ? buffer : '.', buffer);
+  cleinfo("Returning: %c[%02x]\n", isprint(buffer) ? buffer : '.', buffer);
   return buffer;
 }
 
@@ -365,7 +393,7 @@ static void cle_setcursor(FAR struct cle_s *priv, uint16_t column)
   char buffer[16];
   int len;
 
-  clevdbg("row=%d column=%d offset=%d\n", priv->row, column, priv->coloffs);
+  cleinfo("row=%d column=%d offset=%d\n", priv->row, column, priv->coloffs);
 
   /* Format the cursor position command.  The origin is (1,1). */
 
@@ -496,7 +524,7 @@ static int cle_getcursor(FAR struct cle_s *priv, FAR uint16_t *prow,
         }
     }
 
-  clevdbg("row=%ld column=%ld\n", row, column);
+  cleinfo("row=%ld column=%ld\n", row, column);
 
   /* Make sure that the values are within range */
 
@@ -541,7 +569,7 @@ static bool cle_opentext(FAR struct cle_s *priv, uint16_t pos,
 {
   int i;
 
-  clevdbg("pos=%ld increment=%ld\n", (long)pos, (long)increment);
+  cleinfo("pos=%ld increment=%ld\n", (long)pos, (long)increment);
 
   /* Check if there is space in the line buffer to open up a region the size
    * of 'increment'
@@ -581,7 +609,7 @@ static void cle_closetext(FAR struct cle_s *priv, uint16_t pos, uint16_t size)
 {
   int i;
 
-  clevdbg("pos=%ld size=%ld\n", (long)pos, (long)size);
+  cleinfo("pos=%ld size=%ld\n", (long)pos, (long)size);
 
   /* Close up the gap to remove 'size' characters at 'pos' */
 
@@ -686,7 +714,7 @@ static void cle_showtext(FAR struct cle_s *priv)
 
 static void cle_insertch(FAR struct cle_s *priv, char ch)
 {
-  clevdbg("curpos=%ld ch=%c[%02x]\n", priv->curpos, isprint(ch) ? ch : '.', ch);
+  cleinfo("curpos=%ld ch=%c[%02x]\n", priv->curpos, isprint(ch) ? ch : '.', ch);
 
   /* Make space in the buffer for the new character */
 
@@ -925,7 +953,7 @@ int cle(FAR char *line, uint16_t linelen, FILE *instream, FILE *outstream)
 
   priv.coloffs = column - 1;
 
-  clevdbg("row=%d column=%d\n", priv.row, column);
+  cleinfo("row=%d column=%d\n", priv.row, column);
 
   /* The editor loop */
 

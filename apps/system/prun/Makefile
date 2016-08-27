@@ -1,7 +1,7 @@
 ############################################################################
 # apps/system/prun/Makefile
 #
-#   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -39,10 +39,6 @@ include $(APPDIR)/Make.defs
 
 # Pascal P-Code interpreter / Virtual machine
 
-ifeq ($(WINTOOL),y)
-INCDIROPT = -w
-endif
-
 CFLAGS += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" \
   "." \
   "$(APPDIR)$(DELIM)interpreters$(DELIM)pcode$(DELIM)include" \
@@ -56,7 +52,8 @@ PRIORITY = $(CONFIG_SYSTEM_PEXEC_PRIORITY)
 STACKSIZE = $(CONFIG_SYSTEM_PEXEC_STACKSIZE)
 
 ASRCS =
-CSRCS = prun.c
+CSRCS =
+MAINSRC = prun.c
 
 ifeq ($(CONFIG_SYSTEM_PEXEC),y)
 CSRCS += pexec_main.c
@@ -64,9 +61,14 @@ endif
 
 AOBJS = $(ASRCS:.S=$(OBJEXT))
 COBJS = $(CSRCS:.c=$(OBJEXT))
+MAINOBJ = $(MAINSRC:.c=$(OBJEXT))
 
-SRCS = $(ASRCS) $(CSRCS)
+SRCS = $(ASRCS) $(CSRCS) $(MAINSRC)
 OBJS = $(AOBJS) $(COBJS)
+
+ifneq ($(CONFIG_BUILD_KERNEL),y)
+  OBJS += $(MAINOBJ)
+endif
 
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
   BIN = ..\..\libapps$(LIBEXT)
@@ -77,6 +79,15 @@ else
   BIN = ../../libapps$(LIBEXT)
 endif
 endif
+
+ifeq ($(WINTOOL),y)
+  INSTALL_DIR = "${shell cygpath -w $(BIN_DIR)}"
+else
+  INSTALL_DIR = $(BIN_DIR)
+endif
+
+CONFIG_XYZ_PROGNAME ?= prun$(EXEEXT)
+PROGNAME = $(CONFIG_XYZ_PROGNAME)
 
 ROOTDEPPATH = --dep-path .
 
@@ -90,12 +101,25 @@ all: .built
 $(AOBJS): %$(OBJEXT): %.S
 	$(call ASSEMBLE, $<, $@)
 
-$(COBJS): %$(OBJEXT): %.c
+$(COBJS) $(MAINOBJ): %$(OBJEXT): %.c
 	$(call COMPILE, $<, $@)
 
 .built: $(OBJS)
 	$(call ARCHIVE, $(BIN), $(OBJS))
 	@touch .built
+
+ifeq ($(CONFIG_BUILD_KERNEL),y)
+$(BIN_DIR)$(DELIM)$(PROGNAME): $(OBJS) $(MAINOBJ)
+	@echo "LD: $(PROGNAME)"
+	$(Q) $(LD) $(LDELFFLAGS) $(LDLIBPATH) -o $(INSTALL_DIR)$(DELIM)$(PROGNAME) $(ARCHCRT0OBJ) $(MAINOBJ) $(LDLIBS)
+	$(Q) $(NM) -u  $(INSTALL_DIR)$(DELIM)$(PROGNAME)
+
+install: $(BIN_DIR)$(DELIM)$(PROGNAME)
+
+else
+install:
+
+endif
 
 ifeq ($(CONFIG_NSH_BUILTIN_APPS),y)
 ifeq ($(CONFIG_SYSTEM_PEXEC),y)
@@ -125,3 +149,5 @@ distclean: clean
 	$(call DELFILE, .depend)
 
 -include Make.dep
+.PHONY: preconfig
+preconfig:

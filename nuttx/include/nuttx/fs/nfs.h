@@ -95,7 +95,8 @@ struct nfs_args
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -105,4 +106,4 @@ extern "C" {
 }
 #endif
 
-#endif /* _NFS_NFS_H */
+#endif /* __INCLUDE_NUTTX_FS_NFS_H */

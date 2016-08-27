@@ -1,7 +1,7 @@
 /****************************************************************************
  * libc/time/lib_strftime.c
  *
- *   Copyright (C) 2009, 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@
 #include <nuttx/time.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -70,7 +70,19 @@
  * Private Data
  ****************************************************************************/
 
-static const char * const g_abbrevmonthname[12] =
+#if defined(CONFIG_LIBC_LOCALTIME) || defined(CONFIG_TIME_EXTENDED)
+static const char * const g_abbrev_wdayname[7] =
+{
+  "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
+};
+
+static const char * const g_wdayname[7] =
+{
+  "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+};
+#endif
+
+static const char * const g_abbrev_monthname[12] =
 {
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
@@ -142,13 +154,14 @@ static const char * const g_monthname[12] =
  *
  ****************************************************************************/
 
-size_t strftime(char *s, size_t max, const char *format, const struct tm *tm)
+size_t strftime(FAR char *s, size_t max, FAR const char *format,
+                FAR const struct tm *tm)
 {
-  const char *str;
-  char       *dest   = s;
-  int         chleft = max;
-  int         value;
-  int         len;
+  FAR const char *str;
+  FAR char       *dest   = s;
+  int             chleft = max;
+  int             value;
+  int             len;
 
   while (*format && chleft > 0)
     {
@@ -168,6 +181,31 @@ size_t strftime(char *s, size_t max, const char *format, const struct tm *tm)
 
        switch (*format++)
          {
+#if defined(CONFIG_LIBC_LOCALTIME) || defined(CONFIG_TIME_EXTENDED)
+           /* %a: A three-letter abbreviation for the day of the week. */
+
+           case 'a':
+             {
+               if (tm->tm_wday < 7)
+                 {
+                   str = g_abbrev_wdayname[tm->tm_wday];
+                   len = snprintf(dest, chleft, "%s", str);
+                 }
+             }
+             break;
+
+           /* %A: The full name for the day of the week. */
+
+           case 'A':
+             {
+               if (tm->tm_wday < 7)
+                 {
+                   str = g_wdayname[tm->tm_wday];
+                   len = snprintf(dest, chleft, "%s", str);
+                 }
+             }
+             break;
+#else
            /* %a: A three-letter abbreviation for the day of the week. */
            /* %A: The full name for the day of the week. */
 
@@ -177,6 +215,7 @@ size_t strftime(char *s, size_t max, const char *format, const struct tm *tm)
                len = snprintf(dest, chleft, "Day"); /* Not supported */
              }
              break;
+#endif
 
            /* %h: Equivalent to %b */
 
@@ -188,7 +227,7 @@ size_t strftime(char *s, size_t max, const char *format, const struct tm *tm)
              {
                if (tm->tm_mon < 12)
                  {
-                   str = g_abbrevmonthname[tm->tm_mon];
+                   str = g_abbrev_monthname[tm->tm_mon];
                    len = snprintf(dest, chleft, "%s", str);
                  }
              }
@@ -209,12 +248,16 @@ size_t strftime(char *s, size_t max, const char *format, const struct tm *tm)
            /* %y: The year as a decimal number without a century (range 00 to 99). */
 
            case 'y':
+             {
+               len = snprintf(dest, chleft, "%02d", tm->tm_year % 100);
+             }
+             break;
 
            /* %C: The century number (year/100) as a 2-digit integer. */
 
            case 'C':
              {
-               len = snprintf(dest, chleft, "%02d", tm->tm_year % 100);
+               len = snprintf(dest, chleft, "%02d", tm->tm_year / 100);
              }
              break;
 
@@ -342,12 +385,12 @@ size_t strftime(char *s, size_t max, const char *format, const struct tm *tm)
              break;
 
            /* %s: The number of seconds since the Epoch, that is, since 1970-01-01
-            * 00:00:00 UTC.
+            * 00:00:00 UTC.  Hmmm... mktime argume is not 'const'.
             */
 
            case 's':
              {
-               len = snprintf(dest, chleft, "%d", mktime(tm));
+               len = snprintf(dest, chleft, "%d", mktime((FAR struct tm *)tm));
              }
              break;
 

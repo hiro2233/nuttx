@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/arm/src/common/up_modifyreg8.c
+ * arch/z80/src/common/up_modifyreg8.c
  *
  *   Copyright (C) 2009 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -41,7 +41,7 @@
 
 #include <stdint.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <arch/io.h>
 
 /****************************************************************************
@@ -73,10 +73,10 @@ void modifyreg8(uint16_t addr, uint8_t clearbits, uint8_t setbits)
   irqstate_t flags;
   uint8_t    regval;
 
-  flags   = irqsave();
+  flags   = enter_critical_section();
   regval  = inp(addr);
   regval &= ~clearbits;
   regval |= setbits;
   outp(regval, addr);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }

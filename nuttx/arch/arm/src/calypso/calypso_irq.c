@@ -35,7 +35,7 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- **************************************************************************/
+ ****************************************************************************/
 
 /****************************************************************************
  * Included Files
@@ -45,6 +45,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 
@@ -52,6 +53,7 @@
 #include <arch/calypso/clock.h>
 
 #include "arm.h"
+#include "up_internal.h"
 #include "up_arch.h"
 
 /****************************************************************************
@@ -83,7 +85,13 @@ enum irq_reg
  * Public Data
  ****************************************************************************/
 
-volatile uint32_t *current_regs;
+/* g_current_regs[] holds a references to the current interrupt level
+ * register storage structure.  If is non-NULL only during interrupt
+ * processing.  Access to g_current_regs[] must be through the macro
+ * CURRENT_REGS for portability.
+ */
+
+volatile uint32_t *g_current_regs[1];
 extern uint32_t _exceptions;
 
 /****************************************************************************
@@ -200,7 +208,7 @@ void up_irqinitialize(void)
   /* Prepare hardware */
 
   calypso_exceptions_install();
-  current_regs = NULL;
+  CURRENT_REGS = NULL;
 
   /* Switch to internal ROM */
 
@@ -222,7 +230,7 @@ void up_irqinitialize(void)
   /* Enable interrupts globally to the ARM core */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
-  irqrestore(SVC_MODE | PSR_F_BIT);
+  up_irq_restore(SVC_MODE | PSR_F_BIT);
 #endif
 }
 
@@ -301,8 +309,8 @@ void up_decodeirq(uint32_t *regs)
    * Passed to but ignored in IRQ handlers
    * Only valid meaning is apparently non-NULL == IRQ context */
 
-  saved_regs = (uint32_t *)current_regs;
-  current_regs = regs;
+  saved_regs = (uint32_t *)CURRENT_REGS;
+  CURRENT_REGS = regs;
 
   /* Detect & deliver the IRQ */
 
@@ -315,7 +323,7 @@ void up_decodeirq(uint32_t *regs)
   tmp |= 0x01;
   putreg8(tmp, IRQ_REG(IRQ_CTRL));
 
-  current_regs = saved_regs;
+  CURRENT_REGS = saved_regs;
 }
 
 /****************************************************************************
@@ -331,8 +339,8 @@ void calypso_fiq(void)
    * Passed to but ignored in IRQ handlers
    * Only valid meaning is apparently non-NULL == IRQ context */
 
-  regs = (uint32_t *)current_regs;
-  current_regs = (uint32_t *)&num;
+  regs = (uint32_t *)CURRENT_REGS;
+  CURRENT_REGS = (uint32_t *)&num;
 
   /* Detect & deliver like an IRQ but we are in FIQ context */
 
@@ -345,5 +353,5 @@ void calypso_fiq(void)
   tmp |= 0x02;
   putreg8(tmp, IRQ_REG(IRQ_CTRL));
 
-  current_regs = regs;
+  CURRENT_REGS = regs;
 }

@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/common/up_checkstack.c
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,30 +42,23 @@
 #include <sys/types.h>
 #include <stdint.h>
 #include <sched.h>
+#include <assert.h>
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/tls.h>
+#include <nuttx/board.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-#if !defined(CONFIG_DEBUG)
-#  undef CONFIG_DEBUG_STACK
-#endif
-
-#if defined(CONFIG_DEBUG_STACK)
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
+#ifdef CONFIG_STACK_COLORATION
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
+
+static size_t do_stackcheck(uintptr_t alloc, size_t size);
 
 /****************************************************************************
  * Name: do_stackcheck
@@ -84,18 +77,33 @@
  *
  ****************************************************************************/
 
-size_t do_stackcheck(uintptr_t alloc, size_t size)
+static size_t do_stackcheck(uintptr_t alloc, size_t size)
 {
   FAR uintptr_t start;
   FAR uintptr_t end;
   FAR uint32_t *ptr;
   size_t mark;
 
-  /* Get aligned addresses and adjusted sizes */
+  if (size == 0)
+    {
+      return 0;
+    }
 
-  start  = alloc & ~3;
-  end    = (alloc + size + 3) & ~3;
-  size   = end - start;
+  /* Get aligned addresses of the top and bottom of the stack */
+
+#ifdef CONFIG_TLS
+  /* Skip over the TLS data structure at the bottom of the stack */
+
+  DEBUGASSERT((alloc & TLS_STACK_MASK) == 0);
+  start = alloc + sizeof(struct tls_info_s);
+#else
+  start = alloc & ~3;
+#endif
+  end   = (alloc + size + 3) & ~3;
+
+  /* Get the adjusted size based on the top and bottom of the stack */
+
+  size  = end - start;
 
   /* The ARM uses a push-down stack:  the stack grows toward lower addresses
    * in memory.  We need to start at the lowest address in the stack memory
@@ -120,7 +128,8 @@ size_t do_stackcheck(uintptr_t alloc, size_t size)
 #if 0
   if (mark + 16 > nwords)
     {
-      int i, j;
+      int i;
+      int j;
 
       ptr = (FAR uint32_t *)start;
       for (i = 0; i < size; i += 4*64)
@@ -138,11 +147,11 @@ size_t do_stackcheck(uintptr_t alloc, size_t size)
                 }
 
               up_putc(ch);
-             }
+            }
 
           up_putc('\n');
         }
-     }
+    }
 #endif
 
   /* Return our guess about how much stack space was used */
@@ -151,7 +160,7 @@ size_t do_stackcheck(uintptr_t alloc, size_t size)
 }
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -182,12 +191,12 @@ ssize_t up_check_tcbstack_remain(FAR struct tcb_s *tcb)
 
 size_t up_check_stack(void)
 {
-  return up_check_tcbstack((FAR struct tcb_s*)g_readytorun.head);
+  return up_check_tcbstack(this_task());
 }
 
 ssize_t up_check_stack_remain(void)
 {
-  return up_check_tcbstack_remain((FAR struct tcb_s*)g_readytorun.head);
+  return up_check_tcbstack_remain(this_task());
 }
 
 #if CONFIG_ARCH_INTERRUPTSTACK > 3
@@ -202,4 +211,4 @@ size_t up_check_intstack_remain(void)
 }
 #endif
 
-#endif /* CONFIG_DEBUG_STACK */
+#endif /* CONFIG_STACK_COLORATION */

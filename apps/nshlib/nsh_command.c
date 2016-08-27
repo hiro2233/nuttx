@@ -1,7 +1,7 @@
 /****************************************************************************
  * apps/nshlib/nsh_command.c
  *
- *   Copyright (C) 2007-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +45,10 @@
 #  include <nuttx/binfmt/builtin.h>
 #endif
 
+#if defined(CONFIG_SYSTEM_READLINE) && defined(CONFIG_READLINE_HAVE_EXTMATCH)
+#  include "system/readline.h"
+#endif
+
 #include "nsh.h"
 #include "nsh_console.h"
 
@@ -66,11 +70,11 @@
 
 struct cmdmap_s
 {
-  const char *cmd;        /* Name of the command */
-  cmd_t       handler;    /* Function that handles the command */
+  FAR const char *cmd;    /* Name of the command */
+  nsh_cmd_t   handler;    /* Function that handles the command */
   uint8_t     minargs;    /* Minimum number of arguments (including command) */
   uint8_t     maxargs;    /* Maximum number of arguments (including command) */
-  const char *usage;      /* Usage instructions for 'help' command */
+  FAR const char *usage;  /* Usage instructions for 'help' command */
 };
 
 /****************************************************************************
@@ -110,6 +114,10 @@ static const struct cmdmap_s g_cmdmap[] =
   { "addroute", cmd_addroute, 4, 4, "<target> <netmask> <router>" },
 #endif
 
+#if defined(CONFIG_NET) && defined(CONFIG_NET_ARP) && !defined(CONFIG_NSH_DISABLE_ARP)
+  { "arp",      cmd_arp,      3, 4, "[-a <ipaddr>|-d <ipaddr>|-s <ipaddr> <hwaddr>]" },
+#endif
+
 #if defined(CONFIG_NETUTILS_CODECS) && defined(CONFIG_CODECS_BASE64)
 #  ifndef CONFIG_NSH_DISABLE_BASE64DEC
   { "base64dec", cmd_base64decode, 2, 4, "[-w] [-f] <string or filepath>" },
@@ -117,6 +125,10 @@ static const struct cmdmap_s g_cmdmap[] =
 #  ifndef CONFIG_NSH_DISABLE_BASE64ENC
   { "base64enc", cmd_base64encode, 2, 4, "[-w] [-f] <string or filepath>" },
 #  endif
+#endif
+
+#ifndef CONFIG_NSH_DISABLE_BASENAME
+  { "basename",  cmd_basename, 2, 3, "<path> [<suffix>]" },
 #endif
 
 #if !defined(CONFIG_NSH_DISABLESCRIPT) && !defined(CONFIG_NSH_DISABLE_LOOPS)
@@ -140,7 +152,11 @@ static const struct cmdmap_s g_cmdmap[] =
 # endif
 #endif
 
-#if defined (CONFIG_RTC) && !defined(CONFIG_DISABLE_CLOCK) && !defined(CONFIG_NSH_DISABLE_DATE)
+#ifndef CONFIG_NSH_DISABLE_DIRNAME
+  { "dirname",  cmd_dirname,  2, 2, "<path>" },
+#endif
+
+#ifndef CONFIG_NSH_DISABLE_DATE
   { "date",     cmd_date,     1, 3, "[-s \"MMM DD HH:MM:SS YYYY\"]" },
 #endif
 
@@ -161,8 +177,8 @@ static const struct cmdmap_s g_cmdmap[] =
 #endif
 #endif
 
-#if CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_SYSLOG) && \
-    defined(CONFIG_RAMLOG_SYSLOG) && !defined(CONFIG_NSH_DISABLE_DMESG)
+#if CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_RAMLOG_SYSLOG) && \
+   !defined(CONFIG_NSH_DISABLE_DMESG)
   { "dmesg",    cmd_dmesg,    1, 1, NULL },
 #endif
 
@@ -183,7 +199,7 @@ static const struct cmdmap_s g_cmdmap[] =
 #endif
 
 #ifndef CONFIG_NSH_DISABLESCRIPT
-  { "false",     cmd_false,    1, 1, NULL },
+  { "false",     cmd_false,   1, 1, NULL },
 #endif
 
 #ifndef CONFIG_NSH_DISABLE_FREE
@@ -216,12 +232,16 @@ static const struct cmdmap_s g_cmdmap[] =
 
 #ifdef CONFIG_NET
 # ifndef CONFIG_NSH_DISABLE_IFCONFIG
-  { "ifconfig", cmd_ifconfig, 1, 11, "[nic_name [<ip-address>|dhcp]] [dr|gw|gateway <dr-address>] [netmask <net-mask>] [dns <dns-address>] [hw <hw-mac>]" },
+  { "ifconfig", cmd_ifconfig, 1, 11, "[nic-name [<ip-address>|dhcp]] [dr|gw|gateway <dr-address>] [netmask <net-mask>] [dns <dns-address>] [hw <hw-mac>]" },
 # endif
 # ifndef CONFIG_NSH_DISABLE_IFUPDOWN
-  { "ifdown",   cmd_ifdown,   2, 2,  "<nic_name>" },
-  { "ifup",     cmd_ifup,     2, 2,  "<nic_name>" },
+  { "ifdown",   cmd_ifdown,   2, 2,  "<nic-name>" },
+  { "ifup",     cmd_ifup,     2, 2,  "<nic-name>" },
 # endif
+#endif
+
+#if defined(CONFIG_MODULE) && !defined(CONFIG_NSH_DISABLE_MODCMDS)
+  { "insmod",   cmd_insmod,   3, 3,  "<file-path> <module-name>" },
 #endif
 
 #ifndef CONFIG_DISABLE_SIGNALS
@@ -231,8 +251,14 @@ static const struct cmdmap_s g_cmdmap[] =
 #endif
 
 #if CONFIG_NFILE_DESCRIPTORS > 0 && !defined(CONFIG_DISABLE_MOUNTPOINT)
-# ifndef CONFIG_NSH_DISABLE_LOSETUP
+# if defined(CONFIG_DEV_LOOP) && !defined(CONFIG_NSH_DISABLE_LOSETUP)
   { "losetup",   cmd_losetup, 3, 6, "[-d <dev-path>] | [[-o <offset>] [-r] <dev-path> <file-path>]" },
+# endif
+#endif
+
+#if CONFIG_NFILE_DESCRIPTORS > 0 && !defined(CONFIG_DISABLE_MOUNTPOINT)
+# if defined(CONFIG_SMART_DEV_LOOP) && !defined(CONFIG_NSH_DISABLE_LOSMART)
+  { "losmart",   cmd_losmart, 2, 11, "[-d <dev-path>] | [[-m <minor>] [-o <offset>] [-e <erase-size>] [-s <sect-size>] [-r] <file-path>]" },
 # endif
 #endif
 
@@ -240,6 +266,12 @@ static const struct cmdmap_s g_cmdmap[] =
 # ifndef CONFIG_NSH_DISABLE_LS
   { "ls",       cmd_ls,       1, 5, "[-lRs] <dir-path>" },
 # endif
+#endif
+
+#if defined(CONFIG_MODULE) && !defined(CONFIG_NSH_DISABLE_MODCMDS)
+#if defined(CONFIG_FS_PROCFS) && !defined(CONFIG_FS_PROCFS_EXCLUDE_MODULE)
+  { "lsmod",    cmd_lsmod,   1, 1,  NULL },
+#endif
 #endif
 
 #ifndef CONFIG_NSH_DISABLE_MB
@@ -265,7 +297,8 @@ static const struct cmdmap_s g_cmdmap[] =
 #endif
 
 #if !defined(CONFIG_DISABLE_MOUNTPOINT) && CONFIG_NFILE_DESCRIPTORS > 0
-# ifndef CONFIG_NSH_DISABLE_MKFIFO
+# if defined(CONFIG_PIPES) && CONFIG_DEV_FIFO_SIZE > 0 && \
+    !defined(CONFIG_NSH_DISABLE_MKFIFO)
   { "mkfifo",   cmd_mkfifo,   2, 2, "<path>" },
 # endif
 #endif
@@ -276,13 +309,14 @@ static const struct cmdmap_s g_cmdmap[] =
 # endif
 #endif
 
-#if !defined(CONFIG_DISABLE_MOUNTPOINT) && CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_FS_SMARTFS)
+#if !defined(CONFIG_DISABLE_MOUNTPOINT) && CONFIG_NFILE_DESCRIPTORS > 0 && \
+     defined(CONFIG_FS_SMARTFS) && defined(CONFIG_FSUTILS_MKSMARTFS)
 # ifndef CONFIG_NSH_DISABLE_MKSMARTFS
-#ifdef CONFIG_SMARTFS_MULTI_ROOT_DIRS
-  { "mksmartfs",  cmd_mksmartfs,  2, 3, "<path> [<num-root-directories>]" },
-#else
-  { "mksmartfs",  cmd_mksmartfs,  2, 2, "<path>" },
-#endif
+#  ifdef CONFIG_SMARTFS_MULTI_ROOT_DIRS
+  { "mksmartfs",  cmd_mksmartfs,  2, 5, "[-s sector-size] <path> [<num-root-directories>]" },
+#  else
+  { "mksmartfs",  cmd_mksmartfs,  2, 4, "[-s sector-size] <path>" },
+#  endif
 # endif
 #endif
 
@@ -292,10 +326,10 @@ static const struct cmdmap_s g_cmdmap[] =
 
 #if !defined(CONFIG_DISABLE_MOUNTPOINT) && CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_FS_READABLE)
 # ifndef CONFIG_NSH_DISABLE_MOUNT
-#  ifdef CONFIG_NUTTX_KERNEL
-  { "mount",    cmd_mount,    5, 5, "-t <fstype> [<block-device>] <mount-point>" },
+#if defined(CONFIG_BUILD_PROTECTED) || defined(CONFIG_BUILD_KERNEL)
+  { "mount",    cmd_mount,    5, 7, "-t <fstype> [-o <options>] [<block-device>] <mount-point>" },
 #    else
-  { "mount",    cmd_mount,    1, 5, "[-t <fstype> [<block-device>] <mount-point>]" },
+  { "mount",    cmd_mount,    1, 7, "[-t <fstype> [-o <options>] [<block-device>] <mount-point>]" },
 #  endif
 # endif
 #endif
@@ -317,11 +351,33 @@ static const struct cmdmap_s g_cmdmap[] =
 #  endif
 #endif
 
-#if defined(CONFIG_NET) && defined(CONFIG_NET_ICMP) && defined(CONFIG_NET_ICMP_PING) && \
-   !defined(CONFIG_DISABLE_CLOCK) && !defined(CONFIG_DISABLE_SIGNALS)
+#if defined(CONFIG_LIBC_NETDB) && defined(CONFIG_NETDB_DNSCLIENT) && \
+   !defined(CONFIG_NSH_DISABLE_NSLOOKUP)
+  { "nslookup", cmd_nslookup, 2, 2, "<host-name>" },
+#endif
+
+#if !defined(CONFIG_DISABLE_MOUNTPOINT) && CONFIG_NFILE_DESCRIPTORS > 0 && \
+    defined(CONFIG_FS_WRITABLE) && defined(CONFIG_NSH_LOGIN_PASSWD) && \
+    !defined(CONFIG_FSUTILS_PASSWD_READONLY)
+#  ifndef CONFIG_NSH_DISABLE_PASSWD
+  { "passwd",   cmd_passwd,   3, 3, "<username> <password>" },
+#  endif
+#endif
+
+#if defined(CONFIG_NET) && defined(CONFIG_NET_ICMP) && defined(CONFIG_NET_ICMP_PING) && !defined(CONFIG_DISABLE_SIGNALS)
 # ifndef CONFIG_NSH_DISABLE_PING
   { "ping",     cmd_ping,     2, 6, "[-c <count>] [-i <interval>] <ip-address>" },
 # endif
+#endif
+
+#if defined(CONFIG_NET) && defined(CONFIG_NET_ICMPv6) && defined(CONFIG_NET_ICMPv6_PING) && !defined(CONFIG_DISABLE_SIGNALS)
+# ifndef CONFIG_NSH_DISABLE_PING6
+  { "ping6",    cmd_ping6,    2, 6, "[-c <count>] [-i <interval>] <ip-address>" },
+# endif
+#endif
+
+#if defined(CONFIG_BOARDCTL_POWEROFF) && !defined(CONFIG_NSH_DISABLE_POWEROFF)
+  { "poweroff", cmd_poweroff,  1, 1, NULL },
 #endif
 
 #ifndef CONFIG_NSH_DISABLE_PS
@@ -340,6 +396,10 @@ static const struct cmdmap_s g_cmdmap[] =
 # endif
 #endif
 
+#if defined(CONFIG_BOARDCTL_RESET) && !defined(CONFIG_NSH_DISABLE_REBOOT)
+  { "reboot",   cmd_reboot,   1, 1, NULL },
+#endif
+
 #ifdef NSH_HAVE_DIROPTS
 # ifndef CONFIG_NSH_DISABLE_RM
   { "rm",       cmd_rm,       2, 2, "<file-path>" },
@@ -350,6 +410,10 @@ static const struct cmdmap_s g_cmdmap[] =
 # ifndef CONFIG_NSH_DISABLE_RMDIR
   { "rmdir",    cmd_rmdir,    2, 2, "<dir-path>" },
 # endif
+#endif
+
+#if defined(CONFIG_MODULE) && !defined(CONFIG_NSH_DISABLE_MODCMDS)
+  { "rmmod",    cmd_rmmod,   2, 2,  "<module-name>" },
 #endif
 
 #ifndef CONFIG_DISABLE_ENVIRON
@@ -364,6 +428,16 @@ static const struct cmdmap_s g_cmdmap[] =
 # endif
 #endif
 
+#ifndef CONFIG_NSH_DISABLE_SHUTDOWN
+#if defined(CONFIG_BOARDCTL_POWEROFF) && defined(CONFIG_BOARDCTL_RESET)
+  { "shutdown", cmd_shutdown, 1, 2, "[--reboot]" },
+#elif defined(CONFIG_BOARDCTL_POWEROFF)
+  { "shutdown", cmd_shutdown, 1, 1, NULL },
+#elif defined(CONFIG_BOARDCTL_RESET)
+  { "shutdown", cmd_shutdown, 2, 2, "--reboot" },
+#endif
+#endif
+
 #ifndef CONFIG_DISABLE_SIGNALS
 # ifndef CONFIG_NSH_DISABLE_SLEEP
   { "sleep",    cmd_sleep,    2, 2, "<sec>" },
@@ -374,8 +448,20 @@ static const struct cmdmap_s g_cmdmap[] =
   { "test",     cmd_test,     3, CONFIG_NSH_MAXARGUMENTS, "<expression>" },
 #endif
 
+#ifndef CONFIG_NSH_DISABLE_TIME
+  { "time",     cmd_time,     2, 2, "\"<command>\"" },
+#endif
+
 #ifndef CONFIG_NSH_DISABLESCRIPT
-  { "true",     cmd_true,    1, 1, NULL },
+  { "true",     cmd_true,     1, 1, NULL },
+#endif
+
+#ifndef CONFIG_NSH_DISABLE_UNAME
+#ifdef CONFIG_NET
+  { "uname",    cmd_uname,    1, 7, "[-a | -imnoprsv]" },
+#else
+  { "uname",    cmd_uname,    1, 7, "[-a | -imoprsv]" },
+#endif
 #endif
 
 #if !defined(CONFIG_DISABLE_MOUNTPOINT) && CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_FS_READABLE)
@@ -396,6 +482,17 @@ static const struct cmdmap_s g_cmdmap[] =
 #  endif
 #  ifndef CONFIG_NSH_DISABLE_URLENCODE
   { "urlencode", cmd_urlencode, 2, 3, "[-f] <string or filepath>" },
+#  endif
+#endif
+
+#if !defined(CONFIG_DISABLE_MOUNTPOINT) && CONFIG_NFILE_DESCRIPTORS > 0 && \
+    defined(CONFIG_FS_WRITABLE) && defined(CONFIG_NSH_LOGIN_PASSWD) && \
+    !defined(CONFIG_FSUTILS_PASSWD_READONLY)
+#  ifndef CONFIG_NSH_DISABLE_USERADD
+  { "useradd",   cmd_useradd,     3, 3, "<username> <password>" },
+#  endif
+#  ifndef CONFIG_NSH_DISABLE_USERDEL
+  { "userdel",   cmd_userdel,     2, 2, "<username>" },
 #  endif
 #endif
 
@@ -735,7 +832,7 @@ int nsh_command(FAR struct nsh_vtbl_s *vtbl, int argc, char *argv[])
 {
   const struct cmdmap_s *cmdmap;
   const char            *cmd;
-  cmd_t                  handler = cmd_unrecognized;
+  nsh_cmd_t              handler = cmd_unrecognized;
   int                    ret;
 
   /* The form of argv is:
@@ -788,3 +885,73 @@ int nsh_command(FAR struct nsh_vtbl_s *vtbl, int argc, char *argv[])
    ret = handler(vtbl, argc, argv);
    return ret;
 }
+
+/****************************************************************************
+ * Name: nsh_extmatch_count
+ *
+ * Description:
+ *   This support function is used to provide support for realine tab-
+ *   completion logic  nsh_extmatch_count() counts the number of matching
+ *   nsh command names
+ *
+ * Input Parameters:
+ *   name    - A point to the name containing the name to be matched.
+ *   matches - A table is size CONFIG_READLINE_MAX_EXTCMDS that can
+ *             be used to remember matching name indices.
+ *   namelen - The lenght of the name to match
+ *
+ * Returned Values:
+ *   The number commands that match to the first namelen characters.
+ *
+ ****************************************************************************/
+
+#if defined(CONFIG_NSH_READLINE) && defined(CONFIG_READLINE_TABCOMPLETION) && \
+    defined(CONFIG_READLINE_HAVE_EXTMATCH)
+int nsh_extmatch_count(FAR char *name, FAR int *matches, int namelen)
+{
+  int nr_matches = 0;
+  int i;
+
+  for (i = 0; i < NUM_CMDS; i++)
+    {
+      if (strncmp(name, g_cmdmap[i].cmd, namelen) == 0)
+        {
+          matches[nr_matches] = i;
+          nr_matches++;
+
+          if (nr_matches >= CONFIG_READLINE_MAX_EXTCMDS)
+            {
+              break;
+            }
+        }
+    }
+
+  return nr_matches;
+}
+#endif
+
+/****************************************************************************
+ * Name: nsh_extmatch_getname
+ *
+ * Description:
+ *   This support function is used to provide support for realine tab-
+ *   completion logic  nsh_extmatch_getname() will return the full command
+ *   string from an index that was previously saved by nsh_exmatch_count().
+ *
+ * Input Parameters:
+ *   index - The index of the command name to be returned.
+ *
+ * Returned Values:
+ *   The numb
+ *
+ ****************************************************************************/
+
+#if defined(CONFIG_NSH_READLINE) && defined(CONFIG_READLINE_TABCOMPLETION) && \
+    defined(CONFIG_READLINE_HAVE_EXTMATCH)
+FAR const char *nsh_extmatch_getname(int index)
+{
+  DEBUGASSERT(index > 0 && index <= NUM_CMDS);
+  return  g_cmdmap[index].cmd;
+}
+#endif
+

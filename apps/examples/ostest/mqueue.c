@@ -1,4 +1,4 @@
-/**************************************************************************
+/****************************************************************************
  * apps/examples/ostest/mqueue.c
  *
  *   Copyright (C) 2007-2009, 2011 Gregory Nutt. All rights reserved.
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Included Files
- **************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
@@ -51,9 +51,9 @@
 
 #include "ostest.h"
 
-/**************************************************************************
+/****************************************************************************
  * Private Definitions
- **************************************************************************/
+ ****************************************************************************/
 
 #define TEST_MESSAGE        "This is a test and only a test"
 #if defined(SDCC) || defined(__ZILOG__)
@@ -75,32 +75,32 @@
 
 #define HALF_SECOND_USEC_USEC 500000L
 
-/**************************************************************************
+/****************************************************************************
  * Private Types
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Private Function Prototypes
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
- * Global Variables
- **************************************************************************/
+/****************************************************************************
+ * Public Data
+ ****************************************************************************/
 
-/**************************************************************************
- * Private Variables
- **************************************************************************/
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
 
 static mqd_t g_send_mqfd;
 static mqd_t g_recv_mqfd;
 
-/**************************************************************************
+/****************************************************************************
  * Private Functions
- **************************************************************************/
+ ****************************************************************************/
 
-/**************************************************************************
+/****************************************************************************
  * Public Functions
- **************************************************************************/
+ ****************************************************************************/
 
 static void *sender_thread(void *arg)
 {
@@ -130,7 +130,7 @@ static void *sender_thread(void *arg)
    */
 
   g_send_mqfd = mq_open("mqueue", O_WRONLY|O_CREAT, 0666, &attr);
-  if (g_send_mqfd < 0)
+  if (g_send_mqfd == (mqd_t)-1)
     {
       printf("sender_thread: ERROR mq_open failed\n");
       pthread_exit((pthread_addr_t)1);
@@ -168,7 +168,7 @@ static void *sender_thread(void *arg)
     }
 
   printf("sender_thread: returning nerrors=%d\n", nerrors);
-  return (pthread_addr_t)nerrors;
+  return (pthread_addr_t)((uintptr_t)nerrors);
 }
 
 static void *receiver_thread(void *arg)
@@ -275,8 +275,8 @@ static void *receiver_thread(void *arg)
     }
 
   printf("receiver_thread: returning nerrors=%d\n", nerrors);
-  pthread_exit((pthread_addr_t)nerrors);
-  return (pthread_addr_t)nerrors;
+  pthread_exit((pthread_addr_t)((uintptr_t)nerrors));
+  return (pthread_addr_t)((uintptr_t)nerrors);
 }
 
 void mqueue_test(void)
@@ -345,18 +345,21 @@ void mqueue_test(void)
   status = pthread_attr_setstacksize(&attr, STACKSIZE);
   if (status != 0)
     {
-      printf("mqueue_test: pthread_attr_setstacksize failed, status=%d\n", status);
+      printf("mqueue_test: pthread_attr_setstacksize failed, status=%d\n",
+             status);
     }
 
   sparam.sched_priority = (prio_min + prio_mid) / 2;
   status = pthread_attr_setschedparam(&attr,&sparam);
   if (status != OK)
     {
-      printf("mqueue_test: pthread_attr_setschedparam failed, status=%d\n", status);
+      printf("mqueue_test: pthread_attr_setschedparam failed, status=%d\n",
+             status);
     }
   else
     {
-      printf("mqueue_test: Set sender thread priority to %d\n", sparam.sched_priority);
+      printf("mqueue_test: Set sender thread priority to %d\n",
+             sparam.sched_priority);
     }
 
   status = pthread_create(&sender, &attr, sender_thread, NULL);
@@ -367,9 +370,10 @@ void mqueue_test(void)
 
   printf("mqueue_test: Waiting for sender to complete\n");
   pthread_join(sender, &result);
-  if (result != (void*)0)
+  if (result != (FAR void *)0)
     {
-      printf("mqueue_test: ERROR sender thread exited with %d errors\n", (int)result);
+      printf("mqueue_test: ERROR sender thread exited with %d errors\n",
+             (int)((intptr_t)result));
     }
 
 #ifndef CONFIG_DISABLE_SIGNALS
@@ -403,10 +407,10 @@ void mqueue_test(void)
   pthread_join(receiver, &result);
   if (result != expected)
     {
-      printf("mqueue_test: ERROR receiver thread should have exited with %d\n",
+      printf("mqueue_test: ERROR receiver thread should have exited with %p\n",
              expected);
       printf("             ERROR Instead exited with nerrors=%d\n",
-             (int)result);
+             (int)((intptr_t)result));
     }
 
   /* Message queues are global resources and persist for the life the the
@@ -435,7 +439,7 @@ void mqueue_test(void)
 
   if (g_send_mqfd)
     {
-      printf("mqueue_test: ERROR receive mqd_t left open\n");
+      printf("mqueue_test: ERROR receiver mqd_t left open\n");
       if (mq_close(g_send_mqfd) < 0)
         {
           printf("sender_thread: ERROR mq_close failed\n");

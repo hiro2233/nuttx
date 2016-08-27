@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lpc17xx/lpc17_ssp.c
  *
- *   Copyright (C) 2010-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010-2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@
 #include <debug.h>
 
 #include <arch/board/board.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/spi/spi.h>
 
@@ -62,33 +63,13 @@
     defined(CONFIG_LPC17_SSP2)
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 /* This driver does not support the SPI exchange method. */
 
 #ifdef CONFIG_SPI_EXCHANGE
 #  error "CONFIG_SPI_EXCHANGE must not be defined in the configuration"
-#endif
-
-/* Debug ********************************************************************/
-/* The following enable debug output from this file:
- *
- * CONFIG_DEBUG         - Define to enable general debug features
- * CONFIG_DEBUG_SPI     - Define to enable basic SSP debug (needs CONFIG_DEBUG)
- * CONFIG_DEBUG_VERBOSE - Define to enable verbose SSP debug
- */
-
-#ifdef CONFIG_DEBUG_SPI
-#  define sspdbg  lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define spivdbg lldbg
-#  else
-#    define spivdbg(x...)
-#  endif
-#else
-#  define sspdbg(x...)
-#  define spivdbg(x...)
 #endif
 
 /* SSP Clocking *************************************************************/
@@ -134,13 +115,11 @@ struct lpc17_sspdev_s
 #ifdef CONFIG_LPC17_SSP_INTERRUPTS
   uint8_t          sspirq;     /* SPI IRQ number */
 #endif
-#ifndef CONFIG_SPI_OWNBUS
   sem_t            exclsem;    /* Held while chip is selected for mutual exclusion */
   uint32_t         frequency;  /* Requested clock frequency */
   uint32_t         actual;     /* Actual clock frequency */
   uint8_t          nbits;      /* Width of word in bits (4 to 16) */
   uint8_t          mode;       /* Mode 0,1,2,3 */
-#endif
 };
 
 /****************************************************************************
@@ -155,9 +134,7 @@ static inline void ssp_putreg(FAR struct lpc17_sspdev_s *priv, uint8_t offset,
 
 /* SPI methods */
 
-#ifndef CONFIG_SPI_OWNBUS
 static int      ssp_lock(FAR struct spi_dev_s *dev, bool lock);
-#endif
 static uint32_t ssp_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency);
 static void     ssp_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode);
 static void     ssp_setbits(FAR struct spi_dev_s *dev, int nbits);
@@ -184,13 +161,14 @@ static inline FAR struct lpc17_sspdev_s *lpc17_ssp2initialize(void);
 #ifdef CONFIG_LPC17_SSP0
 static const struct spi_ops_s g_spi0ops =
 {
-#ifndef CONFIG_SPI_OWNBUS
   .lock              = ssp_lock,
-#endif
   .select            = lpc17_ssp0select,   /* Provided externally */
   .setfrequency      = ssp_setfrequency,
   .setmode           = ssp_setmode,
   .setbits           = ssp_setbits,
+#ifdef CONFIG_SPI_HWFEATURES
+  .hwfeatures        = 0,                  /* Not supported */
+#endif
   .status            = lpc17_ssp0status,   /* Provided externally */
 #ifdef CONFIG_SPI_CMDDATA
   .cmddata           = lpc17_ssp0cmddata,  /* Provided externally */
@@ -218,9 +196,7 @@ static struct lpc17_sspdev_s g_ssp0dev =
 #ifdef CONFIG_LPC17_SSP1
 static const struct spi_ops_s g_spi1ops =
 {
-#ifndef CONFIG_SPI_OWNBUS
   .lock              = ssp_lock,
-#endif
   .select            = lpc17_ssp1select,   /* Provided externally */
   .setfrequency      = ssp_setfrequency,
   .setmode           = ssp_setmode,
@@ -252,9 +228,7 @@ static struct lpc17_sspdev_s g_ssp1dev =
 #ifdef CONFIG_LPC17_SSP2
 static const struct spi_ops_s g_spi2ops =
 {
-#ifndef CONFIG_SPI_OWNBUS
   .lock              = ssp_lock,
-#endif
   .select            = lpc17_ssp2select,   /* Provided externally */
   .setfrequency      = ssp_setfrequency,
   .setmode           = ssp_setmode,
@@ -325,7 +299,7 @@ static inline uint32_t ssp_getreg(FAR struct lpc17_sspdev_s *priv, uint8_t offse
  * Returned Value:
  *   None
  *
- ***************************************************************************/
+ ****************************************************************************/
 
 static inline void ssp_putreg(FAR struct lpc17_sspdev_s *priv, uint8_t offset, uint32_t value)
 {
@@ -353,7 +327,6 @@ static inline void ssp_putreg(FAR struct lpc17_sspdev_s *priv, uint8_t offset, u
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static int ssp_lock(FAR struct spi_dev_s *dev, bool lock)
 {
   FAR struct lpc17_sspdev_s *priv = (FAR struct lpc17_sspdev_s *)dev;
@@ -377,7 +350,6 @@ static int ssp_lock(FAR struct spi_dev_s *dev, bool lock)
     }
   return OK;
 }
-#endif
 
 /****************************************************************************
  * Name: ssp_setfrequency
@@ -405,14 +377,13 @@ static uint32_t ssp_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
   /* Check if the requested frequency is the same as the frequency selection */
 
   DEBUGASSERT(priv && frequency <= SSP_CLOCK / 2);
-#ifndef CONFIG_SPI_OWNBUS
+
   if (priv->frequency == frequency)
     {
       /* We are already at this frequency.  Return the actual. */
 
       return priv->actual;
     }
-#endif
 
   /* The SSP bit frequency is given by:
    *
@@ -476,12 +447,10 @@ static uint32_t ssp_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
 
   /* Save the frequency setting */
 
-#ifndef CONFIG_SPI_OWNBUS
   priv->frequency = frequency;
   priv->actual    = actual;
-#endif
 
-  sspdbg("Frequency %d->%d\n", frequency, actual);
+  spiinfo("Frequency %d->%d\n", frequency, actual);
   return actual;
 }
 
@@ -507,14 +476,12 @@ static void ssp_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
 
   /* Has the mode changed? */
 
-#ifndef CONFIG_SPI_OWNBUS
   if (mode != priv->mode)
     {
-#endif
       /* Yes... Set CR0 appropriately */
 
       regval = ssp_getreg(priv, LPC17_SSP_CR0_OFFSET);
-      regval &= ~(SSP_CR0_CPOL|SSP_CR0_CPHA);
+      regval &= ~(SSP_CR0_CPOL | SSP_CR0_CPHA);
 
       switch (mode)
         {
@@ -530,11 +497,11 @@ static void ssp_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
           break;
 
         case SPIDEV_MODE3: /* CPOL=1; CPHA=1 */
-          regval |= (SSP_CR0_CPOL|SSP_CR0_CPHA);
+          regval |= (SSP_CR0_CPOL | SSP_CR0_CPHA);
           break;
 
         default:
-          sspdbg("Bad mode: %d\n", mode);
+          spierr("ERROR: Bad mode: %d\n", mode);
           DEBUGASSERT(FALSE);
           return;
         }
@@ -543,10 +510,8 @@ static void ssp_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
 
       /* Save the mode so that subsequent re-configurations will be faster */
 
-#ifndef CONFIG_SPI_OWNBUS
       priv->mode = mode;
     }
-#endif
 }
 
 /****************************************************************************
@@ -572,10 +537,9 @@ static void ssp_setbits(FAR struct spi_dev_s *dev, int nbits)
   /* Has the number of bits changed? */
 
   DEBUGASSERT(priv && nbits > 3 && nbits < 17);
-#ifndef CONFIG_SPI_OWNBUS
+
   if (nbits != priv->nbits)
     {
-#endif
       /* Yes... Set CR1 appropriately */
 
       regval = ssp_getreg(priv, LPC17_SSP_CR0_OFFSET);
@@ -585,10 +549,8 @@ static void ssp_setbits(FAR struct spi_dev_s *dev, int nbits)
 
       /* Save the selection so the subsequence re-configurations will be faster */
 
-#ifndef CONFIG_SPI_OWNBUS
       priv->nbits = nbits;
     }
-#endif
 }
 
 /****************************************************************************
@@ -627,11 +589,11 @@ static uint16_t ssp_send(FAR struct spi_dev_s *dev, uint16_t wd)
   /* Get the value from the RX FIFO and return it */
 
   regval = ssp_getreg(priv, LPC17_SSP_DR_OFFSET);
-  sspdbg("%04x->%04x\n", wd, regval);
+  spiinfo("%04x->%04x\n", wd, regval);
   return (uint16_t)regval;
 }
 
-/*************************************************************************
+/****************************************************************************
  * Name: ssp_sndblock
  *
  * Description:
@@ -664,7 +626,7 @@ static void ssp_sndblock(FAR struct spi_dev_s *dev, FAR const void *buffer, size
 
   /* Loop while thre are bytes remaining to be sent */
 
-  sspdbg("nwords: %d\n", nwords);
+  spiinfo("nwords: %d\n", nwords);
   u.pv = buffer;
   while (nwords > 0)
     {
@@ -692,7 +654,7 @@ static void ssp_sndblock(FAR struct spi_dev_s *dev, FAR const void *buffer, size
 
   /* Then discard all card responses until the RX & TX FIFOs are emptied. */
 
-  sspdbg("discarding\n");
+  spiinfo("discarding\n");
   do
     {
       /* Is there anything in the RX fifo? */
@@ -753,7 +715,7 @@ static void ssp_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t nw
 
   /* While there is remaining to be sent (and no synchronization error has occurred) */
 
-  sspdbg("nwords: %d\n", nwords);
+  spiinfo("nwords: %d\n", nwords);
   u.pv = buffer;
   while (nwords || rxpending)
     {
@@ -763,7 +725,7 @@ static void ssp_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t nw
        * and (3) there are more bytes to be sent.
        */
 
-      spivdbg("TX: rxpending: %d nwords: %d\n", rxpending, nwords);
+      spiinfo("TX: rxpending: %d nwords: %d\n", rxpending, nwords);
       while ((ssp_getreg(priv, LPC17_SSP_SR_OFFSET) & SSP_SR_TNF) &&
              (rxpending < LPC17_SSP_FIFOSZ) && nwords)
         {
@@ -774,7 +736,7 @@ static void ssp_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t nw
 
       /* Now, read the RX data from the RX FIFO while the RX FIFO is not empty */
 
-      spivdbg("RX: rxpending: %d\n", rxpending);
+      spiinfo("RX: rxpending: %d\n", rxpending);
       while (ssp_getreg(priv, LPC17_SSP_SR_OFFSET) & SSP_SR_RNE)
         {
           data = (uint8_t)ssp_getreg(priv, LPC17_SSP_DR_OFFSET);
@@ -820,7 +782,7 @@ static inline FAR struct lpc17_sspdev_s *lpc17_ssp0initialize(void)
    * #define GPIO_SSP0_SCK GPIO_SSP0_SCK_1
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   lpc17_configgpio(GPIO_SSP0_SCK);
   lpc17_configgpio(GPIO_SSP0_MISO);
   lpc17_configgpio(GPIO_SSP0_MOSI);
@@ -839,7 +801,7 @@ static inline FAR struct lpc17_sspdev_s *lpc17_ssp0initialize(void)
   regval  = getreg32(LPC17_SYSCON_PCONP);
   regval |= SYSCON_PCONP_PCSSP0;
   putreg32(regval, LPC17_SYSCON_PCONP);
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   return &g_ssp0dev;
 }
@@ -874,7 +836,7 @@ static inline FAR struct lpc17_sspdev_s *lpc17_ssp1initialize(void)
    * #define GPIO_SSP0_SCK GPIO_SSP0_SCK_1
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   lpc17_configgpio(GPIO_SSP1_SCK);
   lpc17_configgpio(GPIO_SSP1_MISO);
   lpc17_configgpio(GPIO_SSP1_MOSI);
@@ -893,7 +855,7 @@ static inline FAR struct lpc17_sspdev_s *lpc17_ssp1initialize(void)
   regval  = getreg32(LPC17_SYSCON_PCONP);
   regval |= SYSCON_PCONP_PCSSP1;
   putreg32(regval, LPC17_SYSCON_PCONP);
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   return &g_ssp1dev;
 }
@@ -927,7 +889,7 @@ static inline FAR struct lpc17_sspdev_s *lpc17_ssp2initialize(void)
    * #define GPIO_SSP2_SCK GPIO_SSP2_SCK_1
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   lpc17_configgpio(GPIO_SSP2_SCK);
   lpc17_configgpio(GPIO_SSP2_MISO);
   lpc17_configgpio(GPIO_SSP2_MOSI);
@@ -946,7 +908,7 @@ static inline FAR struct lpc17_sspdev_s *lpc17_ssp2initialize(void)
   regval  = getreg32(LPC17_SYSCON_PCONP);
   regval |= SYSCON_PCONP_PCSSP2;
   putreg32(regval, LPC17_SYSCON_PCONP);
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   return &g_ssp2dev;
 }
@@ -957,7 +919,7 @@ static inline FAR struct lpc17_sspdev_s *lpc17_ssp2initialize(void)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: lpc17_sspinitialize
+ * Name: lpc17_sspbus_initialize
  *
  * Description:
  *   Initialize the selected SSP port.
@@ -970,7 +932,7 @@ static inline FAR struct lpc17_sspdev_s *lpc17_ssp2initialize(void)
  *
  ****************************************************************************/
 
-FAR struct spi_dev_s *lpc17_sspinitialize(int port)
+FAR struct spi_dev_s *lpc17_sspbus_initialize(int port)
 {
   FAR struct lpc17_sspdev_s *priv;
   uint32_t regval;
@@ -1001,7 +963,7 @@ FAR struct spi_dev_s *lpc17_sspinitialize(int port)
 
   /* Configure 8-bit SPI mode */
 
-  ssp_putreg(priv, LPC17_SSP_CR0_OFFSET, SSP_CR0_DSS_8BIT|SSP_CR0_FRF_SPI);
+  ssp_putreg(priv, LPC17_SSP_CR0_OFFSET, SSP_CR0_DSS_8BIT | SSP_CR0_FRF_SPI);
 
   /* Disable the SSP and all interrupts (we'll poll for all data) */
 
@@ -1010,11 +972,9 @@ FAR struct spi_dev_s *lpc17_sspinitialize(int port)
 
   /* Set the initial SSP configuration */
 
-#ifndef CONFIG_SPI_OWNBUS
   priv->frequency = 0;
   priv->nbits     = 8;
   priv->mode      = SPIDEV_MODE0;
-#endif
 
   /* Select a default frequency of approx. 400KHz */
 
@@ -1022,9 +982,7 @@ FAR struct spi_dev_s *lpc17_sspinitialize(int port)
 
   /* Initialize the SPI semaphore that enforces mutually exclusive access */
 
-#ifndef CONFIG_SPI_OWNBUS
   sem_init(&priv->exclsem, 0, 1);
-#endif
 
   /* Enable the SPI */
 

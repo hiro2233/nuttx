@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/thttpd/tasks/tasks.c
  *
- *   Copyright (C) 2009, 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,7 +45,7 @@
 #include <sched.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -85,6 +85,14 @@ static const char *g_ttypenames[4] =
   "--?--  "
 };
 
+static FAR const char *g_policynames[4] =
+{
+  "FIFO",
+  "RR  ",
+  "SPOR",
+  "OTHR"
+};
+
 /****************************************************************************
  * Public Data
  ****************************************************************************/
@@ -105,13 +113,14 @@ static const char *g_ttypenames[4] =
 
 /* static */ void show_task(FAR struct tcb_s *tcb, FAR void *arg)
 {
+  FAR const char *policy;
   int i;
 
   /* Show task/thread status */
 
+  policy = g_policynames[(tcb->flags & TCB_FLAG_POLICY_MASK) >> TCB_FLAG_POLICY_SHIFT];
   printf("%5d %3d %4s %7s%c%c %8s ",
-         tcb->pid, tcb->sched_priority,
-         tcb->flags & TCB_FLAG_ROUND_ROBIN ? "RR  " : "FIFO",
+         tcb->pid, tcb->sched_priority, policy,
          g_ttypenames[(tcb->flags & TCB_FLAG_TTYPE_MASK) >> TCB_FLAG_TTYPE_SHIFT],
          tcb->flags & TCB_FLAG_NONCANCELABLE ? 'N' : ' ',
          tcb->flags & TCB_FLAG_CANCEL_PENDING ? 'P' : ' ',
@@ -152,12 +161,11 @@ static const char *g_ttypenames[4] =
 
       /* Then any additional arguments */
 
-#if CONFIG_MAX_TASK_ARGS > 2
-      for (i = 2; i <= CONFIG_MAX_TASK_ARGS && ttcb->argv[i]; i++)
+      for (i = 2; ttcb->argv[i]; i++)
         {
           printf(", %p", ttcb->argv[i]);
          }
-#endif
+
       printf(")\n");
     }
 }
@@ -166,12 +174,16 @@ static const char *g_ttypenames[4] =
  * Public Functions
  ****************************************************************************/
 
+#ifdef CONFIG_THTTPD_BINFS
+int tasks_main(int argc, char *argv[])
+#else
 int main(int argc, char *argv[])
+#endif
 {
   puts(
-	"Content-type: text/html\r\n"
-	"Status: 200/html\r\n"
-	"\r\n"
+    "Content-type: text/html\r\n"
+    "Status: 200/html\r\n"
+    "\r\n"
     "<html>\r\n"
       "<head>\r\n"
         "<title>NuttX Tasks</title>\r\n"

@@ -33,32 +33,16 @@
 #
 ############################################################################
 
--include $(TOPDIR)/.config
 -include $(TOPDIR)/Make.defs
-include $(APPDIR)/Make.defs
 
 # Basic nRF24L01+ terminal demonstration
 
 ASRCS =
-CSRCS = nrf24l01_term.c
+CSRCS =
+MAINSRC = nrf24l01_term.c
 
-AOBJS = $(ASRCS:.S=$(OBJEXT))
-COBJS = $(CSRCS:.c=$(OBJEXT))
-
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-ifeq ($(CONFIG_WINDOWS_NATIVE),y)
-  BIN = ..\..\libapps$(LIBEXT)
-else
-ifeq ($(WINTOOL),y)
-  BIN = ..\\..\\libapps$(LIBEXT)
-else
-  BIN = ../../libapps$(LIBEXT)
-endif
-endif
-
-ROOTDEPPATH = --dep-path .
+CONFIG_XYZ_PROGNAME ?= nrf24l01_term$(EXEEXT)
+PROGNAME = $(CONFIG_XYZ_PROGNAME)
 
 # built-in application info
 
@@ -66,44 +50,4 @@ APPNAME = nrf24l01_term
 PRIORITY = SCHED_PRIORITY_DEFAULT
 STACKSIZE = 2048
 
-# Common build
-
-VPATH =
-
-all: .built
-.PHONY: context clean depend distclean
-
-$(AOBJS): %$(OBJEXT): %.S
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-.built: $(OBJS)
-	$(call ARCHIVE, $(BIN), $(OBJS))
-	@touch .built
-
-#ifeq ($(CONFIG_NSH_BUILTIN_APPS),y)
-$(BUILTIN_REGISTRY)$(DELIM)$(APPNAME)_main.bdat: $(DEPCONFIG) Makefile
-	$(call REGISTER,$(APPNAME),$(PRIORITY),$(STACKSIZE),$(APPNAME)_main)
-
-context: $(BUILTIN_REGISTRY)$(DELIM)$(APPNAME)_main.bdat
-#else
-#context:
-#endif
-
-.depend: Makefile $(SRCS)
-	@$(MKDEP) $(ROOTDEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make.dep
-	@touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, .built)
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
--include Make.dep
+include $(APPDIR)/Application.mk

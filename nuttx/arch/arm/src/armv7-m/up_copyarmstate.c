@@ -41,10 +41,12 @@
 
 #include <stdint.h>
 
-#include "os_internal.h"
+#include <arch/irq.h>
+
 #include "up_internal.h"
 
-#if defined(CONFIG_ARCH_FPU) && !defined(CONFIG_ARMV7M_CMNVECTOR)
+#if defined(CONFIG_ARCH_FPU) && \
+    (!defined(CONFIG_ARMV7M_CMNVECTOR) || defined(CONFIG_ARMV7M_LAZYFPU))
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -113,4 +115,4 @@ void up_copyarmstate(uint32_t *dest, uint32_t *src)
     }
 }
 
-#endif /* CONFIG_ARCH_FPU && !CONFIG_ARMV7M_CMNVECTOR */
+#endif /* CONFIG_ARCH_FPU && (!CONFIG_ARMV7M_CMNVECTOR || CONFIG_ARMV7M_LAZYFPU) */

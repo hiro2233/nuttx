@@ -2,12 +2,13 @@
  * arch/arm/src/lpc17xx/lpc17_adc.c
  *
  *   Copyright (C) 2011 Li Zhuoyi. All rights reserved.
+ *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
  *   Author: Li Zhuoyi <lzyy.cn@gmail.com>
- *   History: 0.1 2011-08-05 initial version
+ *           Gregory Nutt <gnutt@nuttx.org>
  *
  * This file is a part of NuttX:
  *
- *   Copyright (C) 2010, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2013, 2016 Gregory Nutt. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -50,9 +51,11 @@
 #include <stdbool.h>
 #include <semaphore.h>
 #include <errno.h>
+#include <assert.h>
 #include <debug.h>
 
 #include <arch/board/board.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/analog/adc.h>
 
@@ -86,6 +89,7 @@
 
 struct up_dev_s
 {
+  FAR const struct adc_callback_s *cb;
   uint8_t  mask;
   uint32_t sps;
   int      irq;
@@ -97,8 +101,12 @@ struct up_dev_s
  * Private Function Prototypes
  ****************************************************************************/
 
+static void adc_receive(FAR struct up_dev_s *priv, uint8_t ch, int32_t data);
+
 /* ADC methods */
 
+static int  adc_bind(FAR struct adc_dev_s *dev,
+                     FAR const struct adc_callback_s *callback);
 static void adc_reset(FAR struct adc_dev_s *dev);
 static int  adc_setup(FAR struct adc_dev_s *dev);
 static void adc_shutdown(FAR struct adc_dev_s *dev);
@@ -112,6 +120,7 @@ static int  adc_interrupt(int irq, void *context);
 
 static const struct adc_ops_s g_adcops =
 {
+  .ao_bind     = adc_bind,
   .ao_reset    = adc_reset,
   .ao_setup    = adc_setup,
   .ao_shutdown = adc_shutdown,
@@ -137,6 +146,46 @@ static struct adc_dev_s g_adcdev =
  ****************************************************************************/
 
 /****************************************************************************
+ * Name: adc_receive
+ *
+ * Description:
+ *   Provide received ADC dat to the upper-half driver.
+ *
+ ****************************************************************************/
+
+static void adc_receive(FAR struct up_dev_s *priv, uint8_t ch, int32_t data)
+{
+  /* Verify that the upper-half driver has bound its callback functions. */
+
+  if (priv->cb != NULL)
+    {
+      /* Perform the data received callback */
+
+      DEBUGASSERT(priv->cb->au_receive != NULL);
+      priv->cb->au_receive(&g_adcdev, ch, data);
+    }
+}
+
+/****************************************************************************
+ * Name: adc_bind
+ *
+ * Description:
+ *   Bind the upper-half driver callbacks to the lower-half implementation.  This
+ *   must be called early in order to receive ADC event notifications.
+ *
+ ****************************************************************************/
+
+static int adc_bind(FAR struct adc_dev_s *dev,
+                    FAR const struct adc_callback_s *callback)
+{
+  FAR struct up_dev_s *priv = (FAR struct up_dev_s *)dev->ad_priv;
+
+  DEBUGASSERT(priv != NULL);
+  priv->cb = callback;
+  return OK;
+}
+
+/****************************************************************************
  * Name: adc_reset
  *
  * Description:
@@ -152,11 +201,13 @@ static void adc_reset(FAR struct adc_dev_s *dev)
   uint32_t clkdiv;
   uint32_t regval;
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   regval  = getreg32(LPC17_SYSCON_PCONP);
   regval |= SYSCON_PCONP_PCADC;
   putreg32(regval, LPC17_SYSCON_PCONP);
+
+  /* Power up before we access hardware */
 
   putreg32(ADC_CR_PDN, LPC17_ADC_CR);
 
@@ -165,45 +216,76 @@ static void adc_reset(FAR struct adc_dev_s *dev)
   regval |= (SYSCON_PCLKSEL_CCLK8 << SYSCON_PCLKSEL0_ADC_SHIFT);
   putreg32(regval, LPC17_SYSCON_PCLKSEL0);
 
+#ifdef CONFIG_ADC_BURSTMODE
+  clkdiv   = LPC17_CCLK / 3 / 65 / priv->sps;
+
+//putreg32(0x04, LPC17_ADC_INTEN);         /* Enable only last channel interrupt */
+  putreg32(0x100, LPC17_ADC_INTEN);        /* Enable only global interrupt */
+
+  putreg32((priv->mask) |                  /* Select channels 0 to 7 on ADC0 */
+//         (clkdiv) << 8) |                /* CLKDIV = divisor to make the samples
+//                                          * per second conversion rate */
+           ((32) << 8) |                   /* CLKDIV = divisor to make the faster
+                                            * conversion rate */
+           (0 << 16) |                     /* BURST = 0, BURST capture all selected
+                                            * channels */
+           (1 << 17) |                     /* Reserved bit = 0 */
+           (1 << 21) |                     /* PDN = 1, normal operation */
+           (1 << 26) | (0 << 25) | (0 << 24) |  /* START = at MAT0 signal */
+           (1 << 27),                      /* EDGE = 1 (CAP/MAT signal rising
+                                            * trigger A/D conversion) */
+           LPC17_ADC_CR);
+
+#else /* CONFIG_ADC_BURSTMODE */
+
   clkdiv   = LPC17_CCLK / 8 / 65 / priv->sps;
   clkdiv <<= 8;
   clkdiv  &= 0xff00;
   putreg32(ADC_CR_PDN | ADC_CR_BURST | clkdiv | priv->mask, LPC17_ADC_CR);
 
+#endif /* CONFIG_ADC_BURSTMODE */
+
   if ((priv->mask & 0x01) != 0)
     {
       lpc17_configgpio(GPIO_AD0p0);
     }
+
   if ((priv->mask & 0x02) != 0)
     {
       lpc17_configgpio(GPIO_AD0p1);
     }
+
   if ((priv->mask & 0x04) != 0)
     {
       lpc17_configgpio(GPIO_AD0p2);
     }
+
   if ((priv->mask & 0x08) != 0)
     {
       lpc17_configgpio(GPIO_AD0p3);
     }
+
   if ((priv->mask & 0x10) != 0)
     {
       lpc17_configgpio(GPIO_AD0p4);
     }
+
   if ((priv->mask & 0x20) != 0)
     {
       lpc17_configgpio(GPIO_AD0p5);
     }
+
   if ((priv->mask & 0x40) != 0)
     {
       lpc17_configgpio(GPIO_AD0p6);
     }
+
   if ((priv->mask & 0x80) != 0)
     {
       lpc17_configgpio(GPIO_AD0p7);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -276,6 +358,7 @@ static void adc_rxint(FAR struct adc_dev_s *dev, bool enable)
 
   if (enable)
     {
+#ifndef CONFIG_ADC_BURSTMODE
 #ifdef CONFIG_ADC_CHANLIST
       /* Trigger interrupt at the end of conversion on the last A/D channel
        * in the channel list.
@@ -288,6 +371,11 @@ static void adc_rxint(FAR struct adc_dev_s *dev, bool enable)
 
       putreg32(ADC_INTEN_GLOBAL, LPC17_ADC_INTEN);
 #endif
+#else /* CONFIG_ADC_BURSTMODE */
+      /* Enable only global interrupt */
+
+      putreg32(0x100, LPC17_ADC_INTEN);
+#endif /* CONFIG_ADC_BURSTMODE */
     }
   else
     {
@@ -320,6 +408,7 @@ static int adc_ioctl(FAR struct adc_dev_s *dev, int cmd, unsigned long arg)
 
 static int adc_interrupt(int irq, void *context)
 {
+#ifndef CONFIG_ADC_BURSTMODE
 #ifdef CONFIG_ADC_CHANLIST
 
   FAR struct up_dev_s *priv = (FAR struct up_dev_s *)g_adcdev.ad_priv;
@@ -343,7 +432,7 @@ static int adc_interrupt(int irq, void *context)
             {
               value           = priv->buf[ch] / priv->count[ch];
               value         <<= 15;
-              adc_receive(&g_adcdev,ch,value);
+              adc_receive(priv, ch, value);
               priv->buf[ch]   = 0;
               priv->count[ch] = 0;
             }
@@ -359,23 +448,183 @@ static int adc_interrupt(int irq, void *context)
   unsigned char ch;
   int32_t value;
 
-  regval              = getreg32(LPC17_ADC_GDR);
-  ch                  = (regval >> 24) & 0x07;
-  priv->buf[ch]      += regval & 0xfff0;
+  regval               = getreg32(LPC17_ADC_GDR);
+  ch                   = (regval >> 24) & 0x07;
+  priv->buf[ch]       += regval & 0xfff0;
 
   priv->count[ch]++;
   if (priv->count[ch] >= CONFIG_ADC0_AVERAGE)
     {
-      value           = priv->buf[ch] / priv->count[ch];
-      value         <<= 15;
-      adc_receive(&g_adcdev,ch,value);
-      priv->buf[ch]   = 0;
-      priv->count[ch] = 0;
+      value            = priv->buf[ch] / priv->count[ch];
+      value          <<= 15;
+      adc_receive(priv, ch, value);
+      priv->buf[ch]    = 0;
+      priv->count[ch]  = 0;
     }
 
   return OK;
 
 #endif
+#else /* CONFIG_ADC_BURSTMODE */
+
+  FAR struct up_dev_s *priv = (FAR struct up_dev_s *)g_adcdev.ad_priv;
+  volatile uint32_t regVal, regVal2, regVal3;
+
+  /* Verify that an interrupt has actually occured */
+
+  regVal2 = getreg32(LPC17_ADC_STAT);  /* Read ADSTAT will clear the interrupt flag */
+  if ((regVal2) & (1 << 16))
+    {
+      if ((priv->mask & 0x01) != 0)
+        {
+          regVal = getreg32(LPC17_ADC_DR0);
+
+#ifdef CONFIG_ADC_DIRECT_ACCESS
+          /* Store the data value plus the status bits */
+
+          ADC0Buffer0[0] = regVal;
+          ADC0IntDone = 1;
+#else /* CONFIG_ADC_DIRECT_ACCESS */
+#ifdef CONFIG_ADC_WORKER_THREAD
+          /* Store the data value plus the status bits */
+
+          ADC0Buffer0[0] = regVal;
+          ADC0IntDone = 1;
+
+#else /* CONFIG_ADC_WORKER_THREAD */
+      if ((regVal) & (1 << 31))
+        {
+          adc_receive(priv, 0, (regVal >> 4) & 0xFFF);
+        }
+
+#endif /* CONFIG_ADC_WORKER_THREAD */
+#endif /* CONFIG_ADC_DIRECT_ACCESS */
+        }
+
+      if ((priv->mask & 0x02) != 0)
+        {
+          regVal = getreg32(LPC17_ADC_DR1);
+
+#ifdef CONFIG_ADC_DIRECT_ACCESS
+          /* Store the data value plus the status bits */
+
+          ADC1Buffer0[0] = regVal;
+          ADC0IntDone = 1;
+
+#else /* CONFIG_ADC_DIRECT_ACCESS */
+#ifdef CONFIG_ADC_WORKER_THREAD
+          /* Store the data value plus the status bits */
+
+          ADC1Buffer0[0] = regVal;
+          ADC0IntDone = 1;
+
+#else /* CONFIG_ADC_WORKER_THREAD */
+          if ((regVal) & (1 << 31))
+            {
+              adc_receive(priv, 1, (regVal >> 4) & 0xFFF);
+            }
+
+#endif /* CONFIG_ADC_WORKER_THREAD */
+#endif /* CONFIG_ADC_DIRECT_ACCESS */
+        }
+
+      if ((priv->mask & 0x04) != 0)
+        {
+          regVal = getreg32(LPC17_ADC_DR2);
+
+#ifdef CONFIG_ADC_DIRECT_ACCESS
+          /* Store the data value plus the status bits */
+
+          ADC2Buffer0[0] = regVal;
+          ADC0IntDone = 1;
+
+#else /* CONFIG_ADC_DIRECT_ACCESS */
+#ifdef CONFIG_ADC_WORKER_THREAD
+          /* Store the data value plus the status bits */
+
+          ADC2Buffer0[0] = regVal;
+          ADC0IntDone = 1;
+
+#else /* CONFIG_ADC_WORKER_THREAD */
+          if ((regVal) & (1 << 31))
+            {
+              adc_receive(priv, 2, (regVal >> 4) & 0xFFF);
+            }
+
+#endif /* CONFIG_ADC_WORKER_THREAD */
+#endif /* CONFIG_ADC_DIRECT_ACCESS */
+        }
+
+      if ((priv->mask & 0x08) != 0)
+        {
+          regVal = getreg32(LPC17_ADC_DR3);
+          if ((regVal) & (1 << 31))
+            {
+              adc_receive(priv, 3, (regVal >> 4) & 0xFFF);
+            }
+        }
+
+      if ((priv->mask & 0x10) != 0)
+        {
+          regVal = getreg32(LPC17_ADC_DR4);
+          if ((regVal) & (1 << 31))
+            {
+              adc_receive(priv, 4, (regVal >> 4) & 0xFFF);
+            }
+        }
+
+      if ((priv->mask & 0x20) != 0)
+        {
+          regVal = getreg32(LPC17_ADC_DR5);
+          if ((regVal) & (1 << 31))
+            {
+              adc_receive(priv, 5, (regVal >> 4) & 0xFFF);
+            }
+        }
+
+      if ((priv->mask & 0x40) != 0)
+        {
+          regVal = getreg32(LPC17_ADC_DR6);
+          if ((regVal) & (1 << 31))
+            {
+              adc_receive(priv, 6, (regVal >> 4) & 0xFFF);
+            }
+        }
+
+      if ((priv->mask & 0x80) != 0)
+        {
+          regVal = getreg32(LPC17_ADC_DR7);
+          if ((regVal) & (1 << 31))
+            {
+              adc_receive(priv, 7, (regVal >> 4) & 0xFFF);
+            }
+        }
+
+#ifdef CONFIG_ADC_WORKER_THREAD
+      if (ADC0IntDone == 1)
+        {
+          work_queue(HPWORK, &priv->irqwork, (worker_t)adc_irqworker,
+                     (FAR void *)priv, 0);
+        }
+
+#endif /* CONFIG_ADC_WORKER_THREAD */
+    }
+
+  regVal3 = getreg32(LPC17_ADC_GDR); /* Read ADGDR clear the DONE and OVERRUN bits */
+  putreg32((priv->mask) |            /* Select channels 0 to 7 on ADC0 */
+           (32 << 8) |               /* CLKDIV = 16 */
+           (0 << 16) |               /* BURST = 1, BURST capture all selected channels */
+           (1 << 17) |               /* Reserved bit = 0 */
+           (1 << 21) |               /* PDN = 1, normal operation */
+           (1 << 26) | (0 << 25) | (0 << 24) |  /* START = at MAT0 signal */
+           (1 << 27),                /* EDGE = 1 (CAP/MAT signal rising trigger A/D
+                                      * conversion) */
+           LPC17_ADC_CR);
+
+//lpc17_gpiowrite(LPCXPRESSO_GPIO0_21, 0); /* Reset pin P0.21 */
+//leave_critical_section(saved_state);
+  return OK;
+#endif /* CONFIG_ADC_BURSTMODE */
 }
 
 /****************************************************************************
@@ -389,7 +638,7 @@ static int adc_interrupt(int irq, void *context)
  *   Initialize the adc
  *
  * Returned Value:
- *   Valid can device structure reference on succcess; a NULL on failure
+ *   Valid can device structure reference on success; a NULL on failure
  *
  ****************************************************************************/
 

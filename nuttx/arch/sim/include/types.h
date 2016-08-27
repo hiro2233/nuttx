@@ -1,7 +1,7 @@
-/************************************************************************
+/****************************************************************************
  * arch/sim/include/types.h
  *
- *   Copyright (C) 2007, 2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,7 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************************/
+ ****************************************************************************/
 
 /* This file should never be included directed but, rather,
  * only indirectly through sys/types.h
@@ -40,17 +40,17 @@
 #ifndef __ARCH_SIM_INCLUDE_TYPES_H
 #define __ARCH_SIM_INCLUDE_TYPES_H
 
-/************************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************
- * Definitions
- ************************************************************************/
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
-/************************************************************************
+/****************************************************************************
  * Type Declarations
- ************************************************************************/
+ ****************************************************************************/
 
 #ifndef __ASSEMBLY__
 
@@ -76,21 +76,29 @@ typedef signed long long   _int64_t;
 typedef unsigned long long _uint64_t;
 #define __INT64_DEFINED
 
-/* A pointer is 4 bytes */
+#if defined(CONFIG_HOST_X86_64) && !defined(CONFIG_SIM_M32)
+/* 64-bit build on 64-bit machine: A pointer is 8 bytes */
+
+typedef signed long long   _intptr_t;
+typedef unsigned long long _uintptr_t;
+
+#else
+/* 32-bit build on 32- or 64-bit machine: A pointer is 4 bytes */
 
 typedef signed int         _intptr_t;
 typedef unsigned int       _uintptr_t;
+#endif
 
 /* This is the size of the interrupt state save returned by
- * irqsave()
+ * up_irq_save()
  */
 
 typedef unsigned int       irqstate_t;
 
 #endif /* __ASSEMBLY__ */
 
-/************************************************************************
- * Global Function Prototypes
- ************************************************************************/
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
 
 #endif /* __ARCH_SIM_INCLUDE_TYPES_H */

@@ -37,7 +37,7 @@
 
 # CFLAGS
 
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
   KDEFINE = ${shell $(TOPDIR)\tools\define.bat "$(CC)" __KERNEL__}
 else
@@ -152,6 +152,78 @@ endif
 ifeq ($(CONFIG_NXFONT_SANS20X26),y)
 	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=15 EXTRADEFINES=$(EXTRADEFINES)
 endif
+ifeq ($(CONFIG_NXFONT_PIXEL_UNICODE),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=19 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_PIXEL_LCD_MACHINE),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=20 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_4X6),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=21 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_5X7),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=22 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_5X8),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=23 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_6X9),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=24 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_6X10),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=25 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_6X12),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=26 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_6X13),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=27 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_6X13B),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=28 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_6X13O),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=29 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_7X13),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=30 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_7X13B),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=31 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_7X13O),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=32 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_7X14),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=33 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_7X14B),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=34 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_8X13),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=35 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_8X13B),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=36 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_8X13O),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=37 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_9X15),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=38 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_9X15B),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=39 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_9X18),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=40 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_9X18B),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=41 EXTRADEFINES=$(EXTRADEFINES)
+endif
+ifeq ($(CONFIG_NXFONT_X11_MISC_FIXED_10X20),y)
+	$(Q) $(MAKE) -C nxfonts -f Makefile.sources TOPDIR=$(TOPDIR) NXFONTS_FONTID=42 EXTRADEFINES=$(EXTRADEFINES)
+endif
 
 gensources: gen1bppsources gen2bppsource gen4bppsource gen8bppsource gen16bppsource gen24bppsource gen32bppsources genfontsources
 
@@ -185,7 +257,7 @@ endif
 # Dependencies
 
 .depend: Makefile gensources $(SRCS)
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
 	$(Q) $(MKDEP) --obj-path ubin --obj-suffix $(OBJEXT) $(DEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make_ubin.dep
 	$(Q) $(MKDEP) --obj-path kbin --obj-suffix $(OBJEXT) $(DEPPATH) "$(CC)" -- $(CFLAGS) $(KDEFINE) -- $(SRCS) >Make_kbin.dep
 else

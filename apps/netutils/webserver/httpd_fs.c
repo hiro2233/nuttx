@@ -44,7 +44,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <apps/netutils/httpd.h>
+#include "netutils/httpd.h"
 
 #include "httpd.h"
 
@@ -107,13 +107,14 @@ int httpd_fs_open(const char *name, struct httpd_fs_file *file)
 #ifdef CONFIG_NETUTILS_HTTPDFSSTATS
           ++count[i];
 #endif
-          return 1;
+          return OK;
         }
 #ifdef CONFIG_NETUTILS_HTTPDFSSTATS
       ++i;
 #endif
     }
-  return 0;
+
+  return ERROR;
 }
 
 void httpd_fs_init(void)

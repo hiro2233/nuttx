@@ -43,11 +43,11 @@
 
 #include <nuttx/arch.h>
 
-#include "clock_internal.h"
+#include "clock/clock.h"
 #include "up_internal.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -59,7 +59,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -80,7 +80,7 @@ int up_timerisr(int irq, FAR chipreg_t *regs)
 }
 
 /****************************************************************************
- * Function:  up_timerinit
+ * Function:  up_timer_initialize
  *
  * Description:
  *   This function is called during start-up to initialize the timer
@@ -88,7 +88,7 @@ int up_timerisr(int irq, FAR chipreg_t *regs)
  *
  ****************************************************************************/
 
-void up_timerinit(void)
+void up_timer_initialize(void)
 {
   /* The timer interrupt was attached in up_irqinitialize -- see comments there */
 }

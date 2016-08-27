@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/net/enc28j60.c
  *
- *   Copyright (C) 2010-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010-2012, 2014-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -51,24 +51,29 @@
 #include <time.h>
 #include <string.h>
 #include <debug.h>
-#include <wdog.h>
 #include <errno.h>
+
+#include <arpa/inet.h>
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
+#include <nuttx/wdog.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/wqueue.h>
 #include <nuttx/clock.h>
 #include <nuttx/net/enc28j60.h>
-
-#include <nuttx/net/uip/uip.h>
+#include <nuttx/net/net.h>
 #include <nuttx/net/arp.h>
-#include <nuttx/net/uip/uip-arch.h>
+#include <nuttx/net/netdev.h>
+
+#ifdef CONFIG_NET_PKT
+#  include <nuttx/net/pkt.h>
+#endif
 
 #include "enc28j60.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Configuration ************************************************************/
@@ -80,7 +85,6 @@
  * CONFIG_ENC28J60_FREQUENCY - Define to use a different bus frequency
  * CONFIG_ENC28J60_NINTERFACES - Specifies the number of physical ENC28J60
  *   devices that will be supported.
- * CONFIG_ENC28J60_STATS - Collect network statistics
  * CONFIG_ENC28J60_HALFDUPPLEX - Default is full duplex
  */
 
@@ -103,10 +107,10 @@
 #  define CONFIG_ENC28J60_NINTERFACES 1
 #endif
 
-/* CONFIG_NET_BUFSIZE must always be defined */
+/* CONFIG_NET_ETH_MTU must always be defined */
 
-#if !defined(CONFIG_NET_BUFSIZE) && (CONFIG_NET_BUFSIZE <= MAX_FRAMELEN)
-#  error "CONFIG_NET_BUFSIZE is not valid for the ENC28J60"
+#if !defined(CONFIG_NET_ETH_MTU) && (CONFIG_NET_ETH_MTU <= MAX_FRAMELEN)
+#  error "CONFIG_NET_ETH_MTU is not valid for the ENC28J60"
 #endif
 
 /* We need to have the work queue to handle SPI interrupts */
@@ -131,7 +135,7 @@
 
 /* Low-level register debug */
 
-#if !defined(CONFIG_DEBUG) || !defined(CONFIG_DEBUG_NET)
+#if !defined(CONFIG_DEBUG_FEATURES) || !defined(CONFIG_DEBUG_NET)
 #  undef CONFIG_ENC28J60_REGDEBUG
 #endif
 
@@ -140,7 +144,6 @@
 /* TX poll deley = 1 seconds. CLK_TCK is the number of clock ticks per second */
 
 #define ENC_WDDELAY   (1*CLK_TCK)
-#define ENC_POLLHSEC  (1*2)
 
 /* TX timeout = 1 minute */
 
@@ -154,7 +157,7 @@
 
 /* Packet memory layout */
 
-#define ALIGNED_BUFSIZE ((CONFIG_NET_BUFSIZE + 255) & ~255)
+#define ALIGNED_BUFSIZE ((CONFIG_NET_ETH_MTU + 255) & ~255)
 
 /* Work around Errata #5 (spurious reset of ERXWRPT to 0) by placing the RX
  * FIFO at the beginning of packet memory.
@@ -186,15 +189,19 @@
 
 /* This is a helper pointer for accessing the contents of the Ethernet header */
 
-#define BUF ((struct uip_eth_hdr *)priv->dev.d_buf)
+#define BUF ((struct eth_hdr_s *)priv->dev.d_buf)
 
 /* Debug ********************************************************************/
 
 #ifdef CONFIG_ENC28J60_REGDEBUG
-#  define enc_wrdump(a,v)   lowsyslog("ENC28J60: %02x<-%02x\n", a, v);
-#  define enc_rddump(a,v)   lowsyslog("ENC28J60: %02x->%02x\n", a, v);
-#  define enc_cmddump(c)    lowsyslog("ENC28J60: CMD: %02x\n", c);
-#  define enc_bmdump(c,b,s) lowsyslog("ENC28J60: CMD: %02x buffer: %p length: %d\n", c,b,s);
+#  define enc_wrdump(a,v) \
+   syslog(LOG_DEBUG, "ENC28J60: %02x<-%02x\n", a, v);
+#  define enc_rddump(a,v) \
+   syslog(LOG_DEBUG, "ENC28J60: %02x->%02x\n", a, v);
+#  define enc_cmddump(c) \
+   syslog(LOG_DEBUG, "ENC28J60: CMD: %02x\n", c);
+#  define enc_bmdump(c,b,s) \
+   syslog(LOG_DEBUG, "ENC28J60: CMD: %02x buffer: %p length: %d\n", c, b, s);
 #else
 #  define enc_wrdump(a,v)
 #  define enc_rddump(a,v)
@@ -245,15 +252,9 @@ struct enc_driver_s
 
   FAR struct spi_dev_s *spi;
 
-  /* This holds the information visible to uIP/NuttX */
+  /* This holds the information visible to the NuttX network */
 
-  struct uip_driver_s   dev;          /* Interface understood by uIP */
-
-  /* Statistics */
-
-#ifdef CONFIG_ENC28J60_STATS
-  struct enc_stats_s    stats;
-#endif
+  struct net_driver_s   dev;          /* Interface understood by the network */
 };
 
 /****************************************************************************
@@ -268,15 +269,9 @@ static struct enc_driver_s g_enc28j60[CONFIG_ENC28J60_NINTERFACES];
 
 /* Low-level SPI helpers */
 
-#ifdef CONFIG_SPI_OWNBUS
 static inline void enc_configspi(FAR struct spi_dev_s *spi);
-#  define enc_lock(priv);
-#  define enc_unlock(priv);
-#else
-#  define enc_configspi(spi)
 static void enc_lock(FAR struct enc_driver_s *priv);
 static inline void enc_unlock(FAR struct enc_driver_s *priv);
-#endif
 
 /* SPI control register access */
 
@@ -312,7 +307,7 @@ static void enc_wrphy(FAR struct enc_driver_s *priv, uint8_t phyaddr,
 /* Common TX logic */
 
 static int  enc_transmit(FAR struct enc_driver_s *priv);
-static int  enc_uiptxpoll(struct uip_driver_s *dev);
+static int  enc_txpoll(struct net_driver_s *dev);
 
 /* Interrupt handling */
 
@@ -335,12 +330,12 @@ static void enc_polltimer(int argc, uint32_t arg, ...);
 
 /* NuttX callback functions */
 
-static int  enc_ifup(struct uip_driver_s *dev);
-static int  enc_ifdown(struct uip_driver_s *dev);
-static int  enc_txavail(struct uip_driver_s *dev);
+static int  enc_ifup(struct net_driver_s *dev);
+static int  enc_ifdown(struct net_driver_s *dev);
+static int  enc_txavail(struct net_driver_s *dev);
 #ifdef CONFIG_NET_IGMP
-static int  enc_addmac(struct uip_driver_s *dev, FAR const uint8_t *mac);
-static int  enc_rmmac(struct uip_driver_s *dev, FAR const uint8_t *mac);
+static int  enc_addmac(struct net_driver_s *dev, FAR const uint8_t *mac);
+static int  enc_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
 
 /* Initialization */
@@ -370,18 +365,15 @@ static int  enc_reset(FAR struct enc_driver_s *priv);
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SPI_OWNBUS
 static inline void enc_configspi(FAR struct spi_dev_s *spi)
 {
-  /* Configure SPI for the ENC28J60.  But only if we own the SPI bus.
-   * Otherwise, don't bother because it might change.
-   */
+  /* Configure SPI for the ENC28J60. */
 
   SPI_SETMODE(spi, CONFIG_ENC28J60_SPIMODE);
   SPI_SETBITS(spi, 8);
-  SPI_SETFREQUENCY(spi, CONFIG_ENC28J60_FREQUENCY)
+  (void)SPI_HWFEATURES(spi, 0);
+  (void)SPI_SETFREQUENCY(spi, CONFIG_ENC28J60_FREQUENCY);
 }
-#endif
 
 /****************************************************************************
  * Function: enc_lock
@@ -399,7 +391,6 @@ static inline void enc_configspi(FAR struct spi_dev_s *spi)
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static void enc_lock(FAR struct enc_driver_s *priv)
 {
   /* Lock the SPI bus in case there are multiple devices competing for the SPI
@@ -414,9 +405,9 @@ static void enc_lock(FAR struct enc_driver_s *priv)
 
   SPI_SETMODE(priv->spi, CONFIG_ENC28J60_SPIMODE);
   SPI_SETBITS(priv->spi, 8);
-  SPI_SETFREQUENCY(priv->spi, CONFIG_ENC28J60_FREQUENCY);
+  (void)SPI_HWFEATURES(priv->spi, 0);
+  (void)SPI_SETFREQUENCY(priv->spi, CONFIG_ENC28J60_FREQUENCY);
 }
-#endif
 
 /****************************************************************************
  * Function: enc_unlock
@@ -434,14 +425,12 @@ static void enc_lock(FAR struct enc_driver_s *priv)
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static inline void enc_unlock(FAR struct enc_driver_s *priv)
 {
   /* Relinquish the lock on the bus. */
 
   SPI_LOCK(priv->spi, false);
 }
-#endif
 
 /****************************************************************************
  * Function: enc_rdgreg2
@@ -469,7 +458,7 @@ static uint8_t enc_rdgreg2(FAR struct enc_driver_s *priv, uint8_t cmd)
 
   /* Select ENC28J60 chip */
 
-  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);;
+  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);
 
   /* Send the read command and collect the data.  The sequence requires
    * 16-clocks:  8 to clock out the cmd + 8 to clock in the data.
@@ -512,7 +501,7 @@ static void enc_wrgreg2(FAR struct enc_driver_s *priv, uint8_t cmd,
 
   /* Select ENC28J60 chip */
 
-  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);;
+  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);
 
   /* Send the write command and data.  The sequence requires 16-clocks:
    * 8 to clock out the cmd + 8 to clock out the data.
@@ -556,7 +545,7 @@ static inline void enc_src(FAR struct enc_driver_s *priv)
 
   /* Select ENC28J60 chip */
 
-  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);;
+  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);
 
   /* Send the system reset command. */
 
@@ -603,7 +592,7 @@ static inline void enc_src(FAR struct enc_driver_s *priv)
 
 static void enc_setbank(FAR struct enc_driver_s *priv, uint8_t bank)
 {
-  /* Check if the bank setting has changed*/
+  /* Check if the bank setting has changed */
 
   if (bank != priv->bank)
     {
@@ -653,7 +642,7 @@ static uint8_t enc_rdbreg(FAR struct enc_driver_s *priv, uint8_t ctrlreg)
 
   /* Re-select ENC28J60 chip */
 
-  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);;
+  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);
 
   /* Send the RCR command and collect the data.  How we collect the data
    * depends on if this is a PHY/CAN or not.  The normal sequence requires
@@ -710,7 +699,7 @@ static void enc_wrbreg(FAR struct enc_driver_s *priv, uint8_t ctrlreg,
 
   /* Re-select ENC28J60 chip */
 
-  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);;
+  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);
 
   /* Send the WCR command and data.  The sequence requires 16-clocks:
    * 8 to clock out the cmd + 8 to clock out the data.
@@ -748,8 +737,8 @@ static void enc_wrbreg(FAR struct enc_driver_s *priv, uint8_t ctrlreg,
 static int enc_waitbreg(FAR struct enc_driver_s *priv, uint8_t ctrlreg,
                         uint8_t bits, uint8_t value)
 {
-  uint32_t start = clock_systimer();
-  uint32_t elapsed;
+  systime_t start = clock_systimer();
+  systime_t elapsed;
   uint8_t  rddata;
 
   /* Loop until the exit condition is met */
@@ -785,56 +774,56 @@ static int enc_waitbreg(FAR struct enc_driver_s *priv, uint8_t ctrlreg,
 #if 0 /* Sometimes useful */
 static void enc_rxdump(FAR struct enc_driver_s *priv)
 {
-  lowsyslog("Rx Registers:\n");
-  lowsyslog("  EIE:      %02x EIR:      %02x\n",
-            enc_rdgreg(priv, ENC_EIE), enc_rdgreg(priv, ENC_EIR));
-  lowsyslog("  ESTAT:    %02x ECON1:    %02x ECON2:    %02x\n",
-            enc_rdgreg(priv, ENC_ESTAT), enc_rdgreg(priv, ENC_ECON1),
-            enc_rdgreg(priv, ENC_ECON2));
-  lowsyslog("  ERXST:    %02x %02x\n",
-            enc_rdbreg(priv, ENC_ERXSTH), enc_rdbreg(priv, ENC_ERXSTL));
-  lowsyslog("  ERXND:    %02x %02x\n",
-            enc_rdbreg(priv, ENC_ERXNDH), enc_rdbreg(priv, ENC_ERXNDL));
-  lowsyslog("  ERXRDPT:  %02x %02x\n",
-            enc_rdbreg(priv, ENC_ERXRDPTH), enc_rdbreg(priv, ENC_ERXRDPTL));
-  lowsyslog("  ERXFCON:  %02x EPKTCNT:  %02x\n",
-            enc_rdbreg(priv, ENC_ERXFCON), enc_rdbreg(priv, ENC_EPKTCNT));
-  lowsyslog("  MACON1:   %02x MACON3:   %02x\n",
-            enc_rdbreg(priv, ENC_MACON1), enc_rdbreg(priv, ENC_MACON3));
-  lowsyslog("  MAMXFL:   %02x %02x\n",
-            enc_rdbreg(priv, ENC_MAMXFLH), enc_rdbreg(priv, ENC_MAMXFLL));
-  lowsyslog("  MAADR:    %02x:%02x:%02x:%02x:%02x:%02x\n",
-            enc_rdbreg(priv, ENC_MAADR1), enc_rdbreg(priv, ENC_MAADR2),
-            enc_rdbreg(priv, ENC_MAADR3), enc_rdbreg(priv, ENC_MAADR4),
-            enc_rdbreg(priv, ENC_MAADR5), enc_rdbreg(priv, ENC_MAADR6));
+  syslog(LOG_DEBUG, "Rx Registers:\n");
+  syslog(LOG_DEBUG, "  EIE:      %02x EIR:      %02x\n",
+         enc_rdgreg(priv, ENC_EIE), enc_rdgreg(priv, ENC_EIR));
+  syslog(LOG_DEBUG, "  ESTAT:    %02x ECON1:    %02x ECON2:    %02x\n",
+         enc_rdgreg(priv, ENC_ESTAT), enc_rdgreg(priv, ENC_ECON1),
+         enc_rdgreg(priv, ENC_ECON2));
+  syslog(LOG_DEBUG, "  ERXST:    %02x %02x\n",
+         enc_rdbreg(priv, ENC_ERXSTH), enc_rdbreg(priv, ENC_ERXSTL));
+  syslog(LOG_DEBUG, "  ERXND:    %02x %02x\n",
+         enc_rdbreg(priv, ENC_ERXNDH), enc_rdbreg(priv, ENC_ERXNDL));
+  syslog(LOG_DEBUG, "  ERXRDPT:  %02x %02x\n",
+         enc_rdbreg(priv, ENC_ERXRDPTH), enc_rdbreg(priv, ENC_ERXRDPTL));
+  syslog(LOG_DEBUG, "  ERXFCON:  %02x EPKTCNT:  %02x\n",
+         enc_rdbreg(priv, ENC_ERXFCON), enc_rdbreg(priv, ENC_EPKTCNT));
+  syslog(LOG_DEBUG, "  MACON1:   %02x MACON3:   %02x\n",
+         enc_rdbreg(priv, ENC_MACON1), enc_rdbreg(priv, ENC_MACON3));
+  syslog(LOG_DEBUG, "  MAMXFL:   %02x %02x\n",
+         enc_rdbreg(priv, ENC_MAMXFLH), enc_rdbreg(priv, ENC_MAMXFLL));
+  syslog(LOG_DEBUG, "  MAADR:    %02x:%02x:%02x:%02x:%02x:%02x\n",
+         enc_rdbreg(priv, ENC_MAADR1), enc_rdbreg(priv, ENC_MAADR2),
+         enc_rdbreg(priv, ENC_MAADR3), enc_rdbreg(priv, ENC_MAADR4),
+         enc_rdbreg(priv, ENC_MAADR5), enc_rdbreg(priv, ENC_MAADR6));
 }
 #endif
 
 #if 0 /* Sometimes useful */
 static void enc_txdump(FAR struct enc_driver_s *priv)
 {
-  lowsyslog("Tx Registers:\n");
-  lowsyslog("  EIE:      %02x EIR:      %02x ESTAT:    %02x\n",
-            enc_rdgreg(priv, ENC_EIE), enc_rdgreg(priv, ENC_EIR),);
-  lowsyslog("  ESTAT:    %02x ECON1:    %02x\n",
-            enc_rdgreg(priv, ENC_ESTAT), enc_rdgreg(priv, ENC_ECON1));
-  lowsyslog("  ETXST:    %02x %02x\n",
-            enc_rdbreg(priv, ENC_ETXSTH), enc_rdbreg(priv, ENC_ETXSTL));
-  lowsyslog("  ETXND:    %02x %02x\n",
-            enc_rdbreg(priv, ENC_ETXNDH), enc_rdbreg(priv, ENC_ETXNDL));
-  lowsyslog("  MACON1:   %02x MACON3:   %02x MACON4:   %02x\n",
-            enc_rdbreg(priv, ENC_MACON1), enc_rdbreg(priv, ENC_MACON3),
-            enc_rdbreg(priv, ENC_MACON4));
-  lowsyslog("  MACON1:   %02x MACON3:   %02x MACON4:   %02x\n",
-            enc_rdbreg(priv, ENC_MACON1), enc_rdbreg(priv, ENC_MACON3),
-            enc_rdbreg(priv, ENC_MACON4));
-  lowsyslog("  MABBIPG:  %02x MAIPG %02x %02x\n",
-            enc_rdbreg(priv, ENC_MABBIPG), enc_rdbreg(priv, ENC_MAIPGH),
-            enc_rdbreg(priv, ENC_MAIPGL));
-  lowsyslog("  MACLCON1: %02x MACLCON2:   %02x\n",
-            enc_rdbreg(priv, ENC_MACLCON1), enc_rdbreg(priv, ENC_MACLCON2));
-  lowsyslog("  MAMXFL:   %02x %02x\n",
-            enc_rdbreg(priv, ENC_MAMXFLH), enc_rdbreg(priv, ENC_MAMXFLL));
+  syslog(LOG_DEBUG, "Tx Registers:\n");
+  syslog(LOG_DEBUG, "  EIE:      %02x EIR:      %02x\n",
+         enc_rdgreg(priv, ENC_EIE), enc_rdgreg(priv, ENC_EIR));
+  syslog(LOG_DEBUG, "  ESTAT:    %02x ECON1:    %02x\n",
+         enc_rdgreg(priv, ENC_ESTAT), enc_rdgreg(priv, ENC_ECON1));
+  syslog(LOG_DEBUG, "  ETXST:    %02x %02x\n",
+         enc_rdbreg(priv, ENC_ETXSTH), enc_rdbreg(priv, ENC_ETXSTL));
+  syslog(LOG_DEBUG, "  ETXND:    %02x %02x\n",
+         enc_rdbreg(priv, ENC_ETXNDH), enc_rdbreg(priv, ENC_ETXNDL));
+  syslog(LOG_DEBUG, "  MACON1:   %02x MACON3:   %02x MACON4:   %02x\n",
+         enc_rdbreg(priv, ENC_MACON1), enc_rdbreg(priv, ENC_MACON3),
+         enc_rdbreg(priv, ENC_MACON4));
+  syslog(LOG_DEBUG, "  MACON1:   %02x MACON3:   %02x MACON4:   %02x\n",
+         enc_rdbreg(priv, ENC_MACON1), enc_rdbreg(priv, ENC_MACON3),
+         enc_rdbreg(priv, ENC_MACON4));
+  syslog(LOG_DEBUG, "  MABBIPG:  %02x MAIPG %02x %02x\n",
+         enc_rdbreg(priv, ENC_MABBIPG), enc_rdbreg(priv, ENC_MAIPGH),
+         enc_rdbreg(priv, ENC_MAIPGL));
+  syslog(LOG_DEBUG, "  MACLCON1: %02x MACLCON2:   %02x\n",
+         enc_rdbreg(priv, ENC_MACLCON1), enc_rdbreg(priv, ENC_MACLCON2));
+  syslog(LOG_DEBUG, "  MAMXFL:   %02x %02x\n",
+         enc_rdbreg(priv, ENC_MAMXFLH), enc_rdbreg(priv, ENC_MAMXFLL));
 }
 #endif
 
@@ -864,7 +853,7 @@ static void enc_rdbuffer(FAR struct enc_driver_s *priv, FAR uint8_t *buffer,
 
   /* Select ENC28J60 chip */
 
-  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);;
+  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);
 
   /* Send the read buffer memory command (ignoring the response) */
 
@@ -909,7 +898,7 @@ static inline void enc_wrbuffer(FAR struct enc_driver_s *priv,
    * "The WBM command is started by lowering the CS pin. ..."
    */
 
-  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);;
+  SPI_SELECT(priv->spi, SPIDEV_ETHERNET, true);
 
   /* Send the write buffer memory command (ignoring the response)
    *
@@ -1103,10 +1092,8 @@ static int enc_transmit(FAR struct enc_driver_s *priv)
 
   /* Increment statistics */
 
-  nllvdbg("Sending packet, pktlen: %d\n", priv->dev.d_len);
-#ifdef CONFIG_ENC28J60_STATS
-  priv->stats.txrequests++;
-#endif
+  ninfo("Sending packet, pktlen: %d\n", priv->dev.d_len);
+  NETDEV_TXPACKETS(&priv->dev);
 
   /* Verify that the hardware is ready to send another packet.  The driver
    * starts a transmission process by setting ECON1.TXRTS. When the packet is
@@ -1158,16 +1145,17 @@ static int enc_transmit(FAR struct enc_driver_s *priv)
    * the timer is started?
    */
 
-  (void)wd_start(priv->txtimeout, ENC_TXTIMEOUT, enc_txtimeout, 1, (uint32_t)priv);
+  (void)wd_start(priv->txtimeout, ENC_TXTIMEOUT, enc_txtimeout, 1,
+                 (wdparm_t)priv);
   return OK;
 }
 
 /****************************************************************************
- * Function: enc_uiptxpoll
+ * Function: enc_txpoll
  *
  * Description:
- *   The transmitter is available, check if uIP has any outgoing packets ready
- *   to send.  This is a callback from uip_poll().  uip_poll() may be called:
+ *   The transmitter is available, check if the network has any outgoing packets ready
+ *   to send.  This is a callback from devif_poll().  devif_poll() may be called:
  *
  *   1. When the preceding TX packet send is complete,
  *   2. When the preceding TX packet send timesout and the interface is reset
@@ -1180,11 +1168,11 @@ static int enc_transmit(FAR struct enc_driver_s *priv)
  *   OK on success; a negated errno on failure
  *
  * Assumptions:
- *   Interrupts are enabled but the caller holds the uIP lock.
+ *   Interrupts are enabled but the caller holds the network lock.
  *
  ****************************************************************************/
 
-static int enc_uiptxpoll(struct uip_driver_s *dev)
+static int enc_txpoll(struct net_driver_s *dev)
 {
   FAR struct enc_driver_s *priv = (FAR struct enc_driver_s *)dev->d_private;
 
@@ -1192,10 +1180,33 @@ static int enc_uiptxpoll(struct uip_driver_s *dev)
    * the field d_len is set to a value > 0.
    */
 
-  nllvdbg("Poll result: d_len=%d\n", priv->dev.d_len);
+  ninfo("Poll result: d_len=%d\n", priv->dev.d_len);
   if (priv->dev.d_len > 0)
     {
-      arp_out(&priv->dev);
+      /* Look up the destination MAC address and add it to the Ethernet
+       * header.
+       */
+
+#ifdef CONFIG_NET_IPv4
+#ifdef CONFIG_NET_IPv6
+      if (IFF_IS_IPv4(priv->dev.d_flags))
+#endif
+        {
+          arp_out(&priv->dev);
+        }
+#endif /* CONFIG_NET_IPv4 */
+
+#ifdef CONFIG_NET_IPv6
+#ifdef CONFIG_NET_IPv4
+      else
+#endif
+        {
+          neighbor_out(&priv->dev);
+        }
+#endif /* CONFIG_NET_IPv6 */
+
+      /* Send the packet */
+
       enc_transmit(priv);
 
       /* Stop the poll now because we can queue only one packet */
@@ -1250,7 +1261,7 @@ static void enc_linkstatus(FAR struct enc_driver_s *priv)
  *   None
  *
  * Assumptions:
- *   Interrupts are enabled but the caller holds the uIP lock.
+ *   Interrupts are enabled but the caller holds the network lock.
  *
  ****************************************************************************/
 
@@ -1258,13 +1269,7 @@ static void enc_txif(FAR struct enc_driver_s *priv)
 {
   /* Update statistics */
 
-#ifdef CONFIG_ENC28J60_STATS
-  priv->stats.txifs++;
-  if (enc_rdgreg(priv, ENC_ESTAT) & ESTAT_TXABRT)
-    {
-      priv->stats.txabrts++;
-    }
-#endif
+  NETDEV_TXDONE(&priv->dev);
 
   /* Clear the request to send bit */
 
@@ -1274,9 +1279,18 @@ static void enc_txif(FAR struct enc_driver_s *priv)
 
   wd_cancel(priv->txtimeout);
 
-  /* Then poll uIP for new XMIT data */
+  /* Then make sure that the TX poll timer is running (if it is already
+   * running, the following would restart it).  This is necessary to
+   * avoid certain race conditions where the polling sequence can be
+   * interrupted.
+   */
 
-  (void)uip_poll(&priv->dev, enc_uiptxpoll);
+  (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1,
+                 (wdparm_t)priv);
+
+  /* Then poll the network for new XMIT data */
+
+  (void)devif_poll(&priv->dev, enc_txpoll);
 }
 
 /****************************************************************************
@@ -1299,9 +1313,7 @@ static void enc_txerif(FAR struct enc_driver_s *priv)
 {
   /* Update statistics */
 
-#ifdef CONFIG_ENC28J60_STATS
-  priv->stats.txerifs++;
-#endif
+  NETDEV_TXERRORS(&priv->dev);
 
   /* Reset TX */
 
@@ -1343,18 +1355,14 @@ static void enc_txerif(FAR struct enc_driver_s *priv)
 
 static void enc_rxerif(FAR struct enc_driver_s *priv)
 {
-  /* Update statistics */
-
-#ifdef CONFIG_ENC28J60_STATS
-  priv->stats.rxerifs++;
-#endif
+  /* REVISIT: Update statistics */
 }
 
 /****************************************************************************
  * Function: enc_rxdispatch
  *
  * Description:
- *   Give the newly received packet to uIP.
+ *   Give the newly received packet to the network.
  *
  * Parameters:
  *   priv  - Reference to the driver state structure
@@ -1363,23 +1371,32 @@ static void enc_rxerif(FAR struct enc_driver_s *priv)
  *   None
  *
  * Assumptions:
- *   Interrupts are enabled but the caller holds the uIP lock.
+ *   Interrupts are enabled but the caller holds the network lock.
  *
  ****************************************************************************/
 
 static void enc_rxdispatch(FAR struct enc_driver_s *priv)
 {
- /* We only accept IP packets of the configured type and ARP packets */
+#ifdef CONFIG_NET_PKT
+  /* When packet sockets are enabled, feed the frame into the packet tap */
 
-#ifdef CONFIG_NET_IPv6
-  if (BUF->type == HTONS(UIP_ETHTYPE_IP6))
-#else
-  if (BUF->type == HTONS(UIP_ETHTYPE_IP))
+   pkt_input(&priv->dev);
 #endif
+
+  /* We only accept IP packets of the configured type and ARP packets */
+
+#ifdef CONFIG_NET_IPv4
+  if (BUF->type == HTONS(ETHTYPE_IP))
     {
-      nllvdbg("IP packet received (%02x)\n", BUF->type);
+      ninfo("IPv4 frame\n");
+      NETDEV_RXIPV4(&priv->dev);
+
+      /* Handle ARP on input then give the IPv4 packet to the network
+       * layer
+       */
+
       arp_ipin(&priv->dev);
-      uip_input(&priv->dev);
+      ipv4_input(&priv->dev);
 
       /* If the above function invocation resulted in data that should be
        * sent out on the network, the field  d_len will set to a value > 0.
@@ -1387,13 +1404,72 @@ static void enc_rxdispatch(FAR struct enc_driver_s *priv)
 
       if (priv->dev.d_len > 0)
         {
-          arp_out(&priv->dev);
+          /* Update the Ethernet header with the correct MAC address */
+
+#ifdef CONFIG_NET_IPv6
+          if (IFF_IS_IPv4(priv->dev.d_flags))
+#endif
+            {
+              arp_out(&priv->dev);
+            }
+#ifdef CONFIG_NET_IPv6
+          else
+            {
+              neighbor_out(&priv->dev);
+            }
+#endif
+
+          /* And send the packet */
+
           enc_transmit(priv);
         }
     }
-  else if (BUF->type == htons(UIP_ETHTYPE_ARP))
+  else
+#endif
+#ifdef CONFIG_NET_IPv6
+  if (BUF->type == HTONS(ETHTYPE_IP6))
     {
-      nllvdbg("ARP packet received (%02x)\n", BUF->type);
+      ninfo("Iv6 frame\n");
+      NETDEV_RXIPV6(&priv->dev);
+
+      /* Give the IPv6 packet to the network layer */
+
+      ipv6_input(&priv->dev);
+
+      /* If the above function invocation resulted in data that should be
+       * sent out on the network, the field  d_len will set to a value > 0.
+       */
+
+      if (priv->dev.d_len > 0)
+        {
+          /* Update the Ethernet header with the correct MAC address */
+
+#ifdef CONFIG_NET_IPv4
+          if (IFF_IS_IPv4(priv->dev.d_flags))
+            {
+              arp_out(&priv->dev);
+            }
+          else
+#endif
+#ifdef CONFIG_NET_IPv6
+            {
+              neighbor_out(&priv->dev);
+            }
+#endif
+
+          /* And send the packet */
+
+          enc_transmit(priv);
+        }
+    }
+  else
+#endif
+#ifdef CONFIG_NET_ARP
+  if (BUF->type == htons(ETHTYPE_ARP))
+    {
+      ninfo("ARP packet received (%02x)\n", BUF->type);
+      NETDEV_RXARP(&priv->dev);
+
       arp_arpin(&priv->dev);
 
       /* If the above function invocation resulted in data that should be
@@ -1406,8 +1482,10 @@ static void enc_rxdispatch(FAR struct enc_driver_s *priv)
          }
      }
   else
+#endif
     {
-      nlldbg("Unsupported packet type dropped (%02x)\n", htons(BUF->type));
+      nerr("ERROR: Unsupported packet type dropped (%02x)\n", htons(BUF->type));
+      NETDEV_RXDROPPED(&priv->dev);
     }
 }
 
@@ -1424,7 +1502,7 @@ static void enc_rxdispatch(FAR struct enc_driver_s *priv)
  *   None
  *
  * Assumptions:
- *   Interrupts are enabled but the caller holds the uIP lock.
+ *   Interrupts are enabled but the caller holds the network lock.
  *
  ****************************************************************************/
 
@@ -1436,9 +1514,7 @@ static void enc_pktif(FAR struct enc_driver_s *priv)
 
   /* Update statistics */
 
-#ifdef CONFIG_ENC28J60_STATS
-  priv->stats.pktifs++;
-#endif
+  NETDEV_RXPACKETS(&priv->dev);
 
   /* Set the read pointer to the start of the received packet (ERDPT) */
 
@@ -1467,34 +1543,30 @@ static void enc_pktif(FAR struct enc_driver_s *priv)
   pktlen        = (uint16_t)rsv[3] << 8 | (uint16_t)rsv[2];
   rxstat        = (uint16_t)rsv[5] << 8 | (uint16_t)rsv[4];
 
-  nllvdbg("Receiving packet, nextpkt: %04x pktlen: %d rxstat: %04x\n",
-          priv->nextpkt, pktlen, rxstat);
+  ninfo("Receiving packet, nextpkt: %04x pktlen: %d rxstat: %04x\n",
+        priv->nextpkt, pktlen, rxstat);
 
   /* Check if the packet was received OK */
 
   if ((rxstat & RXSTAT_OK) == 0)
     {
-      nlldbg("ERROR: RXSTAT: %04x\n", rxstat);
-#ifdef CONFIG_ENC28J60_STATS
-      priv->stats.rxnotok++;
-#endif
+      nerr("ERROR: RXSTAT: %04x\n", rxstat);
+      NETDEV_RXERRORS(&priv->dev);
     }
 
   /* Check for a usable packet length (4 added for the CRC) */
 
-  else if (pktlen > (CONFIG_NET_BUFSIZE + 4) || pktlen <= (UIP_LLH_LEN + 4))
+  else if (pktlen > (CONFIG_NET_ETH_MTU + 4) || pktlen <= (ETH_HDRLEN + 4))
     {
-      nlldbg("Bad packet size dropped (%d)\n", pktlen);
-#ifdef CONFIG_ENC28J60_STATS
-      priv->stats.rxpktlen++;
-#endif
+      nerr("ERROR: Bad packet size dropped (%d)\n", pktlen);
+      NETDEV_RXERRORS(&priv->dev);
     }
 
   /* Otherwise, read and process the packet */
 
   else
     {
-      /* Save the packet length (without the 4 byte CRC) in priv->dev.d_len*/
+      /* Save the packet length (without the 4 byte CRC) in priv->dev.d_len */
 
       priv->dev.d_len = pktlen - 4;
 
@@ -1506,7 +1578,7 @@ static void enc_pktif(FAR struct enc_driver_s *priv)
       enc_rdbuffer(priv, priv->dev.d_buf, priv->dev.d_len);
       enc_dumppacket("Received Packet", priv->dev.d_buf, priv->dev.d_len);
 
-      /* Dispatch the packet to uIP */
+      /* Dispatch the packet to the network */
 
       enc_rxdispatch(priv);
     }
@@ -1518,7 +1590,7 @@ static void enc_pktif(FAR struct enc_driver_s *priv)
   enc_wrbreg(priv, ENC_ERXRDPTL, (priv->nextpkt));
   enc_wrbreg(priv, ENC_ERXRDPTH, (priv->nextpkt) >> 8);
 
- /* Decrement the packet counter indicate we are done with this packet */
+  /* Decrement the packet counter indicate we are done with this packet */
 
   enc_bfsgreg(priv, ENC_ECON2, ECON2_PKTDEC);
 }
@@ -1543,14 +1615,14 @@ static void enc_pktif(FAR struct enc_driver_s *priv)
 static void enc_irqworker(FAR void *arg)
 {
   FAR struct enc_driver_s *priv = (FAR struct enc_driver_s *)arg;
-  uip_lock_t lock;
+  net_lock_t lock;
   uint8_t eir;
 
   DEBUGASSERT(priv);
 
-  /* Get exclusive access to both uIP and the SPI bus. */
+  /* Get exclusive access to both the network and the SPI bus. */
 
-  lock = uip_lock();
+  lock = net_lock();
   enc_lock(priv);
 
   /* Disable further interrupts by clearing the global interrupt enable bit.
@@ -1575,7 +1647,7 @@ static void enc_irqworker(FAR void *arg)
        * settings.
        */
 
-      nllvdbg("EIR: %02x\n", eir);
+      ninfo("EIR: %02x\n", eir);
 
       /* DMAIF: The DMA interrupt indicates that the DMA module has completed
        * its memory copy or checksum calculation. Additionally, this interrupt
@@ -1690,18 +1762,13 @@ static void enc_irqworker(FAR void *arg)
 
       /* Ignore PKTIF because is unreliable. Use EPKTCNT instead */
       /* if ((eir & EIR_PKTIF) != 0) */
+
         {
           uint8_t pktcnt = enc_rdbreg(priv, ENC_EPKTCNT);
           if (pktcnt > 0)
             {
-              nllvdbg("EPKTCNT: %02x\n", pktcnt);
+              nerr("EPKTCNT: %02x\n", pktcnt);
 
-#ifdef CONFIG_ENC28J60_STATS
-              if (pktcnt > priv->stats.maxpktcnt)
-                {
-                  priv->stats.maxpktcnt = pktcnt;
-                }
-#endif
               /* Handle packet receipt */
 
               enc_pktif(priv);
@@ -1743,10 +1810,10 @@ static void enc_irqworker(FAR void *arg)
 
   enc_bfsgreg(priv, ENC_EIE, EIE_INTIE);
 
-  /* Release lock on the SPI bus and uIP */
+  /* Release lock on the SPI bus and the network */
 
   enc_unlock(priv);
-  uip_unlock(lock);
+  net_unlock(lock);
 }
 
 /****************************************************************************
@@ -1808,21 +1875,19 @@ static int enc_interrupt(int irq, FAR void *context)
 static void enc_toworker(FAR void *arg)
 {
   FAR struct enc_driver_s *priv = (FAR struct enc_driver_s *)arg;
-  uip_lock_t lock;
+  net_lock_t lock;
   int ret;
 
-  nlldbg("Tx timeout\n");
+  nerr("ERROR: Tx timeout\n");
   DEBUGASSERT(priv);
 
-  /* Get exclusive access to uIP */
+  /* Get exclusive access to the network */
 
-  lock = uip_lock();
+  lock = net_lock();
 
   /* Increment statistics and dump debug info */
 
-#ifdef CONFIG_ENC28J60_STATS
-  priv->stats.txtimeouts++;
-#endif
+  NETDEV_TXTIMEOUTS(&priv->dev);
 
   /* Then reset the hardware: Take the interface down, then bring it
    * back up
@@ -1832,14 +1897,15 @@ static void enc_toworker(FAR void *arg)
   DEBUGASSERT(ret == OK);
   ret = enc_ifup(&priv->dev);
   DEBUGASSERT(ret == OK);
+  UNUSED(ret);
 
-  /* Then poll uIP for new XMIT data */
+  /* Then poll the network for new XMIT data */
 
-  (void)uip_poll(&priv->dev, enc_uiptxpoll);
+  (void)devif_poll(&priv->dev, enc_txpoll);
 
-  /* Release lock on uIP */
+  /* Release lock on the network */
 
-  uip_unlock(lock);
+  net_unlock(lock);
 }
 
 /****************************************************************************
@@ -1880,6 +1946,7 @@ static void enc_txtimeout(int argc, uint32_t arg, ...)
 
   ret = work_queue(HPWORK, &priv->towork, enc_toworker, (FAR void *)priv, 0);
   DEBUGASSERT(ret == OK);
+  UNUSED(ret);
 }
 
 /****************************************************************************
@@ -1902,13 +1969,13 @@ static void enc_txtimeout(int argc, uint32_t arg, ...)
 static void enc_pollworker(FAR void *arg)
 {
   FAR struct enc_driver_s *priv = (FAR struct enc_driver_s *)arg;
-  uip_lock_t lock;
+  net_lock_t lock;
 
   DEBUGASSERT(priv);
 
-  /* Get exclusive access to both uIP and the SPI bus. */
+  /* Get exclusive access to both the network and the SPI bus. */
 
-  lock = uip_lock();
+  lock = net_lock();
   enc_lock(priv);
 
   /* Verify that the hardware is ready to send another packet.  The driver
@@ -1919,22 +1986,23 @@ static void enc_pollworker(FAR void *arg)
 
   if ((enc_rdgreg(priv, ENC_ECON1) & ECON1_TXRTS) == 0)
     {
-      /* Yes.. update TCP timing states and poll uIP for new XMIT data. Hmmm..
+      /* Yes.. update TCP timing states and poll the network for new XMIT data. Hmmm..
        * looks like a bug here to me.  Does this mean if there is a transmit
        * in progress, we will missing TCP time state updates?
        */
 
-      (void)uip_timer(&priv->dev, enc_uiptxpoll, ENC_POLLHSEC);
+      (void)devif_timer(&priv->dev, enc_txpoll);
     }
 
-  /* Release lock on the SPI bus and uIP */
+  /* Release lock on the SPI bus and the network */
 
   enc_unlock(priv);
-  uip_unlock(lock);
+  net_unlock(lock);
 
   /* Setup the watchdog poll timer again */
 
-  (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1, arg);
+  (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1,
+                 (wdparm_t)arg);
 }
 
 /****************************************************************************
@@ -1974,6 +2042,7 @@ static void enc_polltimer(int argc, uint32_t arg, ...)
 
   ret = work_queue(HPWORK, &priv->pollwork, enc_pollworker, (FAR void *)priv, 0);
   DEBUGASSERT(ret == OK);
+  UNUSED(ret);
 }
 
 /****************************************************************************
@@ -1993,14 +2062,14 @@ static void enc_polltimer(int argc, uint32_t arg, ...)
  *
  ****************************************************************************/
 
-static int enc_ifup(struct uip_driver_s *dev)
+static int enc_ifup(struct net_driver_s *dev)
 {
   FAR struct enc_driver_s *priv = (FAR struct enc_driver_s *)dev->d_private;
   int ret;
 
-  nlldbg("Bringing up: %d.%d.%d.%d\n",
-         dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
-        (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24 );
+  ninfo("Bringing up: %d.%d.%d.%d\n",
+        dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
+        (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24);
 
   /* Lock the SPI bus so that we have exclusive access */
 
@@ -2031,7 +2100,8 @@ static int enc_ifup(struct uip_driver_s *dev)
 
       /* Set and activate a timer process */
 
-      (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1, (uint32_t)priv);
+      (void)wd_start(priv->txpoll, ENC_WDDELAY, enc_polltimer, 1,
+                     (wdparm_t)priv);
 
       /* Mark the interface up and enable the Ethernet interrupt at the
        * controller
@@ -2063,15 +2133,15 @@ static int enc_ifup(struct uip_driver_s *dev)
  *
  ****************************************************************************/
 
-static int enc_ifdown(struct uip_driver_s *dev)
+static int enc_ifdown(struct net_driver_s *dev)
 {
   FAR struct enc_driver_s *priv = (FAR struct enc_driver_s *)dev->d_private;
   irqstate_t flags;
   int ret;
 
-  nlldbg("Taking down: %d.%d.%d.%d\n",
-         dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
-         (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24 );
+  ninfo("Taking down: %d.%d.%d.%d\n",
+        dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
+        (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24);
 
   /* Lock the SPI bus so that we have exclusive access */
 
@@ -2079,7 +2149,7 @@ static int enc_ifdown(struct uip_driver_s *dev)
 
   /* Disable the Ethernet interrupt */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   priv->lower->disable(priv->lower);
 
   /* Cancel the TX poll timer and TX timeout timers */
@@ -2093,7 +2163,7 @@ static int enc_ifdown(struct uip_driver_s *dev)
   enc_pwrsave(priv);
 
   priv->ifstate = ENCSTATE_DOWN;
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   /* Un-lock the SPI bus */
 
@@ -2120,7 +2190,7 @@ static int enc_ifdown(struct uip_driver_s *dev)
  *
  ****************************************************************************/
 
-static int enc_txavail(struct uip_driver_s *dev)
+static int enc_txavail(struct net_driver_s *dev)
 {
   FAR struct enc_driver_s *priv = (FAR struct enc_driver_s *)dev->d_private;
   irqstate_t flags;
@@ -2131,7 +2201,7 @@ static int enc_txavail(struct uip_driver_s *dev)
 
   /* Ignore the notification if the interface is not yet up */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (priv->ifstate == ENCSTATE_UP)
     {
       /* Check if the hardware is ready to send another packet.  The driver
@@ -2142,15 +2212,15 @@ static int enc_txavail(struct uip_driver_s *dev)
 
       if ((enc_rdgreg(priv, ENC_ECON1) & ECON1_TXRTS) == 0)
         {
-          /* The interface is up and TX is idle; poll uIP for new XMIT data */
+          /* The interface is up and TX is idle; poll the network for new XMIT data */
 
-          (void)uip_poll(&priv->dev, enc_uiptxpoll);
+          (void)devif_poll(&priv->dev, enc_txpoll);
         }
     }
 
   /* Un-lock the SPI bus */
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   enc_unlock(priv);
   return OK;
 }
@@ -2174,7 +2244,7 @@ static int enc_txavail(struct uip_driver_s *dev)
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IGMP
-static int enc_addmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
+static int enc_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct enc_driver_s *priv = (FAR struct enc_driver_s *)dev->d_private;
 
@@ -2212,7 +2282,7 @@ static int enc_addmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IGMP
-static int enc_rmmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
+static int enc_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct enc_driver_s *priv = (FAR struct enc_driver_s *)dev->d_private;
 
@@ -2266,7 +2336,7 @@ static int enc_rmmac(struct uip_driver_s *dev, FAR const uint8_t *mac)
 
 static void enc_pwrsave(FAR struct enc_driver_s *priv)
 {
-  nllvdbg("Set PWRSV\n");
+  ninfo("Set PWRSV\n");
 
   /* 1. Turn off packet reception by clearing ECON1.RXEN. */
 
@@ -2326,7 +2396,7 @@ static void enc_pwrsave(FAR struct enc_driver_s *priv)
 
 static void enc_pwrfull(FAR struct enc_driver_s *priv)
 {
-  nllvdbg("Clear PWRSV\n");
+  ninfo("Clear PWRSV\n");
 
   /* 1. Wake-up by clearing ECON2.PWRSV. */
 
@@ -2403,7 +2473,7 @@ static int enc_reset(FAR struct enc_driver_s *priv)
 {
   uint8_t regval;
 
-  nlldbg("Reset\n");
+  nwarn("WARNING: Reset\n");
 
   /* Configure SPI for the ENC28J60 */
 
@@ -2454,11 +2524,11 @@ static int enc_reset(FAR struct enc_driver_s *priv)
   regval = enc_rdbreg(priv, ENC_EREVID);
   if (regval == 0x00 || regval == 0xff)
     {
-      nlldbg("Bad Rev ID: %02x\n", regval);
+      nerr("ERROR: Bad Rev ID: %02x\n", regval);
       return -ENODEV;
     }
 
-  nllvdbg("Rev ID: %02x\n", regval);
+  ninfo("Rev ID: %02x\n", regval);
 
   /* Set filter mode: unicast OR broadcast AND crc valid */
 
@@ -2499,8 +2569,8 @@ static int enc_reset(FAR struct enc_driver_s *priv)
 
   /* Set the maximum packet size which the controller will accept */
 
-  enc_wrbreg(priv, ENC_MAMXFLL, CONFIG_NET_BUFSIZE & 0xff);
-  enc_wrbreg(priv, ENC_MAMXFLH, CONFIG_NET_BUFSIZE >> 8);
+  enc_wrbreg(priv, ENC_MAMXFLL, CONFIG_NET_ETH_MTU & 0xff);
+  enc_wrbreg(priv, ENC_MAMXFLH, CONFIG_NET_ETH_MTU >> 8);
 
   /* Configure LEDs (No, just use the defaults for now) */
   /* enc_wrphy(priv, ENC_PHLCON, ??); */
@@ -2590,45 +2660,7 @@ int enc_initialize(FAR struct spi_dev_s *spi,
 
   /* Register the device with the OS so that socket IOCTLs can be performed */
 
-  return netdev_register(&priv->dev);
+  return netdev_register(&priv->dev, NET_LL_ETHERNET);
 }
 
-/****************************************************************************
- * Function: enc_stats
- *
- * Description:
- *   Return accumulated ENC28J60 statistics.  Statistics are cleared after
- *   being returned.
- *
- * Parameters:
- *   devno - If more than one ENC28J60 is supported, then this is the
- *           zero based number that identifies the ENC28J60;
- *   stats - The user-provided location to return the statistics.
- *
- * Returned Value:
- *   OK on success; Negated errno on failure.
- *
- * Assumptions:
- *
- ****************************************************************************/
-
-#ifdef CONFIG_ENC28J60_STATS
-int enc_stats(unsigned int devno, struct enc_stats_s *stats)
-{
-  FAR struct enc_driver_s *priv ;
-  irqstate_t flags;
-
-  DEBUGASSERT(devno < CONFIG_ENC28J60_NINTERFACES);
-  priv = &g_enc28j60[devno];
-
-  /* Disable the Ethernet interrupt */
-
-  flags = irqsave();
-  memcpy(stats, &priv->stats, sizeof(struct enc_stats_s));
-  memset(&priv->stats, 0, sizeof(struct enc_stats_s));
-  irqrestore(flags);
-  return OK;
-}
-#endif
 #endif /* CONFIG_NET && CONFIG_ENC28J60_NET */
-

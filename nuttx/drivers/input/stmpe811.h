@@ -1,7 +1,7 @@
 /********************************************************************************************
  * drivers/input/stmpe811.h
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -46,9 +46,9 @@
 
 #include <nuttx/config.h>
 
-#include <wdog.h>
 #include <semaphore.h>
 
+#include <nuttx/wdog.h>
 #include <nuttx/clock.h>
 #include <nuttx/wqueue.h>
 #include <nuttx/input/stmpe811.h>
@@ -56,7 +56,7 @@
 #if defined(CONFIG_INPUT) && defined(CONFIG_INPUT_STMPE811)
 
 /********************************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ********************************************************************************************/
 /* Configuration ****************************************************************************/
 /* Reference counting is partially implemented, but not needed in the current design.
@@ -96,7 +96,7 @@
 
 /* Timeout to detect missing pen up events */
 
-#define STMPE811_PENUP_TICKS  ((100 + (MSEC_PER_TICK-1)) / MSEC_PER_TICK)
+#define STMPE811_PENUP_TICKS            MSEC2TICK(100)
 
 /********************************************************************************************
  * Public Types
@@ -138,7 +138,7 @@ struct stmpe811_dev_s
 #ifdef CONFIG_STMPE811_SPI
   FAR struct spi_dev_s *spi;           /* Saved SPI driver instance */
 #else
-  FAR struct i2c_dev_s *i2c;           /* Saved I2C driver instance */
+  FAR struct i2c_master_s *i2c;        /* Saved I2C driver instance */
 #endif
 
   uint8_t inuse;                       /* STMPE811 pins in use */

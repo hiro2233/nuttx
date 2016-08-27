@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/include/armv7-a/irq.h
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,13 +44,16 @@
  * Included Files
  ****************************************************************************/
 
+#include <nuttx/config.h>
 #include <nuttx/irq.h>
+
 #ifndef __ASSEMBLY__
 #  include <stdint.h>
+#  include <arch/arch.h>
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* IRQ Stack Frame Format:
@@ -93,7 +96,7 @@
  * The FPU provides an extension register file containing 32 single-
  * precision registers. These can be viewed as:
  *
- * - Sixteen 64-bit doubleword registers, D0-D15
+ * - Sixteen 64-bit double word registers, D0-D15
  * - Thirty-two 32-bit single-word registers, S0-S31
  *   S<2n> maps to the least significant half of D<n>
  *   S<2n+1> maps to the most significant half of D<n>.
@@ -190,8 +193,21 @@
  * Public Types
  ****************************************************************************/
 
-/* This struct defines the way the registers are stored.  We
- * need to save:
+#ifndef __ASSEMBLY__
+
+/* This structure represents the return state from a system call */
+
+#ifdef CONFIG_LIB_SYSCALL
+struct xcpt_syscall_s
+{
+#ifdef CONFIG_BUILD_KERNEL
+  uint32_t cpsr;        /* The CPSR value */
+#endif
+  uint32_t sysreturn;   /* The return PC */
+};
+#endif
+
+/* This struct defines the way the registers are stored.  We need to save:
  *
  *  1  CPSR
  *  7  Static registers, v1-v7 (aka r4-r10)
@@ -213,19 +229,26 @@
 #ifndef __ASSEMBLY__
 struct xcptcontext
 {
-  /* The following function pointer is non-zero if there
-   * are pending signals to be processed.
+  /* The following function pointer is non-zero if there are pending signals
+   * to be processed.
    */
 
 #ifndef CONFIG_DISABLE_SIGNALS
   void *sigdeliver; /* Actual type is sig_deliver_t */
 
-  /* These are saved copies of LR and CPSR used during
-   * signal processing.
-   */
+  /* These are saved copies of LR and CPSR used during signal processing. */
 
   uint32_t saved_pc;
   uint32_t saved_cpsr;
+
+# ifdef CONFIG_BUILD_KERNEL
+  /* This is the saved address to use when returning from a user-space
+   * signal handler.
+   */
+
+  uint32_t sigreturn;
+
+# endif
 #endif
 
   /* Register save area */
@@ -233,7 +256,7 @@ struct xcptcontext
   uint32_t regs[XCPTCONTEXT_REGS];
 
   /* Extra fault address register saved for common paging logic.  In the
-   * case of the prefetch abort, this value is the same as regs[REG_R15];
+   * case of the pre-fetch abort, this value is the same as regs[REG_R15];
    * For the case of the data abort, this value is the value of the fault
    * address register (FAR) at the time of data abort exception.
    */
@@ -241,14 +264,62 @@ struct xcptcontext
 #ifdef CONFIG_PAGING
   uintptr_t far;
 #endif
+
+#ifdef CONFIG_LIB_SYSCALL
+  /* The following array holds the return address and the exc_return value
+   * needed to return from each nested system call.
+   */
+
+  uint8_t nsyscalls;
+  struct xcpt_syscall_s syscall[CONFIG_SYS_NNEST];
+#endif
+
+#ifdef CONFIG_ARCH_ADDRENV
+#ifdef CONFIG_ARCH_STACK_DYNAMIC
+  /* This array holds the physical address of the level 2 page table used
+   * to map the thread's stack memory.  This array will be initially of
+   * zeroed and would be back-up up with pages during page fault exception
+   * handling to support dynamically sized stacks for each thread.
+   */
+
+  FAR uintptr_t *ustack[ARCH_STACK_NSECTS];
+#endif
+
+#ifdef CONFIG_ARCH_KERNEL_STACK
+  /* In this configuration, all syscalls execute from an internal kernel
+   * stack.  Why?  Because when we instantiate and initialize the address
+   * environment of the new user process, we will temporarily lose the
+   * address environment of the old user process, including its stack
+   * contents.  The kernel C logic will crash immediately with no valid
+   * stack in place.
+   */
+
+  FAR uint32_t *ustkptr;  /* Saved user stack pointer */
+  FAR uint32_t *kstack;   /* Allocate base of the (aligned) kernel stack */
+#ifndef CONFIG_DISABLE_SIGNALS
+  FAR uint32_t *kstkptr;  /* Saved kernel stack pointer */
+#endif
+#endif
+#endif
 };
 #endif
+
+#endif /* __ASSEMBLY__ */
 
 /****************************************************************************
  * Inline functions
  ****************************************************************************/
 
 #ifndef __ASSEMBLY__
+
+/* Name: up_irq_save, up_irq_restore, and friends.
+ *
+ * NOTE: This function should never be called from application code and,
+ * as a general rule unless you really know what you are doing, this
+ * function should not be called directly from operation system code either:
+ * Typically, the wrapper functions, enter_critical_section() and
+ * leave_critical section(), are probably what you really want.
+ */
 
 /* Return the current IRQ state */
 
@@ -269,7 +340,7 @@ static inline irqstate_t irqstate(void)
 
 /* Disable IRQs and return the previous IRQ state */
 
-static inline irqstate_t irqsave(void)
+static inline irqstate_t up_irq_save(void)
 {
   unsigned int cpsr;
 
@@ -277,6 +348,9 @@ static inline irqstate_t irqsave(void)
     (
       "\tmrs    %0, cpsr\n"
       "\tcpsid  i\n"
+#if defined(CONFIG_ARMV7A_DECODEFIQ)
+      "\tcpsid  f\n"
+#endif
       : "=r" (cpsr)
       :
       : "memory"
@@ -287,7 +361,7 @@ static inline irqstate_t irqsave(void)
 
 /* Enable IRQs and return the previous IRQ state */
 
-static inline irqstate_t irqenable(void)
+static inline irqstate_t up_irq_enable(void)
 {
   unsigned int cpsr;
 
@@ -295,6 +369,9 @@ static inline irqstate_t irqenable(void)
     (
       "\tmrs    %0, cpsr\n"
       "\tcpsie  i\n"
+#if defined(CONFIG_ARMV7A_DECODEFIQ)
+      "\tcpsie  f\n"
+#endif
       : "=r" (cpsr)
       :
       : "memory"
@@ -305,7 +382,7 @@ static inline irqstate_t irqenable(void)
 
 /* Restore saved IRQ & FIQ state */
 
-static inline void irqrestore(irqstate_t flags)
+static inline void up_irq_restore(irqstate_t flags)
 {
   __asm__ __volatile__
     (
@@ -319,20 +396,21 @@ static inline void irqrestore(irqstate_t flags)
 #endif /* __ASSEMBLY__ */
 
 /****************************************************************************
- * Public Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Public Function Prototypes
+ * Public Data
  ****************************************************************************/
 
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
+
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
 
 #undef EXTERN
 #ifdef __cplusplus

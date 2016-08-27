@@ -75,9 +75,7 @@
  * Public Data
  ****************************************************************************/
 
-#ifdef CONFIG_NSH_BUILTIN_APPS
 struct qe_example_s g_qeexample;
-#endif
 
 /****************************************************************************
  * Private Functions
@@ -108,13 +106,13 @@ static void qe_devpath(FAR const char *devpath)
 #ifdef CONFIG_NSH_BUILTIN_APPS
 static void qe_help(void)
 {
-  message("\nUsage: qe [OPTIONS]\n\n");
-  message("OPTIONS include:\n");
-  message("  [-p devpath] QE device path\n");
-  message("  [-n samples] Number of samples\n");
-  message("  [-t msec]    Delay between samples (msec)\n");
-  message("  [-r]         Reset the position to zero\n");
-  message("  [-h]         Shows this message and exits\n\n");
+  printf("\nUsage: qe [OPTIONS]\n\n");
+  printf("OPTIONS include:\n");
+  printf("  [-p devpath] QE device path\n");
+  printf("  [-n samples] Number of samples\n");
+  printf("  [-t msec]    Delay between samples (msec)\n");
+  printf("  [-r]         Reset the position to zero\n");
+  printf("  [-h]         Shows this message and exits\n\n");
 }
 #endif
 
@@ -178,7 +176,7 @@ static void parse_args(int argc, FAR char **argv)
       ptr = argv[index];
       if (ptr[0] != '-')
         {
-          message("Invalid options format: %s\n", ptr);
+          printf("Invalid options format: %s\n", ptr);
           exit(0);
         }
 
@@ -188,7 +186,7 @@ static void parse_args(int argc, FAR char **argv)
             nargs = arg_decimal(&argv[index], &value);
             if (value < 0 || value > INT_MAX)
               {
-                message("Sample count out of range: %ld\n", value);
+                printf("Sample count out of range: %ld\n", value);
                 exit(1);
               }
 
@@ -206,7 +204,7 @@ static void parse_args(int argc, FAR char **argv)
             nargs = arg_decimal(&argv[index], &value);
             if (value < 0 || value > INT_MAX)
               {
-                message("Sample delay out of range: %ld\n", value);
+                printf("Sample delay out of range: %ld\n", value);
                 exit(1);
               }
 
@@ -224,7 +222,7 @@ static void parse_args(int argc, FAR char **argv)
             exit(EXIT_SUCCESS);
 
           default:
-            message("Unsupported option: %s\n", ptr);
+            printf("Unsupported option: %s\n", ptr);
             qe_help();
             exit(EXIT_FAILURE);
         }
@@ -240,13 +238,17 @@ static void parse_args(int argc, FAR char **argv)
  * Name: qe_main
  ****************************************************************************/
 
-int qe_main(int argc, char *argv[])
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
+int qe_main(int argc, FAR char *argv[])
+#endif
 {
   int32_t position;
   int fd;
   int exitval = EXIT_SUCCESS;
   int ret;
-#if defined(CONFIG_NSH_BUILTIN_APPS) || defined(CONFIG_EXAMPLES_QENCODER_NSAMPLES)
+#if defined(CONFIG_NSH_BUILTIN_APPS) || CONFIG_EXAMPLES_QENCODER_NSAMPLES > 0
   int nloops;
 #endif
 
@@ -258,11 +260,11 @@ int qe_main(int argc, char *argv[])
        * this test.
        */
 
-      message("qe_main: Initializing external encoder(s)\n");
+      printf("qe_main: Initializing external encoder(s)\n");
       ret = qe_devinit();
       if (ret != OK)
         {
-          message("qe_main: qe_devinit failed: %d\n", ret);
+          printf("qe_main: qe_devinit failed: %d\n", ret);
           exitval = EXIT_FAILURE;
           goto errout;
         }
@@ -281,40 +283,42 @@ int qe_main(int argc, char *argv[])
 
   /* Open the encoder device for reading */
 
-  message("qe_main: Hardware initialized. Opening the encoder device: %s\n",
-          g_qeexample.devpath);
+  printf("qe_main: Hardware initialized. Opening the encoder device: %s\n",
+         g_qeexample.devpath);
 
   fd = open(g_qeexample.devpath, O_RDONLY);
   if (fd < 0)
     {
-      message("qe_main: open %s failed: %d\n", g_qeexample.devpath, errno);
+      printf("qe_main: open %s failed: %d\n", g_qeexample.devpath, errno);
       exitval = EXIT_FAILURE;
       goto errout_with_dev;
     }
 
   /* Reset the count if so requested */
 
+#ifdef CONFIG_NSH_BUILTIN_APPS
   if (g_qeexample.reset)
     {
-      message("qe_main: Resetting the count...\n");
+      printf("qe_main: Resetting the count...\n");
       ret = ioctl(fd, QEIOC_RESET, 0);
       if (ret < 0)
         {
-          message("qe_main: ioctl(QEIOC_RESET) failed: %d\n", errno);
+          printf("qe_main: ioctl(QEIOC_RESET) failed: %d\n", errno);
           exitval = EXIT_FAILURE;
           goto errout_with_dev;
         }
     }
+#endif
 
   /* Now loop the appropriate number of times, displaying the collected
    * encoder samples.
    */
 
 #if defined(CONFIG_NSH_BUILTIN_APPS)
-  message("qe_main: Number of samples: %d\n", g_qeexample.nloops);
+  printf("qe_main: Number of samples: %u\n", g_qeexample.nloops);
   for (nloops = 0; nloops < g_qeexample.nloops; nloops++)
-#elif defined(CONFIG_EXAMPLES_QENCODER_NSAMPLES)
-  message("qe_main: Number of samples: %d\n", CONFIG_EXAMPLES_QENCODER_NSAMPLES);
+#elif CONFIG_EXAMPLES_QENCODER_NSAMPLES > 0
+  printf("qe_main: Number of samples: %d\n", CONFIG_EXAMPLES_QENCODER_NSAMPLES);
   for (nloops = 0; nloops < CONFIG_EXAMPLES_QENCODER_NSAMPLES; nloops++)
 #else
   for (;;)
@@ -324,14 +328,14 @@ int qe_main(int argc, char *argv[])
        * through the loop.
        */
 
-      msgflush();
+      fflush(stdout);
 
       /* Get the positions data using the ioctl */
 
       ret = ioctl(fd, QEIOC_POSITION, (unsigned long)((uintptr_t)&position));
       if (ret < 0)
         {
-          message("qe_main: ioctl(QEIOC_POSITION) failed: %d\n", errno);
+          printf("qe_main: ioctl(QEIOC_POSITION) failed: %d\n", errno);
           exitval = EXIT_FAILURE;
           goto errout_with_dev;
         }
@@ -340,7 +344,11 @@ int qe_main(int argc, char *argv[])
 
       else
         {
-          message("qe_main: %3d. %d\n", nloops+1, position);
+#if defined(CONFIG_NSH_BUILTIN_APPS) || CONFIG_EXAMPLES_QENCODER_NSAMPLES > 0
+          printf("qe_main: %3d. %d\n", nloops+1, position);
+#else
+          printf("qe_main: %d\n", position);
+#endif
         }
 
       /* Delay a little bit */
@@ -356,7 +364,7 @@ errout_with_dev:
   close(fd);
 
 errout:
-  message("Terminating!\n");
-  msgflush();
+  printf("Terminating!\n");
+  fflush(stdout);
   return exitval;
 }

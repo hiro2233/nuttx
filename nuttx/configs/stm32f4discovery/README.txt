@@ -10,7 +10,7 @@ memory and 128kbytes. The board features:
   - LIS302DL, ST MEMS motion sensor, 3-axis digital output accelerometer,
   - MP45DT02, ST MEMS audio sensor, omni-directional digital microphone,
   - CS43L22, audio DAC with integrated class D speaker driver,
-  - Eight LEDs and two push-buttons,
+  - Four LEDs and two push-buttons,
   - USB OTG FS with micro-AB connector, and
   - Easy access to most MCU pins.
 
@@ -27,14 +27,17 @@ Contents
   - NuttX OABI "buildroot" Toolchain
   - NXFLAT Toolchain
   - LEDs
+  - RGB LED Driver
   - PWM
   - UARTs
   - Timer Inputs/Outputs
   - FPU
+  - STM32F4DIS-BB
   - FSMC SRAM
   - SSD1289
   - UG-2864AMBAG01 / UG-2864HSWEG01
   - STM32F4Discovery-specific Configuration Options
+  - BASIC
   - Configurations
 
 Development Environment
@@ -94,12 +97,6 @@ GNU Toolchain Options
        make clean_context all
 
      An alias in your .bashrc file might make that less painful.
-
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
 
   The CodeSourcery Toolchain (2009q1)
   -----------------------------------
@@ -188,7 +185,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -220,7 +217,7 @@ NuttX EABI "buildroot" Toolchain
   NOTE:  Unfortunately, the 4.6.3 EABI toolchain is not compatible with the
   the NXFLAT tools.  See the top-level TODO file (under "Binary loaders") for
   more information about this problem. If you plan to use NXFLAT, please do not
-  use the GCC 4.6.3 EABI toochain; instead use the GCC 4.3.3 OABI toolchain.
+  use the GCC 4.6.3 EABI toolchain; instead use the GCC 4.3.3 OABI toolchain.
   See instructions below.
 
 NuttX OABI "buildroot" Toolchain
@@ -248,8 +245,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -278,7 +275,7 @@ NXFLAT Toolchain
 LEDs
 ====
 
-The STM32F4Discovery board has four LEDs; green, organge, red and blue on the
+The STM32F4Discovery board has four LEDs; green, orange, red and blue on the
 board. These LEDs are not used by the board port unless CONFIG_ARCH_LEDS is
 defined.  In that case, the usage by the board port is defined in
 include/board.h and src/up_leds.c. The LEDs are used to encode OS-related
@@ -300,9 +297,42 @@ events as follows:
   * If LED1, LED2, LED3 are statically on, then NuttX probably failed to boot
     and these LEDs will give you some indication of where the failure was
  ** The normal state is LED3 ON and LED1 faintly glowing.  This faint glow
-    is because of timer interupts that result in the LED being illuminated
+    is because of timer interrupts that result in the LED being illuminated
     on a small proportion of the time.
 *** LED2 may also flicker normally if signals are processed.
+
+RGB LED Driver
+==============
+
+Alan Carvalho de Assis has used the STM32F4-Discovery to drive an RGB LED
+using PWM output.  The external RGB connected this way:
+
+   R = TIM1 CH1 on PE9
+   G = TIM2 CH2 on PA1
+   B = TIM3 CH3 on PB0
+
+The RGB LED driver that uses PWM to control the red, green, and blue color
+components can be enabled with the following configuratin settings:
+
+  +CONFIG_RGBLED=y
+
+  +CONFIG_PWM
+
+  +CONFIG_STM32_TIM1
+  +CONFIG_STM32_TIM2
+  +CONFIG_STM32_TIM3
+  +CONFIG_STM32_TIM1_PWM=y
+  +CONFIG_STM32_TIM1_MODE=0
+  +CONFIG_STM32_TIM1_CHANNEL=1
+  +CONFIG_STM32_TIM1_CHMODE=0
+  +CONFIG_STM32_TIM2_PWM=y
+  +CONFIG_STM32_TIM2_MODE=0
+  +CONFIG_STM32_TIM2_CHANNEL=2
+  +CONFIG_STM32_TIM2_CHMODE=0
+  +CONFIG_STM32_TIM3_PWM=y
+  +CONFIG_STM32_TIM3_MODE=0
+  +CONFIG_STM32_TIM3_CHANNEL=3
+  +CONFIG_STM32_TIM3_CHMODE=0
 
 PWM
 ===
@@ -356,8 +386,13 @@ USART6
 Default USART/UART Configuration
 --------------------------------
 
-USART2 is enabled in all configurations (see */defconfig).  RX and TX are
+USART2 is enabled in most configurations (see */defconfig).  RX and TX are
 configured on pins PA3 and PA2, respectively (see include/board.h).
+
+These pins selections, however, conflict with Ethernet pin usage on the
+STM32F4DIS-BB base board.  The STM32F4DIS-BB base board provides RS-232
+drivers and a DB9 connector for USART6.  USART6 is the preferred serial
+console for use with the STM32F4DIS-BB.
 
 Timer Inputs/Outputs
 ====================
@@ -496,6 +531,53 @@ See the section above on Toolchains, NOTE 2, for explanations for some of
 the configuration settings.  Some of the usual settings are just not supported
 by the "Lite" version of the Atollic toolchain.
 
+STM32F4DIS-BB
+=============
+
+On-board PIO usage:
+
+  ---------- ------------- ------------------------------
+  PIO        SIGNAL        FUNCTION
+  ---------- ------------- ------------------------------
+  PB11       TXEN          LAN8720
+  PB12       TXD0
+  PB13       TXD1
+  PC4        RXD0/MODE0
+  PC5        RXD1/MODE1
+  PA7        RXDR/PHYAD0
+  PA2        MDIO
+  PC1        MDC
+  PA1        NINT/REFCLK0
+  PE2        NRST
+  ---------- ------------- ------------------------------
+  PC6        D2            DCMI
+  PC7        D3
+  PE0        D4
+  PE1        D5
+  PE4        D6
+  PB6        D7
+  PE5        D8
+  PE6        D9
+  PA6        PCLK
+  PA4        HS
+  PB7        VS
+  PD6        PWR_EN
+  PD12       RST
+  PB9        SDA
+  PB8        SCL
+  ---------- ------------- ------------------------------
+  USART6_TX  T1IN          SP3232EEY-L
+  USART6_RX  T2OUT
+  ---------- ------------- ------------------------------
+  PB15       NCD           MicroSD
+  PC9        DAT1
+  PC8        DAT0
+  PC12       CLK
+  PD2        CMD
+  PC11       CD/DAT3
+  PC10       DAT2
+  ---------- ------------- ------------------------------
+
 FSMC SRAM
 =========
 
@@ -553,7 +635,7 @@ SSD1289
 
 I purchased an LCD display on eBay from China.  The LCD is 320x240 RGB565 and
 is based on an SSD1289 LCD controller and an XPT2046 touch IC.  The pin out
-from the 2x16 connect on the LCD is labeled as follows:
+from the 2x16 connect on the LCD is labelled as follows:
 
 LCD CONNECTOR:          SSD1289 MPU INTERFACE PINS:
 
@@ -629,9 +711,9 @@ MAPPING TO STM32 F4:
 
 NOTE:  The configuration to test this LCD configuration is available at
 configs/stm32f4discovery/nxlines.  As of this writing, I have not seen the
-LCD working so I probaby have some things wrong.
+LCD working so I probably have some things wrong.
 
-I might need to use a bit-baning interface.  Below is the pin configurationf
+I might need to use a bit-banging interface.  Below is the pin configuration
 of a similar LCD to support a (write-only), bit banging interface:
 
   LCD PIN   BOARD CONNECTION
@@ -646,7 +728,7 @@ of a similar LCD to support a (write-only), bit banging interface:
   CS        Pin configured as output
   RSET      Pin configured as output
 
-The following summarize the bit banging oprations:
+The following summarize the bit banging operations:
 
   /* Rese the LCD */
   void Reset(void)
@@ -699,7 +781,7 @@ write only so the driver keeps a 128*64/8 = 1KB framebuffer to remember
 the display contents:
 
 Here is how I have the OLED connected.  But you can change this with the
-settings in include/board.h and src/stm324fdiscovery-internal.h.  Connector
+settings in include/board.h and src/stm324fdiscovery.h.  Connector
 pinout for the UG-2864AMBAG01 is specific to the theO.net display board
 that I am using:
 
@@ -723,7 +805,7 @@ that I am using:
   -------------------------------------------------------------------------
 
 Darcy Gong recently added support for the UG-2864HSWEG01 OLED which is also
-an option with this configuratin.  I have little technical information about
+an option with this configuration.  I have little technical information about
 the UG-2864HSWEG01 interface (see configs/stm32f4discovery/src/up_ug2864hsweg01.c).
 
 STM32F4Discovery-specific Configuration Options
@@ -810,7 +892,7 @@ STM32F4Discovery-specific Configuration Options
 
     CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
        cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
+       serves no purpose other than it allows you to calibrate
        CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
        the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
        the delay actually is 100 seconds.
@@ -942,7 +1024,7 @@ STM32F4Discovery-specific Configuration Options
     CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2 is defined.
     CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
     CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
-    CONFIG_CAN_REGDEBUG - If CONFIG_DEBUG is set, this will generate an
+    CONFIG_STM32_CAN_REGDEBUG - If CONFIG_DEBUG_FEATURES is set, this will generate an
       dump of all CAN registers.
 
   STM32F4Discovery SPI Configuration
@@ -985,9 +1067,107 @@ STM32F4Discovery-specific Configuration Options
    CONFIG_STM32_OTGFS_SOFINTR - Enable SOF interrupts.  Why would you ever
      want to do that?
    CONFIG_STM32_USBHOST_REGDEBUG - Enable very low-level register access
-     debug.  Depends on CONFIG_DEBUG.
+     debug.  Depends on CONFIG_DEBUG_FEATURES.
    CONFIG_STM32_USBHOST_PKTDUMP - Dump all incoming and outgoing USB
-     packets. Depends on CONFIG_DEBUG.
+     packets. Depends on CONFIG_DEBUG_FEATURES.
+
+BASIC
+=====
+  I have used the stm32f4discovery/nsh configuration to test Michael Haardt's
+  BASIC interpreter that you can find at apps/interpreters/bas.
+
+    Bas is an interpreter for the classic dialect of the programming language
+    BASIC.  It is pretty compatible to typical BASIC interpreters of the 1980s,
+    unlike some other UNIX BASIC interpreters, that implement a different
+    syntax, breaking compatibility to existing programs.  Bas offers many ANSI
+    BASIC statements for structured programming, such as procedures, local
+    variables and various loop types.  Further there are matrix operations,
+    automatic LIST indentation and many statements and functions found in
+    specific classic dialects.  Line numbers are not required.
+
+  There is also a test suite for the interpreter that can be found at
+  apps/examples/bastest.
+
+  Configuration
+  -------------
+  Below are the recommended configuration changes to use BAS with the
+  stm32f4discovery/nsh configuration:
+
+  Dependencies:
+    CONFIG_LIBC_EXECFUNCS=y      : exec*() functions are required
+    CONFIG_LIBM=y                : Some floating point library is required
+    CONFIG_LIBC_FLOATINGPOINT=y  : Floating point printing support is required
+    CONFIG_LIBC_TMPDIR="/tmp"    : Writable temporary files needed for some commands
+    CONFIG_FS_FAT=y              : With FAT you create a RAMDISK at /tmp
+    CONFIG_FAT_LFN=y             : FAT is difficult to use with long file names
+
+  Enable the BASIC interpreter.  Other default options should be okay:
+    CONFIG_INTERPRETERS_BAS=y    : Enables the interpreter
+    CONFIG_INTERPRETER_BAS_VT100=y
+
+  The BASIC test suite can be included:
+     CONFIG_FS_ROMFS=y           : ROMFS support is needed
+     CONFIG_EXAMPLES_BASTEST=y   : Enables the BASIC test setup
+     CONFIG_EXAMPLES_BASTEST_DEVMINOR=0
+     CONFIG_EXAMPLES_BASTEST_DEVPATH="/dev/ram0"
+
+  Usage
+  -----
+  This setup will initialize the BASIC test (optional):  This will mount
+  a ROMFS file system at /mnt/romfs that contains the BASIC test files:
+
+  nsh> bastest
+  Registering romdisk at /dev/ram0
+  Mounting ROMFS filesystem at target=/mnt/romfs with source=/dev/ram0
+  nsh>
+
+  These steps will create and mount a RAMDISK at /tmp (required only for a
+  few BASIC commands).  This will create a RAMDISK device at /dev/ram1 with
+  size = 512 * 64 = 32KiB and mount it at /tmp:
+
+  nsh> mkrd -m 1 -s 512 64
+  nsh> mkfatfs /dev/ram1
+  nsh> mount -t vfat /dev/ram1 /tmp
+  nsh>
+
+  The interactive interpreter is started like:
+
+  nsh> bas
+  bas 2.4
+  Copyright 1999-2014 Michael Haardt.
+  This is free software with ABSOLUTELY NO WARRANTY.
+  >
+
+  Ctrl-D exits the interpreter.
+
+  The test programs can be ran like this:
+
+  nsh> bastest
+  Registering romdisk at /dev/ram0
+  Mounting ROMFS filesystem at target=/mnt/romfs with source=/dev/ram0
+  nsh> bas /mnt/romfs/test01.bas
+   1
+  hello
+   0.0002
+   0.0000020
+   0.0000002
+
+  nsh>
+
+  Or you can load a test into memory and execute it interactively:
+
+  nsh> bas
+  bas 2.4
+  Copyright 1999-2014 Michael Haardt.
+  This is free software with ABSOLUTELY NO WARRANTY.
+  > load "/mnt/romfs/test01.bas"
+  > run
+   1
+  hello
+   0.0002
+   0.0000020
+   0.0000002
+  >
 
 Configurations
 ==============
@@ -1020,15 +1200,15 @@ Where <subdir> is one of the following:
   NOTES:
 
   1. Before you can use this example, you must first install the uClibc++
-     C++ library.  This is located outside of the NuttX source tree at
-     misc/uClibc++ in GIT.  See the README.txt file for instructions on
-     how to install uClibc++
+     C++ library.  This is located outside of the NuttX source tree in the
+     NuttX uClibc++ GIT repository.  See the README.txt file there for
+     instructions on how to install uClibc++
 
   2. This configuration uses the mconf-based configuration tool.  To
      change this configuration using that tool, you should:
 
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-        and misc/tools/
+        see additional README.txt files in the NuttX tools repository.
 
      b. Execute 'make menuconfig' in nuttx/ in order to start the
         reconfiguration process.
@@ -1062,7 +1242,7 @@ Where <subdir> is one of the following:
 
        arm-none-eabi-ar.exe rcs libsupc++.a vterminate.o
 
-  4. Exceptions are enabled and workking (CONFIG_UCLIBCXX_EXCEPTIONS=y)
+  4. Exceptions are enabled and workking (CONFIG_UCLIBCXX_EXCEPTION=y)
 
   elf:
   ---
@@ -1076,7 +1256,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -1090,7 +1270,7 @@ Where <subdir> is one of the following:
     3. By default, this project assumes that you are *NOT* using the DFU
        bootloader.
 
-    4. It appears that you cannot excute from CCM RAM.  This is why the
+    4. It appears that you cannot execute from CCM RAM.  This is why the
        following definition appears in the defconfig file:
 
        CONFIG_STM32_CCMEXCLUDE=y
@@ -1099,11 +1279,114 @@ Where <subdir> is one of the following:
        on your system and that you have the full path to the installed genromfs
        executable in PATH variable (see apps/examples/README.txt)
 
+    6. This configuration can be extended to use the hello++4 example and to
+       build uClibc with the following additions to to the configuration file
+       (from Leo aloe3132):
+
+       CONFIG_C99_BOOL8=y
+       CONFIG_HAVE_CXXINITIALIZE=y
+
+       CONFIG_UCLIBCXX=y
+       CONFIG_UCLIBCXX_EXCEPTION=y
+       CONFIG_UCLIBCXX_HAVE_LIBSUPCXX=y
+       CONFIG_UCLIBCXX_IOSTREAM_BUFSIZE=32
+
+       CONFIG_EXAMPLES_ELF_CXXINITIALIZE=y
+       CONFIG_EXAMPLES_ELF_UCLIBCXX=y
+
+    4. The network initialization thread is enabled in this configuration.
+       As a result, networking initialization is performed asynchronously with
+       NSH bring-up.
+
+       The network monitor is not enabled in this configuration, however, so
+       the firmware will not know when the network is disconnected or
+       reconnected.  The NSH Network Monitor cannot be used with the
+       STM32F4DIS-BB base board because the LAN8720 is configured in REF_CLK
+       OUT mode.  In that mode, the PHY interrupt is not supported.  The NINT
+       pin serves as REFLCK0 in that case.
+
+  ipv6:
+  ----
+    This is another version of the NuttShell configuration for the
+    STM32F4-Discovery with the STM32F4DIS-BB base board.  It is very similar
+    to the netnsh configuration except that it has IPv6 enabled and IPv4
+    disabled.  Several network utilities that are not yet available under
+    IPv6 are disabled.
+
+    NOTES:
+
+    1. As of 2015-02-05, this configuration was identical to the netnsh
+       configuration other than using IPv6.  So all of the notes above
+       regarding the netnsh configuration apply.
+
+       a. Telnet does not work with IPv6.
+       b. The network initialization thread was enabed in the netnsh
+          configuration on 2015-09-28, but not in the ipv6 configuration.
+
+    2. This configuration can be modified to that both IPv4 and IPv6
+       are support.  Here is a summary of the additional configuration
+       settings required to support both IPv4 and IPv6:
+
+         CONFIG_NET_IPv4=y
+         CONFIG_NET_ARP=y
+         CONFIG_NET_ARP_SEND=y (optional)
+         CONFIG_NET_ICMP=y
+         CONFIG_NET_ICMP_PING=y
+
+         CONFIG_NETDB_DNSCLIENT=y
+         CONFIG_NETUTILS_TELNETD=y
+
+         CONFIG_NSH_IPADDR=0x0a000002
+         CONFIG_NSH_DRIPADDR=0x0a000001
+         CONFIG_NSH_NETMASK=0xffffff00
+         CONFIG_NSH_TELNET=y
+
+       Then from NSH, you have both ping and ping6 commands:
+
+         nsh> ping 10.0.0.1
+         nsh> ping6 fc00::1
+
+       And from the host you can do similar:
+
+         ping 10.0.0.2
+         ping6 fc00::2   (Linux)
+         ping -6 fc00::2 (Windows cmd)
+
+       and Telnet again works from the host:
+
+         telent 10.0.0.2
+
+    3. I have used this configuration to serve up IP address prefixes
+       in a local network with these modifications to the configuration:
+
+       +CONFIG_NET_ICMPv6_ROUTER=y
+       +CONFIG_NET_ICMPv6_PREFLEN=64
+       +CONFIG_NET_ICMPv6_PREFIX_1=0xfc00
+       +CONFIG_NET_ICMPv6_PREFIX_2=0x0000
+       +CONFIG_NET_ICMPv6_PREFIX_3=0x0000
+       +CONFIG_NET_ICMPv6_PREFIX_4=0x0000
+       +CONFIG_NET_ICMPv6_PREFIX_5=0x0000
+       +CONFIG_NET_ICMPv6_PREFIX_6=0x0000
+       +CONFIG_NET_ICMPv6_PREFIX_7=0x0000
+       +CONFIG_NET_ICMPv6_PREFIX_8=0x0000
+
+       +CONFIG_NSH_IPv6NETMASK_5=0x0000
+       -CONFIG_NSH_IPv6NETMASK_5=0xffff
+
+       +CONFIG_NSH_IPv6NETMASK_6=0x0000
+       -CONFIG_NSH_IPv6NETMASK_6=0xffff
+
+       +CONFIG_NSH_IPv6NETMASK_7=0x0000
+       -CONFIG_NSH_IPv6NETMASK_7=0xffff
+
+       +CONFIG_NSH_IPv6NETMASK_8=0x0000
+       -CONFIG_NSH_IPv6NETMASK_8=0xff80
+
   kostest:
   -------
     This is identical to the ostest configuration below except that NuttX
     is built as a kernel-mode, monolithic module and the user applications
-    are built separately.  Is is recommened to use a special make command;
+    are built separately.  Is is recommended to use a special make command;
     not just 'make' but make with the following two arguments:
 
         make pass1 pass2
@@ -1120,7 +1403,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -1190,6 +1473,52 @@ Where <subdir> is one of the following:
        you do this a lot, you will probably want to invest a little time
        to develop a tool to automate these steps.
 
+  netnsh:
+  ------
+    This is a special version of the NuttShell (nsh) configuration that is
+    tailored to work with the STM32F4DIS-BB base board.  This version
+    derives from nsh configuration so all of the notes apply there except as
+    noted below.
+
+    NOTES:
+
+    1. This example uses USART6 for the serial console.  The STM32F4DIS-BB
+       provides RS-232 drivers for USART6 and allows access via the DB9
+       connector on the base board.  USART6 is, therefore, the more
+       convenient UART to use for the serial console.
+
+    2. Networking is enabled.  The STM32F4DIS-BB has an SMC LAN2870 PHY
+       and RJ5 network connector.  Support is enabled for ICMP, TCP/IP,
+       UDP, and ARP.
+
+    3. SD card support is enabled.  The STM32F4DIS-BB has an on-board
+       microSD slot that should be automatically registered as the block
+       device /dev/mmcsd0 when an SD card is present.  The SD card can
+       then be mounted by the NSH command:
+
+       nsh> mount -t /dev/mmcsd0 /mnt/sdcard
+
+    4. CCM memory is not included in the heap in this configuration.  That
+       is because the SD card uses DMA and if DMA memory is allocated from
+       the CCM memory, the DMA will failure.  This is an STM32 hardware
+       limitation.
+
+       If you want to get the CCM memory back in the heap, then you can
+
+         a) Disable microSD support (and DMAC2 which is then no longer
+            needed).  If you reduce the clocking by a huge amount, it might
+            be possible to use microSD without DMA.  This, however, may
+            not be possible.
+         b) Develop a strategy to manage CCM memory and DMA memory.  Look
+            at this discussion on the NuttX Wiki:
+            http://www.nuttx.org/doku.php?id=wiki:howtos:stm32-ccm-alloc
+
+       To put the CCM memory back into the heap you would need to change
+       the following in the NuttX configuration:
+
+         CONFIG_STM32_CCMEXCLUDE=n  : Don't exclude CCM memory from the heap
+         CONFIG_MM_REGIONS=2        : With CCM, there will be two memory regions
+
   nsh:
   ---
     Configures the NuttShell (nsh) located at apps/examples/nsh.  The
@@ -1203,7 +1532,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -1216,7 +1545,17 @@ Where <subdir> is one of the following:
        CONFIG_WINDOWS_CYGWIN=y                 : Using Cygwin
        CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y : CodeSourcery for Windows
 
-    3. This example supports the PWM test (apps/examples/pwm) but this must
+    3. To use this configuration with the STM32F4DIS-BB baseboard you
+       should:
+
+       - Select the STM32F4DIS-BB baseboard in the board configuration
+         menu
+       - Disable UART2 and select USART6 in the STM32 peripheral selection
+         menu
+       - Select USART6 as the serial console at 115200 8N1 in the
+         Drivers menus
+
+    4. This example supports the PWM test (apps/examples/pwm) but this must
        be manually enabled by selecting:
 
        CONFIG_PWM=y              : Enable the generic PWM infrastructure
@@ -1227,7 +1566,7 @@ Where <subdir> is one of the following:
 
        Special PWM-only debug options:
 
-       CONFIG_DEBUG_PWM
+       CONFIG_DEBUG_PWM_INFO
 
     5. This example supports the Quadrature Encode test (apps/examples/qencoder)
        but this must be manually enabled by selecting:
@@ -1240,9 +1579,9 @@ Where <subdir> is one of the following:
        CONFIG_STM32_TIM8_QE=y     : Use TIM8 as the quadrature encoder
        CONFIG_STM32_TIM2_QE=y     : (Or optionally TIM2)
 
-       See also apps/examples/README.tx. Special PWM-only debug options:
+       See also apps/examples/README.tx. Special debug options:
 
-       CONFIG_DEBUG_QENCODER
+       CONFIG_DEBUG_SENSORS
 
     6. This example supports the watchdog timer test (apps/examples/watchdog)
        but this must be manually enabled by selecting:
@@ -1313,14 +1652,14 @@ Where <subdir> is one of the following:
 
         - /dev/console still exists and still refers to the serial port. So
           you can still use certain kinds of debug output (see include/debug.h, all
-          of the interfaces based on lowsyslog will work in this configuration).
+          of the debug output from interrupt handlers will be lost.
 
         - But don't enable USB debug output!  Since USB is console is used for
           USB debug output and you are using a USB console, there will be
           infinite loops and deadlocks:  Debug output generates USB debug
           output which generatates USB debug output, etc.  If you want USB
           debug output, you should consider enabling USB trace
-          (CONFIG_USBDEV_TRACE) and perhaps the USB monitor (CONFIG_SYSTEM_USBMONITOR).
+          (CONFIG_USBDEV_TRACE) and perhaps the USB monitor (CONFIG_USBMONITOR).
 
           See the usbnsh configuration below for more information on configuring
           USB trace output and the USB monitor.
@@ -1329,15 +1668,31 @@ Where <subdir> is one of the following:
        a USB host on the STM32F4Discovery, including support for a mass storage
        class driver:
 
-       CONFIG_USBDEV=n          : Make sure tht USB device support is disabled
-       CONFIG_USBHOST=y         : Enable USB host support
-       CONFIG_STM32_OTGFS=y     : Enable the STM32 USB OTG FS block
-       CONFIG_STM32_SYSCFG=y    : Needed for all USB OTF FS support
-       CONFIG_SCHED_WORKQUEUE=y : Worker thread support is required for the mass
-                                  storage class driver.
-       CONFIG_NSH_ARCHINIT=y    : Architecture specific USB initialization
-                                  is needed for NSH
-       CONFIG_FS_FAT=y          : Needed by the USB host mass storage class.
+       Device Drivers ->
+         CONFIG_USBDEV=n          : Make sure tht USB device support is disabled
+         CONFIG_USBHOST=y         : Enable USB host support
+         CONFIG_USBHOST_ISOC_DISABLE=y
+
+       Device Drivers -> USB Host Driver Support
+         CONFIG_USBHOST_MSC=y     : Enable the mass storage class
+
+       System Type -> STM32 Peripheral Support
+         CONFIG_STM32_OTGFS=y     : Enable the STM32 USB OTG FS block
+         CONFIG_STM32_SYSCFG=y    : Needed for all USB OTF FS support
+
+       RTOS Features -> Work Queue Support
+         CONFIG_SCHED_WORKQUEUE=y : High priority worker thread support is required
+         CONFIG_SCHED_HPWORK=y    :   for the mass storage class driver.
+
+       File Systems ->
+         CONFIG_FS_FAT=y          : Needed by the USB host mass storage class.
+
+       Board Selection ->
+         CONFIG_LIB_BOARDCTL=y    : Needed for CONFIG_NSH_ARCHINIT
+
+       Application Configuration -> NSH Library
+         CONFIG_NSH_ARCHINIT=y    : Architecture specific USB initialization
+                                  : is needed for NSH
 
        With those changes, you can use NSH with a FLASH pen driver as shown
        belong.  Here NSH is started with nothing in the USB host slot:
@@ -1384,6 +1739,39 @@ Where <subdir> is one of the following:
 
        nsh> umount /mnt/stuff
 
+   11. I used this configuration to test the USB hub class.  I did this
+       testing with the following changes to the configuration (in addition
+       to those listed above for base USB host/mass storage class support):
+
+       Drivers -> USB Host Driver Support
+         CONFIG_USBHOST_HUB=y     : Enable the hub class
+         CONFIG_USBHOST_ASYNCH=y  : Asynchonous I/O supported needed for hubs
+
+       System Type -> USB host configuration
+         To be determined
+
+       Board Selection ->
+         CONFIG_STM32F4DISCO_USBHOST_STACKSIZE=2048 (bigger than it needs to be)
+
+       RTOS Features -> Work Queue Support
+         CONFIG_SCHED_LPWORK=y     : Low priority queue support is needed
+         CONFIG_SCHED_LPNTHREADS=1
+         CONFIG_SCHED_LPWORKSTACKSIZE=1024
+
+       NOTES:
+
+       1. It is necessary to perform work on the low-priority work queue
+          (vs. the high priority work queue) because deferred hub-related
+          work requires some delays and waiting that is not appropriate on
+          the high priority work queue.
+
+       2. Stack usage make increase when USB hub support is enabled because
+          the nesting depth of certain USB host class logic can increase.
+
+       STATUS:
+       2015-04-30
+          Appears to be fully functional.
+
   nxlines:
   ------
     An example using the NuttX graphics system (NX).   This example focuses on
@@ -1408,7 +1796,7 @@ Where <subdir> is one of the following:
      change this configuration using that tool, you should:
 
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-        and misc/tools/
+        see additional README.txt files in the NuttX tools repository.
 
      b. Execute 'make menuconfig' in nuttx/ in order to start the
         reconfiguration process.
@@ -1472,7 +1860,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -1510,7 +1898,7 @@ Where <subdir> is one of the following:
         CONFIG_PM_BUTTONS=y
 
        CONFIG_PM_BUTTONS enables button support for PM testing.  Buttons can
-       drive EXTI interrupts and EXTI interrrupts can be used to wakeup for
+       drive EXTI interrupts and EXTI interrupts can be used to wakeup for
        certain reduced power modes (STOP mode).  The use of the buttons here
        is for PM testing purposes only; buttons would normally be part the
        application code and CONFIG_PM_BUTTONS would not be defined.
@@ -1532,7 +1920,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -1545,6 +1933,33 @@ Where <subdir> is one of the following:
 
     3. By default, this project assumes that you are *NOT* using the DFU
        bootloader.
+
+  pseudoterm:
+  -----------
+
+    This is a configuration to test the Pseudo Terminal support for NuttX.
+
+    To test it you will need two USB/Serial dongles. The first dongle as
+    usual will be used to main NSH console port in UART2 (PA2 and PA3) and
+    the second dongle you will connect to UART3 (PB10 and PB11).
+
+    In the main NSH console (in UART2) type: "pts_test &". It will create a
+    new console in UART3. Just press ENTER and start typing commands on it.
+
+  rgbled:
+  -------
+
+    Alan Carvalho de Assis has used the STM32F4-Discovery to drive an RGB LED
+    using PWM output.  The external RGB connected this way:
+
+     R = TIM1 CH1 on PE9
+     G = TIM2 CH2 on PA1
+     B = TIM3 CH3 on PB0
+
+    as described about in the section "RGB LED Driver".
+
+    This configuration uses the example at apps/examples/rgbled to drive the
+    external RGB LED>
 
   usbnsh:
   -------
@@ -1560,7 +1975,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -1576,7 +1991,6 @@ Where <subdir> is one of the following:
     3. This configuration does have UART2 output enabled and set up as
        the system logging device:
 
-       CONFIG_SYSLOG=y                    : Enable output to syslog, not console
        CONFIG_SYSLOG_CHAR=y               : Use a character device for system logging
        CONFIG_SYSLOG_DEVPATH="/dev/ttyS0" : UART2 will be /dev/ttyS0
 
@@ -1593,23 +2007,23 @@ Where <subdir> is one of the following:
     4. Enabling USB monitor SYSLOG output.  If tracing is enabled, the USB
        device will save encoded trace output in in-memory buffer; if the
        USB monitor is enabled, that trace buffer will be periodically
-       emptied and dumped to the system loggin device (UART2 in this
-       configuraion):
+       emptied and dumped to the system logging device (UART2 in this
+       configuration):
 
        CONFIG_USBDEV_TRACE=y                   : Enable USB trace feature
        CONFIG_USBDEV_TRACE_NRECORDS=128        : Buffer 128 records in memory
        CONFIG_NSH_USBDEV_TRACE=n               : No builtin tracing from NSH
        CONFIG_NSH_ARCHINIT=y                   : Automatically start the USB monitor
-       CONFIG_SYSTEM_USBMONITOR=y              : Enable the USB monitor daemon
-       CONFIG_SYSTEM_USBMONITOR_STACKSIZE=2048 : USB monitor daemon stack size
-       CONFIG_SYSTEM_USBMONITOR_PRIORITY=50    : USB monitor daemon priority
-       CONFIG_SYSTEM_USBMONITOR_INTERVAL=2     : Dump trace data every 2 seconds
+       CONFIG_USBMONITOR=y              : Enable the USB monitor daemon
+       CONFIG_USBMONITOR_STACKSIZE=2048 : USB monitor daemon stack size
+       CONFIG_USBMONITOR_PRIORITY=50    : USB monitor daemon priority
+       CONFIG_USBMONITOR_INTERVAL=2     : Dump trace data every 2 seconds
 
-       CONFIG_SYSTEM_USBMONITOR_TRACEINIT=y    : Enable TRACE output
-       CONFIG_SYSTEM_USBMONITOR_TRACECLASS=y
-       CONFIG_SYSTEM_USBMONITOR_TRACETRANSFERS=y
-       CONFIG_SYSTEM_USBMONITOR_TRACECONTROLLER=y
-       CONFIG_SYSTEM_USBMONITOR_TRACEINTERRUPTS=y
+       CONFIG_USBMONITOR_TRACEINIT=y    : Enable TRACE output
+       CONFIG_USBMONITOR_TRACECLASS=y
+       CONFIG_USBMONITOR_TRACETRANSFERS=y
+       CONFIG_USBMONITOR_TRACECONTROLLER=y
+       CONFIG_USBMONITOR_TRACEINTERRUPTS=y
 
     5. By default, this project assumes that you are *NOT* using the DFU
        bootloader.

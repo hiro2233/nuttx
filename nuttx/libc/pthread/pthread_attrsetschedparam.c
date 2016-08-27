@@ -1,7 +1,7 @@
 /****************************************************************************
  * libc/pthread/pthread_attrsetschedparam.c
  *
- *   Copyright (C) 2007-2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,26 +46,6 @@
 #include <errno.h>
 
 /****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Type Declarations
- ****************************************************************************/
-
-/****************************************************************************
- * Global Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -86,11 +66,11 @@
  ****************************************************************************/
 
 int pthread_attr_setschedparam(FAR pthread_attr_t *attr,
-			       FAR const struct sched_param *param)
+                               FAR const struct sched_param *param)
 {
   int ret;
 
-  sdbg("attr=0x%p param=0x%p\n", attr, param);
+  linfo("attr=0x%p param=0x%p\n", attr, param);
 
   if (!attr || !param)
     {
@@ -98,11 +78,18 @@ int pthread_attr_setschedparam(FAR pthread_attr_t *attr,
     }
   else
     {
-      attr->priority = (short)param->sched_priority;
+      attr->priority            = (short)param->sched_priority;
+#ifdef CONFIG_SCHED_SPORADIC
+      attr->low_priority        = (uint8_t)param->sched_ss_low_priority;
+      attr->max_repl            = (uint8_t)param->sched_ss_max_repl;
+      attr->repl_period.tv_sec  = param->sched_ss_repl_period.tv_sec;
+      attr->repl_period.tv_nsec = param->sched_ss_repl_period.tv_nsec;
+      attr->budget.tv_sec       = param->sched_ss_init_budget.tv_sec;
+      attr->budget.tv_nsec      = param->sched_ss_init_budget.tv_nsec;
+#endif
       ret = OK;
     }
-  sdbg("Returning %d\n", ret);
+
+  linfo("Returning %d\n", ret);
   return ret;
 }
-
-

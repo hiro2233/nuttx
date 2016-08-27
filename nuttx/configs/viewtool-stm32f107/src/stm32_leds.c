@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/viewtool-stm32f107/src/stm32_leds.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,30 +43,11 @@
 #include <stdbool.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "stm32_gpio.h"
 #include "viewtool_stm32f107.h"
-
-/****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg  lldbg
-#  define ledvdbg llvdbg
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -139,14 +120,14 @@ static void led_offbits(unsigned int clrbits)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: stm32_ledinit
+ * Name: stm32_led_initialize
  *
  * Description:
  *   Configure LEDs.  LEDs are left in the OFF state.
  *
  ****************************************************************************/
 
-void stm32_ledinit(void)
+void stm32_led_initialize(void)
 {
   /* Configure LED1-4 GPIOs for output.  Initial state is OFF */
 
@@ -157,7 +138,7 @@ void stm32_ledinit(void)
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  *
  * Description:
  *   Select the "logical" ON state:
@@ -178,7 +159,7 @@ void stm32_ledinit(void)
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   switch (led)
     {
@@ -210,7 +191,7 @@ void board_led_on(int led)
 #endif
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  *
  * Description:
  *   Select the "logical" OFF state:
@@ -231,7 +212,7 @@ void board_led_on(int led)
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   switch (led)
     {
@@ -249,7 +230,7 @@ void board_led_off(int led)
 #endif
 
 /************************************************************************************
- * Name:  stm32_setled, and stm32_setleds
+ * Name:  board_userled_initialize, board_userled, and board_userled_all
  *
  * Description:
  *   These interfaces allow user control of the board LEDs.
@@ -263,7 +244,12 @@ void board_led_off(int led)
  *
  ************************************************************************************/
 
-void stm32_setled(int led, bool ledon)
+void board_userled_initialize(void)
+{
+  /* Already initialized by stm32_led_initialize */
+}
+
+void board_userled(int led, bool ledon)
 {
   uint32_t pinset;
 
@@ -293,7 +279,7 @@ void stm32_setled(int led, bool ledon)
   stm32_gpiowrite(pinset, !ledon);
 }
 
-void stm32_setleds(uint8_t ledset)
+void board_userled_all(uint8_t ledset)
 {
 #ifdef CONFIG_ARCH_LEDS
   led_onbits(ledset & ~BOARD_LED4_BIT);

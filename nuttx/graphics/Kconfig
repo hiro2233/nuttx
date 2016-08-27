@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 config NX
@@ -25,9 +25,27 @@ config NX_NPLANES
 	int "Number of Color Planes"
 	default 1
 	---help---
-		Some YUV color formats requires support for multiple planes, one for each
-		color component.  Unless you have such special hardware, this value should be
-		undefined or set to 1.
+		Some YUV color formats requires support for multiple planes, one for
+		each color component.  Unless you have such special hardware (and
+		are willing to debug a lot of untested logic), this value should be
+		set to 1.
+
+config NX_BGCOLOR
+	hex "Initial background color"
+	default 0x0
+	---help---
+		NX will clear the background plane initially.  This is the default
+		color that will be used when the background is cleared.  Note: This
+		logic would have to be extended if you want to support multiple
+		color planes.
+
+config NX_ANTIALIASING
+	bool "Anti-aliasing support"
+	default n
+	depends on (!NX_DISABLE_16BPP || !NX_DISABLE_24BPP || !NX_DISABLE_32BPP) && !NX_LCDDRIVER
+	---help---
+		Enable support for ant-aliasing when rendering lines as various
+		orientations.
 
 config NX_WRITEONLY
 	bool "Write-only Graphics Device"
@@ -37,6 +55,30 @@ config NX_WRITEONLY
 		Define if the underlying graphics device does not support read operations.
 		Automatically defined if NX_LCDDRIVER and LCD_NOGETRUN are
 		defined.
+
+config NX_UPDATE
+	bool "Display update hooks"
+	default n
+	---help---
+		Enable a callout to inform some external module that the display has
+		been updated.  This would be useful in a couple for cases.
+
+		- When a serial LCD is used, but a framebuffer is used to access the
+		  LCD.  In this case, the update callout can be used to refresh the
+		  affected region of the display.
+
+		- When VNC is enabled.  This is case, this callout is necessary to
+		  update the remote frame buffer to match the local framebuffer.
+
+		When this feature is enabled, some external logic must provide this
+		interface:
+
+		  void nx_notify_rectangle(FAR NX_PLANEINFOTYPE *pinfo,
+		                           FAR const struct nxgl_rect_s *rect);
+
+		That is the function that will handle the notification.  It
+		receives the rectangular region that was updated in the provided
+		plane.
 
 menu "Supported Pixel Depths"
 
@@ -108,11 +150,42 @@ config NX_PACKEDMSFIRST
 
 menu "Input Devices"
 
-config NX_MOUSE
-	bool "Mouse/Touchscreen Support"
+config NX_XYINPUT
+	bool
 	default n
+
+choice
+	prompt "Mouse/Touchscreen Support"
+	default NX_XYINPUT_NONE
+
+config NX_XYINPUT_NONE
+	bool "No X/Y input device"
 	---help---
-		Build in support for mouse or touchscreeninput.
+		There is no X/Y positional input device connected
+
+config NX_XYINPUT_MOUSE
+	bool "Mouse device support"
+	select NX_XYINPUT
+	---help---
+		X/Y positional input is provided by a mouse.  The only difference
+		between the mouse and touchscreen selection is in the presence or
+		absence of the mouse buttons.  This difference is not used within
+		NuttX itself, however, graphics applications may need this
+		information, for example, to handle the different ways that graphic
+		elements are selected and dragged.
+
+config NX_XYINPUT_TOUCHSCREEN
+	bool "Touchscreen device support"
+	select NX_XYINPUT
+	---help---
+		X/Y positional input is provided by a touchscreen.  The only difference
+		between the mouse and touchscreen selection is in the presence or
+		absence of the mouse buttons.  This difference is not used within
+		NuttX itself, however, graphics applications may need this
+		information, for example, to handle the different ways that graphic
+		elements are selected and dragged.
+
+endchoice # Mouse/Touchscreen Support
 
 config NX_KBD
 	bool "Keyboard Support"
@@ -314,20 +387,188 @@ config NXFONT_SERIF38X49B
 		This option enables support for a large, 38x49 bold font (with serifs)
 		(font ID FONTID_SERIF38X49B == 13).
 
-endmenu
-
-menuconfig NXCONSOLE
-	bool "NxConsole"
+config NXFONT_PIXEL_UNICODE
+	bool "Pixel UniCode"
 	default n
 	---help---
-		Enables building of the NxConsole driver.
+		This option enables support for a small LCD, The "Pixel UniCode"
+		(font ID FONTID_PIXEL_UNICODE == 19).
 
-if NXCONSOLE
+config NXFONT_PIXEL_LCD_MACHINE
+	bool "Pixel lcd machine"
+	default n
+	---help---
+		This option enables support for a small LCD, The "Pixel lcd machine"
+		(font ID FONTID_PIXEL_LCD_MACHINE == 20).
 
-comment "NxConsole Output Text/Graphics Options"
+config NXFONT_X11_MISC_FIXED_4X6
+	bool "x11 misc fixed 4x6"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-4x6".
+		(font ID FONTID_X11_MISC_FIXED_4X6 == 21).
 
-config NXCONSOLE_BPP
-	int "NxConsole BPP"
+config NXFONT_X11_MISC_FIXED_5X7
+	bool "x11 misc fixed 5x7"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-5x7".
+		(font ID FONTID_X11_MISC_FIXED_5X7 == 22).
+
+config NXFONT_X11_MISC_FIXED_5X8
+	bool "x11 misc fixed 5x8"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-5x8".
+		(font ID FONTID_X11_MISC_FIXED_5X8 == 23).
+
+config NXFONT_X11_MISC_FIXED_6X9
+	bool "x11 misc fixed 6x9"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-6x9".
+		(font ID FONTID_X11_MISC_FIXED_6X9 == 24).
+
+config NXFONT_X11_MISC_FIXED_6X10
+	bool "x11 misc fixed 6x10"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-6x10".
+		(font ID FONTID_X11_MISC_FIXED_6X10 == 25).
+
+config NXFONT_X11_MISC_FIXED_6X12
+	bool "x11 misc fixed 6x12"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-6x12".
+		(font ID FONTID_X11_MISC_FIXED_6X12 == 26).
+
+config NXFONT_X11_MISC_FIXED_6X13
+	bool "x11 misc fixed 6x13"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-6x13".
+		(font ID FONTID_X11_MISC_FIXED_6X13 == 27).
+
+config NXFONT_X11_MISC_FIXED_6X13B
+	bool "x11 misc fixed 6x13B"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-6x13B".
+		(font ID FONTID_X11_MISC_FIXED_6X13B == 28).
+
+config NXFONT_X11_MISC_FIXED_6X13O
+	bool "x11 misc fixed 6x13O"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-6x13O".
+		(font ID FONTID_X11_MISC_FIXED_6X13O == 29).
+
+config NXFONT_X11_MISC_FIXED_7X13
+	bool "x11 misc fixed 7x13"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-7x13".
+		(font ID FONTID_X11_MISC_FIXED_7X13 == 30).
+
+config NXFONT_X11_MISC_FIXED_7X13B
+	bool "x11 misc fixed 7x13B"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-7x13B".
+		(font ID FONTID_X11_MISC_FIXED_7X13B == 31).
+
+config NXFONT_X11_MISC_FIXED_7X13O
+	bool "x11 misc fixed 7x13O"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-7x13O".
+		(font ID FONTID_X11_MISC_FIXED_7X13O == 32).
+
+config NXFONT_X11_MISC_FIXED_7X14
+	bool "x11 misc fixed 7x14"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-7x14".
+		(font ID FONTID_X11_MISC_FIXED_7X14 == 33).
+
+config NXFONT_X11_MISC_FIXED_7X14B
+	bool "x11 misc fixed 7x14B"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-7x14B".
+		(font ID FONTID_X11_MISC_FIXED_7X14B == 34).
+
+config NXFONT_X11_MISC_FIXED_8X13
+	bool "x11 misc fixed 8x13"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-8x13".
+		(font ID FONTID_X11_MISC_FIXED_8X13 == 35).
+
+config NXFONT_X11_MISC_FIXED_8X13B
+	bool "x11 misc fixed 8x13B"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-8x13B".
+		(font ID FONTID_X11_MISC_FIXED_8X13B == 36).
+
+config NXFONT_X11_MISC_FIXED_8X13O
+	bool "x11 misc fixed 8x13O"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-8x13O".
+		(font ID FONTID_X11_MISC_FIXED_8X13O == 37).
+
+config NXFONT_X11_MISC_FIXED_9X15
+	bool "x11 misc fixed 9x15"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-9x15".
+		(font ID FONTID_X11_MISC_FIXED_9X15 == 38).
+
+config NXFONT_X11_MISC_FIXED_9X15B
+	bool "x11 misc fixed 9x15B"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-9x15B".
+		(font ID FONTID_X11_MISC_FIXED_9X15B == 39).
+
+config NXFONT_X11_MISC_FIXED_9X18
+	bool "x11 misc fixed 9x18"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-9x18".
+		(font ID FONTID_X11_MISC_FIXED_9X18 == 40).
+
+config NXFONT_X11_MISC_FIXED_9X18B
+	bool "x11 misc fixed 9x18B"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-9x18B".
+		(font ID FONTID_X11_MISC_FIXED_9X18B == 41).
+
+config NXFONT_X11_MISC_FIXED_10X20
+	bool "x11 misc fixed 10x20"
+	default n
+	---help---
+		This option enables support for a "x11-misc-fixed-10x20".
+		(font ID FONTID_X11_MISC_FIXED_10X20 == 42).
+
+endmenu
+
+menuconfig NXTERM
+	bool "NxTerm"
+	default n
+	---help---
+		Enables building of the NxTerm driver.
+
+if NXTERM
+
+comment "NxTerm Output Text/Graphics Options"
+
+config NXTERM_BPP
+	int "NxTerm BPP"
 	default 1 if !NX_DISABLE_1BPP
 	default 2 if !NX_DISABLE_2BPP
 	default 4 if !NX_DISABLE_4BPP
@@ -336,50 +577,50 @@ config NXCONSOLE_BPP
 	default 24 if !NX_DISABLE_24BPP
 	default 32 if !NX_DISABLE_32BPP
 	---help---
-		Currently, NxConsole supports only a single pixel depth. This
+		Currently, NxTerm supports only a single pixel depth. This
 		configuration setting must be provided to support that single pixel depth.
 		Default: The smallest enabled pixel depth. (see NX_DISABLE_*BPP)
 
-config NXCONSOLE_CURSORCHAR
+config NXTERM_CURSORCHAR
 	int "Character code to use as the cursor"
 	default 137
 	---help---
 		The bitmap code to use as the cursor.  Default '_' (137)
 
-config NXCONSOLE_MXCHARS
+config NXTERM_MXCHARS
 	int "Max Characters on Display"
 	default 128
 	---help---
-		NxConsole needs to remember every character written to the console so
+		NxTerm needs to remember every character written to the console so
 		that it can redraw the window. This setting determines the size of some
 		internal memory allocations used to hold the character data. Default: 128.
 
-config NXCONSOLE_CACHESIZE
+config NXTERM_CACHESIZE
 	int "Font Cache Size"
 	default 16
 	---help---
-		NxConsole supports caching of rendered fonts. This font caching is required
+		NxTerm supports caching of rendered fonts. This font caching is required
 		for two reasons: (1) First, it improves text performance, but more
 		importantly (2) it preserves the font memory. Since the NX server runs on
 		a separate server thread, it requires that the rendered font memory persist
 		until the server has a chance to render the font. Unfortunately, the font
-		cache would be quite large if all fonts were saved. The NXCONSOLE_CACHESIZE
+		cache would be quite large if all fonts were saved. The NXTERM_CACHESIZE
 		setting will control the size of the font cache (in number of glyphs). Only that
 		number of the most recently used glyphs will be retained. Default: 16.
-		NOTE: There can still be a race condition between the NxConsole driver and the
+		NOTE: There can still be a race condition between the NxTerm driver and the
 		NX task.  If you every see character corruption (especially when printing
-		a lot of data or scrolling), then increasing the value of NXCONSOLE_CACHESIZE
+		a lot of data or scrolling), then increasing the value of NXTERM_CACHESIZE
 		is something that you should try.  Alternatively, you can reduce the size of
-		MQ_MAXMSGSIZE which will force NxConsole task to pace the server task.
-		NXCONSOLE_CACHESIZE should be larger than MQ_MAXMSGSIZE in any event.
+		MQ_MAXMSGSIZE which will force NxTerm task to pace the server task.
+		NXTERM_CACHESIZE should be larger than MQ_MAXMSGSIZE in any event.
 
-config NXCONSOLE_LINESEPARATION
+config NXTERM_LINESEPARATION
 	int "Line Separation"
 	default 0
 	---help---
 		This the space (in rows) between each row of test.  Default: 0
 
-config NXCONSOLE_NOWRAP
+config NXTERM_NOWRAP
 	bool "No wrap"
 	default n
 	---help---
@@ -387,33 +628,33 @@ config NXCONSOLE_NOWRAP
 		of the window. This setting can be defining to change this behavior so
 		that the text is simply truncated until a new line is  encountered.
 
-comment "NxConsole Input options"
+comment "NxTerm Input options"
 
-config NXCONSOLE_NXKBDIN
+config NXTERM_NXKBDIN
 	bool "NX KBD input"
 	default n
 	---help---
 		Take input from the NX keyboard input callback.  By default, keyboard
 		input is taken from stdin (/dev/console).  If this option is set, then
-		the interface nxcon_kdbin() is enabled.  That interface may be driven
+		the interface nxterm_kdbin() is enabled.  That interface may be driven
 		by window callback functions so that keyboard input *only* goes to the
 		top window.
 
-config NXCONSOLE_KBDBUFSIZE
+config NXTERM_KBDBUFSIZE
 	int "Keyboard Input Buffer Size"
 	default 16
 	---help---
-		If NXCONSOLE_NXKBDIN is enabled, then this value may be used to
+		If NXTERM_NXKBDIN is enabled, then this value may be used to
 		define the size of the per-window keyboard input buffer.  Default: 16
 
-config NXCONSOLE_NPOLLWAITERS
+config NXTERM_NPOLLWAITERS
 	int "Number of Poll Waiters"
 	default 4
 	---help---
 		The number of threads that can be waiting for read data available.
 		Default: 4
 
-endif # NXCONSOLE
+endif # NXTERM
 
 comment "NX Multi-user only options"
 
@@ -466,9 +707,10 @@ config NXSTART_EXTERNINIT
 	---help---
 		Define to support external display initialization by platform-
 		specific code.  This this option is defined, then nx_start() will
-		call up_nxdrvinit(CONFIG_NXSTART_DEVNO) to initialize the graphics
-		device.  This option is necessary if display is used that cannot be
-		initialized using the standard LCD or framebuffer interfaces.
+		call board_graphics_setup(CONFIG_NXSTART_DEVNO) to initialize the
+		graphics device.  This option is necessary if display is used that
+		cannot be initialized using the standard LCD or framebuffer
+		interfaces.
 
 config NXSTART_SERVERPRIO
 	int "NX Server priority"
@@ -503,4 +745,7 @@ config NXSTART_VPLANE
 
 endif # NX_NXSTART
 endif # NX_MULTIUSER
+
+source "graphics/vnc/Kconfig"
+
 endif # NX

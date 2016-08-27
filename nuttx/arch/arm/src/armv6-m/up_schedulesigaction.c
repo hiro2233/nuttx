@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/armv6-m/up_schedulesigaction.c
  *
- *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,11 +43,12 @@
 #include <sched.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 
 #include "psr.h"
 #include "exc_return.h"
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 #include "up_arch.h"
 
@@ -104,31 +105,31 @@
 
 void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
 {
-  /* Refuse to handle nested signal actions */
+  irqstate_t flags;
 
-  sdbg("tcb=0x%p sigdeliver=0x%p\n", tcb, sigdeliver);
+  sinfo("tcb=0x%p sigdeliver=0x%p\n", tcb, sigdeliver);
+
+  /* Make sure that interrupts are disabled */
+
+  flags = enter_critical_section();
+
+  /* Refuse to handle nested signal actions */
 
   if (!tcb->xcp.sigdeliver)
     {
-      irqstate_t flags;
-
-      /* Make sure that interrupts are disabled */
-
-      flags = irqsave();
-
       /* First, handle some special cases when the signal is being delivered
        * to the currently executing task.
        */
 
-      sdbg("rtcb=0x%p current_regs=0x%p\n", g_readytorun.head, current_regs);
+      sinfo("rtcb=0x%p CURRENT_REGS=0x%p\n", this_task(), CURRENT_REGS);
 
-      if (tcb == (struct tcb_s*)g_readytorun.head)
+      if (tcb == this_task())
         {
           /* CASE 1:  We are not in an interrupt handler and a task is
            * signalling itself for some reason.
            */
 
-          if (!current_regs)
+          if (!CURRENT_REGS)
             {
               /* In this case just deliver the signal now. */
 
@@ -149,22 +150,22 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
                */
 
               tcb->xcp.sigdeliver       = sigdeliver;
-              tcb->xcp.saved_pc         = current_regs[REG_PC];
-              tcb->xcp.saved_primask    = current_regs[REG_PRIMASK];
-              tcb->xcp.saved_xpsr       = current_regs[REG_XPSR];
-#ifdef CONFIG_NUTTX_KERNEL
-              tcb->xcp.saved_lr         = current_regs[REG_LR];
+              tcb->xcp.saved_pc         = CURRENT_REGS[REG_PC];
+              tcb->xcp.saved_primask    = CURRENT_REGS[REG_PRIMASK];
+              tcb->xcp.saved_xpsr       = CURRENT_REGS[REG_XPSR];
+#ifdef CONFIG_BUILD_PROTECTED
+              tcb->xcp.saved_lr         = CURRENT_REGS[REG_LR];
 #endif
               /* Then set up to vector to the trampoline with interrupts
                * disabled.  The kernel-space trampoline must run in
                * privileged thread mode.
                */
 
-              current_regs[REG_PC]      = (uint32_t)up_sigdeliver;
-              current_regs[REG_PRIMASK] = 1;
-              current_regs[REG_XPSR]    = ARMV6M_XPSR_T;
-#ifdef CONFIG_NUTTX_KERNEL
-              current_regs[REG_LR]      = EXC_RETURN_PRIVTHR;
+              CURRENT_REGS[REG_PC]      = (uint32_t)up_sigdeliver;
+              CURRENT_REGS[REG_PRIMASK] = 1;
+              CURRENT_REGS[REG_XPSR]    = ARMV6M_XPSR_T;
+#ifdef CONFIG_BUILD_PROTECTED
+              CURRENT_REGS[REG_LR]      = EXC_RETURN_PRIVTHR;
 #endif
               /* And make sure that the saved context in the TCB is the same
                * as the interrupt return context.
@@ -190,7 +191,7 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
           tcb->xcp.saved_pc         = tcb->xcp.regs[REG_PC];
           tcb->xcp.saved_primask    = tcb->xcp.regs[REG_PRIMASK];
           tcb->xcp.saved_xpsr       = tcb->xcp.regs[REG_XPSR];
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
           tcb->xcp.saved_lr         = tcb->xcp.regs[REG_LR];
 #endif
 
@@ -202,13 +203,13 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
           tcb->xcp.regs[REG_PC]      = (uint32_t)up_sigdeliver;
           tcb->xcp.regs[REG_PRIMASK] = 1;
           tcb->xcp.regs[REG_XPSR]    = ARMV6M_XPSR_T;
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
           tcb->xcp.regs[REG_LR]      = EXC_RETURN_PRIVTHR;
 #endif
         }
-
-      irqrestore(flags);
     }
+
+  leave_critical_section(flags);
 }
 
 #endif /* !CONFIG_DISABLE_SIGNALS */

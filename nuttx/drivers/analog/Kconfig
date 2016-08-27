@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 config ADC
@@ -10,6 +10,16 @@ config ADC
 		Select to enable support for analog input device support.  This includes
 		not only Analog-to-Digital Converters (ADC) but also amplifiers and
 		analog multiplexers.
+
+		This selection enables:
+
+			- The upper half, device-independent ADC character driver, and
+			- Selection of common lower half ADC drivers.
+
+		MCU-specific, lower half drivers may be selected independently of
+		CONFIG_ADC.  However, if CONFIG_ADC is selected, then it is assume
+		that lower half ADC drivers will be used only with the commoun ADC
+		upper half driver.
 
 if ADC
 
@@ -23,10 +33,30 @@ config ADC_FIFOSIZE
 		this is a ring buffer, the actual number of bytes that can be
 		retained in buffer is (ADC_FIFOSIZE - 1).
 
+config ADC_NO_STARTUP_CONV
+	bool "Do not start conversion when opening ADC device"
+	default n
+	depends on ARCH_CHIP_STM32
+	---help---
+		Do not start conversion when opening ADC device.
+
+config ADC_ADS1242
+	bool "TI ADS1242 support"
+	default n
+	select SPI
+	---help---
+		Enable driver support for the ADS1242 24-Bit SPI powered ADC.
+
+		This driver supports reading the ADC conversion result as well as
+		configuring the ADC, setting the input channel, etc. is implemented
+		via ioctl calls. However, it does not yet implement the standard ADC
+		interface.
+
 config ADC_ADS125X
 	bool "TI ADS1255/ADS1256 support"
 	default n
 	select SPI
+	select SCHED_HPWORK
 
 if ADC_ADS125X
 

@@ -9,7 +9,7 @@ Toolchain
   different from the default).
 
   If you have no ARM toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
 
   1. You must have already configured Nuttx in <some-dir>nuttx.
 
@@ -31,6 +31,22 @@ Toolchain
   8. Edit setenv.h so that the PATH variable includes the path to the
      newly built binaries.
 
+Issues
+^^^^^^
+
+  Title:       PORT IS INCOMPLETE
+  Description: The basic port of the i.MX1 architecture was never finished.  The port
+               is incomplete (as of this writing, is still lacks a timer, interrupt
+               decoding, USB, network) and untested.
+  Status:      Open
+  Priority:    Medium (high if you need i.MX1/L support)
+
+  Title:       SPI METHODS ARE NOT THREAD SAFE
+  Description: SPI methods are not thread safe.  Needs a semaphore to protect from re-entrancy.
+  Status:      Open
+  Priority:    Medium -- Will be very high if you do SPI access from multiple threads.
+
+
 ARM/i.MX1-specific Configuration Options
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -49,7 +65,7 @@ ARM/i.MX1-specific Configuration Options
 
 	CONFIG_ARCH_CHIP - Identifies the arch/*/chip subdirectory
 
-	   CONFIG_ARCH_CHIP=imx
+	   CONFIG_ARCH_CHIP=imx1
 
 	CONFIG_ARCH_CHIP_name - For use in C code.  Could be line _IMX1,
 	   _IMXL, _IMX21, _IMX27, _IMX31, etc. (not all of which are
@@ -110,13 +126,13 @@ ARM/i.MX1-specific Configuration Options
 
   IMX USB Configuration
 
-	CONFIG_IMX_GIO_USBATTACH
+	CONFIG_IMX1_GIO_USBATTACH
 	   GIO that detects USB attach/detach events
-	CONFIG_IMX_GIO_USBDPPULLUP
+	CONFIG_IMX1_GIO_USBDPPULLUP
 	   GIO
 	CONFIG_DMA320_USBDEV_DMA
 	   Enable IMX-specific DMA support
-	CONFIG_IMX_GIO_USBATTACH=6
+	CONFIG_IMX1_GIO_USBATTACH=6
 
 Configurations
 ^^^^^^^^^^^^^^
@@ -139,7 +155,7 @@ Common Configuration Notes
      change a configurations using that tool, you should:
 
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-        and misc/tools/
+        see additional README.txt files in the NuttX tools repository.
 
      b. Execute 'make menuconfig' in nuttx/ in order to start the
         reconfiguration process.

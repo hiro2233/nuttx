@@ -76,12 +76,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   The CodeSourcery Toolchain (2009q1)
   -----------------------------------
   The CodeSourcery toolchain (2009q1) does not work with default optimization
@@ -164,13 +158,13 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
 
      cd tools
-     ./configure.sh stm32f100rc_generic/<sub-dir>
+     ./configure.sh stm32vldiscovery/<sub-dir>
 
   2. Download the latest buildroot package into <some-dir>
 
@@ -224,8 +218,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -256,7 +250,7 @@ LEDs
 
 It is asumed that STMicro STM32F100RC generic board board has one LED on PA0.
 You should configure the port and pin number in
-configs/stm32f100rc_generic/src/stm32f100rc_internal.h. This LED is not used by
+configs/stm32vldiscovery/src/stm32vldiscovery.h. This LED is not used by
 the board port unless CONFIG_ARCH_LEDS is defined.  In that case, the usage by
 the board port is defined in include/board.h and src/up_leds.c. The LED is used
 to encode OS-related events as follows:
@@ -348,7 +342,7 @@ RX pin (PA10) of your board besides, of course, the GND pin.
 
     CONFIG_ARCH_STACKDUMP - Do stack dumps after assertions
 
-    CONFIG_ARCH_CALIBRATION - when used togeter with CONFIG_DEBUG enables some
+    CONFIG_ARCH_CALIBRATION - when used togeter with CONFIG_DEBUG_FEATURES enables some
 	   build in instrumentation that cause a 100 second delay during boot-up.
 	   This 100 second delay serves no purpose other than it allows you to
 	   calibratre CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to
@@ -451,7 +445,7 @@ Each STMicro STM32F100RC generic configuration is maintained in a sub-directory
 and can be selected as follow:
 
     cd tools
-    ./configure.sh stm32f100rc_generic/<subdir>
+    ./configure.sh stm32vldiscovery/<subdir>
     cd -
     . ./setenv.sh
 

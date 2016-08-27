@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/icmp/icmp_send.c
  *
- *   Copyright (C) 2008-2010, 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2010, 2012, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,36 +42,29 @@
 
 #include <debug.h>
 
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip.h>
-#include <nuttx/net/uip/uip-arch.h>
+#include <arpa/inet.h>
 
-#include "uip/uip_internal.h"
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/netdev.h>
+#include <nuttx/net/netstats.h>
+#include <nuttx/net/ip.h>
+
+#include "devif/devif.h"
+#include "utils/utils.h"
+#include "icmp/icmp.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define ICMPBUF ((struct uip_icmpip_hdr *)&dev->d_buf[UIP_LLH_LEN])
-
-/****************************************************************************
- * Public Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Variables
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
+#define ICMPBUF ((struct icmp_iphdr_s *)&dev->d_buf[NET_LL_HDRLEN(dev)])
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: uip_icmpsend
+ * Name: icmp_send
  *
  * Description:
  *   Setup to send an ICMP packet
@@ -87,42 +80,27 @@
  *
  ****************************************************************************/
 
-void uip_icmpsend(struct uip_driver_s *dev, uip_ipaddr_t *destaddr)
+void icmp_send(FAR struct net_driver_s *dev, FAR in_addr_t *destaddr)
 {
-  struct uip_icmpip_hdr *picmp = ICMPBUF;
+  FAR struct icmp_iphdr_s *picmp = ICMPBUF;
 
   if (dev->d_sndlen > 0)
     {
+      IFF_SET_IPv4(dev->d_flags);
+
       /* The total length to send is the size of the application data plus
        * the IP and ICMP headers (and, eventually, the Ethernet header)
        */
 
-      dev->d_len = dev->d_sndlen + UIP_IPICMPH_LEN;
+      dev->d_len = dev->d_sndlen + IPICMP_HDRLEN;
 
       /* The total size of the data (for ICMP checksum calculation) includes
        * the size of the ICMP header
        */
 
-      dev->d_sndlen += UIP_ICMPH_LEN;
+      dev->d_sndlen += ICMP_HDRLEN;
 
-      /* Initialize the IP header.  Note that for IPv6, the IP length field
-       * does not include the IPv6 IP header length.
-       */
-
-#ifdef CONFIG_NET_IPv6
-
-      picmp->vtc         = 0x60;
-      picmp->tcf         = 0x00;
-      picmp->flow        = 0x00;
-      picmp->len[0]      = (dev->d_sndlen >> 8);
-      picmp->len[1]      = (dev->d_sndlen & 0xff);
-      picmp->nexthdr     = UIP_PROTO_ICMP;
-      picmp->hoplimit    = UIP_TTL;
-
-      uip_ipaddr_copy(picmp->srcipaddr, &dev->d_ipaddr);
-      uip_ipaddr_copy(picmp->destipaddr, destaddr);
-
-#else /* CONFIG_NET_IPv6 */
+      /* Initialize the IP header. */
 
       picmp->vhl         = 0x45;
       picmp->tos         = 0;
@@ -131,36 +109,34 @@ void uip_icmpsend(struct uip_driver_s *dev, uip_ipaddr_t *destaddr)
       ++g_ipid;
       picmp->ipid[0]     = g_ipid >> 8;
       picmp->ipid[1]     = g_ipid & 0xff;
-      picmp->ipoffset[0] = UIP_TCPFLAG_DONTFRAG >> 8;
-      picmp->ipoffset[1] = UIP_TCPFLAG_DONTFRAG & 0xff;
-      picmp->ttl         = UIP_TTL;
-      picmp->proto       = UIP_PROTO_ICMP;
+      picmp->ipoffset[0] = IP_FLAG_DONTFRAG >> 8;
+      picmp->ipoffset[1] = IP_FLAG_DONTFRAG & 0xff;
+      picmp->ttl         = IP_TTL;
+      picmp->proto       = IP_PROTO_ICMP;
 
-      uiphdr_ipaddr_copy(picmp->srcipaddr, &dev->d_ipaddr);
-      uiphdr_ipaddr_copy(picmp->destipaddr, destaddr);
+      net_ipv4addr_hdrcopy(picmp->srcipaddr, &dev->d_ipaddr);
+      net_ipv4addr_hdrcopy(picmp->destipaddr, destaddr);
 
       /* Calculate IP checksum. */
 
       picmp->ipchksum    = 0;
-      picmp->ipchksum    = ~(uip_ipchksum(dev));
-
-#endif /* CONFIG_NET_IPv6 */
+      picmp->ipchksum    = ~(ipv4_chksum(dev));
 
       /* Calculate the ICMP checksum. */
 
       picmp->icmpchksum  = 0;
-      picmp->icmpchksum  = ~(uip_icmpchksum(dev, dev->d_sndlen));
+      picmp->icmpchksum  = ~(icmp_chksum(dev, dev->d_sndlen));
       if (picmp->icmpchksum == 0)
         {
           picmp->icmpchksum = 0xffff;
         }
 
-      nllvdbg("Outgoing ICMP packet length: %d (%d)\n",
+      ninfo("Outgoing ICMP packet length: %d (%d)\n",
               dev->d_len, (picmp->len[0] << 8) | picmp->len[1]);
 
 #ifdef CONFIG_NET_STATISTICS
-      uip_stat.icmp.sent++;
-      uip_stat.ip.sent++;
+      g_netstats.icmp.sent++;
+      g_netstats.ipv4.sent++;
 #endif
     }
 }

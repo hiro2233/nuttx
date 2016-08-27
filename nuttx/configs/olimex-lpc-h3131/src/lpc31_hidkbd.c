@@ -41,14 +41,14 @@
 
 #include <nuttx/usb/usbhost.h>
 
-#include "lpc31_internal.h"
+#include "lpc31.h"
 #include "lpc_h3131.h"
 
 #if defined(CONFIG_LPC31_USBOTG) && defined(CONFIG_USBHOST) && \
     defined(CONFIG_EXAMPLES_HIDKBD)
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************

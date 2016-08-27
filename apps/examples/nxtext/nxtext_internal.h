@@ -47,11 +47,10 @@
 #include <semaphore.h>
 
 #include <nuttx/nx/nx.h>
-#include <nuttx/nx/nxtk.h>
 #include <nuttx/nx/nxfonts.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Configuration ************************************************************/
@@ -78,7 +77,7 @@
 #  elif !defined(CONFIG_NX_DISABLE_16BPP)
 #    define CONFIG_EXAMPLES_NXTEXT_BPP 16
 //#elif !defined(CONFIG_NX_DISABLE_24BPP)
-//#    define CONFIG_NXCONSOLE_BPP 24
+//#    define CONFIG_NXTERM_BPP 24
 #  elif !defined(CONFIG_NX_DISABLE_32BPP)
 #    define CONFIG_EXAMPLES_NXTEXT_BPP 32
 #  else
@@ -190,26 +189,6 @@
 #  endif
 #endif
 
-/* Debug ********************************************************************/
-
-#ifdef CONFIG_CPP_HAVE_VARARGS
-#  ifdef CONFIG_DEBUG
-#    define message(...) lowsyslog(__VA_ARGS__)
-#    define msgflush()
-#  else
-#    define message(...) printf(__VA_ARGS__)
-#    define msgflush() fflush(stdout)
-#  endif
-#else
-#  ifdef CONFIG_DEBUG
-#    define message lowsyslog
-#    define msgflush()
-#  else
-#    define message printf
-#    define msgflush() fflush(stdout)
-#  endif
-#endif
-
 /* Bitmap flags */
 
 #define BMFLAGS_NOGLYPH (1 << 0) /* No glyph available, use space */
@@ -298,7 +277,7 @@ struct nxtext_state_s
 };
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /* The connecton handler */
@@ -335,32 +314,29 @@ extern int g_exitcode;
  * Public Function Prototypes
  ****************************************************************************/
 
-#ifdef CONFIG_EXAMPLES_NXTEXT_EXTERNINIT
-extern FAR NX_DRIVERTYPE *up_nxdrvinit(unsigned int devno);
-#endif
 #if defined(CONFIG_NX) && defined(CONFIG_NX_MULTIUSER)
-extern int nxtext_server(int argc, char *argv[]);
-extern FAR void *nxtext_listener(FAR void *arg);
+int nxtext_server(int argc, char *argv[]);
+FAR void *nxtext_listener(FAR void *arg);
 #endif
 
 /* Background window interfaces */
 
-extern FAR struct nxtext_state_s *nxbg_getstate(void);
-extern void nxbg_write(NXWINDOW hwnd, FAR const uint8_t *buffer, size_t buflen);
+FAR struct nxtext_state_s *nxbg_getstate(void);
+void nxbg_write(NXWINDOW hwnd, FAR const uint8_t *buffer, size_t buflen);
 
 /* Pop-up window interfaces */
 
-extern NXWINDOW nxpu_open(void);
-extern int nxpu_close(NXWINDOW hwnd);
+NXWINDOW nxpu_open(void);
+int nxpu_close(NXWINDOW hwnd);
 
 /* Generic text helpers */
 
-extern void nxtext_home(FAR struct nxtext_state_s *st);
-extern void nxtext_newline(FAR struct nxtext_state_s *st);
-extern void nxtext_putc(NXWINDOW hwnd, FAR struct nxtext_state_s *st,
-                        NXHANDLE hfont, uint8_t ch);
-extern void nxtext_fillchar(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect,
-                            FAR struct nxtext_state_s *st, NXHANDLE hfont,
-                            FAR const struct nxtext_bitmap_s *bm);
+void nxtext_home(FAR struct nxtext_state_s *st);
+void nxtext_newline(FAR struct nxtext_state_s *st);
+void nxtext_putc(NXWINDOW hwnd, FAR struct nxtext_state_s *st,
+                 NXHANDLE hfont, uint8_t ch);
+void nxtext_fillchar(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect,
+                     FAR struct nxtext_state_s *st, NXHANDLE hfont,
+                     FAR const struct nxtext_bitmap_s *bm);
 
 #endif /* __EXAMPLES_NXTEXT_NXTEXT_INTERNAL_H */

@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/power/pm_checkstate.c
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,37 +39,15 @@
 
 #include <nuttx/config.h>
 
+#include <assert.h>
+
 #include <nuttx/power/pm.h>
 #include <nuttx/clock.h>
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 
-#include "pm_internal.h"
+#include "pm.h"
 
 #ifdef CONFIG_PM
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -99,24 +77,30 @@
  *   is completed.
  *
  * Input Parameters:
- *   None
+ *   domain - the PM domain to check
  *
  * Returned Value:
  *   The recommended power management state.
  *
  ****************************************************************************/
 
-enum pm_state_e pm_checkstate(void)
+enum pm_state_e pm_checkstate(int domain)
 {
-  uint32_t now;
+  FAR struct pm_domain_s *pdom;
+  systime_t now;
   irqstate_t flags;
+
+  /* Get a convenience pointer to minimize all of the indexing */
+
+  DEBUGASSERT(domain >= 0 && domain < CONFIG_PM_NDOMAINS);
+  pdom = &g_pmglobals.domain[domain];
 
   /* Check for the end of the current time slice.  This must be performed
    * with interrupts disabled so that it does not conflict with the similar
    * logic in pm_activity().
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Check the elapsed time.  In periods of low activity, time slicing is
    * controlled by IDLE loop polling; in periods of higher activity, time
@@ -127,27 +111,28 @@ enum pm_state_e pm_checkstate(void)
    */
 
    now = clock_systimer();
-   if (now - g_pmglobals.stime >= TIME_SLICE_TICKS)
+   if (now - pdom->stime >= TIME_SLICE_TICKS)
     {
-       int16_t accum;
+      int16_t accum;
 
-       /* Sample the count, reset the time and count, and assess the PM
-        * state.  This is an atomic operation because interrupts are
-        * still disabled.
-        */
+      /* Sample the count, reset the time and count, and assess the PM
+       * state.  This is an atomic operation because interrupts are
+       * still disabled.
+       */
 
-       accum             = g_pmglobals.accum;
-       g_pmglobals.stime = now;
-       g_pmglobals.accum = 0;
+      accum       = pdom->accum;
+      pdom->stime = now;
+      pdom->accum = 0;
 
-       /* Reassessing the PM state may require some computation.  However,
-        * the work will actually be performed on a worker thread at a user-
-        * controlled priority.
-        */
+      /* Reassessing the PM state may require some computation.  However,
+       * the work will actually be performed on a worker thread at a user-
+       * controlled priority.
+       */
 
-       (void)pm_update(accum);
+      (void)pm_update(domain, accum);
     }
-  irqrestore(flags);
+
+  leave_critical_section(flags);
 
   /* Return the recommended state.  Assuming that we are called from the
    * IDLE thread at the lowest priority level, any updates scheduled on the
@@ -155,7 +140,7 @@ enum pm_state_e pm_checkstate(void)
    * state should be current:
    */
 
-  return g_pmglobals.recommended;
+  return pdom->recommended;
 }
 
 #endif /* CONFIG_PM */

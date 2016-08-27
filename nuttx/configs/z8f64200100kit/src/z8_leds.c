@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/z8f64200100kit/src/z8_leds.c
  *
- *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,11 +39,13 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
+
 #include "up_internal.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -63,27 +65,27 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_led_initialize
+ * Name: board_autoled_initialize
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void board_led_initialize(void)
+void board_autoled_initialize(void)
 {
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  ****************************************************************************/
 
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
 }
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  ****************************************************************************/
 
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
 }
 #endif /* CONFIG_ARCH_LEDS */

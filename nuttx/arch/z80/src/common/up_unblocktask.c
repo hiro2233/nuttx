@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z80/src/common/up_unblocktask.c
  *
- *   Copyright (C) 2007-2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,24 +43,14 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/sched.h>
 
 #include "chip/chip.h"
 #include "chip/switch.h"
-#include "os_internal.h"
-#include "clock_internal.h"
+#include "sched/sched.h"
+#include "group/group.h"
+#include "clock/clock.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -78,44 +68,40 @@
  *   tcb: Refers to the tcb to be unblocked.  This tcb is
  *     in one of the waiting tasks lists.  It must be moved to
  *     the ready-to-run list and, if it is the highest priority
- *     ready to run taks, executed.
+ *     ready to run task, executed.
  *
  ****************************************************************************/
 
 void up_unblock_task(FAR struct tcb_s *tcb)
 {
-  FAR struct tcb_s *rtcb = (FAR struct tcb_s*)g_readytorun.head;
+  FAR struct tcb_s *rtcb = this_task();
 
   /* Verify that the context switch can be performed */
 
   ASSERT((tcb->task_state >= FIRST_BLOCKED_STATE) &&
          (tcb->task_state <= LAST_BLOCKED_STATE));
 
-  /* dbg("Unblocking TCB=%p\n", tcb); */
+  /* _info("Unblocking TCB=%p\n", tcb); */
 
   /* Remove the task from the blocked task list */
 
   sched_removeblocked(tcb);
 
-  /* Reset its timeslice.  This is only meaningful for round
-   * robin tasks but it doesn't here to do it for everything
-   */
-
-#if CONFIG_RR_INTERVAL > 0
-  tcb->timeslice = CONFIG_RR_INTERVAL / MSEC_PER_TICK;
-#endif
-
   /* Add the task in the correct location in the prioritized
-   * g_readytorun task list
+   * ready-to-run task list
    */
 
   if (sched_addreadytorun(tcb))
     {
       /* The currently active task has changed! We need to do
        * a context switch to the new task.
-       *
-       * Are we in an interrupt handler?
        */
+
+      /* Update scheduler parameters */
+
+      sched_suspend_scheduler(rtcb);
+
+      /* Are we in an interrupt handler? */
 
       if (IN_INTERRUPT())
         {
@@ -126,14 +112,18 @@ void up_unblock_task(FAR struct tcb_s *tcb)
           SAVE_IRQCONTEXT(rtcb);
 
           /* Restore the exception context of the rtcb at the (new) head
-           * of the g_readytorun task list.
+           * of the ready-to-run task list.
            */
 
-          rtcb = (FAR struct tcb_s*)g_readytorun.head;
-          /* dbg("New Active Task TCB=%p\n", rtcb); */
+          rtcb = this_task();
+
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
 
           /* Then setup so that the context will be performed on exit
-           * from the interrupt.
+           * from the interrupt.  Any necessary address environment
+           * changes will be made when the interrupt returns.
            */
 
           SET_IRQCONTEXT(rtcb);
@@ -149,11 +139,23 @@ void up_unblock_task(FAR struct tcb_s *tcb)
         {
           /* Restore the exception context of the new task that is ready to
            * run (probably tcb).  This is the new rtcb at the head of the
-           * g_readytorun task list.
+           * ready-to-run task list.
            */
 
-          rtcb = (FAR struct tcb_s*)g_readytorun.head;
-          /* dbg("New Active Task TCB=%p\n", rtcb); */
+          rtcb = this_task();
+
+#ifdef CONFIG_ARCH_ADDRENV
+         /* Make sure that the address environment for the previously
+          * running task is closed down gracefully (data caches dump,
+          * MMU flushed) and set up the address environment for the new
+          * thread at the head of the ready-to-run list.
+          */
+
+         (void)group_addrenv(rtcb);
+#endif
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
 
           /* Then switch contexts */
 

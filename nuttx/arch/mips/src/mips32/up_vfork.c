@@ -50,7 +50,7 @@
 #include <arch/irq.h>
 
 #include "up_vfork.h"
-#include "os_internal.h"
+#include "sched/sched.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -113,36 +113,36 @@
 
 pid_t up_vfork(const struct vfork_s *context)
 {
-  struct tcb_s *parent = (FAR struct tcb_s *)g_readytorun.head;
+  struct tcb_s *parent = this_task();
   struct task_tcb_s *child;
   size_t stacksize;
   uint32_t newsp;
-#if CONFIG_MIPS32_FRAMEPOINTER
+#ifdef CONFIG_MIPS32_FRAMEPOINTER
   uint32_t newfp;
 #endif
   uint32_t stackutil;
   int ret;
 
-  svdbg("s0:%08x s1:%08x s2:%08x s3:%08x s4:%08x\n",
+  sinfo("s0:%08x s1:%08x s2:%08x s3:%08x s4:%08x\n",
         context->s0, context->s1, context->s2, context->s3, context->s4);
-#if CONFIG_MIPS32_FRAMEPOINTER
-  svdbg("s5:%08x s6:%08x s7:%08x\n",
+#ifdef CONFIG_MIPS32_FRAMEPOINTER
+  sinfo("s5:%08x s6:%08x s7:%08x\n",
         context->s5, context->s6, context->s7);
 #ifdef MIPS32_SAVE_GP
-  svdbg("fp:%08x sp:%08x ra:%08x gp:%08x\n",
+  sinfo("fp:%08x sp:%08x ra:%08x gp:%08x\n",
         context->fp, context->sp, context->ra, context->gp);
 #else
-  svdbg("fp:%08x sp:%08x ra:%08x\n",
+  sinfo("fp:%08x sp:%08x ra:%08x\n",
         context->fp context->sp, context->ra);
 #endif
 #else
-  svdbg("s5:%08x s6:%08x s7:%08x s8:%08x\n",
+  sinfo("s5:%08x s6:%08x s7:%08x s8:%08x\n",
         context->s5, context->s6, context->s7, context->s8);
 #ifdef MIPS32_SAVE_GP
-  svdbg("sp:%08x ra:%08x gp:%08x\n",
+  sinfo("sp:%08x ra:%08x gp:%08x\n",
         context->sp, context->ra, context->gp);
 #else
-  svdbg("sp:%08x ra:%08x\n",
+  sinfo("sp:%08x ra:%08x\n",
         context->sp, context->ra);
 #endif
 #endif
@@ -152,11 +152,11 @@ pid_t up_vfork(const struct vfork_s *context)
   child = task_vforksetup((start_t)context->ra);
   if (!child)
     {
-      sdbg("task_vforksetup failed\n");
+      sinfo("task_vforksetup failed\n");
       return (pid_t)ERROR;
     }
 
-  svdbg("Parent=%p Child=%p\n", parent, child);
+  sinfo("Parent=%p Child=%p\n", parent, child);
 
   /* Get the size of the parent task's stack.  Due to alignment operations,
    * the adjusted stack size may be smaller than the stack size originally
@@ -171,7 +171,7 @@ pid_t up_vfork(const struct vfork_s *context)
                         parent->flags & TCB_FLAG_TTYPE_MASK);
   if (ret != OK)
     {
-      sdbg("up_create_stack failed: %d\n", ret);
+      serr("ERROR: up_create_stack failed: %d\n", ret);
       task_vforkabort(child, -ret);
       return (pid_t)ERROR;
     }
@@ -185,7 +185,7 @@ pid_t up_vfork(const struct vfork_s *context)
   DEBUGASSERT((uint32_t)parent->adj_stack_ptr > context->sp);
   stackutil = (uint32_t)parent->adj_stack_ptr - context->sp;
 
-  svdbg("stacksize:%d stackutil:%d\n", stacksize, stackutil);
+  sinfo("stacksize:%d stackutil:%d\n", stacksize, stackutil);
 
   /* Make some feeble effort to perserve the stack contents.  This is
    * feeble because the stack surely contains invalid pointers and other
@@ -199,7 +199,7 @@ pid_t up_vfork(const struct vfork_s *context)
 
   /* Was there a frame pointer in place before? */
 
-#if CONFIG_MIPS32_FRAMEPOINTER
+#ifdef CONFIG_MIPS32_FRAMEPOINTER
   if (context->fp <= (uint32_t)parent->adj_stack_ptr &&
       context->fp >= (uint32_t)parent->adj_stack_ptr - stacksize)
     {
@@ -211,23 +211,23 @@ pid_t up_vfork(const struct vfork_s *context)
       newfp = context->fp;
     }
 
-  svdbg("Old stack base:%08x SP:%08x FP:%08x\n",
+  sinfo("Old stack base:%08x SP:%08x FP:%08x\n",
         parent->adj_stack_ptr, context->sp, context->fp);
-  svdbg("New stack base:%08x SP:%08x FP:%08x\n",
+  sinfo("New stack base:%08x SP:%08x FP:%08x\n",
         child->cmn.adj_stack_ptr, newsp, newfp);
 #else
-  svdbg("Old stack base:%08x SP:%08x\n",
+  sinfo("Old stack base:%08x SP:%08x\n",
         parent->adj_stack_ptr, context->sp);
-  svdbg("New stack base:%08x SP:%08x\n",
+  sinfo("New stack base:%08x SP:%08x\n",
         child->cmn.adj_stack_ptr, newsp);
 #endif
 
- /* Update the stack pointer, frame pointer, global pointer and saved
-  * registers.  When the child TCB was initialized, all of the values
-  * were set to zero. up_initial_state() altered a few values, but the
-  * return value in v0 should be cleared to zero, providing the
-  * indication to the newly started child thread.
-  */
+  /* Update the stack pointer, frame pointer, global pointer and saved
+   * registers.  When the child TCB was initialized, all of the values
+   * were set to zero. up_initial_state() altered a few values, but the
+   * return value in v0 should be cleared to zero, providing the
+   * indication to the newly started child thread.
+   */
 
   child->cmn.xcp.regs[REG_S0]  = context->s0;  /* Saved register s0 */
   child->cmn.xcp.regs[REG_S1]  = context->s1;  /* Saved register s1 */
@@ -237,13 +237,13 @@ pid_t up_vfork(const struct vfork_s *context)
   child->cmn.xcp.regs[REG_S5]  = context->s5;  /* Volatile register s5 */
   child->cmn.xcp.regs[REG_S6]  = context->s6;  /* Volatile register s6 */
   child->cmn.xcp.regs[REG_S7]  = context->s7;  /* Volatile register s7 */
-#if CONFIG_MIPS32_FRAMEPOINTER
+#ifdef CONFIG_MIPS32_FRAMEPOINTER
   child->cmn.xcp.regs[REG_FP]  = newfp;        /* Frame pointer */
 #else
   child->cmn.xcp.regs[REG_S8]  = context->s8;  /* Volatile register s8 */
 #endif
   child->cmn.xcp.regs[REG_SP]  = newsp;        /* Stack pointer */
-#if MIPS32_SAVE_GP
+#ifdef MIPS32_SAVE_GP
   child->cmn.xcp.regs[REG_GP]  = newsp;        /* Global pointer */
 #endif
 

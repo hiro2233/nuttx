@@ -1,7 +1,7 @@
 /************************************************************************************
  * arch/arm/src/sama5/chip.h
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,5 +45,19 @@
 
 #include "chip/sam_memorymap.h"
 
-#endif /* __ARCH_ARM_SRC_SAMA5_CHIP_H */
+/************************************************************************************
+ * Pre-processor Definitions
+ ************************************************************************************/
 
+/* arch/arm/src/armv7-a/l2cc_pl310.h includes this file and expects it to provide the
+ * address of the L2CC-PL310 implementation.
+ */
+
+#define L2CC_VBASE SAM_L2CC_VSECTION
+
+/* Cache line sizes (in bytes)for the SAVA5Dx */
+
+#define ARMV7A_DCACHE_LINESIZE 32  /* 32 bytes (8 words) */
+#define ARMV7A_ICACHE_LINESIZE 32  /* 32 bytes (8 words) */
+
+#endif /* __ARCH_ARM_SRC_SAMA5_CHIP_H */

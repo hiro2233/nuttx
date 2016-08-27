@@ -44,12 +44,12 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <nuttx/usb/usbhost_trace.h>
 #undef usbtrace
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Configuration ************************************************************/
@@ -108,7 +108,7 @@ static int usbhost_trsyslog(uint32_t event, FAR void *arg)
     {
       /* Just print the data using syslog() */
 
-      syslog(fmt, (unsigned int)TRACE_DECODE_U23(event));
+      syslog(LOG_INFO, fmt, (unsigned int)TRACE_DECODE_U23(event));
     }
 
   /* No, then it must the the two argument format first. */
@@ -121,7 +121,7 @@ static int usbhost_trsyslog(uint32_t event, FAR void *arg)
         {
           /* Just print the data using syslog() */
 
-          syslog(fmt, (unsigned int)TRACE_DECODE_U7(event),
+          syslog(LOG_INFO, fmt, (unsigned int)TRACE_DECODE_U7(event),
                  (unsigned int)TRACE_DECODE_U16(event));
         }
     }
@@ -148,7 +148,7 @@ void usbhost_trace_common(uint32_t event)
 
   /* Check if tracing is enabled for this ID */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (!g_disabled)
     {
       /* Yes... save the new trace data at the head */
@@ -170,7 +170,7 @@ void usbhost_trace_common(uint32_t event)
             }
         }
     }
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 #endif /* CONFIG_USBHOST_TRACE */
 
@@ -190,7 +190,7 @@ void usbhost_trace_common(uint32_t event)
  ****************************************************************************/
 
 #if defined(CONFIG_USBHOST_TRACE) || \
-   (defined(CONFIG_DEBUG) && defined(CONFIG_DEBUG_USB))
+   (defined(CONFIG_DEBUG_FEATURES) && defined(CONFIG_DEBUG_USB))
 
 void usbhost_trace1(uint16_t id, uint32_t u23)
 {
@@ -206,7 +206,7 @@ void usbhost_trace1(uint16_t id, uint32_t u23)
 
   /* Just print the data using syslog() */
 
-  syslog(fmt, (unsigned int)u23);
+  syslog(LOG_INFO, fmt, (unsigned int)u23);
 #endif
 }
 
@@ -224,13 +224,13 @@ void usbhost_trace2(uint16_t id, uint8_t u7, uint16_t u16)
 
   /* Just print the data using syslog() */
 
-  syslog(fmt, u7, u16);
+  syslog(LOG_INFO, fmt, u7, u16);
 #endif
 }
 
-#endif /* CONFIG_USBHOST_TRACE || CONFIG_DEBUG && CONFIG_DEBUG_USB */
+#endif /* CONFIG_USBHOST_TRACE || CONFIG_DEBUG_FEATURES && CONFIG_DEBUG_USB */
 
-/*******************************************************************************
+/****************************************************************************
  * Name: usbtrace_enumerate
  *
  * Description:
@@ -239,7 +239,7 @@ void usbhost_trace2(uint16_t id, uint8_t u7, uint16_t u16)
  * Assumptions:
  *   NEVER called from an interrupt handler
  *
- *******************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_USBHOST_TRACE
 int usbhost_trenumerate(usbhost_trcallback_t callback, FAR void *arg)

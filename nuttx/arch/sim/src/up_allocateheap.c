@@ -1,5 +1,5 @@
 /****************************************************************************
- * up_allocateheap.c
+ * arch/sim/src/up_allocateheap.c
  *
  *   Copyright (C) 2007-2009, 2013 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -46,22 +46,13 @@
 
 #include <nuttx/arch.h>
 
-#include "os_internal.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
 static uint8_t sim_heap[SIM_HEAP_SIZE];
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -72,10 +63,6 @@ static uint8_t sim_heap[SIM_HEAP_SIZE];
  *
  * Description:
  *   This function will be called to dynamically set aside the heap region.
- *
- *   For the kernel build (CONFIG_NUTTX_KERNEL=y) with both kernel- and
- *   user-space heaps (CONFIG_MM_KERNEL_HEAP=y), this function provides the
- *   size of the unprotected, user-space heap.
  *
  *   If a protected kernel-space heap is provided, the kernel heap must be
  *   allocated (and protected) by an analogous up_allocate_kheap().

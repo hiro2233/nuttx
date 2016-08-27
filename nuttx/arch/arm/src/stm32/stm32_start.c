@@ -1,8 +1,7 @@
 /****************************************************************************
  * arch/arm/src/stm32/stm32_start.c
- * arch/arm/src/chip/stm32_start.c
  *
- *   Copyright (C) 2009, 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,9 +64,9 @@
 #ifdef CONFIG_ARCH_FPU
 static inline void stm32_fpuconfig(void);
 #endif
-#ifdef CONFIG_DEBUG_STACK
+#ifdef CONFIG_STACK_COLORATION
 static void go_os_start(void *pv, unsigned int nbytes)
-  __attribute__ ((naked,no_instrument_function,noreturn));
+  __attribute__ ((naked, no_instrument_function, noreturn));
 #endif
 
 /****************************************************************************
@@ -82,10 +81,20 @@ static void go_os_start(void *pv, unsigned int nbytes)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 #  define showprogress(c) up_lowputc(c)
 #else
 #  define showprogress(c)
+#endif
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+#ifdef CONFIG_ARMV7M_STACKCHECK
+/* we need to get r10 set before we can allow instrumentation calls */
+
+void __start(void) __attribute__ ((no_instrument_function));
 #endif
 
 /****************************************************************************
@@ -112,7 +121,7 @@ static void go_os_start(void *pv, unsigned int nbytes)
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_FPU
-#ifdef CONFIG_ARMV7M_CMNVECTOR
+#if defined(CONFIG_ARMV7M_CMNVECTOR) && !defined(CONFIG_ARMV7M_LAZYFPU)
 
 static inline void stm32_fpuconfig(void)
 {
@@ -186,7 +195,7 @@ static inline void stm32_fpuconfig(void)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_STACK
+#ifdef CONFIG_STACK_COLORATION
 static void go_os_start(void *pv, unsigned int nbytes)
 {
   /* Set the IDLE stack to the stack coloration value then jump to
@@ -198,7 +207,7 @@ static void go_os_start(void *pv, unsigned int nbytes)
 
   __asm__ __volatile__
   (
-    "\tmov  r1, r1, lsr #2\n"   /* R1 = nwords = nbytes >> 2 */
+    "\tmovs r1, r1, lsr #2\n"   /* R1 = nwords = nbytes >> 2 */
     "\tbeq  2f\n"               /* (should not happen) */
 
     "\tbic  r0, r0, #3\n"       /* R0 = Aligned stackptr */
@@ -235,7 +244,13 @@ void __start(void)
   const uint32_t *src;
   uint32_t *dest;
 
-  /* Configure the uart so that we can get debug output as soon as possible */
+#ifdef CONFIG_ARMV7M_STACKCHECK
+  /* Set the stack limit before we attempt to call any functions */
+
+  __asm__ volatile ("sub r10, sp, %0" : : "r" (CONFIG_IDLETHREAD_STACKSIZE - 64) : );
+#endif
+
+  /* Configure the UART so that we can get debug output as soon as possible */
 
   stm32_clockconfig();
   stm32_fpuconfig();
@@ -247,7 +262,7 @@ void __start(void)
    * certain that there are no issues with the state of global variables.
    */
 
-  for (dest = &_sbss; dest < &_ebss; )
+  for (dest = _START_BSS; dest < _END_BSS; )
     {
       *dest++ = 0;
     }
@@ -260,12 +275,18 @@ void __start(void)
    * end of all of the other read-only data (.text, .rodata) at _eronly.
    */
 
-  for (src = &_eronly, dest = &_sdata; dest < &_edata; )
+  for (src = _DATA_INIT, dest = _START_DATA; dest < _END_DATA; )
     {
       *dest++ = *src++;
     }
 
   showprogress('C');
+
+#ifdef CONFIG_ARMV7M_ITMSYSLOG
+  /* Perform ARMv7-M ITM SYSLOG initialization */
+
+  itm_syslog_initialize();
+#endif
 
   /* Perform early serial initialization */
 
@@ -280,7 +301,7 @@ void __start(void)
    * segments.
    */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
   stm32_userspace();
   showprogress('E');
 #endif
@@ -295,7 +316,7 @@ void __start(void)
   showprogress('\r');
   showprogress('\n');
 
-#ifdef CONFIG_DEBUG_STACK
+#ifdef CONFIG_STACK_COLORATION
   /* Set the IDLE stack to the coloration value and jump into os_start() */
 
   go_os_start((FAR void *)&_ebss, CONFIG_IDLETHREAD_STACKSIZE);
@@ -306,6 +327,6 @@ void __start(void)
 
   /* Shoulnd't get here */
 
-  for (;;);
+  for (; ; );
 #endif
 }

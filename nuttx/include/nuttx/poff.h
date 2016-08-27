@@ -1,4 +1,4 @@
-/***************************************************************************
+/****************************************************************************
  * include/nuttx/poff.h
  * Definitions for the P-Code Object File Format (POFF)
  *
@@ -32,21 +32,21 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ***************************************************************************/
+ ****************************************************************************/
 
-#ifndef __INCLUDE_NUXX_POFF_H
-#define __INCLUDE_NUXX_POFF_H
+#ifndef __INCLUDE_NUTTX_POFF_H
+#define __INCLUDE_NUTTX_POFF_H
 
-/***************************************************************************
+/****************************************************************************
  * Included Files
- ***************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <stdint.h>
 
-/***************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- ***************************************************************************/
+ ****************************************************************************/
 
 /* Definitions for the fh_ident field of the poffHdr_t */
 
@@ -157,9 +157,9 @@
 #define RLI_TYPE(x)          ((x) & 0xff) /* Reloc type */
 #define RLI_MAKE(s,t)        (((uint32_t)(s) << 8) | ((t) & 0xff))
 
-/***************************************************************************
+/****************************************************************************
  * Public Types
- ***************************************************************************/
+ ****************************************************************************/
 
 /* POFF file header */
 
@@ -425,11 +425,11 @@ typedef struct poff_debugfuncinfo_s poff_debugfuncinfo_t;
 
 struct poff_debugarginfo_s
 {
-  /* This is the size, in bytes, of one input paramter */
+  /* This is the size, in bytes, of one input parameter */
 
   uint32_t da_size;
 };
 
 typedef struct poff_debugarginfo_s poff_debugarginfo_t;
 
-#endif /* __INCLUDE_NUXX_POFF_H */
+#endif /* __INCLUDE_NUTTX_POFF_H */

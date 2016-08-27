@@ -49,14 +49,14 @@
 
 #include "up_arch.h"
 
-#include "atmega_internal.h"
+#include "atmega.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* The CPU frequency is given by BOARD_CPU_CLOCK (defined in board.h).  The
- * desired interrupt frequency is given by CONFIG_MSEC_PER_TICK.  An unscaled
+ * desired interrupt frequency is given by CONFIG_USEC_PER_TICK.  An unscaled
  * ideal match is given by:
  *
  *   CLOCK = CPU_CLOCK / DIVISOR                      # CPU clocks/sec
@@ -92,8 +92,7 @@
 #  error "Cannot represent this timer frequency"
 #endif
 
-/*
- * Eg. CPU_CLOCK = 8MHz, CLOCKS_PER_SEC = 100
+/* Eg. CPU_CLOCK = 8MHz, CLOCKS_PER_SEC = 100
  *
  *   MATCH1      ((8000000 + 50) / 100) = 80,000  FREQ=100.0Hz
  *   MATCH8      ((1000000 + 50) / 100) = 10,000  FREQ=100.0Hz <-- this one
@@ -111,7 +110,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -125,14 +124,14 @@
 
 int up_timerisr(int irq, uint32_t *regs)
 {
-   /* Process timer interrupt */
+  /* Process timer interrupt */
 
-   sched_process_timer();
-   return 0;
+  sched_process_timer();
+  return 0;
 }
 
 /****************************************************************************
- * Function:  up_timerinit
+ * Function:  up_timer_initialize
  *
  * Description:
  *   This function is called during start-up to initialize the timer
@@ -141,7 +140,7 @@ int up_timerisr(int irq, uint32_t *regs)
  *
  ****************************************************************************/
 
-void up_timerinit(void)
+void up_timer_initialize(void)
 {
   /* Setup timer 1 compare match A to generate a tick interrupt.
    *
@@ -173,9 +172,19 @@ void up_timerinit(void)
 
   /* Attach the timer interrupt vector */
 
+#if defined(ATMEGA_IRQ_T1COMPA)
   (void)irq_attach(ATMEGA_IRQ_T1COMPA, (xcpt_t)up_timerisr);
+#elif defined(ATMEGA_IRQ_TIM1_COMPA)
+  (void)irq_attach(ATMEGA_IRQ_TIM1_COMPA, (xcpt_t)up_timerisr);
+#else
+# error "Unable to find IRQ for timer"
+#endif
 
   /* Enable the interrupt on compare match A */
 
+#if defined(TIMSK1)
+  TIMSK1 |= (1 << OCIE1A);
+#else
   TIMSK |= (1 << OCIE1A);
+#endif
 }

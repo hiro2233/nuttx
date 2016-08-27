@@ -1,4 +1,4 @@
-/***********************************************************************
+/****************************************************************************
  * apps/examples/ostest/fpu.c
  *
  *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ***********************************************************************/
+ ****************************************************************************/
 
-/***********************************************************************
+/****************************************************************************
  * Included Files
- ***********************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <sys/wait.h>
@@ -48,14 +48,17 @@
 
 #include "ostest.h"
 
-/***********************************************************************
+/****************************************************************************
  * Pre-processor definitions
- ***********************************************************************/
+ ****************************************************************************/
 /* Configuration *******************************************************/
 
 #undef HAVE_FPU
 #ifdef CONFIG_ARCH_FPU
-#  if defined(CONFIG_EXAMPLES_OSTEST_FPUSIZE) && defined(CONFIG_SCHED_WAITPID) && !defined(CONFIG_DISABLE_SIGNALS)
+#  if defined(CONFIG_EXAMPLES_OSTEST_FPUSIZE) && \
+      defined(CONFIG_SCHED_WAITPID) && \
+      !defined(CONFIG_DISABLE_SIGNALS) && \
+      defined(CONFIG_BUILD_FLAT)
 #    define HAVE_FPU 1
 #  else
 #    ifndef CONFIG_EXAMPLES_OSTEST_FPUSIZE
@@ -66,6 +69,9 @@
 #    endif
 #    ifdef CONFIG_DISABLE_SIGNALS
 #      warning "FPU test not built; CONFIG_DISABLE_SIGNALS defined"
+#    endif
+#    ifndef CONFIG_BUILD_FLAT
+#      warning "FPU test not built; Only available in the flat build (CONFIG_BUILD_FLAT)"
 #    endif
 #  endif
 #endif
@@ -88,7 +94,7 @@
 #  define CONFIG_EXAMPLES_OSTEST_FPUSTACKSIZE 2048
 #endif
 
-/* Other defintions ****************************************************/
+/* Other definitions ***************************************************/
 /* We'll keep all data using 32-bit values only to force 32-bit alignment.
  * This logic has no real notion of the underlying representation.
  */
@@ -100,9 +106,9 @@
 # define NULL (void*)0
 #endif
 
-/***********************************************************************
+/****************************************************************************
  * External Dependencies
- ***********************************************************************/
+ ****************************************************************************/
 /* This test is very dependent on support provided by the chip/board-
  * layer logic.  In particular, it expects the following functions
  * to be provided:
@@ -121,9 +127,9 @@ extern void arch_getfpu(FAR uint32_t *fpusave);
 extern bool arch_cmpfpu(FAR const uint32_t *fpusave1,
                         FAR const uint32_t *fpusave2);
 
-/***********************************************************************
+/****************************************************************************
  * Private Types
- ***********************************************************************/
+ ****************************************************************************/
 
 struct fpu_threaddata_s
 {
@@ -146,16 +152,16 @@ struct fpu_threaddata_s
   volatile float dp4;
 };
 
-/***********************************************************************
+/****************************************************************************
  * Private Data
- ***********************************************************************/
+ ****************************************************************************/
 
 static uint8_t g_fpuno;
 /* static */ struct fpu_threaddata_s g_fputhread[FPU_NTHREADS];
 
-/***********************************************************************
+/****************************************************************************
  * Private Functions
- ***********************************************************************/
+ ****************************************************************************/
 
 static void fpu_dump(FAR uint32_t *buffer, FAR const char *msg)
 {
@@ -293,9 +299,9 @@ static int fpu_task(int argc, char *argv[])
 }
 #endif /* HAVE_FPU */
 
-/***********************************************************************
+/****************************************************************************
  * Private Functions
- ***********************************************************************/
+ ****************************************************************************/
 
 void fpu_test(void)
 {
@@ -308,7 +314,7 @@ void fpu_test(void)
 
   g_fpuno = 0;
   printf("Starting task FPU#1\n");
-  task1 = TASK_CREATE("FPU#1", CONFIG_EXAMPLES_OSTEST_FPUPRIORITY, CONFIG_EXAMPLES_OSTEST_FPUSTACKSIZE, fpu_task, NULL);
+  task1 = task_create("FPU#1", CONFIG_EXAMPLES_OSTEST_FPUPRIORITY, CONFIG_EXAMPLES_OSTEST_FPUSTACKSIZE, fpu_task, NULL);
   if (task1 < 0)
     {
       printf("fpu_test: ERROR Failed to start task FPU#1\n");
@@ -321,7 +327,7 @@ void fpu_test(void)
   usleep(250);
 
   printf("Starting task FPU#2\n");
-  task2 = TASK_CREATE("FPU#2", CONFIG_EXAMPLES_OSTEST_FPUPRIORITY, CONFIG_EXAMPLES_OSTEST_FPUSTACKSIZE, fpu_task, NULL);
+  task2 = task_create("FPU#2", CONFIG_EXAMPLES_OSTEST_FPUPRIORITY, CONFIG_EXAMPLES_OSTEST_FPUSTACKSIZE, fpu_task, NULL);
   if (task2 < 0)
     {
       printf("fpu_test: ERROR Failed to start task FPU#1\n");

@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 if ARCH_CHIP_EZ80
@@ -9,23 +9,24 @@ menu "ez80 Peripheral Support"
 
 config EZ80_UART0
 	bool "UART0"
-	select ARCH_HAVE_UART0
+	select UART0_SERIALDRIVER
 	default n
 
 config EZ80_UART1
 	bool "UART1"
-	select ARCH_HAVE_UART1
+	select UART1_SERIALDRIVER
 	default n
 
 config EZ80_UART2
 	bool "UART2"
-	select ARCH_HAVE_UART2
+	select UART2_SERIALDRIVER
 	default n
 
 config EZ80_EMAC
 	bool "Ethernet MAC"
 	default n
 	select ARCH_HAVE_PHY
+	select ARCH_HAVE_NETDEV_STATISTICS
 	---help---
 		Enables support for ez80 EMAC driver.
 
@@ -39,6 +40,18 @@ config EZ80_TOOLCHAIN_ZDSII
 	bool
 	default y if ARCH_CHIP_EZ80
 	default n if !ARCH_CHIP_EZ80
+
+choice
+	prompt "ZDS-II Toolchain version"
+	default EZ80_ZDSII_V521
+
+config EZ80_ZDSII_V511
+	bool "ZDS-II 5.1.1"
+
+config EZ80_ZDSII_V521
+	bool "ZDS-II 5.2.1"
+
+endchoice # ZDS-II Toolchain version
 
 if EZ80_EMAC
 
@@ -104,7 +117,7 @@ config ARCH_MCFILTER
 	---help---
 		Enables multicast MAC address filtering (not fully implemented)
 
-endif
+endif # EZ80_EMAC
 
 config ARCH_TIMERHOOK
 	bool "Timer Hook"
@@ -115,4 +128,4 @@ config ARCH_TIMERHOOK
 		user provided function called up_timerhook().  At present, this timer hook is
 		only used for driving the segment LED on board certain ez80 boards.
 
-endif
+endif # ARCH_CHIP_EZ80

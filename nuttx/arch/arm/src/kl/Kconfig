@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 comment "Kinetis Configuration Options"
@@ -10,8 +10,16 @@ choice
 	default ARCH_CHIP_MKL25Z128
 	depends on ARCH_CHIP_KL
 
+config ARCH_CHIP_MKL25Z64
+	bool "MKL25Z64"
+	select ARCH_FAMILY_KL2X
+
 config ARCH_CHIP_MKL25Z128
 	bool "MKL25Z128"
+	select ARCH_FAMILY_KL2X
+
+config ARCH_CHIP_MKL26Z128
+	bool "MKL26Z128"
 	select ARCH_FAMILY_KL2X
 
 endchoice
@@ -39,21 +47,21 @@ config KL_FLEXBUS
 config KL_UART0
 	bool "UART0"
 	default n
-	select ARCH_HAVE_UART0
+	select UART0_SERIALDRIVER
 	---help---
 		Support UART0
 
 config KL_UART1
 	bool "UART1"
 	default n
-	select ARCH_HAVE_UART1
+	select UART1_SERIALDRIVER
 	---help---
 		Support UART1
 
 config KL_UART2
 	bool "UART2"
 	default n
-	select ARCH_HAVE_UART2
+	select UART2_SERIALDRIVER
 	---help---
 		Support UART2
 
@@ -61,6 +69,7 @@ config KL_RNGB
 	bool "Random number generator"
 	default n
 	depends on ARCH_FAMILY_K60
+	select ARCH_HAVE_RNG
 	---help---
 		Support the random number generator(K60 only)
 
@@ -305,8 +314,8 @@ config KL_TPM1_PWM
 config KL_TPM1_CHANNEL
 	int "TPM1 PWM Output Channel"
 	default 0
-	range 0 1 if ARCH_CHIP_MKL25Z128
-	range 0 5 if !ARCH_CHIP_MKL25Z128
+	range 0 1 if ARCH_CHIP_MKL25Z64 || ARCH_CHIP_MKL25Z128 || ARCH_CHIP_MKL26Z128
+	range 0 5 if !ARCH_CHIP_MKL25Z64 && !ARCH_CHIP_MKL25Z128 && !ARCH_CHIP_MKL26Z128
 	depends on KL_TPM1_PWM
 	---help---
 		If TIM1 is enabled for PWM usage, you also need specifies the timer output
@@ -327,8 +336,8 @@ config KL_TPM2_PWM
 config KL_TPM2_CHANNEL
 	int "TPM2 PWM Output Channel"
 	default 0
-	range 0 1 if ARCH_CHIP_MKL25Z128
-	range 0 5 if !ARCH_CHIP_MKL25Z128
+	range 0 1 if ARCH_CHIP_MKL25Z64 || ARCH_CHIP_MKL25Z128 || ARCH_CHIP_MKL26Z128
+	range 0 5 if !ARCH_CHIP_MKL25Z64 && !ARCH_CHIP_MKL25Z128 && !ARCH_CHIP_MKL26Z128
 	depends on KL_TPM2_PWM
 	---help---
 		If TIM2 is enabled for PWM usage, you also need specifies the timer output
@@ -336,37 +345,21 @@ config KL_TPM2_CHANNEL
 
 comment "Kinetis GPIO Interrupt Configuration"
 
-config GPIO_IRQ
+config KL_GPIOIRQ
 	bool "GPIO pin interrupts"
 	---help---
 		Enable support for interrupting GPIO pins
 
-if GPIO_IRQ
+if KL_GPIOIRQ
 
 config KL_PORTAINTS
 	bool "GPIOA interrupts"
 	---help---
 		Enable support for 32 interrupts from GPIO port A pins
 
-config KL_PORTBINTS
-	bool "GPIOB interrupts"
-	---help---
-		Enable support for 32 interrupts from GPIO port B pins
-
-config KL_PORTCINTS
-	bool "GPIOC interrupts"
-	---help---
-		Enable support for 32 interrupts from GPIO port C pins
-
 config KL_PORTDINTS
 	bool "GPIOD interrupts"
 	---help---
 		Enable support for 32 interrupts from GPIO port D pins
 
-config KL_PORTEINTS
-	bool "GPIOE interrupts"
-	---help---
-		Enable support for 32 interrupts from GPIO port E pins
-
 endif
-

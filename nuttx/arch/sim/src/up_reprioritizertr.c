@@ -1,7 +1,7 @@
 /****************************************************************************
- * up_reprioritizertr.c
+ * arch/sim/src/up_reprioritizertr.c
  *
- *   Copyright (C) 2007-2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,21 +45,10 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/sched.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -103,10 +92,10 @@ void up_reprioritize_rtr(struct tcb_s *tcb, uint8_t priority)
     }
   else
     {
-      struct tcb_s *rtcb = (struct tcb_s*)g_readytorun.head;
+      FAR struct tcb_s *rtcb = this_task();
       bool switch_needed;
 
-      sdbg("TCB=%p PRI=%d\n", tcb, priority);
+      sinfo("TCB=%p PRI=%d\n", tcb, priority);
 
       /* Remove the tcb task from the ready-to-run list.
        * sched_removereadytorun will return true if we just
@@ -143,19 +132,23 @@ void up_reprioritize_rtr(struct tcb_s *tcb, uint8_t priority)
               sched_mergepending();
             }
 
+          /* Update scheduler parameters */
+
+          sched_suspend_scheduler(rtcb);
+
           /* Copy the exception context into the TCB at the (old) head of the
-           * g_readytorun Task list. if up_setjmp returns a non-zero
+           * ready-to-run Task list. if up_setjmp returns a non-zero
            * value, then this is really the previously running task restarting!
            */
 
           if (!up_setjmp(rtcb->xcp.regs))
             {
               /* Restore the exception context of the rtcb at the (new) head
-               * of the g_readytorun task list.
+               * of the ready-to-run task list.
                */
 
-              rtcb = (struct tcb_s*)g_readytorun.head;
-              sdbg("New Active Task TCB=%p\n", rtcb);
+              rtcb = this_task();
+              sinfo("New Active Task TCB=%p\n", rtcb);
 
               /* The way that we handle signals in the simulation is kind of
                * a kludge.  This would be unsafe in a truly multi-threaded, interrupt
@@ -164,10 +157,14 @@ void up_reprioritize_rtr(struct tcb_s *tcb, uint8_t priority)
 
               if (rtcb->xcp.sigdeliver)
                 {
-                  sdbg("Delivering signals TCB=%p\n", rtcb);
+                  sinfo("Delivering signals TCB=%p\n", rtcb);
                   ((sig_deliver_t)rtcb->xcp.sigdeliver)(rtcb);
                   rtcb->xcp.sigdeliver = NULL;
                 }
+
+              /* Update scheduler parameters */
+
+              sched_resume_scheduler(rtcb);
 
               /* Then switch contexts */
 

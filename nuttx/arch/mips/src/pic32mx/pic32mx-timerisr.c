@@ -46,17 +46,17 @@
 #include <nuttx/arch.h>
 #include <arch/board/board.h>
 
-#include "clock_internal.h"
+#include "clock/clock.h"
 #include "up_internal.h"
 #include "up_arch.h"
 
 #include "pic32mx-config.h"
 #include "pic32mx-timer.h"
 #include "pic32mx-int.h"
-#include "pic32mx-internal.h"
+#include "pic32mx.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Timer Setup **************************************************************/
 /* Timer 1 is a type A timer.  Setting the TCS bit in the timer control
@@ -83,7 +83,7 @@
  *
  *   TIMER1_PRESCALE >= TIMER1_SRC_FREQ / CLOCKS_PER_SEC / 65535
  *
- * Timer 1 does not have very many options for the perscaler value.  So we
+ * Timer 1 does not have very many options for the prescaler value.  So we
  * can pick the best by brute force.  Example:
  *
  * Example 1. Given:
@@ -133,7 +133,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -158,7 +158,7 @@ int up_timerisr(int irq, uint32_t *regs)
 }
 
 /****************************************************************************
- * Function:  up_timerinit
+ * Function:  up_timer_initialize
  *
  * Description:
  *   This function is called during start-up to initialize
@@ -166,14 +166,14 @@ int up_timerisr(int irq, uint32_t *regs)
  *
  ****************************************************************************/
 
-void up_timerinit(void)
+void up_timer_initialize(void)
 {
   /* Configure and enable TIMER1.  Used the computed TCKPS divider and timer
-   * match valude.  The source will be either the internal PBCLOCK (TCS=0) or
+   * match value.  The source will be either the internal PBCLOCK (TCS=0) or
    * the external SOSC (TCS=1)
    */
 
-  putreg32((TIMER1_CON_TCKPS|TIMER1_CON_TCS), PIC32MX_TIMER1_CON);
+  putreg32((TIMER1_CON_TCKPS | TIMER1_CON_TCS), PIC32MX_TIMER1_CON);
   putreg32(0, PIC32MX_TIMER1_CNT);
   putreg32(TIMER1_MATCH-1, PIC32MX_TIMER1_PR);
   putreg32(TIMER_CON_ON, PIC32MX_TIMER1_CONSET);

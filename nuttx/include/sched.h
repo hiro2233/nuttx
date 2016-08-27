@@ -1,7 +1,7 @@
 /********************************************************************************
  * include/sched.h
  *
- *   Copyright (C) 2007-2009, 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011, 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,39 +44,137 @@
 
 #include <sys/types.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <nuttx/sched.h>
 
 /********************************************************************************
  * Pre-processor Definitions
  ********************************************************************************/
-
 /* Task Management Definitions **************************************************/
 
 /* POSIX-like scheduling policies */
 
-#define SCHED_FIFO     1  /* FIFO per priority scheduling policy */
-#define SCHED_RR       2  /* Round robin scheduling policy */
-#define SCHED_SPORADIC 3  /* Not supported */
-#define SCHED_OTHER    4  /* Not supported */
+#define SCHED_FIFO       1  /* FIFO priority scheduling policy */
+#define SCHED_RR         2  /* Round robin scheduling policy */
+#define SCHED_SPORADIC   3  /* Sporadic scheduling policy */
+#define SCHED_OTHER      4  /* Not supported */
+
+/* Maximum number of SCHED_SPORADIC replenishments */
+
+#define SS_REPL_MAX      CONFIG_SCHED_SPORADIC_MAXREPL
 
 /* Pthread definitions **********************************************************/
 
 #define PTHREAD_KEYS_MAX CONFIG_NPTHREAD_KEYS
 
-/* Non-standard Helper **********************************************************/
-/* One processor family supported by NuttX has a single, fixed hardware stack.
- * That is the 8051 family.  So for that family only, there is a variant form
- * of task_create() that does not take a stack size parameter.  The following
- * helper macros are provided to work around the ugliness of that exception.
+/* CPU affinity mask helpers ***************************************************/
+/* These are not standard but are defined for Linux compatibility */
+
+#ifdef CONFIG_SMP
+
+/* void CPU_ZERO(FAR cpu_set_t *set); */
+
+#  define CPU_ZERO(s) do { *(s) = 0; } while (0)
+
+/* void CPU_SET(int cpu, FAR cpu_set_t *set); */
+
+#  define CPU_SET(c,s) do { *(s) |= (1 << (c)); } while (0)
+
+/* void CPU_CLR(int cpu, FAR cpu_set_t *set); */
+
+#  define CPU_CLR(c,s) do { *(s) &= ~(1 << (c)); } while (0)
+
+/* int  CPU_ISSET(int cpu, FAR const cpu_set_t *set); */
+
+#  define CPU_ISSET(c,s) ((*(s) & (1 << (c))) != 0)
+
+/* int CPU_COUNT(FAR const cpu_set_t *set); */
+
+#  define CPU_COUNT(s) sched_cpu_count(s)
+
+/* void CPU_AND(FAR cpu_set_t *destset, FAR const cpu_set_t *srcset1,
+ *              FAR const cpu_set_t *srcset2);
  */
 
-#ifndef CONFIG_CUSTOM_STACK
-#  define TASK_INIT(t,n,p,m,s,e,a) task_init(t,n,p,m,s,e,a)
-#  define TASK_CREATE(n,p,s,e,a)   task_create(n,p,s,e,a)
-#else
-#  define TASK_INIT(t,n,p,m,s,e,a) task_init(t,n,p,e,a)
-#  define TASK_CREATE(n,p,s,e,a)   task_create(n,p,e,a)
-#endif
+#  define CPU_AND(d,s1,s2) do { *(d) = *(s1) & *(s2); } while (0)
+
+/* void CPU_OR(FAR cpu_set_t *destset, FAR const cpu_set_t *srcset1,
+ *             FAR const cpu_set_t *srcset2);
+ */
+
+#  define CPU_OR(d,s1,s2) do { *(d) = *(s1) | *(s2); } while (0)
+
+/* void CPU_XOR(FAR cpu_set_t *destset, FAR const cpu_set_t *srcset1,
+ *              FAR const cpu_set_t *srcset2);
+ */
+
+#  define CPU_XOR(d,s1,s2) do { *(d) = *(s1) ^ *(s2); } while (0)
+
+/* int CPU_EQUAL(FAR const cpu_set_t *set1, FAR const cpu_set_t *set2); */
+
+#  define CPU_EQUAL(s1,s2) (*(s2) == *(s2))
+
+/* REVISIT: Variably sized CPU sets are not supported */
+/* FAR cpu_set_t *CPU_ALLOC(int num_cpus); */
+
+#  define CPU_ALLOC(n) (FAR cpu_set_t *)malloc(sizeof(cpu_set_t));
+
+/* void CPU_FREE(cpu_set_t *set); */
+
+#  define CPU_ALLOC(s) free(s)
+
+/* size_t CPU_ALLOC_SIZE(int num_cpus); */
+
+#  define CPU_ALLOC_SIZE(n) sizeof(cpu_set_t)
+
+/* void CPU_ZERO_S(size_t setsize, FAR cpu_set_t *set); */
+
+#  define CPU_ZERO_S(n,s) CPU_ZERO_S(s)
+
+/* void CPU_SET_S(int cpu, size_t setsize, FAR cpu_set_t *set); */
+
+#  define CPU_SET_S(c,n,s) CPU_SET(c,s)
+
+/* void CPU_CLR_S(int cpu, size_t setsize, FAR cpu_set_t *set); */
+
+#  define CPU_CLR_S(c,n,s) CPU_CLR(c,s)
+
+/* int CPU_ISSET_S(int cpu, size_t setsize, FAR const cpu_set_t *set); */
+
+#  define CPU_ISSET_S(c,n,s) CPU_ISSET(c,s)
+
+/* int CPU_COUNT_S(size_t setsize, FAR const cpu_set_t *set); */
+
+#  define CPU_COUNT_S(n,s) CPU_COUNT(s)
+
+/* void CPU_AND_S(size_t setsize, FAR cpu_set_t *destset,
+ *                FAR const cpu_set_t *srcset1,
+ *                FAR const cpu_set_t *srcset2);
+ */
+
+#  define CPU_AND_S(n,d,s1,s2) CPU_AND(d,s1,s2)
+
+/* void CPU_OR_S(size_t setsize, FAR cpu_set_t *destset,
+ *              FAR const cpu_set_t *srcset1,
+ *              FAR const cpu_set_t *srcset2);
+ */
+
+#  define CPU_OR_S(n,d,s1,s2) CPU_OR(d,s1,s2)
+
+/* void CPU_XOR_S(size_t setsize, FAR cpu_set_t *destset,
+ *                FAR const cpu_set_t *srcset1,
+ *                FAR const cpu_set_t *srcset2);
+ */
+
+#  define CPU_XOR_S(n,d,s1,s2) CPU_XOR(d,s1,s2)
+
+/* int CPU_EQUAL_S(size_t setsize, FAR const cpu_set_t *set1,
+ *                 FAR const cpu_set_t *set2);
+ */
+
+#  define CPU_EQUAL_S(n,s1,s2) CPU_EQUAL(s1,s2)
+
+#endif /* CONFIG_SMP */
 
 /********************************************************************************
  * Public Type Definitions
@@ -86,7 +184,17 @@
 
 struct sched_param
 {
-  int sched_priority;
+  int sched_priority;                   /* Base thread priority */
+
+#ifdef CONFIG_SCHED_SPORADIC
+  int sched_ss_low_priority;            /* Low scheduling priority for sporadic
+                                         * server */
+  struct timespec sched_ss_repl_period; /* Replenishment period for sporadic
+                                         * server. */
+  struct timespec sched_ss_init_budget; /* Initial budget for sporadic server */
+  int sched_ss_max_repl;                /* Maximum pending replenishments for
+                                         * sporadic server. */
+#endif
 };
 
 /********************************************************************************
@@ -109,21 +217,14 @@ extern "C"
 
 /* Task Control Interfaces (non-standard) */
 
-#ifndef CONFIG_CUSTOM_STACK
 int    task_init(FAR struct tcb_s *tcb, const char *name, int priority,
                  FAR uint32_t *stack, uint32_t stack_size, main_t entry,
                  FAR char * const argv[]);
-#else
-int    task_init(FAR struct tcb_s *tcb, const char *name, int priority,
-                 main_t entry, FAR char * const argv[]);
-#endif
 int    task_activate(FAR struct tcb_s *tcb);
-#ifndef CONFIG_CUSTOM_STACK
+
+#ifndef CONFIG_BUILD_KERNEL
 int    task_create(FAR const char *name, int priority, int stack_size,
                    main_t entry, FAR char * const argv[]);
-#else
-int    task_create(FAR const char *name, int priority, main_t entry,
-                   FAR char * const argv[]);
 #endif
 int    task_delete(pid_t pid);
 int    task_restart(pid_t pid);
@@ -140,28 +241,24 @@ int    sched_get_priority_max(int policy);
 int    sched_get_priority_min(int policy);
 int    sched_rr_get_interval(pid_t pid, FAR struct timespec *interval);
 
+#ifdef CONFIG_SMP
+/* Task affinity */
+
+int    sched_setaffinity(pid_t pid, size_t cpusetsize,
+                         FAR const cpu_set_t *mask);
+int    sched_getaffinity(pid_t pid, size_t cpusetsize, FAR cpu_set_t *mask);
+int    sched_cpu_count(FAR const cpu_set_t *set);
+#endif /* CONFIG_SMP */
+
 /* Task Switching Interfaces (non-standard) */
 
 int    sched_lock(void);
 int    sched_unlock(void);
 int    sched_lockcount(void);
 
-/* If instrumentation of the scheduler is enabled, then some outboard logic
- * must provide the following interfaces.
- */
+/* Queries */
 
-#ifdef CONFIG_SCHED_INSTRUMENTATION
-
-void   sched_note_start(FAR struct tcb_s *tcb);
-void   sched_note_stop(FAR struct tcb_s *tcb);
-void   sched_note_switch(FAR struct tcb_s *pFromTcb,
-                         FAR struct tcb_s *pToTcb);
-
-#else
-# define sched_note_start(t)
-# define sched_note_stop(t)
-# define sched_note_switch(t1, t2)
-#endif /* CONFIG_SCHED_INSTRUMENTATION */
+bool   sched_idletask(void);
 
 #undef EXTERN
 #if defined(__cplusplus)

@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/stm32/stm32_iwdg.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,8 +44,9 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/clock.h>
-#include <nuttx/watchdog.h>
+#include <nuttx/timers/watchdog.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
@@ -56,7 +57,7 @@
 #if defined(CONFIG_WATCHDOG) && defined(CONFIG_STM32_IWDG)
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Clocking *****************************************************************/
 /* The minimum frequency of the IWDG clock is:
@@ -67,7 +68,7 @@
  *
  *   1000 * IWDG_RLR_MAX / Fmin
  *
- * For example, if Flsi = 30Khz (the nominal, uncalibrathed value), then the
+ * For example, if Flsi = 30Khz (the nominal, uncalibrated value), then the
  * maximum delay is:
  *
  *   Fmin = 117.1875
@@ -81,6 +82,10 @@
 
 #ifndef CONFIG_STM32_IWDG_DEFTIMOUT
 #  define CONFIG_STM32_IWDG_DEFTIMOUT IWDG_MAXTIMEOUT
+#endif
+
+#ifndef CONFIG_DEBUG_WATCHDOG_INFO
+#  undef CONFIG_STM32_IWDG_REGDEBUG
 #endif
 
 /* REVISIT:  It appears that you can only setup the prescaler and reload
@@ -102,20 +107,6 @@
 
 #if defined(CONFIG_STM32_IWDG_ONETIMESETUP) && defined(CONFIG_STM32_IWDG_DEFERREDSETUP)
 #  error "Both CONFIG_STM32_IWDG_ONETIMESETUP and CONFIG_STM32_IWDG_DEFERREDSETUP are defined"
-#endif
-
-/* Debug ********************************************************************/
-/* Non-standard debug that may be enabled just for testing the watchdog
- * driver.  NOTE: that only lldbg types are used so that the output is
- * immediately available.
- */
-
-#ifdef CONFIG_DEBUG_WATCHDOG
-#  define wddbg    lldbg
-#  define wdvdbg   llvdbg
-#else
-#  define wddbg(x...)
-#  define wdvdbg(x...)
 #endif
 
 /****************************************************************************
@@ -142,7 +133,7 @@ struct stm32_lowerhalf_s
  ****************************************************************************/
 /* Register operations ******************************************************/
 
-#if defined(CONFIG_STM32_IWDG_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_STM32_IWDG_REGDEBUG
 static uint16_t stm32_getreg(uint32_t addr);
 static void     stm32_putreg(uint16_t val, uint32_t addr);
 #else
@@ -194,7 +185,7 @@ static struct stm32_lowerhalf_s g_wdgdev;
  *
  ****************************************************************************/
 
-#if defined(CONFIG_STM32_IWDG_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_STM32_IWDG_REGDEBUG
 static uint16_t stm32_getreg(uint32_t addr)
 {
   static uint32_t prevaddr = 0;
@@ -205,7 +196,7 @@ static uint16_t stm32_getreg(uint32_t addr)
 
   uint16_t val = getreg16(addr);
 
-  /* Is this the same value that we read from the same registe last time?  Are
+  /* Is this the same value that we read from the same register last time?  Are
    * we polling the register?  If so, suppress some of the output.
    */
 
@@ -213,10 +204,11 @@ static uint16_t stm32_getreg(uint32_t addr)
     {
       if (count == 0xffffffff || ++count > 3)
         {
-           if (count == 4)
-             {
-               lldbg("...\n");
-             }
+          if (count == 4)
+            {
+              wdinfo("...\n");
+            }
+
           return val;
         }
     }
@@ -225,25 +217,25 @@ static uint16_t stm32_getreg(uint32_t addr)
 
   else
     {
-       /* Did we print "..." for the previous value? */
+      /* Did we print "..." for the previous value? */
 
-       if (count > 3)
-         {
-           /* Yes.. then show how many times the value repeated */
+      if (count > 3)
+        {
+          /* Yes.. then show how many times the value repeated */
 
-           lldbg("[repeats %d more times]\n", count-3);
-         }
+          wdinfo("[repeats %d more times]\n", count-3);
+        }
 
-       /* Save the new address, value, and count */
+      /* Save the new address, value, and count */
 
-       prevaddr = addr;
-       preval   = val;
-       count    = 1;
+      prevaddr = addr;
+      preval   = val;
+      count    = 1;
     }
 
   /* Show the register value read */
 
-  lldbg("%08x->%04x\n", addr, val);
+  wdinfo("%08x->%04x\n", addr, val);
   return val;
 }
 #endif
@@ -256,12 +248,12 @@ static uint16_t stm32_getreg(uint32_t addr)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_STM32_IWDG_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_STM32_IWDG_REGDEBUG
 static void stm32_putreg(uint16_t val, uint32_t addr)
 {
   /* Show the register value being written */
 
-  lldbg("%08x<-%04x\n", addr, val);
+  wdinfo("%08x<-%04x\n", addr, val);
 
   /* Write the value */
 
@@ -279,7 +271,7 @@ static void stm32_putreg(uint16_t val, uint32_t addr)
  * Input Parameters:
  *   priv   - A pointer the internal representation of the "lower-half"
  *             driver state structure.
- *   timeout - The new timeout value in millisecnds.
+ *   timeout - The new timeout value in milliseconds.
  *
  * Returned Values:
  *   Zero on success; a negated errno value on failure.
@@ -301,7 +293,7 @@ static inline void stm32_setprescaler(FAR struct stm32_lowerhalf_s *priv)
    */
 
 #ifndef CONFIG_STM32_IWDG_ONETIMESETUP
-  while ((stm32_getreg(STM32_IWDG_SR) & (IWDG_SR_PVU|IWDG_SR_RVU)) != 0);
+  while ((stm32_getreg(STM32_IWDG_SR) & (IWDG_SR_PVU | IWDG_SR_RVU)) != 0);
 #endif
 
   /* Set the prescaler */
@@ -337,7 +329,7 @@ static int stm32_start(FAR struct watchdog_lowerhalf_s *lower)
   FAR struct stm32_lowerhalf_s *priv = (FAR struct stm32_lowerhalf_s *)lower;
   irqstate_t flags;
 
-  wdvdbg("Entry: started=%d\n");
+  wdinfo("Entry: started=%d\n");
   DEBUGASSERT(priv);
 
   /* Have we already been started? */
@@ -363,12 +355,13 @@ static int stm32_start(FAR struct watchdog_lowerhalf_s *lower)
        * bits, the watchdog is automatically enabled at power-on.
        */
 
-      flags           = irqsave();
+      flags           = enter_critical_section();
       stm32_putreg(IWDG_KR_KEY_START, STM32_IWDG_KR);
       priv->lastreset = clock_systimer();
       priv->started   = true;
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
+
   return OK;
 }
 
@@ -391,7 +384,7 @@ static int stm32_stop(FAR struct watchdog_lowerhalf_s *lower)
 {
   /* There is no way to disable the IDWG timer once it has been started */
 
-  wdvdbg("Entry\n");
+  wdinfo("Entry\n");
   return -ENOSYS;
 }
 
@@ -401,7 +394,7 @@ static int stm32_stop(FAR struct watchdog_lowerhalf_s *lower)
  * Description:
  *   Reset the watchdog timer to the current timeout value, prevent any
  *   imminent watchdog timeouts.  This is sometimes referred as "pinging"
- *   the atchdog timer or "petting the dog".
+ *   the watchdog timer or "petting the dog".
  *
  * Input Parameters:
  *   lower - A pointer the publicly visible representation of the "lower-half"
@@ -417,14 +410,14 @@ static int stm32_keepalive(FAR struct watchdog_lowerhalf_s *lower)
   FAR struct stm32_lowerhalf_s *priv = (FAR struct stm32_lowerhalf_s *)lower;
   irqstate_t flags;
 
-  wdvdbg("Entry\n");
+  wdinfo("Entry\n");
 
   /* Reload the IWDG timer */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   stm32_putreg(IWDG_KR_KEY_RELOAD, STM32_IWDG_KR);
   priv->lastreset = clock_systimer();
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   return OK;
 }
@@ -436,9 +429,9 @@ static int stm32_keepalive(FAR struct watchdog_lowerhalf_s *lower)
  *   Get the current watchdog timer status
  *
  * Input Parameters:
- *   lower   - A pointer the publicly visible representation of the "lower-half"
- *             driver state structure.
- *   stawtus - The location to return the watchdog status information.
+ *   lower  - A pointer the publicly visible representation of the "lower-half"
+ *            driver state structure.
+ *   status - The location to return the watchdog status information.
  *
  * Returned Values:
  *   Zero on success; a negated errno value on failure.
@@ -452,7 +445,7 @@ static int stm32_getstatus(FAR struct watchdog_lowerhalf_s *lower,
   uint32_t ticks;
   uint32_t elapsed;
 
-  wdvdbg("Entry\n");
+  wdinfo("Entry\n");
   DEBUGASSERT(priv);
 
   /* Return the status bit */
@@ -481,10 +474,10 @@ static int stm32_getstatus(FAR struct watchdog_lowerhalf_s *lower,
 
   status->timeleft = priv->timeout - elapsed;
 
-  wdvdbg("Status     :\n");
-  wdvdbg("  flags    : %08x\n", status->flags);
-  wdvdbg("  timeout  : %d\n", status->timeout);
-  wdvdbg("  timeleft : %d\n", status->timeleft);
+  wdinfo("Status     :\n");
+  wdinfo("  flags    : %08x\n", status->flags);
+  wdinfo("  timeout  : %d\n", status->timeout);
+  wdinfo("  timeleft : %d\n", status->timeleft);
   return OK;
 }
 
@@ -497,7 +490,7 @@ static int stm32_getstatus(FAR struct watchdog_lowerhalf_s *lower,
  * Input Parameters:
  *   lower   - A pointer the publicly visible representation of the "lower-half"
  *             driver state structure.
- *   timeout - The new timeout value in millisecnds.
+ *   timeout - The new timeout value in milliseconds.
  *
  * Returned Values:
  *   Zero on success; a negated errno value on failure.
@@ -513,14 +506,14 @@ static int stm32_settimeout(FAR struct watchdog_lowerhalf_s *lower,
   int prescaler;
   int shift;
 
-  wdvdbg("Entry: timeout=%d\n", timeout);
+  wdinfo("Entry: timeout=%d\n", timeout);
   DEBUGASSERT(priv);
 
   /* Can this timeout be represented? */
 
   if (timeout < 1 || timeout > IWDG_MAXTIMEOUT)
     {
-      wddbg("Cannot represent timeout=%d > %d\n",
+      wderr("ERROR: Cannot represent timeout=%d > %d\n",
             timeout, IWDG_MAXTIMEOUT);
       return -ERANGE;
     }
@@ -533,7 +526,7 @@ static int stm32_settimeout(FAR struct watchdog_lowerhalf_s *lower,
 #ifdef CONFIG_STM32_IWDG_ONETIMESETUP
   if (priv->started)
     {
-      wddbg("Timer is already started\n");
+      wdwarn("WARNING: Timer is already started\n");
       return -EBUSY;
     }
 #endif
@@ -577,7 +570,7 @@ static int stm32_settimeout(FAR struct watchdog_lowerhalf_s *lower,
 
       if (reload <= IWDG_RLR_MAX || prescaler == 6)
         {
-          /* Note that we explicity break out of the loop rather than using
+          /* Note that we explicitly break out of the loop rather than using
            * the 'for' loop termination logic because we do not want the
            * value of prescaler to be incremented.
            */
@@ -628,7 +621,7 @@ static int stm32_settimeout(FAR struct watchdog_lowerhalf_s *lower,
     }
 #endif
 
-  wdvdbg("prescaler=%d fiwdg=%d reload=%d\n", prescaler, fiwdg, reload);
+  wdinfo("prescaler=%d fiwdg=%d reload=%d\n", prescaler, fiwdg, reload);
 
   return OK;
 }
@@ -659,7 +652,7 @@ void stm32_iwdginitialize(FAR const char *devpath, uint32_t lsifreq)
 {
   FAR struct stm32_lowerhalf_s *priv = &g_wdgdev;
 
-  wdvdbg("Entry: devpath=%s lsifreq=%d\n", devpath, lsifreq);
+  wdinfo("Entry: devpath=%s lsifreq=%d\n", devpath, lsifreq);
 
   /* NOTE we assume that clocking to the IWDG has already been provided by
    * the RCC initialization logic.
@@ -671,7 +664,7 @@ void stm32_iwdginitialize(FAR const char *devpath, uint32_t lsifreq)
   priv->lsifreq = lsifreq;
   priv->started = false;
 
-  /* Make sure that the LSI ocsillator is enabled.  NOTE:  The LSI oscillator
+  /* Make sure that the LSI oscillator is enabled.  NOTE:  The LSI oscillator
    * is enabled here but is not disabled by this file (because this file does
    * not know the global usage of the oscillator.  Any clock management
    * logic (say, as part of a power management scheme) needs handle other
@@ -679,7 +672,7 @@ void stm32_iwdginitialize(FAR const char *devpath, uint32_t lsifreq)
    */
 
   stm32_rcc_enablelsi();
-  wdvdbg("RCC CSR: %08x\n", getreg32(STM32_RCC_CSR));
+  wdinfo("RCC CSR: %08x\n", getreg32(STM32_RCC_CSR));
 
   /* Select an arbitrary initial timeout value.  But don't start the watchdog
    * yet. NOTE: If the "Hardware watchdog" feature is enabled through the
@@ -701,9 +694,16 @@ void stm32_iwdginitialize(FAR const char *devpath, uint32_t lsifreq)
     defined(CONFIG_STM32_JTAG_NOJNTRST_ENABLE) || \
     defined(CONFIG_STM32_JTAG_SW_ENABLE)
     {
+#if defined(CONFIG_STM32_STM32F20XX) || defined(CONFIG_STM32_STM32F30XX) || \
+    defined(CONFIG_STM32_STM32F40XX)
+      uint32_t cr = getreg32(STM32_DBGMCU_APB1_FZ);
+      cr |= DBGMCU_APB1_IWDGSTOP;
+      putreg32(cr, STM32_DBGMCU_APB1_FZ);
+#else /* if defined(CONFIG_STM32_STM32F10XX) */
       uint32_t cr = getreg32(STM32_DBGMCU_CR);
       cr |= DBGMCU_CR_IWDGSTOP;
       putreg32(cr, STM32_DBGMCU_CR);
+#endif
     }
 #endif
 }

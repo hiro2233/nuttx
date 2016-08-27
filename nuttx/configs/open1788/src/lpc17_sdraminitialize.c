@@ -55,7 +55,7 @@
 #if defined(CONFIG_LPC17_EMC) && defined(CONFIG_LPC17_EXTDRAM)
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* The core clock is LPC17_EMCCLK which may be either LPC17_CCLK* (undivided), or
  * LPC17_CCLK / 2 as determined by settings in the board.h header file.
@@ -78,14 +78,20 @@
 
 /* Set up for 32-bit SDRAM at CS0 */
 
-#define CONFIG_LPC17_SDRAM_32BIT
+#ifdef CONFIG_LPC17_EXTDRAMSIZE
+#  define SDRAM_SIZE CONFIG_LPC17_EXTDRAMSIZE
+#endif
 
 #ifdef CONFIG_LPC17_SDRAM_16BIT
-#  define SDRAM_SIZE        0x02000000 /* 256Mbit */
+#  ifndef SDRAM_SIZE
+#    define SDRAM_SIZE      0x02000000 /* 256Mbit */
+#  endif
 #else /* if defined(CONFIG_LPC17_SDRAM_32BIT) */
 #  undef CONFIG_LPC17_SDRAM_32BIT
 #  define CONFIG_LPC17_SDRAM_32BIT 1
-#  define SDRAM_SIZE        0x04000000 /* 512Mbit */
+#  ifndef SDRAM_SIZE
+#    define SDRAM_SIZE      0x04000000 /* 512Mbit */
+#  endif
 #endif
 
 #define SDRAM_BASE          0xa0000000 /* CS0 */
@@ -109,11 +115,6 @@
 void open1788_sdram_initialize(void)
 {
   uint32_t regval;
-#ifdef CONFIG_LPC17_SDRAM_16BIT
-  volatile uint16_t dummy;
-#else
-  volatile uint32_t dummy;
-#endif
   int i;
 
   /* Reconfigure delays:
@@ -159,7 +160,7 @@ void open1788_sdram_initialize(void)
 
   putreg32(MDKCFG_RASCAS0VAL, LPC17_EMC_DYNAMICRASCAS0);
 
-  #ifdef CONFIG_LPC17_SDRAM_16BIT
+#ifdef CONFIG_LPC17_SDRAM_16BIT
     /* For Manley lpc1778 SDRAM: H57V2562GTR-75C, 256Mb, 16Mx16, 4 banks, row=13, column=9:
      *
      * 256Mb, 16Mx16, 4 banks, row=13, column=9, RBC
@@ -211,9 +212,9 @@ void open1788_sdram_initialize(void)
            LPC17_EMC_DYNAMICCONTROL);
 
 #ifdef CONFIG_LPC17_SDRAM_16BIT
-  dummy = getreg16(SDRAM_BASE | (0x33 << 12));  /* 8 burst, 3 CAS latency */
+  (void)getreg16(SDRAM_BASE | (0x33 << 12));  /* 8 burst, 3 CAS latency */
 #elif defined CONFIG_LPC17_SDRAM_32BIT
-  dummy = getreg32(SDRAM_BASE | (0x32 << 13)); /* 4 burst, 3 CAS latency */
+  (void)getreg32(SDRAM_BASE | (0x32 << 13)); /* 4 burst, 3 CAS latency */
 #endif
 
   /* Issue NORMAL command */

@@ -41,17 +41,18 @@
 
 #include <stdbool.h>
 #include <stdio.h>
-#include <debug.h>
 #include <assert.h>
 #include <errno.h>
+#include <debug.h>
 
+#include <nuttx/board.h>
 #include <nuttx/usb/usbhost.h>
 #include <nuttx/input/touchscreen.h>
 
 #ifdef CONFIG_USBHOST_HIDMOUSE
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Both CONFIG_DEBUG_INPUT and CONFIG_DEBUG_USB could apply to this file.
  * We assume here that CONFIG_DEBUG_INPUT might be enabled separately, but
@@ -59,38 +60,18 @@
  */
 
 #ifndef CONFIG_DEBUG_INPUT
-#  undef  idbg
-#  define idbg    udbg
-#  undef  illdbg
-#  define illdbg  ulldbg
-#  undef  ivdbg
-#  define ivdbg   uvdbg
-#  undef  illvdbg
-#  define illvdbg ullvdbg
+#  undef  ierr
+#  define ierr    uerr
+#  undef  iinfo
+#  define iinfo   uinfo
 #endif
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: arch_tcinitialize
+ * Name: board_tsc_setup
  *
  * Description:
  *   Each board that supports a touchscreen device must provide this
@@ -108,12 +89,12 @@
  *
  ****************************************************************************/
 
-int arch_tcinitialize(int minor)
+int board_tsc_setup(int minor)
 {
   static bool initialized = false;
   int ret;
 
-  idbg("minor %d\n", minor);
+  iinfo("minor %d\n", minor);
   DEBUGASSERT(minor == 0);
 
   /* Have we already initialized?  Since we never uninitialize we must prevent
@@ -124,12 +105,22 @@ int arch_tcinitialize(int minor)
 
   if (!initialized)
     {
+#ifdef CONFIG_USBHOST_HUB
+      /* Initialize USB hub support */
+
+      ret = usbhost_hub_initialize();
+      if (ret < 0)
+        {
+          ierr("ERROR: usbhost_hub_initialize failed: %d\n", ret);
+        }
+#endif
+
       /* Initialize and register the USB HID mouse device class */
 
       ret = usbhost_mouse_init();
       if (ret < 0)
         {
-          idbg("Failed to register USB HID mouse device class\n");
+          ierr("ERROR: Failed to register USB HID mouse device class\n");
           return -ENODEV;
         }
 
@@ -142,7 +133,7 @@ int arch_tcinitialize(int minor)
 }
 
 /****************************************************************************
- * Name: arch_tcuninitialize
+ * Name: board_tsc_teardown
  *
  * Description:
  *   Each board that supports a touchscreen device must provide this function.
@@ -157,7 +148,7 @@ int arch_tcinitialize(int minor)
  *
  ****************************************************************************/
 
-void arch_tcuninitialize(void)
+void board_tsc_teardown(void)
 {
   /* No support for un-initializing the USB mouse driver.  It will continue
    * to run and process touch interrupts in the background.

@@ -1,8 +1,7 @@
 /************************************************************************************
  * configs/open1788/src/lpc17_boardinitialize.c
- * arch/arm/src/board/lpc17_boardinitialize.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,6 +41,7 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
@@ -52,7 +52,7 @@
 #include "open1788.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /************************************************************************************
@@ -91,20 +91,20 @@ void lpc17_boardinitialize(void)
 #endif
 
   /* Configure SSP chip selects if 1) at least one SSP is enabled, and 2) the weak
-   * function open1788_sspinitialize() has been brought into the link.
+   * function open1788_sspdev_initialize() has been brought into the link.
    */
 
 #if defined(CONFIG_LPC17_SSP0) || defined(CONFIG_LPC17_SSP1) || defined(CONFIG_LPC17_SSP2)
-  if (open1788_sspinitialize)
+  if (open1788_sspdev_initialize)
     {
-      open1788_sspinitialize();
+      open1788_sspdev_initialize();
     }
 #endif
 
   /* Configure on-board LEDs if LED support has been selected. */
 
 #ifdef CONFIG_ARCH_LEDS
-  board_led_initialize();
+  board_autoled_initialize();
 #endif
 
   /* Configure the LCD GPIOs if LCD support has been selected. */
@@ -135,8 +135,8 @@ void board_initialize(void)
    * but the initialization function must run in kernel space.
    */
 
-#if defined(CONFIG_NSH_LIBRARY) && !defined(CONFIG_NSH_ARCHINIT)
-  (void)nsh_archinitialize();
+#if defined(CONFIG_NSH_LIBRARY) && !defined(CONFIG_LIB_BOARDCTL)
+  (void)board_app_initialize(0);
 #endif
 }
 #endif

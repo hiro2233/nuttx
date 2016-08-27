@@ -39,7 +39,7 @@
 
 #include <nuttx/config.h>
 
-#if defined(CONFIG_DEBUG) && defined(CONFIG_IOB_DEBUG)
+#if defined(CONFIG_DEBUG_FEATURES) && defined(CONFIG_IOB_DEBUG)
 /* Force debug output (from this file only) */
 
 #  undef  CONFIG_DEBUG_NET
@@ -52,22 +52,6 @@
 #include <nuttx/net/iob.h>
 
 #include "iob.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -86,10 +70,9 @@ FAR struct iob_s *iob_trimtail(FAR struct iob_s *iob, unsigned int trimlen)
   FAR struct iob_s *entry;
   FAR struct iob_s *penultimate;
   FAR struct iob_s *last;
-  unsigned int iosize;
   int len;
 
-  nlldbg("iob=%p pktlen=%d trimlen=%d\n", iob, iob->io_pktlen, trimlen);
+  ninfo("iob=%p pktlen=%d trimlen=%d\n", iob, iob->io_pktlen, trimlen);
 
   if (iob && trimlen > 0)
     {
@@ -105,14 +88,9 @@ FAR struct iob_s *iob_trimtail(FAR struct iob_s *iob, unsigned int trimlen)
 
           penultimate = NULL;
           last = NULL;
-          iosize = 0;
 
           for (entry = iob; entry; entry = entry->io_flink)
             {
-              /* Accumulate the total size of all buffers in the list */
-
-              iosize += entry->io_len;
-
               /* Remember the last and the next to the last in the chain */
 
               penultimate = last;
@@ -123,7 +101,7 @@ FAR struct iob_s *iob_trimtail(FAR struct iob_s *iob, unsigned int trimlen)
            * I/O buffer away?
            */
 
-          nllvdbg("iob=%p len=%d vs %d\n", last, last->io_len, len);
+          ninfo("iob=%p len=%d vs %d\n", last, last->io_len, len);
           if (last->io_len <= len)
             {
               /* Yes.. Consume the entire buffer */
@@ -149,7 +127,7 @@ FAR struct iob_s *iob_trimtail(FAR struct iob_s *iob, unsigned int trimlen)
 
               penultimate->io_flink = NULL;
             }
-               
+
           else
             {
               /* No, then just take what we need from this I/O buffer and

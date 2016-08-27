@@ -54,10 +54,13 @@
  * Configuration
  **********************************************************************************/
 
-#undef ALIGNMENT_TRAP
+/* Hard-coded options */
+
+#undef CPU_ALIGNMENT_TRAP
 #undef CPU_CACHE_ROUND_ROBIN
 #undef CPU_DCACHE_DISABLE
 #undef CPU_ICACHE_DISABLE
+#undef CPU_AFE_ENABLE
 
 /* There are three operational memory configurations:
  *
@@ -135,7 +138,7 @@
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* RX_NSECTIONS determines the number of 1Mb sections to map for the
@@ -166,7 +169,7 @@
 
 /* This macro will modify r0, r1, r2 and r14 */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 	.macro	showprogress, code
 	mov		r0, #\code
 	bl		up_lowputc
@@ -185,7 +188,7 @@
 	.type	__start, #function
 
 __start:
-	/* Make sure that we are in SVC mode with all IRQs disabled */
+	/* Make sure that we are in SVC mode with IRQs and FIQs disabled */
 
 	mov		r0, #(PSR_MODE_SVC | PSR_I_BIT | PSR_F_BIT)
 	msr		cpsr_c, r0
@@ -407,7 +410,7 @@ __start:
 	 *                      replacement strategy.
 	 *   SCTLR_HA   Bit 17: Not supported by A5
 	 *
-	 *   SCTLR_EE   Bit 25: Little endian (reset value).
+	 *   SCTLR_EE   Bit 25: 0=Little endian (reset value).
 	 *   SCTLR_TRE  Bit 28: No memory region remapping (reset value)
 	 *   SCTLR_AFE  Bit 29: Full, legacy access permissions behavior (reset value).
 	 *   SCTLR_TE   Bit 30: All exceptions handled in ARM state (reset value).
@@ -465,7 +468,7 @@ __start:
 	orr		r0, r0, #(SCTLR_I)
 #endif
 
-#ifdef ALIGNMENT_TRAP
+#ifdef CPU_ALIGNMENT_TRAP
 	/* Alignment abort enable
 	 *
 	 *   SCTLR_A    Bit 1:  Strict alignment enabled
@@ -474,7 +477,16 @@ __start:
 	orr		r0, r0, #(SCTLR_A)
 #endif
 
-#ifdef CONFIG_AFE_ENABLE
+#ifdef CONFIG_ENDIAN_BIG
+	/* Big endian mode
+	 *
+	 *   SCTLR_EE       Bit 25: 1=Big endian.
+	 */
+
+	orr		r0, r0, #(SCTLR_EE)
+#endif
+
+#ifdef CPU_AFE_ENABLE
 	/* AP[0:2] Permissions model
 	 *
 	 *   SCTLR_AFE  Bit 29: Full, legacy access permissions behavior (reset value).
@@ -613,25 +625,25 @@ __start:
 	/* Set up the stack pointer and clear the frame pointer */
 
 	ldr		sp, .Lstackpointer
-	mov     fp, #0
+	mov		fp, #0
 
 #ifndef CONFIG_BOOT_SDRAM_DATA
 	/* Initialize .bss and .data ONLY if .bss and .data lie in SRAM that is
 	 * ready to use.  Other memory, such as SDRAM, must be initialized before
-	 * it can be used.  up_boot() will perform that memory initialization and
-	 * .bss and .data can be initialized after up_boot() returns.
+	 * it can be used.  arm_boot() will perform that memory initialization and
+	 * .bss and .data can be initialized after arm_boot() returns.
 	 */
 
 	bl		arm_data_initialize
 #endif
 
 	/* Perform early C-level, platform-specific initialization.  Logic
-	 * within up_boot() must configure SDRAM and call arm_ram_initailize.
+	 * within arm_boot() must configure SDRAM and call arm_ram_initailize.
 	 */
 
-	bl		up_boot
+	bl		arm_boot
 
-#ifdef CONFIG_DEBUG_STACK
+#ifdef CONFIG_STACK_COLORATION
 	/* Write a known value to the IDLE thread stack to support stack
 	 * monitoring logic
 	 */
@@ -748,7 +760,7 @@ arm_data_initialize:
 	.size	.Ldatainit, . -.Ldatainit
 #endif
 
-#ifdef CONFIG_DEBUG_STACK
+#ifdef CONFIG_STACK_COLORATION
 	.type	.Lstkinit, %object
 .Lstkinit:
 #ifdef CONFIG_BOOT_SDRAM_DATA

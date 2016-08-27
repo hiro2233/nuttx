@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/tm4c123g-launchpad/src/tm4c_boot.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
@@ -48,7 +49,7 @@
 #include "tm4c123g-launchpad.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /************************************************************************************
@@ -64,7 +65,7 @@
  *
  * Description:
  *   All Tiva architectures must provide the following entry point.  This entry
- *   point is called early in the intitialization -- after all memory has been
+ *   point is called early in the initialization -- after all memory has been
  *   configured and mapped but before any devices have been initialized.
  *
  ************************************************************************************/
@@ -72,21 +73,43 @@
 void tiva_boardinitialize(void)
 {
   /* Configure SPI chip selects if 1) SSI is not disabled, and 2) the weak function
-   * tm4c_ssiinitialize() has been brought into the link.
+   * tm4c_ssidev_initialize() has been brought into the link.
    */
 
   /* The TM4C123G LaunchPad microSD CS and OLED are on SSI0 */
 
-#if !defined(CONFIG_SSI0_DISABLE) || !defined(CONFIG_SSI1_DISABLE)
-  if (tm4c_ssiinitialize)
+#if defined(CONFIG_TIVA_SSI0) || defined(CONFIG_TIVA_SSI1)
+  if (tm4c_ssidev_initialize)
     {
-      tm4c_ssiinitialize();
+      tm4c_ssidev_initialize();
     }
 #endif
 
   /* Configure on-board LEDs if LED support has been selected. */
 
 #ifdef CONFIG_ARCH_LEDS
-  tm4c_ledinit();
+  tm4c_led_initialize();
 #endif
 }
+
+/****************************************************************************
+ * Name: board_initialize
+ *
+ * Description:
+ *   If CONFIG_BOARD_INITIALIZE is selected, then an additional
+ *   initialization call will be performed in the boot-up sequence to a
+ *   function called board_initialize().  board_initialize() will be
+ *   called immediately after up_intiialize() is called and just before the
+ *   initial application is started.  This additional initialization phase
+ *   may be used, for example, to initialize board-specific device drivers.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_BOARD_INITIALIZE
+void board_initialize(void)
+{
+  /* Perform board initialization */
+
+  (void)tm4c_bringup();
+}
+#endif /* CONFIG_BOARD_INITIALIZE */

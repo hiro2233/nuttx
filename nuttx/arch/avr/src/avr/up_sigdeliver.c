@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/avr/src/avr/up_sigdeliver.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,25 +45,14 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 #include "up_arch.h"
 
 #ifndef CONFIG_DISABLE_SIGNALS
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -81,7 +70,7 @@
 
 void up_sigdeliver(void)
 {
-  struct tcb_s *rtcb = (struct tcb_s*)g_readytorun.head;
+  struct tcb_s *rtcb = this_task();
   uint8_t regs[XCPTCONTEXT_REGS];
   sig_deliver_t sigdeliver;
 
@@ -91,17 +80,20 @@ void up_sigdeliver(void)
 
   int saved_errno = rtcb->pterrno;
 
-  board_led_on(LED_SIGNAL);
+  board_autoled_on(LED_SIGNAL);
 
-  sdbg("rtcb=%p sigdeliver=%p sigpendactionq.head=%p\n",
+  sinfo("rtcb=%p sigdeliver=%p sigpendactionq.head=%p\n",
         rtcb, rtcb->xcp.sigdeliver, rtcb->sigpendactionq.head);
   ASSERT(rtcb->xcp.sigdeliver != NULL);
 
   /* Save the real return state on the stack. */
 
   up_copystate(regs, rtcb->xcp.regs);
-  regs[REG_PCL]        = rtcb->xcp.saved_pcl;
-  regs[REG_PCH]        = rtcb->xcp.saved_pch;
+  regs[REG_PC0]        = rtcb->xcp.saved_pc0;
+  regs[REG_PC1]        = rtcb->xcp.saved_pc1;
+#if defined(REG_PC2)
+  regs[REG_PC2]        = rtcb->xcp.saved_pc2;
+#endif
   regs[REG_SREG]       = rtcb->xcp.saved_sreg;
 
   /* Get a local copy of the sigdeliver function pointer. We do this so that
@@ -114,7 +106,7 @@ void up_sigdeliver(void)
 
   /* Then restore the task interrupt state */
 
-  irqrestore(regs[REG_SREG]);
+  up_irq_restore(regs[REG_SREG]);
 
   /* Deliver the signals */
 
@@ -125,8 +117,8 @@ void up_sigdeliver(void)
    * errno that is needed by the user logic (it is probably EINTR).
    */
 
-  sdbg("Resuming\n");
-  (void)irqsave();
+  sinfo("Resuming\n");
+  (void)up_irq_save();
   rtcb->pterrno = saved_errno;
 
   /* Then restore the correct state for this thread of execution. This is an
@@ -146,9 +138,8 @@ void up_sigdeliver(void)
    *      to the size of register save structure size will protect its contents.
    */
 
-  board_led_off(LED_SIGNAL);
+  board_autoled_off(LED_SIGNAL);
   up_fullcontextrestore(regs);
 }
 
 #endif /* !CONFIG_DISABLE_SIGNALS */
-

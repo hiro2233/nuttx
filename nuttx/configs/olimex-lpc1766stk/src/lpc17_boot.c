@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/olimex-lpc1766stk/src/lpc17_boot.c
  *
- *   Copyright (C) 2010, 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
@@ -50,7 +51,7 @@
 #include "lpc1766stk.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /************************************************************************************
@@ -74,19 +75,19 @@
 void lpc17_boardinitialize(void)
 {
   /* Configure SSP chip selects if 1) at least one SSP is enabled, and 2) the weak
-   * function lpc1766stk_sspinitialize() has been brought into the link.
+   * function lpc1766stk_sspdev_initialize() has been brought into the link.
    */
 
 #if defined(CONFIG_LPC17_SSP0) || defined(CONFIG_LPC17_SSP1)
-  if (lpc1766stk_sspinitialize)
+  if (lpc1766stk_sspdev_initialize)
     {
-      lpc1766stk_sspinitialize();
+      lpc1766stk_sspdev_initialize();
     }
 #endif
 
   /* Configure on-board LEDs if LED support has been selected. */
 
 #ifdef CONFIG_ARCH_LEDS
-  board_led_initialize();
+  board_autoled_initialize();
 #endif
 }

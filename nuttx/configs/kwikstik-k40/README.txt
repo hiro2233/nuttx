@@ -200,12 +200,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -252,7 +246,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M4 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   NOTE:  The NuttX toolchain may not include optimizations for Cortex-M4 (ARMv7E-M).
@@ -314,8 +308,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -344,7 +338,7 @@ NXFLAT Toolchain
 KwikStik-K40-specific Configuration Options
 ============================================
 
-    CONFIG_ARCH - Identifies the arch/ subdirectory.  This sould
+    CONFIG_ARCH - Identifies the arch/ subdirectory.  This should
        be set to:
 
        CONFIG_ARCH=arm
@@ -399,11 +393,9 @@ KwikStik-K40-specific Configuration Options
 
     CONFIG_ARCH_STACKDUMP - Do stack dumps after assertions
 
-    CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
-
     CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
        cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
+       serves no purpose other than it allows you to calibrate
        CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
        the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
        the delay actually is 100 seconds.
@@ -446,13 +438,13 @@ KwikStik-K40-specific Configuration Options
     CONFIG_KINETIS_USBOTG   -- Support USB OTG (see also CONFIG_USBHOST and CONFIG_USBDEV)
     CONFIG_KINETIS_USBDCD   -- Support the USB Device Charger Detection module
     CONFIG_KINETIS_LLWU     -- Support the Low Leakage Wake-Up Unit
-    CONFIG_KINETIS_TSI      -- Support the touch screeen interface
+    CONFIG_KINETIS_TSI      -- Support the touch screen interface
     CONFIG_KINETIS_FTFL     -- Support FLASH
     CONFIG_KINETIS_DMA      -- Support DMA
     CONFIG_KINETIS_CRC      -- Support CRC
     CONFIG_KINETIS_PDB      -- Support the Programmable Delay Block
     CONFIG_KINETIS_PIT      -- Support Programmable Interval Timers
-    CONFIG_ARMV7M_MPU       -- Support the MPU
+    CONFIG_ARM_MPU          -- Support the MPU
 
   Kinetis interrupt priorities (Default is the mid priority)  These should
   not be set because they can cause unhandled, nested interrupts.  All
@@ -469,7 +461,7 @@ KwikStik-K40-specific Configuration Options
 
   PIN Interrupt Support
 
-    CONFIG_GPIO_IRQ          -- Enable pin interrtup support.  Also needs
+    CONFIG_KINETIS_GPIOIRQ          -- Enable pin interrupt support.  Also needs
       one or more of the following:
     CONFIG_KINETIS_PORTAINTS -- Support 32 Port A interrupts
     CONFIG_KINETIS_PORTBINTS -- Support 32 Port B interrupts
@@ -530,7 +522,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.

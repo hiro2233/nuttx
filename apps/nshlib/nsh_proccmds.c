@@ -1,7 +1,7 @@
 /****************************************************************************
  * apps/nshlib/nsh_proccmds.c
  *
- *   Copyright (C) 2007-2009, 2011-2012, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011-2012, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,8 +42,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
+#include <ctype.h>
 #include <fcntl.h>
-#include <sched.h>
+#include <dirent.h>
 #include <errno.h>
 
 #include "nsh.h"
@@ -53,14 +55,20 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#ifndef CONFIG_NSH_PROC_MOUNTPOUNT
-#  define CONFIG_NSH_PROC_MOUNTPOUNT "/proc"
+#ifndef CONFIG_NSH_PROC_MOUNTPOINT
+#  define CONFIG_NSH_PROC_MOUNTPOINT "/proc"
 #endif
 
-#undef HAVE_CPULOAD
-#if defined(CONFIG_SCHED_CPULOAD) && defined(CONFIG_FS_PROCFS) && \
-   !defined(CONFIG_FS_PROCFS_EXCLUDE_CPULOAD)
-#  define HAVE_CPULOAD 1
+/* See include/nuttx/sched.h: */
+
+#undef HAVE_GROUPID
+
+#if defined(CONFIG_SCHED_HAVE_PARENT) && defined(CONFIG_SCHED_CHILD_STATUS)
+#  define HAVE_GROUPID  1
+#endif
+
+#ifdef CONFIG_DISABLE_PTHREAD
+#  undef HAVE_GROUPID
 #endif
 
 /****************************************************************************
@@ -73,236 +81,462 @@
 
 typedef int (*exec_t)(void);
 
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
+/* This structure represents the parsed task characteristics */
 
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-#ifndef CONFIG_NSH_DISABLE_PS
-static const char *g_statenames[] =
+struct nsh_taskstatus_s
 {
-  "INVALID ",
-  "PENDING ",
-  "READY   ",
-  "RUNNING ",
-  "INACTIVE",
-  "WAITSEM ",
-#ifndef CONFIG_DISABLE_MQUEUE
-  "WAITSIG ",
+  FAR const char *td_type;       /* Thread type */
+#ifdef CONFIG_SCHED_HAVE_PARENT
+#ifdef HAVE_GROUPID
+  FAR const char *td_groupid;    /* Group ID */
+#else
+  FAR const char *td_ppid;       /* Parent thread ID */
 #endif
-#ifndef CONFIG_DISABLE_MQUEUE
-  "MQNEMPTY",
-  "MQNFULL "
+#endif
+#ifdef CONFIG_SMP
+  FAR const char *td_cpu;        /* CPU */
+#endif
+  FAR const char *td_state;      /* Thread state */
+  FAR const char *td_event;      /* Thread wait event */
+  FAR const char *td_flags;      /* Thread flags */
+  FAR const char *td_priority;   /* Thread priority */
+  FAR const char *td_policy;     /* Thread scheduler */
+#ifndef CONFIG_DISABLE_SIGNALS
+  FAR const char *td_sigmask;    /* Signal mask */
 #endif
 };
 
-static const char *g_ttypenames[4] =
-{
-  "TASK   ",
-  "PTHREAD",
-  "KTHREAD",
-  "--?--  "
-};
+/* Status strings */
+
+#if 0 /* Not used */
+static const char g_name[]      = "Name:";
+#endif
+static const char g_type[]      = "Type:";
+#ifdef CONFIG_SCHED_HAVE_PARENT
+#ifdef HAVE_GROUPID
+static const char g_groupid[]   = "Group:";
+#else
+static const char g_ppid[]      = "PPID:";
+#endif
+#endif
+#ifdef CONFIG_SMP
+static const char g_cpu[]       = "CPU:";
+#endif
+static const char g_state[]     = "State:";
+static const char g_flags[]     = "Flags:";
+static const char g_priority[]  = "Priority:";
+static const char g_scheduler[] = "Scheduler:";
+#ifndef CONFIG_DISABLE_SIGNALS
+static const char g_sigmask[]   = "SigMask:";
 #endif
 
-/****************************************************************************
- * Public Data
- ****************************************************************************/
+#if !defined(CONFIG_NSH_DISABLE_PSSTACKUSAGE)
+static const char g_stacksize[] = "StackSize:";
+#ifdef CONFIG_STACK_COLORATION
+static const char g_stackused[] = "StackUsed:";
+#endif
+#endif
 
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: readfile
- ****************************************************************************/
-
-#ifdef HAVE_CPULOAD
-static int readfile(FAR const char *filename, FAR char *buffer, size_t buflen)
-{
-  FAR char *bufptr;
-  size_t remaining;
-  ssize_t nread;
-  ssize_t ntotal;
-  int fd;
-  int ret;
-
-  /* Open the file */
-
-  fd = open(filename, O_RDONLY);
-  if (fd < 0)
-    {
-      int errcode = errno;
-      DEBUGASSERT(errcode > 0);
-      return -errcode;
-    }
-
-  /* Read until we hit the end of the file, until we have exhausted the
-   * buffer space, or until some irrecoverable error occurs
-   */
-
-  ntotal    = 0;          /* No bytes read yet */
-  *buffer   = '\0';       /* NUL terminate the empty buffer */
-  bufptr    = buffer;     /* Working pointer */
-  remaining = buflen - 1; /* Reserve one byte for a NUL terminator */
-  ret       = -E2BIG;     /* Assume result will not fit in the buffer */
-
-  do
-    {
-      nread = read(fd, bufptr, remaining);
-      if (nread < 0)
-        {
-          /* Read error */
-
-          int errcode = errno;
-          DEBUGASSERT(errcode > 0);
-
-          /* EINTR is not a read error.  It simply means that a signal was
-           * received while waiting for the read to complete.
-           */
-
-          if (errcode != EINTR)
-            {
-              /* Fatal error */
-
-              ret = -errcode;
-              break;
-            }
-        }
-      else if (nread == 0)
-        {
-          /* End of file */
-
-          ret = OK;
-          break;
-        }
-      else
-        {
-          /* Successful read.  Make sure that the buffer is null terminated */
-
-          DEBUGASSERT(nread <= remaining);
-          ntotal += nread;
-          buffer[ntotal] = '\0';
-
-          /* Bump up the read count and continuing reading to the end of
-           * file.
-           */
-
-          bufptr    += nread;
-          remaining -= nread;
-        }
-    }
-  while (buflen > 0);
-
-  /* Close the file and return. */
-
-  close(fd);
-  return ret;
-}
-#endif
-
-/****************************************************************************
- * Name: loadavg
- ****************************************************************************/
-
-#ifdef HAVE_CPULOAD
-static int loadavg(pid_t pid, FAR char *buffer, size_t buflen)
-{
-  char path[24];
-
-  /* Form the full path to the 'loadavg' pseudo-file */
-
-  snprintf(path, sizeof(path), CONFIG_NSH_PROC_MOUNTPOUNT "/%d/loadavg",
-           (int)pid);
-
-  /* Read the 'loadavg' pseudo-file into the user buffer */
-
-  return readfile(path, buffer, buflen);
-}
-#endif
-
-/****************************************************************************
- * Name: ps_task
+ * Name: nsh_parse_statusline
  ****************************************************************************/
 
 #ifndef CONFIG_NSH_DISABLE_PS
-static void ps_task(FAR struct tcb_s *tcb, FAR void *arg)
+static void nsh_parse_statusline(FAR char *line,
+                                 FAR struct nsh_taskstatus_s *status)
 {
-  struct nsh_vtbl_s *vtbl = (struct nsh_vtbl_s*)arg;
-#ifdef HAVE_CPULOAD
-  char buffer[8];
-  int ret;
+  /* Parse the task status.
+   *
+   *   Format:
+   *
+   *            111111111122222222223
+   *   123456789012345678901234567890
+   *   Name:       xxxx...            Task/thread name (See CONFIG_TASK_NAME_SIZE)
+   *   Type:       xxxxxxx            {Task, pthread, Kthread, Invalid}
+   *   Type:       xxxxxxx            {Task, pthread, Kthread, Invalid}
+   *   PPID:       xxxxx              Parent thread ID
+   *   State:      xxxxxxxx,xxxxxxxxx {Invalid, Waiting, Ready, Running, Inactive},
+   *                                  {Unlock, Semaphore, Signal, MQ empty, MQ full}
+   *   Flags:      xxx                N,P,X
+   *   Priority:   nnn                Decimal, 0-255
+   *   Scheduler:  xxxxxxxxxxxxxx     {SCHED_FIFO, SCHED_RR, SCHED_SPORADIC, SCHED_OTHER}
+   *   Sigmask:    nnnnnnnn           Hexadecimal, 32-bit
+   */
+
+#if 0 /* Not used */
+ /* Task name */
+
+ if (strncmp(line, g_name, strlen(g_name)) == 0)
+   {
+     /* Not used */
+   }
+ else
 #endif
-#if CONFIG_MAX_TASK_ARGS > 2
-  int i;
-#endif
+  /* Task/thread type */
 
-  /* Show task status */
-
-  nsh_output(vtbl, "%5d %3d %4s %7s%c%c %8s ",
-             tcb->pid, tcb->sched_priority,
-             tcb->flags & TCB_FLAG_ROUND_ROBIN ? "RR  " : "FIFO",
-             g_ttypenames[(tcb->flags & TCB_FLAG_TTYPE_MASK) >> TCB_FLAG_TTYPE_SHIFT],
-             tcb->flags & TCB_FLAG_NONCANCELABLE ? 'N' : ' ',
-             tcb->flags & TCB_FLAG_CANCEL_PENDING ? 'P' : ' ',
-             g_statenames[tcb->task_state]);
-
-#ifdef HAVE_CPULOAD
-  /* Get the CPU load */
-
-  ret = loadavg(tcb->pid, buffer, sizeof(buffer));
-  if (ret < 0)
+  if (strncmp(line, g_type, strlen(g_type)) == 0)
     {
-      /* Make the buffer into an empty string */
+      /* Save the thread type */
 
-      buffer[0] = '\0';
+      status->td_type = nsh_trimspaces(&line[12]);
     }
 
-  nsh_output(vtbl, "%-6s ", buffer);
-#endif
+#ifdef CONFIG_SCHED_HAVE_PARENT
+#ifdef HAVE_GROUPID
+  else if (strncmp(line, g_groupid, strlen(g_groupid)) == 0)
+    {
+      /* Save the Group ID */
 
-  /* Show task name and arguments */
-
-#if CONFIG_TASK_NAME_SIZE > 0
-  nsh_output(vtbl, "%s(", tcb->name);
+      status->td_groupid = nsh_trimspaces(&line[12]);
+    }
 #else
-  nsh_output(vtbl, "<noname>(");
-#endif
-
-  /* Is this a task or a pthread? */
-
-#ifndef CONFIG_DISABLE_PTHREAD
-  if ((tcb->flags & TCB_FLAG_TTYPE_MASK) == TCB_FLAG_TTYPE_PTHREAD)
+  else if (strncmp(line, g_ppid, strlen(g_ppid)) == 0)
     {
-      FAR struct pthread_tcb_s *ptcb = (FAR struct pthread_tcb_s *)tcb;
-      nsh_output(vtbl, "%p", ptcb->arg);
+      /* Save the parent thread id */
+
+      status->td_ppid = nsh_trimspaces(&line[12]);
     }
-  else
 #endif
+#endif
+
+#ifdef CONFIG_SMP
+  else if (strncmp(line, g_cpu, strlen(g_cpu)) == 0)
     {
-       FAR struct task_tcb_s *ttcb = (FAR struct task_tcb_s *)tcb;
+      /* Save the current CPU */
 
-     /* Special case 1st argument (no comma) */
+      status->td_cpu = nsh_trimspaces(&line[12]);
+    }
+#endif
 
-      if (ttcb->argv[1])
+  else if (strncmp(line, g_state, strlen(g_state)) == 0)
+    {
+      FAR char *ptr;
+
+      /* Save the thread state */
+
+      status->td_state = nsh_trimspaces(&line[12]);
+
+      /* Check if an event follows the state */
+
+      ptr = strchr(status->td_state, ',');
+      if (ptr != NULL)
         {
-          nsh_output(vtbl, "%p", ttcb->argv[1]);
+          *ptr++ = '\0';
+          status->td_event = nsh_trimspaces(ptr);
+        }
+    }
+  else if (strncmp(line, g_flags, strlen(g_flags)) == 0)
+    {
+      status->td_flags = nsh_trimspaces(&line[12]);
+    }
+  else if (strncmp(line, g_priority, strlen(g_priority)) == 0)
+    {
+      FAR char *ptr = nsh_trimspaces(&line[12]);
+      status->td_priority = ptr;
+
+      /* If priority inheritance is enabled, use current pri, ignore base */
+
+      while (isdigit(*ptr))
+        {
+          ++ptr;
         }
 
-      /* Then any additional arguments */
+      *ptr = '\0';
+    }
+  else if (strncmp(line, g_scheduler, strlen(g_scheduler)) == 0)
+    {
+      /* Skip over the SCHED_ part of the policy.  Resultis max 8 bytes */
 
-#if CONFIG_MAX_TASK_ARGS > 2
-      for (i = 2; i <= CONFIG_MAX_TASK_ARGS && ttcb->argv[i]; i++)
-        {
-          nsh_output(vtbl, ", %p", ttcb->argv[i]);
-         }
-#endif
+      status->td_policy = nsh_trimspaces(&line[12+6]);
     }
 
-  nsh_output(vtbl, ")\n");
+#ifndef CONFIG_DISABLE_SIGNALS
+  else if (strncmp(line, g_sigmask, strlen(g_sigmask)) == 0)
+    {
+      status->td_sigmask = nsh_trimspaces(&line[12]);
+    }
+#endif
+}
+#endif
+
+/****************************************************************************
+ * Name: ps_callback
+ ****************************************************************************/
+
+#ifndef CONFIG_NSH_DISABLE_PS
+static int ps_callback(FAR struct nsh_vtbl_s *vtbl, FAR const char *dirpath,
+                       FAR struct dirent *entryp, FAR void *pvarg)
+
+{
+  struct nsh_taskstatus_s status;
+  FAR char *filepath;
+  FAR char *line;
+  FAR char *nextline;
+  int ret;
+  int i;
+#if !defined(CONFIG_NSH_DISABLE_PSSTACKUSAGE)
+  uint32_t stack_size;
+#ifdef CONFIG_STACK_COLORATION
+  uint32_t stack_used;
+  uint32_t stack_filled;
+#endif
+#endif
+
+  /* Task/thread entries in the /proc directory will all be (1) directories
+   * with (2) all numeric names.
+   */
+
+  if (!DIRENT_ISDIRECTORY(entryp->d_type))
+    {
+      /* Not a directory... skip this entry */
+
+      return OK;
+    }
+
+  /* Check each character in the name */
+
+  for (i = 0; i < NAME_MAX && entryp->d_name[i] != '\0'; i++)
+    {
+      if (!isdigit(entryp->d_name[i]))
+        {
+          /* Name contains something other than a numeric character */
+
+          return OK;
+        }
+    }
+
+  /* Set all pointers to the empty string. */
+
+  status.td_type     = "";
+#ifdef CONFIG_SCHED_HAVE_PARENT
+#ifdef HAVE_GROUPID
+  status.td_groupid  = "";
+#else
+  status.td_ppid     = "";
+#endif
+#endif
+#ifdef CONFIG_SMP
+  status.td_cpu      = "";
+#endif
+  status.td_state    = "";
+  status.td_event    = "";
+  status.td_flags    = "";
+  status.td_priority = "";
+  status.td_policy   = "";
+#ifndef CONFIG_DISABLE_SIGNALS
+  status.td_sigmask  = "";
+#endif
+
+  /* Read the task status */
+
+  filepath = NULL;
+  ret = asprintf(&filepath, "%s/%s/status", dirpath, entryp->d_name);
+  if (ret < 0 || filepath == NULL)
+    {
+      nsh_output(vtbl, g_fmtcmdfailed, "ps", "asprintf", NSH_ERRNO);
+    }
+  else
+    {
+      ret = nsh_readfile(vtbl, "ps", filepath, vtbl->iobuffer, IOBUFFERSIZE);
+      free(filepath);
+
+      if (ret >= 0)
+        {
+          /* Parse the task status. */
+
+          nextline = vtbl->iobuffer;
+          do
+            {
+              /* Find the beginning of the next line and NUL-terminat the
+               * current line.
+               */
+
+              line = nextline;
+              for (nextline++;
+                   *nextline != '\n' && *nextline != '\0';
+                   nextline++);
+
+              if (*nextline == '\n')
+                {
+                  *nextline++ = '\0';
+                }
+              else
+                {
+                  nextline = NULL;
+                }
+
+              /* Parse the current line */
+
+              nsh_parse_statusline(line, &status);
+            }
+          while (nextline != NULL);
+        }
+    }
+
+  /* Finally, print the status information */
+
+  nsh_output(vtbl, "%5s ", entryp->d_name);
+
+#ifdef CONFIG_SCHED_HAVE_PARENT
+#ifdef HAVE_GROUPID
+  nsh_output(vtbl, "%5s ", status.td_groupid);
+#else
+  nsh_output(vtbl, "%5s ", status.td_ppid);
+#endif
+#endif
+
+#ifdef CONFIG_SMP
+  nsh_output(vtbl, "%3s ", status.td_cpu);
+#endif
+
+  nsh_output(vtbl, "%3s %-8s %-7s %3s %-8s %-9s ",
+             status.td_priority, status.td_policy, status.td_type,
+             status.td_flags, status.td_state, status.td_event);
+
+#ifndef CONFIG_DISABLE_SIGNALS
+  nsh_output(vtbl, "%-8s ", status.td_sigmask);
+#endif
+
+#if !defined(CONFIG_NSH_DISABLE_PSSTACKUSAGE)
+  /* Get the StackSize and StackUsed */
+
+  stack_size = 0;
+#ifdef CONFIG_STACK_COLORATION
+  stack_used = 0;
+#endif
+  filepath   = NULL;
+
+  ret = asprintf(&filepath, "%s/%s/stack", dirpath, entryp->d_name);
+  if (ret < 0 || filepath == NULL)
+    {
+      nsh_output(vtbl, g_fmtcmdfailed, "ps", "asprintf", NSH_ERRNO);
+      vtbl->iobuffer[0] = '\0';
+    }
+  else
+    {
+      ret = nsh_readfile(vtbl, "ps", filepath, vtbl->iobuffer,
+                         IOBUFFERSIZE);
+      free(filepath);
+
+      if (ret >= 0)
+        {
+          nextline = vtbl->iobuffer;
+          do
+            {
+              /* Find the beginning of the next line and NUL-terminate the
+               * current line.
+               */
+
+              line = nextline;
+              for (nextline++;
+                  *nextline != '\n' && *nextline != '\0';
+                  nextline++);
+
+              if (*nextline == '\n')
+                {
+                  *nextline++ = '\0';
+                }
+              else
+                {
+                  nextline = NULL;
+                }
+
+              /* Parse the current line
+               *
+               *   Format:
+               *
+               *            111111111122222222223
+               *   123456789012345678901234567890
+               *   StackBase:  xxxxxxxxxx
+               *   StackSize:  xxxx
+               *   StackUsed:  xxxx
+               */
+
+              if (strncmp(line, g_stacksize, strlen(g_stacksize)) == 0)
+                {
+                  stack_size = (uint32_t)atoi(&line[12]);
+                }
+#ifdef CONFIG_STACK_COLORATION
+              else if (strncmp(line, g_stackused, strlen(g_stackused)) == 0)
+                {
+                  stack_used = (uint32_t)atoi(&line[12]);
+                }
+#endif
+            }
+          while (nextline != NULL);
+        }
+    }
+
+  nsh_output(vtbl, "%6.6u ", (unsigned int)stack_size);
+
+#ifdef CONFIG_STACK_COLORATION
+  nsh_output(vtbl, "%6.6u ", (unsigned int)stack_used);
+
+  stack_filled = 0;
+  if (stack_size > 0 && stack_used > 0)
+    {
+      /* Use fixed-point math with one decimal place */
+
+      stack_filled = 10 * 100 * stack_used / stack_size;
+    }
+
+  /* Additionally print a '!' if the stack is filled more than 80% */
+
+  nsh_output(vtbl, "%3d.%1d%%%c ",
+             stack_filled / 10, stack_filled % 10,
+             (stack_filled >= 10 * 80 ? '!' : ' '));
+#endif
+#endif
+
+#ifdef NSH_HAVE_CPULOAD
+  /* Get the CPU load */
+
+  filepath          = NULL;
+  ret = asprintf(&filepath, "%s/%s/loadavg", dirpath, entryp->d_name);
+  if (ret < 0 || filepath == NULL)
+    {
+      nsh_output(vtbl, g_fmtcmdfailed, "ps", "asprintf", NSH_ERRNO);
+      vtbl->iobuffer[0] = '\0';
+    }
+  else
+    {
+      ret = nsh_readfile(vtbl, "ps", filepath, vtbl->iobuffer, IOBUFFERSIZE);
+      free(filepath);
+
+      if (ret < 0)
+        {
+          vtbl->iobuffer[0] = '\0';
+        }
+    }
+
+  nsh_output(vtbl, "%6s ", nsh_trimspaces(vtbl->iobuffer));
+#endif
+
+  /* Read the task/tread command line */
+
+  filepath = NULL;
+  ret = asprintf(&filepath, "%s/%s/cmdline", dirpath, entryp->d_name);
+
+  if (ret < 0 || filepath == NULL)
+    {
+      nsh_output(vtbl, g_fmtcmdfailed, "ps", "asprintf", NSH_ERRNO);
+      return ERROR;
+    }
+
+  ret = nsh_readfile(vtbl, "ps", filepath, vtbl->iobuffer, IOBUFFERSIZE);
+  free(filepath);
+
+  if (ret < 0)
+    {
+      return ERROR;
+    }
+
+  nsh_output(vtbl, "%s\n", nsh_trimspaces(vtbl->iobuffer));
+  return OK;
 }
 #endif
 
@@ -315,9 +549,9 @@ static void ps_task(FAR struct tcb_s *tcb, FAR void *arg)
  ****************************************************************************/
 
 #ifndef CONFIG_NSH_DISABLE_EXEC
-int cmd_exec(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
+int cmd_exec(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv)
 {
-  char *endptr;
+  FAR char *endptr;
   uintptr_t addr;
 
   addr = (uintptr_t)strtol(argv[1], &endptr, 0);
@@ -339,13 +573,42 @@ int cmd_exec(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 #ifndef CONFIG_NSH_DISABLE_PS
 int cmd_ps(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 {
-#ifdef HAVE_CPULOAD
-  nsh_output(vtbl, "PID   PRI SCHD TYPE   NP STATE    CPU    NAME\n");
+  nsh_output(vtbl, "%5s ", "PID");
+
+#ifdef CONFIG_SCHED_HAVE_PARENT
+#ifdef HAVE_GROUPID
+  nsh_output(vtbl, "%5s ", "GROUP");
 #else
-  nsh_output(vtbl, "PID   PRI SCHD TYPE   NP STATE    NAME\n");
+  nsh_output(vtbl, "%5s ", "PPID");
 #endif
-  sched_foreach(ps_task, vtbl);
-  return OK;
+#endif
+
+#ifdef CONFIG_SMP
+  nsh_output(vtbl, "%3s ", "CPU");
+#endif
+
+  nsh_output(vtbl, "%3s %-8s %-7s %3s %-8s %-9s ",
+             "PRI", "POLICY", "TYPE", "NPX", "STATE", "EVENT");
+
+#ifndef CONFIG_DISABLE_SIGNALS
+  nsh_output(vtbl, "%-8s ", "SIGMASK");
+#endif
+
+#if !defined(CONFIG_NSH_DISABLE_PSSTACKUSAGE)
+  nsh_output(vtbl, "%6s ", "STACK");
+#ifdef CONFIG_STACK_COLORATION
+  nsh_output(vtbl, "%6s ", "USED");
+  nsh_output(vtbl, "%7s ", "FILLED");
+#endif
+#endif
+
+#ifdef NSH_HAVE_CPULOAD
+  nsh_output(vtbl, "%6s ", "CPU");
+#endif
+  nsh_output(vtbl, "%s\n", "COMMAND");
+
+  return nsh_foreach_direntry(vtbl, "ps", CONFIG_NSH_PROC_MOUNTPOINT,
+                              ps_callback, NULL);
 }
 #endif
 
@@ -440,6 +703,7 @@ int cmd_sleep(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
        nsh_output(vtbl, g_fmtarginvalid, argv[0]);
        return ERROR;
     }
+
   sleep(secs);
   return OK;
 }
@@ -463,6 +727,7 @@ int cmd_usleep(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
        nsh_output(vtbl, g_fmtarginvalid, argv[0]);
        return ERROR;
     }
+
   usleep(usecs);
   return OK;
 }

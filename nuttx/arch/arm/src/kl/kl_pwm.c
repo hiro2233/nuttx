@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/kl/kl_pwm.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *           Alan Carvalho de Assis <acassis@gmail.com>
  *
@@ -46,8 +46,9 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
-#include <nuttx/pwm.h>
+#include <nuttx/drivers/pwm.h>
 #include <arch/board/board.h>
 
 #include "up_internal.h"
@@ -72,36 +73,17 @@
 /* PWM/Timer Definitions ****************************************************/
 
 /* Debug ********************************************************************/
-/* Non-standard debug that may be enabled just for testing PWM */
 
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_PWM
-#endif
-
-#ifdef CONFIG_DEBUG_PWM
-#  define pwmdbg              dbg
-#  define pwmlldbg            lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define pwmvdbg           vdbg
-#    define pwmllvdbg         llvdbg
-#    define pwm_dumpgpio(p,m) kl_dumpgpio(p,m)
-#  else
-#    define pwmlldbg(x...)
-#    define pwmllvdbg(x...)
-#    define pwm_dumpgpio(p,m)
-#  endif
+#ifdef CONFIG_DEBUG_PWM_INFO
+#  define pwm_dumpgpio(p,m) kl_dumpgpio(p,m)
 #else
-#  define pwmdbg(x...)
-#  define pwmlldbg(x...)
-#  define pwmvdbg(x...)
-#  define pwmllvdbg(x...)
 #  define pwm_dumpgpio(p,m)
 #endif
 
 /****************************************************************************
  * Private Types
  ****************************************************************************/
-/* This structure representst the state of one PWM timer */
+/* This structure represents the state of one PWM timer */
 
 struct kl_pwmtimer_s
 {
@@ -121,7 +103,7 @@ struct kl_pwmtimer_s
 static uint32_t pwm_getreg(struct kl_pwmtimer_s *priv, int offset);
 static void pwm_putreg(struct kl_pwmtimer_s *priv, int offset, uint32_t value);
 
-#if defined(CONFIG_DEBUG_PWM) && defined(CONFIG_DEBUG_VERBOSE)
+#ifdef CONFIG_DEBUG_PWM_INFO
 static void pwm_dumpregs(struct kl_pwmtimer_s *priv, FAR const char *msg);
 #else
 #  define pwm_dumpregs(priv,msg)
@@ -252,52 +234,70 @@ static void pwm_putreg(struct kl_pwmtimer_s *priv, int offset, uint32_t value)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_DEBUG_PWM) && defined(CONFIG_DEBUG_VERBOSE)
+#ifdef CONFIG_DEBUG_PWM_INFO
 static void pwm_dumpregs(struct kl_pwmtimer_s *priv, FAR const char *msg)
 {
-  pwmvdbg("%s:\n", msg);
-  pwmvdbg("  TPM%d_SC:     %04x   TPM%d_CNT:  %04x     TPM%d_MOD:  %04x\n",
+  int nchannels = (priv->tpmid == 0) ? 6 : 2;
+
+  pwminfo("%s:\n", msg);
+  pwminfo("  TPM%d_SC:     %04x   TPM%d_CNT:  %04x     TPM%d_MOD:  %04x\n",
           priv->tpmid,
           pwm_getreg(priv, TPM_SC_OFFSET),
           priv->tpmid,
           pwm_getreg(priv, TPM_CNT_OFFSET),
           priv->tpmid,
           pwm_getreg(priv, TPM_MOD_OFFSET));
-  pwmvdbg("  TPM%d_STATUS: %04x   TPM%d_CONF: %04x\n",
+  pwminfo("  TPM%d_STATUS: %04x   TPM%d_CONF: %04x\n",
           priv->tpmid,
           pwm_getreg(priv, TPM_STATUS_OFFSET),
           priv->tpmid,
           pwm_getreg(priv, TPM_CONF_OFFSET));
-  pwmvdbg("   TPM%d_C0SC:  %04x   TPM%d_C0V:  %04x\n",
+  pwminfo("   TPM%d_C0SC:  %04x   TPM%d_C0V:  %04x\n",
           priv->tpmid,
           pwm_getreg(priv, TPM_C0SC_OFFSET),
           priv->tpmid,
           pwm_getreg(priv, TPM_C0V_OFFSET));
-  pwmvdbg("   TPM%d_C1SC:  %04x   TPM%d_C1V:  %04x\n",
+  pwminfo("   TPM%d_C1SC:  %04x   TPM%d_C1V:  %04x\n",
           priv->tpmid,
           pwm_getreg(priv, TPM_C1SC_OFFSET),
           priv->tpmid,
           pwm_getreg(priv, TPM_C1V_OFFSET));
-  pwmvdbg("   TPM%d_C2SC:  %04x   TPM%d_C2V:  %04x\n",
-          priv->tpmid,
-          pwm_getreg(priv, TPM_C2SC_OFFSET),
-          priv->tpmid,
-          pwm_getreg(priv, TPM_C2V_OFFSET));
-  pwmvdbg("   TPM%d_C3SC:  %04x   TPM%d_C3V:  %04x\n",
-          priv->tpmid,
-          pwm_getreg(priv, TPM_C3SC_OFFSET),
-          priv->tpmid,
-          pwm_getreg(priv, TPM_C3V_OFFSET));
-  pwmvdbg("   TPM%d_C4SC:  %04x   TPM%d_C4V:  %04x\n",
-          priv->tpmid,
-          pwm_getreg(priv, TPM_C4SC_OFFSET),
-          priv->tpmid,
-          pwm_getreg(priv, TPM_C4V_OFFSET));
-  pwmvdbg("   TPM%d_C5SC:  %04x   TPM%d_C5V:  %04x\n",
-          priv->tpmid,
-          pwm_getreg(priv, TPM_C5SC_OFFSET),
-          priv->tpmid,
-          pwm_getreg(priv, TPM_C5V_OFFSET));
+
+  if (nchannels >= 3)
+    {
+      pwminfo("   TPM%d_C2SC:  %04x   TPM%d_C2V:  %04x\n",
+              priv->tpmid,
+              pwm_getreg(priv, TPM_C2SC_OFFSET),
+              priv->tpmid,
+              pwm_getreg(priv, TPM_C2V_OFFSET));
+    }
+
+  if (nchannels >= 4)
+    {
+      pwminfo("   TPM%d_C3SC:  %04x   TPM%d_C3V:  %04x\n",
+              priv->tpmid,
+              pwm_getreg(priv, TPM_C3SC_OFFSET),
+              priv->tpmid,
+              pwm_getreg(priv, TPM_C3V_OFFSET));
+    }
+
+  if (nchannels >= 5)
+    {
+      pwminfo("   TPM%d_C4SC:  %04x   TPM%d_C4V:  %04x\n",
+              priv->tpmid,
+              pwm_getreg(priv, TPM_C4SC_OFFSET),
+              priv->tpmid,
+              pwm_getreg(priv, TPM_C4V_OFFSET));
+    }
+
+  if (nchannels >= 6)
+    {
+      pwminfo("   TPM%d_C5SC:  %04x   TPM%d_C5V:  %04x\n",
+              priv->tpmid,
+              pwm_getreg(priv, TPM_C5SC_OFFSET),
+              priv->tpmid,
+              pwm_getreg(priv, TPM_C5V_OFFSET));
+    }
 }
 #endif
 
@@ -328,13 +328,13 @@ static int pwm_timer(FAR struct kl_pwmtimer_s *priv,
   uint32_t cv;
   uint8_t i;
 
-  uint8_t presc_values[8] = {1, 2, 4, 8, 16, 32, 64, 128};
+  static const uint8_t presc_values[8] = {1, 2, 4, 8, 16, 32, 64, 128};
 
   /* Register contents */
 
   DEBUGASSERT(priv != NULL && info != NULL);
 
-  pwmvdbg("TPM%d channel: %d frequency: %d duty: %08x\n",
+  pwminfo("TPM%d channel: %d frequency: %d duty: %08x\n",
           priv->tpmid, priv->channel, info->frequency, info->duty);
 
   DEBUGASSERT(info->frequency > 0 && info->duty > 0 &&
@@ -404,9 +404,9 @@ static int pwm_timer(FAR struct kl_pwmtimer_s *priv,
 
   cv = b16toi(info->duty * modulo + b16HALF);
 
-  pwmvdbg("TPM%d PCLK: %d frequency: %d TPMCLK: %d prescaler: %d modulo: %d c0v: %d\n",
+  pwminfo("TPM%d PCLK: %d frequency: %d TPMCLK: %d prescaler: %d modulo: %d c0v: %d\n",
           priv->tpmid, priv->pclk, info->frequency, tpmclk,
-          presc_values[prescaler], modulo, c0v);
+          presc_values[prescaler], modulo, cv);
 
   /* Disable TPM and reset CNT before writing MOD and PS */
 
@@ -464,7 +464,7 @@ static int pwm_timer(FAR struct kl_pwmtimer_s *priv,
         break;
 
       default:
-        pwmdbg("No such channel: %d\n", priv->channel);
+        pwmerr("ERROR: No such channel: %d\n", priv->channel);
         return -EINVAL;
     }
 
@@ -511,7 +511,7 @@ static int pwm_setup(FAR struct pwm_lowerhalf_s *dev)
   regval |= SIM_SCGC6_TPM0 | SIM_SCGC6_TPM1 | SIM_SCGC6_TPM2;
   putreg32(regval, KL_SIM_SCGC6);
 
-  pwmvdbg("TPM%d pincfg: %08x\n", priv->tpmid, priv->pincfg);
+  pwminfo("TPM%d pincfg: %08x\n", priv->tpmid, priv->pincfg);
   pwm_dumpregs(priv, "Initially");
 
   /* Configure the PWM output pin, but do not start the timer yet */
@@ -542,7 +542,7 @@ static int pwm_shutdown(FAR struct pwm_lowerhalf_s *dev)
   FAR struct kl_pwmtimer_s *priv = (FAR struct kl_pwmtimer_s *)dev;
   uint32_t pincfg;
 
-  pwmvdbg("TPM%d pincfg: %08x\n", priv->tpmid, priv->pincfg);
+  pwminfo("TPM%d pincfg: %08x\n", priv->tpmid, priv->pincfg);
 
   /* Make sure that the output has been stopped */
 
@@ -602,13 +602,13 @@ static int pwm_stop(FAR struct pwm_lowerhalf_s *dev)
   FAR struct kl_pwmtimer_s *priv = (FAR struct kl_pwmtimer_s *)dev;
   irqstate_t flags;
 
-  pwmvdbg("TPM%d\n", priv->tpmid);
+  pwminfo("TPM%d\n", priv->tpmid);
 
   /* Disable interrupts momentary to stop any ongoing timer processing and
    * to prevent any concurrent access to the reset register.
   */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Disable further interrupts and stop the timer */
 
@@ -644,11 +644,11 @@ static int pwm_stop(FAR struct pwm_lowerhalf_s *dev)
         break;
 
       default:
-        pwmdbg("No such channel: %d\n", priv->channel);
+        pwmerr("ERROR: No such channel: %d\n", priv->channel);
         return -EINVAL;
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   pwm_dumpregs(priv, "After stop");
   return OK;
@@ -672,12 +672,12 @@ static int pwm_stop(FAR struct pwm_lowerhalf_s *dev)
 
 static int pwm_ioctl(FAR struct pwm_lowerhalf_s *dev, int cmd, unsigned long arg)
 {
-#ifdef CONFIG_DEBUG_PWM
+#ifdef CONFIG_DEBUG_PWM_INFO
   FAR struct kl_pwmtimer_s *priv = (FAR struct kl_pwmtimer_s *)dev;
 
   /* There are no platform-specific ioctl commands */
 
-  pwmvdbg("TPM%d\n", priv->tpmid);
+  pwminfo("TPM%d\n", priv->tpmid);
 #endif
   return -ENOTTY;
 }
@@ -705,7 +705,7 @@ FAR struct pwm_lowerhalf_s *kl_pwminitialize(int timer)
 {
   FAR struct kl_pwmtimer_s *lower;
 
-  pwmvdbg("TPM%d\n", timer);
+  pwminfo("TPM%d\n", timer);
 
   switch (timer)
     {
@@ -731,7 +731,7 @@ FAR struct pwm_lowerhalf_s *kl_pwminitialize(int timer)
 #endif
 
       default:
-        pwmdbg("No such timer configured\n");
+        pwmerr("ERROR: No such timer configured\n");
         return NULL;
     }
 

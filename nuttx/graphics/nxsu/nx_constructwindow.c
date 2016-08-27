@@ -49,7 +49,7 @@
 #include "nxfe.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -107,7 +107,7 @@ int nx_constructwindow(NXHANDLE handle, NXWINDOW hwnd,
   FAR struct nxbe_window_s *wnd = (FAR struct nxbe_window_s *)hwnd;
   FAR struct nxbe_state_s *be = &fe->be;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!wnd)
     {
       set_errno(EINVAL);
@@ -116,7 +116,7 @@ int nx_constructwindow(NXHANDLE handle, NXWINDOW hwnd,
 
   if (!fe || !cb)
     {
-      kufree(wnd);
+      kumm_free(wnd);
       errno = EINVAL;
       return ERROR;
     }
@@ -144,7 +144,7 @@ int nx_constructwindow(NXHANDLE handle, NXWINDOW hwnd,
 
   /* Provide the initial mouse settings */
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
   nxsu_mousereport(wnd);
 #endif
 

@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/tm4c123g-launchpad/src/tm4c123g-launchpad.h
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,24 +42,76 @@
 
 #include <nuttx/config.h>
 #include <nuttx/compiler.h>
+#include <nuttx/irq.h>
 
 #include "chip.h"
 #include "tiva_gpio.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
+/* Configuration ********************************************************************/
+
+#define HAVE_AT24 1
 
 /* How many SSI modules does this chip support? */
 
 #if TIVA_NSSI < 1
-#  undef CONFIG_SSI0_DISABLE
-#  define CONFIG_SSI0_DISABLE 1
-#  undef CONFIG_SSI1_DISABLE
-#  define CONFIG_SSI1_DISABLE 1
+#  undef CONFIG_TIVA_SSI0
+#  undef CONFIG_TIVA_SSI1
 #elif TIVA_NSSI < 2
-#  undef CONFIG_SSI1_DISABLE
-#  define CONFIG_SSI1_DISABLE 1
+#  undef CONFIG_TIVA_SSI1
+#endif
+
+/* AT24 Serial EEPROM
+ *
+ * A AT24C512 Serial EEPPROM was used for tested I2C.  There are no I2C
+ * devices on-board the Launchpad, but an external serial EEPROM module
+ * module was used.
+ *
+ * The Serial EEPROM was mounted on an external adaptor board and connected
+ * to the LaunchPad thusly:
+ *
+ *   - VCC -- VCC
+ *   - GND -- GND
+ *   - PB2 -- SCL
+ *   - PB3 -- SDA
+ */
+
+#define AT24_BUS   0
+#define AT24_MINOR 0
+
+#if !defined(CONFIG_MTD_AT24XX) || !defined(CONFIG_TIVA_I2C0)
+#  undef HAVE_AT24
+#endif
+
+/* Can't support AT25 features if mountpoints are disabled or if we were not
+ * asked to mount the AT25 part
+ */
+
+#if defined(CONFIG_DISABLE_MOUNTPOINT) || \
+   !defined(CONFIG_TM4C123G_LAUNCHPAD_AT24_BLOCKMOUNT)
+#  undef HAVE_AT24
+#endif
+
+/* If we are going to mount the AT25, then they user must also have told
+ * us what to do with it by setting one of these.
+ */
+
+#ifndef CONFIG_FS_NXFFS
+#  undef CONFIG_TM4C123G_LAUNCHPAD_AT24_NXFFS
+#endif
+
+#if !defined(CONFIG_TM4C123G_LAUNCHPAD_AT24_FTL) && \
+    !defined(CONFIG_TM4C123G_LAUNCHPAD_AT24_NXFFS)
+#  undef HAVE_AT24
+#endif
+
+#if defined(CONFIG_TM4C123G_LAUNCHPAD_AT24_FTL) && \
+   defined(CONFIG_TM4C123G_LAUNCHPAD_AT24_NXFFS)
+#  warning Both CONFIG_TM4C123G_LAUNCHPAD_AT24_FTL and CONFIG_TM4C123G_LAUNCHPAD_AT24_NXFFS are set
+#  warning Ignoring CONFIG_TM4C123G_LAUNCHPAD_AT24_NXFFS
+#  undef CONFIG_TM4C123G_LAUNCHPAD_AT24_NXFFS
 #endif
 
 /* TM4C123G LaunchPad ***************************************************************/
@@ -112,12 +164,16 @@
 
 /* The TM4C123G LaunchPad has a two buttons:
  *
- *   BOARD_SW1    -- Connected to PF4
- *   BOARD_SW2    -- Connected to PF0
+ *   BOARD_SW1    -- Connected to PF0
+ *   BOARD_SW2    -- Connected to PF4
  */
 
-#define GPIO_SW1     (GPIO_FUNC_INTERRUPT | GPIO_INT_BOTHEDGES | GPIO_PORTF | GPIO_PIN_1)
-#define GPIO_SW2     (GPIO_FUNC_INTERRUPT | GPIO_INT_BOTHEDGES | GPIO_PORTF | GPIO_PIN_1)
+#define GPIO_SW1     (GPIO_FUNC_INTERRUPT | GPIO_INT_BOTHEDGES | \
+                      GPIO_STRENGTH_2MA | GPIO_PADTYPE_STDWPU | \
+                      GPIO_PORTF | GPIO_PIN_4)
+#define GPIO_SW2     (GPIO_FUNC_INTERRUPT | GPIO_INT_BOTHEDGES | \
+                      GPIO_STRENGTH_2MA | GPIO_PADTYPE_STDWPU | \
+                      GPIO_PORTF | GPIO_PIN_0)
 
 /************************************************************************************
  * Public Functions
@@ -126,17 +182,17 @@
 #ifndef __ASSEMBLY__
 
 /************************************************************************************
- * Name: tm4c_ssiinitialize
+ * Name: tm4c_ssidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins for the TM4C123G LaunchPad.
  *
  ************************************************************************************/
 
-void weak_function tm4c_ssiinitialize(void);
+void weak_function tm4c_ssidev_initialize(void);
 
 /****************************************************************************
- * Name: tm4c_ledinit
+ * Name: tm4c_led_initialize
  *
  * Description:
  *   Called to initialize the on-board LEDs.
@@ -144,9 +200,54 @@ void weak_function tm4c_ssiinitialize(void);
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void tm4c_ledinit(void);
+void tm4c_led_initialize(void);
+#endif
+
+/****************************************************************************
+ * Name: tm4c_bringup
+ *
+ * Description:
+ *   Bring up board features
+ *
+ ****************************************************************************/
+
+int tm4c_bringup(void);
+
+/****************************************************************************
+ * Name: tm4c_at24_automount
+ *
+ * Description:
+ *   Initialize and configure the AT24 serial EEPROM
+ *
+ ****************************************************************************/
+
+#ifdef HAVE_AT24
+int tm4c_at24_automount(int minor);
+#endif
+
+/****************************************************************************
+ * Name: tiva_timer_configure
+ *
+ * Description:
+ *   Configure the timer driver
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_TIVA_TIMER
+int tiva_timer_configure(void);
+#endif
+
+/************************************************************************************
+ * Name: board_adc_initialize
+ *
+ * Description:
+ *   Initialize and register the ADC driver
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_TIVA_ADC
+int board_adc_initialize(void);
 #endif
 
 #endif /* __ASSEMBLY__ */
 #endif /* __CONFIGS_TM4C123G_LAUNCHPAD_TM4C123G_LAUNCHPAD_H */
-

@@ -1,8 +1,7 @@
 /****************************************************************************
  * configs/lpc4330-xplorer/include/board.h
- * include/arch/board/board.h
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,12 +43,12 @@
 #include <nuttx/config.h>
 #include <stdbool.h>
 
-#if defined(CONFIG_ARCH_IRQBUTTONS) && defined(CONFIG_GPIO_IRQ)
+#if defined(CONFIG_ARCH_IRQBUTTONS) && defined(CONFIG_LPC43_GPIO_IRQ)
 #  include <nuttx/irq.h>
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Clocking ****************************************************************/
@@ -151,6 +150,42 @@
 
 #define LPC43_CCLK                  BOARD_FCLKOUT_FREQUENCY
 
+/* APB Clocking */
+
+#if defined(CONFIG_LPC43_BUS) || defined(CONFIG_LPC43_MCPWM) || \
+    defined(CONFIG_LPC43_I2C0) || defined(CONFIG_LPC43_I2S0) || \
+    defined(CONFIG_LPC43_I2S1)  || defined(CONFIG_LPC43_CAN1)
+#  define BOARD_ABP1_CLKSRC         BASE_APB_CLKSEL_XTAL
+#  define BOARD_ABP1_FREQUENCY      BOARD_XTAL_FREQUENCY
+#endif
+
+
+#if defined(CONFIG_LPC43_BUS) || defined(CONFIG_LPC43_I2C1) || \
+    defined(CONFIG_LPC43_DAC) || defined(CONFIG_LPC43_ADC0) || \
+    defined(CONFIG_LPC43_ADC1)  || defined(CONFIG_LPC43_CAN0)
+#  define BOARD_ABP3_CLKSRC         BASE_APB_CLKSEL_XTAL
+#  define BOARD_ABP3_FREQUENCY      BOARD_XTAL_FREQUENCY
+#endif
+
+/* SSP Clocking */
+
+#define BOARD_IDIVA_DIVIDER         (2)
+#define BOARD_IDIVA_CLKSRC          IDIVA_CLKSEL_PLL1
+#define BOARD_IDIVA_FREQUENCY       (BOARD_FCLKOUT_FREQUENCY/BOARD_IDIVA_DIVIDER)
+
+#define BOARD_SSP0_CLKSRC           BASE_SSP0_CLKSEL_IDIVA
+#define BOARD_SSP0_BASEFREQ         BOARD_IDIVA_FREQUENCY
+
+#define BOARD_SSP1_CLKSRC           BASE_SSP1_CLKSEL_IDIVA
+#define BOARD_SSP1_BASEFREQ         BOARD_IDIVA_FREQUENCY
+
+/* USB0 ********************************************************************/
+/* Settings needed in lpc43_cpu.c */
+
+#define BOARD_USB0_CLKSRC           PLL0USB_CLKSEL_XTAL
+#define BOARD_USB0_MDIV             0x06167ffa /* Table 149 datsheet, valid for 12Mhz Fclkin */
+#define BOARD_USB0_NP_DIV           0x00302062 /* Table 149 datsheet, valid for 12Mhz Fclkin */
+
 /* SPIFI clocking **********************************************************/
 /* The SPIFI will receive clocking from a divider per the settings provided
  * in this file.  The NuttX code will configure PLL1 as the input clock
@@ -207,17 +242,17 @@
  *
  * LEDs are pulled high to a low output illuminates the LED.
  *
- * LED index values for use with lpc43_setled()
+ * LED index values for use with board_userled()
  */
 
-#define BOARD_LED1        0
-#define BOARD_LED2        1
-#define BOARD_NLEDS       2
+#define BOARD_LED1          0
+#define BOARD_LED2          1
+#define BOARD_NLEDS         2
 
-/* LED bits for use with lpc43_setleds() */
+/* LED bits for use with board_userled_all() */
 
-#define BOARD_LED1_BIT    (1 << BOARD_LED1)
-#define BOARD_LED2_BIT    (1 << BOARD_LED2)
+#define BOARD_LED1_BIT      (1 << BOARD_LED1)
+#define BOARD_LED2_BIT      (1 << BOARD_LED2)
 
 /* If CONFIG_ARCH_LEDS is defined, the LEDs will be controlled as follows
  * for NuttX debug functionality (where NC means "No Change"). If
@@ -225,20 +260,20 @@
  * control of the application.  The following interfaces are then available
  * for application control of the LEDs:
  *
- *  void lpc43_ledinit(void);
- *  void lpc43_setled(int led, bool ledon);
- *  void lpc43_setleds(uint8_t ledset);
+ *  void board_userled_initialize(void);
+ *  void board_userled(int led, bool ledon);
+ *  void board_userled_all(uint8_t ledset);
  */
                                       /*     ON            OFF     */
                                       /* LED1   LED2   LED1   LED2 */
-#define LED_STARTED                0  /* OFF    OFF     -      -   */
-#define LED_HEAPALLOCATE           1  /* ON     OFF     -      -   */
-#define LED_IRQSENABLED            1  /* ON     OFF     -      -   */
-#define LED_STACKCREATED           1  /* ON     OFF     -      -   */
-#define LED_INIRQ                  2  /* NC     ON      NC     OFF */
-#define LED_SIGNAL                 2  /* NC     ON      NC     OFF */
-#define LED_ASSERTION              2  /* NC     ON      NC     OFF */
-#define LED_PANIC                  2  /* NC     ON      NC     OFF */
+#define LED_STARTED         0  /* OFF    OFF     -      -   */
+#define LED_HEAPALLOCATE    1  /* ON     OFF     -      -   */
+#define LED_IRQSENABLED     1  /* ON     OFF     -      -   */
+#define LED_STACKCREATED    1  /* ON     OFF     -      -   */
+#define LED_INIRQ           2  /* NC     ON      NC     OFF */
+#define LED_SIGNAL          2  /* NC     ON      NC     OFF */
+#define LED_ASSERTION       2  /* NC     ON      NC     OFF */
+#define LED_PANIC           2  /* NC     ON      NC     OFF */
 
 /* UART Pins ****************************************************************/
 /* The LPC4330 Xplorer does not have RS-232 drivers or serial connectors on
@@ -259,20 +294,27 @@
  * file arch/arc/src/lpc43xx/lpc4310203050_pinconf.h for more info).
  */
 
-#define PINCONF_U0_TXD  PINCONF_U0_TXD_3
-#define PINCONF_U0_RXD  PINCONF_U0_RXD_3
-#define PINCONF_U0_DIR  PINCONF_U0_DIR_3
+#define PINCONF_U0_TXD      PINCONF_U0_TXD_3
+#define PINCONF_U0_RXD      PINCONF_U0_RXD_3
+#define PINCONF_U0_DIR      PINCONF_U0_DIR_3
 
-#define PINCONF_U1_TXD  PINCONF_U1_TXD_1
-#define PINCONF_U1_RXD  PINCONF_U1_RXD_1
+#define PINCONF_U1_TXD      PINCONF_U1_TXD_1
+#define PINCONF_U1_RXD      PINCONF_U1_RXD_1
 
-#define PINCONF_U2_TXD  PINCONF_U2_TXD_1
-#define PINCONF_U2_RXD  PINCONF_U2_RXD_1
-#define PINCONF_U2_DIR  PINCONF_U2_DIR_1
+#define PINCONF_U2_TXD      PINCONF_U2_TXD_1
+#define PINCONF_U2_RXD      PINCONF_U2_RXD_1
+#define PINCONF_U2_DIR      PINCONF_U2_DIR_1
 
-#define PINCONF_U3_TXD  PINCONF_U3_TXD_2
-#define PINCONF_U3_RXD  PINCONF_U3_RXD_2
-#define PINCONF_U3_DIR  PINCONF_U3_DIR_2
+#define PINCONF_U3_TXD      PINCONF_U3_TXD_2
+#define PINCONF_U3_RXD      PINCONF_U3_RXD_2
+#define PINCONF_U3_DIR      PINCONF_U3_DIR_2
+
+/* Ethernet */
+
+#define PINCONF_ENET_RX_DV  PINCONF_ENET_RX_DV_2
+#define PINCONF_ENET_RESET  PINCONF_GPIO0p4
+#define GPIO_ENET_RESET     (GPIO_MODE_OUTPUT | GPIO_VALUE_ONE | GPIO_PORT0 | GPIO_PIN4)
+#define PINCONF_ENET_MDC    PINCONF_ENET_MDC_3
 
 /****************************************************************************
  * Public Types
@@ -287,7 +329,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -306,23 +349,7 @@ extern "C" {
  *
  ****************************************************************************/
 
-EXTERN void lpc43_boardinitialize(void);
-
-/*****************************************************************************
- * Name:  lpc43_ledinit, lpc43_setled, and lpc43_setleds
- *
- * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board
- *   LEDs.  If CONFIG_ARCH_LEDS is not defined, then the following interfaces
- *   are available to control the LEDs from user applications.
- *
- ****************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-EXTERN void lpc43_ledinit(void);
-EXTERN void lpc43_setled(int led, bool ledon);
-EXTERN void lpc43_setleds(uint8_t ledset);
-#endif
+void lpc43_boardinitialize(void);
 
 #undef EXTERN
 #if defined(__cplusplus)

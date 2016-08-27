@@ -1,4 +1,4 @@
-/************************************************************************
+/****************************************************************************
  * arch/arm/src/dm320/dm320_irq.c
  *
  *   Copyright (C) 2007, 2009, 2012 Gregory Nutt. All rights reserved.
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
@@ -46,22 +46,27 @@
 #include "chip.h"
 
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
-/************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- ************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************
+/****************************************************************************
  * Public Data
- ************************************************************************/
+ ****************************************************************************/
 
-volatile uint32_t *current_regs;
+/* g_current_regs[] holds a references to the current interrupt level
+ * register storage structure.  If is non-NULL only during interrupt
+ * processing.  Access to g_current_regs[] must be through the macro
+ * CURRENT_REGS for portability.
+ */
 
-/************************************************************************
+volatile uint32_t *g_current_regs[1];
+
+/****************************************************************************
  * Private Data
- ************************************************************************/
+ ****************************************************************************/
 
 /* The value of _svectors is defined in ld.script.  It could be hard-
  * coded because we know that correct IRAM area is 0xffc00000.
@@ -69,17 +74,17 @@ volatile uint32_t *current_regs;
 
 extern int _svectors; /* Type does not matter */
 
-/************************************************************************
+/****************************************************************************
  * Private Functions
- ************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************
+/****************************************************************************
  * Public Functions
- ************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************
+/****************************************************************************
  * Name: up_irqinitialize
- ************************************************************************/
+ ****************************************************************************/
 
 void up_irqinitialize(void)
 {
@@ -103,31 +108,31 @@ void up_irqinitialize(void)
   putreg16(0xffff, DM320_INTC_IRQ1);
   putreg16(0xffff, DM320_INTC_IRQ2);
 
- /* Make sure that the base addresses are zero and that
-  * the table increment is 4 bytes.
-  */
+  /* Make sure that the base addresses are zero and that
+   * the table increment is 4 bytes.
+   */
 
   putreg16(0, DM320_INTC_EABASE0);
   putreg16(0, DM320_INTC_EABASE1);
 
   /* currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  CURRENT_REGS = NULL;
 
   /* And finally, enable interrupts */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
-  irqrestore(SVC_MODE | PSR_F_BIT);
+  up_irq_restore(SVC_MODE | PSR_F_BIT);
 #endif
 }
 
-/************************************************************************
+/****************************************************************************
  * Name: up_disable_irq
  *
  * Description:
  *   Disable the IRQ specified by 'irq'
  *
- ************************************************************************/
+ ****************************************************************************/
 
 void up_disable_irq(int irq)
 {
@@ -161,13 +166,13 @@ void up_disable_irq(int irq)
     }
 }
 
-/************************************************************************
+/****************************************************************************
  * Name: up_enable_irq
  *
  * Description:
  *   Enable the IRQ specified by 'irq'
  *
- ************************************************************************/
+ ****************************************************************************/
 
 void up_enable_irq(int irq)
 {
@@ -201,49 +206,36 @@ void up_enable_irq(int irq)
     }
 }
 
-/************************************************************************
- * Name: up_maskack_irq
+/****************************************************************************
+ * Name: up_ack_irq
  *
  * Description:
- *   Mask the IRQ and acknowledge it
+ *   Acknowledge the interrupt
  *
- ************************************************************************/
+ ****************************************************************************/
 
-void up_maskack_irq(int irq)
+void up_ack_irq(int irq)
 {
-  /* Disable the interrupt by clearing the corresponding bit in
-   * the IRQ enable register.  And acknowlege it by setting the
-   * corresponding bit in the IRQ status register.
+  /* Acknowlege the interrupt by setting the corresponding bit in the
+   * IRQ status register.
    */
 
   if (irq < 16)
     {
-      /* IRQs0-15 are controlled by the IRQ0 enable register
-       * Clear the associated enable bit to disable the interrupt
-       * Set the associated status bit to clear the interrupt
-       */
+      /* Set the associated status bit to clear the interrupt */
 
-      putreg16((getreg16(DM320_INTC_EINT0) & ~(1<< irq)), DM320_INTC_EINT0);
       putreg16((1 << irq), DM320_INTC_IRQ0);
     }
   else if (irq < 32)
     {
-      /* IRQs16-31 are controlled by the IRQ1 enable register
-       * Clear the associated enable bit to disable the interrupt
-       * Set the associated status bit to clear the interrupt
-       */
+      /* Set the associated status bit to clear the interrupt  */
 
-      putreg16((getreg16(DM320_INTC_EINT1) & ~(1<< (irq-16))), DM320_INTC_EINT1);
       putreg16((1 << (irq-16)), DM320_INTC_IRQ1);
     }
   else
     {
-      /* IRQs32- are controlled by the IRQ2 enable register
-       * Clear the associated enable bit to disable the interrupt
-       * Set the associated status bit to clear the interrupt
-       */
+      /* Set the associated status bit to clear the interrupt */
 
-      putreg16((getreg16(DM320_INTC_EINT2) & ~(1<< (irq-32))), DM320_INTC_EINT2);
       putreg16((1 << (irq-32)), DM320_INTC_IRQ2);
     }
 }

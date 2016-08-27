@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/nuc/nuc_gpio.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,19 +42,20 @@
 #include <sys/types.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
+
 #include "up_arch.h"
 
 #include "chip.h"
 #include "nuc_gpio.h"
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_GPIO_INFO
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 /* Port letters for prettier debug output */
 
-#ifdef CONFIG_DEBUG
 static const char g_portchar[NUC_GPIO_NPORTS] =
 {
 #if NUC_GPIO_NPORTS > 9
@@ -81,15 +82,6 @@ static const char g_portchar[NUC_GPIO_NPORTS] =
 #  error "Bad number of GPIOs"
 #endif
 };
-#endif
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -120,24 +112,24 @@ void nuc_dumpgpio(gpio_cfgset_t pinset, const char *msg)
 
   /* The following requires exclusive access to the GPIO registers */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
-  lldbg("GPIO%c pinset: %08x base: %08x -- %s\n",
-        g_portchar[port], pinset, base, msg);
-  lldbg("  PMD: %08x  OFFD: %08x  DOUT: %08x DMASK: %08x\n",
-        getreg32(base + NUC_GPIO_PMD_OFFSET),
-        getreg32(base + NUC_GPIO_OFFD_OFFSET),
-        getreg32(base + NUC_GPIO_DOUT_OFFSET),
-        getreg32(base + NUC_GPIO_DMASK_OFFSET));
-  lldbg("  PIN: %08x  DBEN: %08x   IMD: %08x   IEN: %08x\n",
-        getreg32(base + NUC_GPIO_PIN_OFFSET),
-        getreg32(base + NUC_GPIO_DBEN_OFFSET),
-        getreg32(base + NUC_GPIO_IMD_OFFSET),
-        getreg32(base + NUC_GPIO_IEN_OFFSET));
-  lldbg(" ISRC: %08x\n",
-        getreg32(base + NUC_GPIO_ISRC_OFFSET));
+  gpioinfo("GPIO%c pinset: %08x base: %08x -- %s\n",
+           g_portchar[port], pinset, base, msg);
+  gpioinfo("  PMD: %08x  OFFD: %08x  DOUT: %08x DMASK: %08x\n",
+           getreg32(base + NUC_GPIO_PMD_OFFSET),
+           getreg32(base + NUC_GPIO_OFFD_OFFSET),
+           getreg32(base + NUC_GPIO_DOUT_OFFSET),
+           getreg32(base + NUC_GPIO_DMASK_OFFSET));
+  gpioinfo("  PIN: %08x  DBEN: %08x   IMD: %08x   IEN: %08x\n",
+           getreg32(base + NUC_GPIO_PIN_OFFSET),
+           getreg32(base + NUC_GPIO_DBEN_OFFSET),
+           getreg32(base + NUC_GPIO_IMD_OFFSET),
+           getreg32(base + NUC_GPIO_IEN_OFFSET));
+  gpioinfo(" ISRC: %08x\n",
+           getreg32(base + NUC_GPIO_ISRC_OFFSET));
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
-#endif /* CONFIG_DEBUG */
+#endif /* CONFIG_DEBUG_GPIO_INFO */

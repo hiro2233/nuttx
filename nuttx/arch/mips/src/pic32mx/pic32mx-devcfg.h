@@ -45,7 +45,7 @@
 #include "pic32mx-memorymap.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Register Offsets *********************************************************/
 
@@ -249,7 +249,7 @@
 #  define DEVCFG0_CP                (1 << 28) /* Bit 28: Code-protect */
 #  define DEVCFG0_SIGN              (1 << 31) /* Bit 31: Signature */
 
-#  define DEVCFG0_UNUSED            0x6ef00ff0 /* Bits 4-11, 20-23, 25-27, 29-30 */
+#  define DEVCFG0_UNUSED            0x6ef00ff4 /* Bits 4-11, 20-23, 25-27, 29-30 */
 #endif
 
 /****************************************************************************
@@ -268,7 +268,8 @@
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

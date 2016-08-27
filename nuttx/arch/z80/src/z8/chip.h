@@ -34,8 +34,8 @@
  *
  ************************************************************************************/
 
-#ifndef __Z8_CHIP_H
-#define __Z8_CHIP_H
+#ifndef __ARCH_Z80_SRC_Z8_CHIP_H
+#define __ARCH_Z80_SRC_Z8_CHIP_H
 
 /************************************************************************************
  * Included Files
@@ -46,7 +46,7 @@
 #endif
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Hexadecimal Representation *******************************************************/
@@ -224,7 +224,8 @@
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -235,4 +236,4 @@ extern "C" {
 #endif
 #endif
 
-#endif  /* __Z8_CHIP_H */
+#endif  /* __ARCH_Z80_SRC_Z8_CHIP_H */

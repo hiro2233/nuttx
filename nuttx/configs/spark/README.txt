@@ -98,12 +98,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP = $(TOPDIR)/tools/mknulldeps.sh
-
   The CodeSourcery Toolchain (2009q1)
   -----------------------------------
   The CodeSourcery toolchain (2009q1) does not work with default optimization
@@ -202,7 +196,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -262,8 +256,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -499,7 +493,7 @@ Buttons and LEDs
     * If LED2, LED3, LED4 are statically on, then NuttX probably failed to boot
       and these LEDs will give you some indication of where the failure was
    ** The normal state is LED4 ON and LED2 faintly glowing.  This faint glow
-      is because of timer interupts that result in the LED being illuminated
+      is because of timer interrupts that result in the LED being illuminated
       on a small proportion of the time.
   *** LED3 may also flicker normally if signals are processed.
 
@@ -548,7 +542,7 @@ Configurations
   in the top level Make.degs or the code will not fit.
 
   Stack space has been hand optimized using the stack coloring by enabling
-  "Stack usage debug hooks" (CONFIG_DEBUG_STACK) in Build Setup-> Debug
+  "Stack coloration" (CONFIG_STACK_COLORATION) in Build Setup-> Debug
   Options. I have selected values that have 8-16 bytes of headroom with
   network debugging on. If you enable more debugging and get a hard fault
   or any weirdness like commands hanging. Then the Idle, main or Interrupt

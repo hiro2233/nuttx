@@ -46,6 +46,8 @@
 #  include "sam3u_periphclks.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM3X) || defined(CONFIG_ARCH_CHIP_SAM3A)
 #  include "sam3x_periphclks.h"
+#elif defined(CONFIG_ARCH_CHIP_SAM4CM)
+#  include "sam4cm_periphclks.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM4E)
 #  include "sam4e_periphclks.h"
 #elif defined(CONFIG_ARCH_CHIP_SAM4L)

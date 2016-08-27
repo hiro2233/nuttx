@@ -2,7 +2,7 @@
  * arch/arm/src/lpc17xx/lpc17_start.c
  * arch/arm/src/chip/lpc17_start.c
  *
- *   Copyright (C) 2010, 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2012-2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -59,7 +59,7 @@
 #endif
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -82,7 +82,7 @@
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 #  define showprogress(c) up_lowputc(c)
 #else
 #  define showprogress(c)
@@ -112,7 +112,7 @@
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_FPU
-#ifdef CONFIG_ARMV7M_CMNVECTOR
+#if defined(CONFIG_ARMV7M_CMNVECTOR) && !defined(CONFIG_ARMV7M_LAZYFPU)
 
 static inline void lpc17_fpuconfig(void)
 {
@@ -239,7 +239,7 @@ void __start(void)
    * segments.
    */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
   lpc17_userspace();
   showprogress('E');
 #endif
@@ -257,5 +257,5 @@ void __start(void)
 
   /* Shouldn't get here */
 
-  for (;;);
+  for (; ; );
 }

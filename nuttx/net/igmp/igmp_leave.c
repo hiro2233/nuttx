@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/igmp/igmp_leave.c
  *
- *   Copyright (C) 2010-2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010-2011, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * The NuttX implementation of IGMP was inspired by the IGMP add-on for the
@@ -43,25 +43,22 @@
 
 #include <nuttx/config.h>
 
-#include <wdog.h>
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip.h>
-#include <nuttx/net/uip/uip-igmp.h>
+#include <netinet/in.h>
 
-#include "uip/uip_internal.h"
+#include <nuttx/wdog.h>
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/net.h>
+#include <nuttx/net/netstats.h>
+#include <nuttx/net/ip.h>
+#include <nuttx/net/igmp.h>
+
+#include "devif/devif.h"
+#include "igmp/igmp.h"
 
 #ifdef CONFIG_NET_IGMP
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -127,17 +124,17 @@
  *
  ****************************************************************************/
 
-int igmp_leavegroup(struct uip_driver_s *dev, FAR const struct in_addr *grpaddr)
+int igmp_leavegroup(struct net_driver_s *dev, FAR const struct in_addr *grpaddr)
 {
   struct igmp_group_s *group;
-  uip_lock_t flags;
+  net_lock_t flags;
 
   DEBUGASSERT(dev && grpaddr);
 
   /* Find the entry corresponding to the address leaving the group */
 
-  group = uip_grpfind(dev, &grpaddr->s_addr);
-  ndbg("Leaving group: %p\n", group);
+  group = igmp_grpfind(dev, &grpaddr->s_addr);
+  ninfo("Leaving group: %p\n", group);
   if (group)
     {
       /* Cancel the timer and discard any queued Membership Reports.  Canceling
@@ -146,36 +143,36 @@ int igmp_leavegroup(struct uip_driver_s *dev, FAR const struct in_addr *grpaddr)
        * could interfere with the Leave Group.
        */
 
-      flags = uip_lock();
+      flags = net_lock();
       wd_cancel(group->wdog);
       CLR_SCHEDMSG(group->flags);
       CLR_WAITMSG(group->flags);
-      uip_unlock(flags);
+      net_unlock(flags);
 
-      IGMP_STATINCR(uip_stat.igmp.leaves);
+      IGMP_STATINCR(g_netstats.igmp.leaves);
 
       /* Send a leave if the flag is set according to the state diagram */
 
       if (IS_LASTREPORT(group->flags))
         {
-          ndbg("Schedule Leave Group message\n");
-          IGMP_STATINCR(uip_stat.igmp.leave_sched);
-          uip_igmpwaitmsg(group, IGMP_LEAVE_GROUP);
+          ninfo("Schedule Leave Group message\n");
+          IGMP_STATINCR(g_netstats.igmp.leave_sched);
+          igmp_waitmsg(group, IGMP_LEAVE_GROUP);
         }
 
       /* Free the group structure (state is now Non-Member */
 
-      uip_grpfree(dev, group);
+      igmp_grpfree(dev, group);
 
       /* And remove the group address from the ethernet drivers MAC filter set */
 
-      uip_removemcastmac(dev, (FAR uip_ipaddr_t *)&grpaddr->s_addr);
+      igmp_removemcastmac(dev, (FAR in_addr_t *)&grpaddr->s_addr);
       return OK;
     }
 
   /* Return ENOENT if the address is not a member of the group */
 
-  nvdbg("Return -ENOENT\n");
+  ninfo("Return -ENOENT\n");
   return -ENOENT;
 }
 

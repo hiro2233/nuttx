@@ -1,12 +1,13 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
-config SYSTEM_USBMSC
-	bool "USB mass storage class controls"
+menuconfig SYSTEM_USBMSC
+	bool "USB Mass Storage Device Commands"
 	default n
-	depends on USBMSC && !KERNEL_BUILD
+	depends on LIB_BOARDCTL && USBMSC && !KERNEL_BUILD
+	select BOARDCTL_USBDEVCTRL
 	---help---
 		Enable the USB mass storage class controls.  These controls include:
 
@@ -89,7 +90,7 @@ config SYSTEM_USBMSC_TRACEINIT
 	bool "USB Trace Initialization"
 	default n
 	---help---
-		If USBDEV_TRACE is enabled (or DEBUG and DEBUG_USB),
+		If USBDEV_TRACE is enabled (or CONFIG_DEBUG_FEATURES and CONFIG_DEBUG_USB),
 		then the add-on code will also manage the USB trace output.  The
 		amount of trace output can be controlled this configuration value:
 		This setting will show USB initialization events
@@ -98,7 +99,7 @@ config SYSTEM_USBMSC_TRACECLASS
 	bool "USB Trace Class"
 	default n
 	---help---
-		If USBDEV_TRACE is enabled (or DEBUG and DEBUG_USB),
+		If USBDEV_TRACE is enabled (or CONFIG_DEBUG_FEATURES and CONFIG_DEBUG_USB),
 		then the add-on code will also manage the USB trace output.  The
 		amount of trace output can be controlled this configuration value:
 		This setting will show USB class driver events
@@ -107,7 +108,7 @@ config SYSTEM_USBMSC_TRACETRANSFERS
 	bool "USB Trace Transfers"
 	default n
 	---help---
-		If USBDEV_TRACE is enabled (or DEBUG and DEBUG_USB),
+		If USBDEV_TRACE is enabled (or CONFIG_DEBUG_FEATURES and CONFIG_DEBUG_USB),
 		then the add-on code will also manage the USB trace output.  The
 		amount of trace output can be controlled this configuration value:
 		This setting will show USB data transfer events
@@ -116,7 +117,7 @@ config SYSTEM_USBMSC_TRACECONTROLLER
 	bool "USB Trace Device Controller Events"
 	default n
 	---help---
-		If USBDEV_TRACE is enabled (or DEBUG and DEBUG_USB),
+		If USBDEV_TRACE is enabled (or CONFIG_DEBUG_FEATURES and CONFIG_DEBUG_USB),
 		then the add-on code will also manage the USB trace output.  The
 		amount of trace output can be controlled this configuration value:
 		This setting will show USB device controller events
@@ -125,7 +126,7 @@ config SYSTEM_USBMSC_TRACEINTERRUPTS
 	bool "USB Trace Device Controller Interrupt Events"
 	default n
 	---help---
-		If USBDEV_TRACE is enabled (or DEBUG and DEBUG_USB),
+		If USBDEV_TRACE is enabled (or CONFIG_DEBUG_FEATURES and CONFIG_DEBUG_USB),
 		then the add-on code will also manage the USB trace output.  The
 		amount of trace output can be controlled this configuration value:
 		This setting will show USB device controller interrupt-related events.

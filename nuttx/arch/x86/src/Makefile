@@ -1,7 +1,7 @@
 ############################################################################
 # arch/x86/src/Makefile
 #
-#   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2011-2012, 2014, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,10 @@ ifeq ($(CONFIG_ARCH_I486),y)
 ARCH_SUBDIR = i486
 endif
 
+CPPFLAGS += $(EXTRADEFINES)
+CFLAGS += $(EXTRADEFINES)
+CXXFLAGS += $(EXTRADEFINES)
+
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
   ARCH_SRCDIR = $(TOPDIR)\arch\$(CONFIG_ARCH)\src
   NUTTX = $(TOPDIR)\nuttx$(EXEEXT)
@@ -65,6 +69,7 @@ endif
 endif
 
 HEAD_OBJ = $(HEAD_ASRC:.S=$(OBJEXT))
+STARTUP_OBJS ?= $(HEAD_OBJ)
 
 ASRCS = $(CHIP_ASRCS) $(CMN_ASRCS)
 AOBJS = $(ASRCS:.S=$(OBJEXT))
@@ -74,6 +79,11 @@ COBJS = $(CSRCS:.c=$(OBJEXT))
 
 SRCS = $(ASRCS) $(CSRCS)
 OBJS = $(AOBJS) $(COBJS)
+
+# Override in Make.defs if linker is not 'ld'
+
+LDSTARTGROUP ?= --start-group
+LDENDGROUP ?= --end-group
 
 LDFLAGS += $(ARCHSCRIPT)
 EXTRA_LIBS ?=
@@ -138,19 +148,19 @@ board/libboard$(LIBEXT):
 
 nuttx$(EXEEXT): $(HEAD_OBJ) board/libboard$(LIBEXT)
 	@echo "LD: nuttx$(EXEEXT)"
-	$(Q) $(LD) --entry=__start $(LDFLAGS) $(LIBPATHS) -o $(NUTTX)$(EXEEXT) $(HEAD_OBJ) $(EXTRA_OBJS) \
-		--start-group $(LDLIBS) $(EXTRA_LIBS) $(LIBGCC) --end-group
+	$(Q) $(LD) --entry=__start $(LDFLAGS) $(LIBPATHS) -o $(NUTTX) $(HEAD_OBJ) $(EXTRA_OBJS) \
+		$(LDSTARTGROUP) $(LDLIBS) $(EXTRA_LIBS) $(LIBGCC) $(LDENDGROUP)
 ifneq ($(CONFIG_WINDOWS_NATIVE),y)
-	$(Q) $(NM) $(NUTTX)$(EXEEXT) | \
+	$(Q) $(NM) $(NUTTX) | \
 	grep -v '\(compiled\)\|\(\$(OBJEXT)$$\)\|\( [aUw] \)\|\(\.\.ng$$\)\|\(LASH[RL]DI\)' | \
 	sort > $(TOPDIR)/System.map
 endif
 
 # This is part of the top-level export target
 
-export_head: board/libboard$(LIBEXT) $(HEAD_OBJ)
+export_startup: board/libboard$(LIBEXT) $(STARTUP_OBJS)
 	$(Q) if [ -d "$(EXPORT_DIR)/startup" ]; then \
-		cp -f $(HEAD_OBJ) "$(EXPORT_DIR)/startup"; \
+		cp -f $(STARTUP_OBJS) "$(EXPORT_DIR)/startup"; \
 	 else \
 		echo "$(EXPORT_DIR)/startup does not exist"; \
 		exit 1; \

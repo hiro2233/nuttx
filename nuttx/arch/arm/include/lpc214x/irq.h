@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/lpc214x/irq.h
  *
- *   Copyright (C) 2007, 2008 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2008, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,8 +37,8 @@
  * only indirectly through nuttx/irq.h
  */
 
-#ifndef __ARCH_LPC214X_IRQ_H
-#define __ARCH_LPC214X_IRQ_H
+#ifndef __ARCH_ARM_INCLUDE_LPC214X_IRQ_H
+#define __ARCH_ARM_INCLUDE_LPC214X_IRQ_H
 
 /****************************************************************************
  * Included Files
@@ -49,7 +49,7 @@
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* LPC214X Interrupts */
@@ -100,7 +100,7 @@ typedef void (*vic_vector_t)(uint32_t *regs);
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -110,14 +110,15 @@ typedef void (*vic_vector_t)(uint32_t *regs);
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
 
 #ifndef CONFIG_VECTORED_INTERRUPTS
-EXTERN void up_attach_vector(int irq, int vector, vic_vector_t handler);
-EXTERN void up_detach_vector(int vector);
+void up_attach_vector(int irq, int vector, vic_vector_t handler);
+void up_detach_vector(int vector);
 #endif
 
 #undef EXTERN
@@ -126,5 +127,5 @@ EXTERN void up_detach_vector(int vector);
 #endif
 #endif
 
-#endif /* __ARCH_LPC214X_IRQ_H */
+#endif /* __ARCH_ARM_INCLUDE_LPC214X_IRQ_H */
 

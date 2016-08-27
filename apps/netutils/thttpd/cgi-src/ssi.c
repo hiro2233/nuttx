@@ -2,7 +2,7 @@
  * netutils/thttpd/cgi-src/ssi.c
  * Server-side-includes CGI program
  *
- *   Copyright (C) 2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Derived from the file of the same name in the original THTTPD package:
@@ -47,7 +47,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include <nuttx/regex.h>
+#include <nuttx/lib/regex.h>
 
 #include "config.h"
 
@@ -378,11 +378,11 @@ static void show_size(off_t size)
         {
           (void)printf("%ld", (long)size);
         }
-      else if (size < 1024)
+      else if (size < 1024 * 1024)
         {
           (void)printf("%ldK", (long)size / 1024L);
         }
-      else if (size < 1024 * 1024)
+      else if (size < 1024 * 1024 * 1024)
         {
           (void)printf("%ldM", (long)size / (1024L * 1024L));
         }
@@ -496,7 +496,7 @@ static void do_include(FILE *instream, char *vfilename, char *filename,
 }
 
 static void do_echo(FILE *instream, char *vfilename, char *filename,
-                     char *directive, char *tag, char *val)
+                    char *directive, char *tag, char *val)
 {
   char *cp;
 
@@ -551,6 +551,7 @@ static void do_echo(FILE *instream, char *vfilename, char *filename,
           gettimeofday(&tm, NULL);
           show_time(tm.tv_sec, 1);
         }
+#if 0 /* fstat is not yet supported */
       else if (strcmp(val, "LAST_MODIFIED") == 0)
         {
           /* The last modification date of the current document. */
@@ -560,6 +561,7 @@ static void do_echo(FILE *instream, char *vfilename, char *filename,
               show_time(g_sb.st_mtime, 0);
             }
         }
+#endif
       else
         {
           /* Try an environment variable. */
@@ -876,13 +878,17 @@ static void read_file(FILE *instream, char *vfilename, char *filename)
  * Public Functions
  ****************************************************************************/
 
-int main(int argc, char **argv)
+#ifdef CONFIG_THTTPD_BINFS
+int ssi_main(int argc, char *argv[])
+#else
+int main(int argc, char *argv[])
+#endif
 {
   FILE *instream;
   char *script_name;
   char *path_info;
   char *path_translated;
-  int err = 0;
+  int errcode = 0;
 
   /* Default formats. */
 
@@ -924,14 +930,14 @@ int main(int argc, char **argv)
   if (!path_translated)
     {
       internal_error("Couldn't get PATH_TRANSLATED environment variable.");
-      err = 3;
+      errcode = 3;
       goto errout_with_g_url;
     }
 
   if (!check_filename(path_translated))
     {
       not_permitted("initial", "PATH_TRANSLATED", path_translated);
-      err = 4;
+      errcode = 4;
       goto errout_with_g_url;
     }
 
@@ -941,7 +947,7 @@ int main(int argc, char **argv)
   if (!instream)
     {
       not_found(path_translated);
-      err = 5;
+      errcode = 5;
       goto errout_with_g_url;
     }
 
@@ -953,5 +959,5 @@ int main(int argc, char **argv)
 
 errout_with_g_url:
   free(g_url);
-  return err;
+  return errcode;
 }

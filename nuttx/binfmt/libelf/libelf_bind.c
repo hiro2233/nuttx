@@ -1,7 +1,7 @@
 /****************************************************************************
  * binfmt/libelf/libelf_bind.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -55,11 +55,11 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* CONFIG_DEBUG, CONFIG_DEBUG_VERBOSE, and CONFIG_DEBUG_BINFMT have to be
+/* CONFIG_DEBUG_FEATURES, CONFIG_DEBUG_INFO, and CONFIG_DEBUG_BINFMT have to be
  * defined or CONFIG_ELF_DUMPBUFFER does nothing.
  */
 
-#if !defined(CONFIG_DEBUG_VERBOSE) || !defined (CONFIG_DEBUG_BINFMT)
+#if !defined(CONFIG_DEBUG_INFO) || !defined (CONFIG_DEBUG_BINFMT)
 #  undef CONFIG_ELF_DUMPBUFFER
 #endif
 
@@ -68,7 +68,7 @@
 #endif
 
 #ifdef CONFIG_ELF_DUMPBUFFER
-# define elf_dumpbuffer(m,b,n) bvdbgdumpbuffer(m,b,n)
+# define elf_dumpbuffer(m,b,n) binfodumpbuffer(m,b,n)
 #else
 # define elf_dumpbuffer(m,b,n)
 #endif
@@ -103,7 +103,7 @@ static inline int elf_readrel(FAR struct elf_loadinfo_s *loadinfo,
 
   if (index < 0 || index > (relsec->sh_size / sizeof(Elf32_Rel)))
     {
-      bdbg("Bad relocation symbol index: %d\n", index);
+      berr("Bad relocation symbol index: %d\n", index);
       return -EINVAL;
     }
 
@@ -113,7 +113,7 @@ static inline int elf_readrel(FAR struct elf_loadinfo_s *loadinfo,
 
   /* And, finally, read the symbol table entry into memory */
 
-  return elf_read(loadinfo, (FAR uint8_t*)rel, sizeof(Elf32_Rel), offset);
+  return elf_read(loadinfo, (FAR uint8_t *)rel, sizeof(Elf32_Rel), offset);
 }
 
 /****************************************************************************
@@ -136,6 +136,7 @@ static int elf_relocate(FAR struct elf_loadinfo_s *loadinfo, int relidx,
   FAR Elf32_Shdr *dstsec = &loadinfo->shdr[relsec->sh_info];
   Elf32_Rel       rel;
   Elf32_Sym       sym;
+  FAR Elf32_Sym  *psym;
   uintptr_t       addr;
   int             symidx;
   int             ret;
@@ -148,12 +149,14 @@ static int elf_relocate(FAR struct elf_loadinfo_s *loadinfo, int relidx,
 
   for (i = 0; i < relsec->sh_size / sizeof(Elf32_Rel); i++)
     {
+      psym = &sym;
+
       /* Read the relocation entry into memory */
 
       ret = elf_readrel(loadinfo, relsec, i, &rel);
       if (ret < 0)
         {
-          bdbg("Section %d reloc %d: Failed to read relocation entry: %d\n",
+          berr("Section %d reloc %d: Failed to read relocation entry: %d\n",
                relidx, i, ret);
           return ret;
         }
@@ -169,7 +172,7 @@ static int elf_relocate(FAR struct elf_loadinfo_s *loadinfo, int relidx,
       ret = elf_readsym(loadinfo, symidx, &sym);
       if (ret < 0)
         {
-          bdbg("Section %d reloc %d: Failed to read symbol[%d]: %d\n",
+          berr("Section %d reloc %d: Failed to read symbol[%d]: %d\n",
                relidx, i, symidx, ret);
           return ret;
         }
@@ -179,58 +182,49 @@ static int elf_relocate(FAR struct elf_loadinfo_s *loadinfo, int relidx,
       ret = elf_symvalue(loadinfo, &sym, exports, nexports);
       if (ret < 0)
         {
-          bdbg("Section %d reloc %d: Failed to get value of symbol[%d]: %d\n",
-               relidx, i, symidx, ret);
-          return ret;
+          /* The special error -ESRCH is returned only in one condition:  The
+           * symbol has no name.
+           *
+           * There are a few relocations for a few architectures that do
+           * no depend upon a named symbol.  We don't know if that is the
+           * case here, but we will use a NULL symbol pointer to indicate
+           * that case to up_relocate().  That function can then do what
+           * is best.
+           */
+
+          if (ret == -ESRCH)
+            {
+              berr("Section %d reloc %d: Undefined symbol[%d] has no name: %d\n",
+                  relidx, i, symidx, ret);
+              psym = NULL;
+            }
+          else
+            {
+              berr("Section %d reloc %d: Failed to get value of symbol[%d]: %d\n",
+                  relidx, i, symidx, ret);
+              return ret;
+            }
         }
 
       /* Calculate the relocation address. */
 
       if (rel.r_offset < 0 || rel.r_offset > dstsec->sh_size - sizeof(uint32_t))
         {
-          bdbg("Section %d reloc %d: Relocation address out of range, offset %d size %d\n",
+          berr("Section %d reloc %d: Relocation address out of range, offset %d size %d\n",
                relidx, i, rel.r_offset, dstsec->sh_size);
           return -EINVAL;
         }
 
       addr = dstsec->sh_addr + rel.r_offset;
 
-      /* If CONFIG_ADDRENV=y, then 'addr' lies in a virtual address space that
-       * may not be in place now.  elf_addrenv_select() will temporarily
-       * instantiate that address space.
-       */
-
-#ifdef CONFIG_ADDRENV
-      ret = elf_addrenv_select(loadinfo);
-      if (ret < 0)
-        {
-          bdbg("ERROR: elf_addrenv_select() failed: %d\n", ret);
-          return ret;
-        }
-#endif
-
       /* Now perform the architecture-specific relocation */
 
-      ret = arch_relocate(&rel, &sym, addr);
+      ret = up_relocate(&rel, psym, addr);
       if (ret < 0)
         {
-#ifdef CONFIG_ADDRENV
-          (void)elf_addrenv_restore(loadinfo);
-#endif
-          bdbg("ERROR: Section %d reloc %d: Relocation failed: %d\n", ret);
+          berr("ERROR: Section %d reloc %d: Relocation failed: %d\n", relidx, i, ret);
           return ret;
         }
-
-      /* Restore the original address environment */
-
-#ifdef CONFIG_ADDRENV
-      ret = elf_addrenv_restore(loadinfo);
-      if (ret < 0)
-        {
-          bdbg("ERROR: elf_addrenv_restore() failed: %d\n", ret);
-          return ret;
-        }
-#endif
     }
 
   return OK;
@@ -239,7 +233,7 @@ static int elf_relocate(FAR struct elf_loadinfo_s *loadinfo, int relidx,
 static int elf_relocateadd(FAR struct elf_loadinfo_s *loadinfo, int relidx,
                            FAR const struct symtab_s *exports, int nexports)
 {
-  bdbg("Not implemented\n");
+  berr("Not implemented\n");
   return -ENOSYS;
 }
 
@@ -263,6 +257,9 @@ static int elf_relocateadd(FAR struct elf_loadinfo_s *loadinfo, int relidx,
 int elf_bind(FAR struct elf_loadinfo_s *loadinfo,
              FAR const struct symtab_s *exports, int nexports)
 {
+#ifdef CONFIG_ARCH_ADDRENV
+  int status;
+#endif
   int ret;
   int i;
 
@@ -281,9 +278,23 @@ int elf_bind(FAR struct elf_loadinfo_s *loadinfo,
   ret = elf_allocbuffer(loadinfo);
   if (ret < 0)
     {
-      bdbg("elf_allocbuffer failed: %d\n", ret);
+      berr("elf_allocbuffer failed: %d\n", ret);
       return -ENOMEM;
     }
+
+#ifdef CONFIG_ARCH_ADDRENV
+  /* If CONFIG_ARCH_ADDRENV=y, then the loaded ELF lies in a virtual address
+   * space that may not be in place now.  elf_addrenv_select() will
+   * temporarily instantiate that address space.
+   */
+
+  ret = elf_addrenv_select(loadinfo);
+  if (ret < 0)
+    {
+      berr("ERROR: elf_addrenv_select() failed: %d\n", ret);
+      return ret;
+    }
+#endif
 
   /* Process relocations in every allocated section */
 
@@ -323,12 +334,41 @@ int elf_bind(FAR struct elf_loadinfo_s *loadinfo,
         }
     }
 
-  /* Flush the instruction cache before starting the newly loaded module */
+#if defined(CONFIG_ARCH_ADDRENV)
+  /* Ensure that the I and D caches are coherent before starting the newly
+   * loaded module by cleaning the D cache (i.e., flushing the D cache
+   * contents to memory and invalidating the I cache).
+   */
 
-#ifdef CONFIG_ELF_ICACHE
-  arch_flushicache((FAR void*)loadinfo->elfalloc, loadinfo->elfsize);
+#if 0 /* REVISIT... has some problems */
+  (void)up_addrenv_coherent(&loadinfo->addrenv);
+#else
+  up_coherent_dcache(loadinfo->textalloc, loadinfo->textsize);
+  up_coherent_dcache(loadinfo->dataalloc, loadinfo->datasize);
+#endif
+
+  /* Restore the original address environment */
+
+  status = elf_addrenv_restore(loadinfo);
+  if (status < 0)
+    {
+      berr("ERROR: elf_addrenv_restore() failed: %d\n", status);
+      if (ret == OK)
+        {
+          ret = status;
+        }
+    }
+
+#elif defined(CONFIG_ARCH_HAVE_COHERENT_DCACHE)
+  /* Ensure that the I and D caches are coherent before starting the newly
+   * loaded module by cleaning the D cache (i.e., flushing the D cache
+   * contents to memory and invalidating the I cache).
+   */
+
+  up_coherent_dcache(loadinfo->textalloc, loadinfo->textsize);
+  up_coherent_dcache(loadinfo->dataalloc, loadinfo->datasize);
+
 #endif
 
   return ret;
 }
-

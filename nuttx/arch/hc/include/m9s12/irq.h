@@ -48,7 +48,7 @@
 #include <nuttx/irq.h>
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* IRQ Numbers */
@@ -108,7 +108,7 @@
  * Port J: Pins 0-3 and 6-7
  */
 
-#ifdef CONFIG_GPIO_IRQ
+#ifdef CONFIG_HCS12_GPIOIRQ
 
 /* To conserve space, interrupts must also be configured, port by port */
 
@@ -156,7 +156,7 @@
 # endif
 #else
 #  define HCS12_IRQ_NIRQS     HCS12_IRQ_NVECTORS
-#endif /* CONFIG_GPIO_IRQ */
+#endif /* CONFIG_HCS12_GPIOIRQ */
 
 #define HCS12_IRQ_VILLEGAL    HCS12_IRQ_NIRQS /* Any reserved vector */
 #define NR_IRQS               (HCS12_IRQ_NIRQS+1)
@@ -172,7 +172,8 @@
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

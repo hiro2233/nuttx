@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/avr/src/at32uc3/at32uc3_timerisr.c
  *
- *   Copyright (C) 2010 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,12 +47,12 @@
 #include "up_arch.h"
 
 #include "chip.h"
-#include "at32uc3_internal.h"
+#include "at32uc3.h"
 #include "at32uc3_pm.h"
 #include "at32uc3_rtc.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* The desired timer interrupt frequency is normally provided by the
@@ -61,12 +61,12 @@
  * setting that defaults to 100 (100 ticks per second = 10 MS interval).
  *
  * However, the AVR RTC does not support that default value well and so, we
- * will insist that default is over-ridden by CONFIG_MSEC_PER_TICK in the
- * configuration file.  Further, we will insist that CONFIG_MSEC_PER_TICK
- * have the value 8 (see reasoning below).
+ * will insist that default is over-ridden by CONFIG_USEC_PER_TICK in the
+ * configuration file.  Further, we will insist that CONFIG_USEC_PER_TICK
+ * have the value 10000 (see reasoning below).
  */
 
-#if defined(CONFIG_MSEC_PER_TICK) && CONFIG_MSEC_PER_TICK != 10
+#if defined(CONFIG_USEC_PER_TICK) && CONFIG_USEC_PER_TICK != 10000
 #  error "Only a 100KHz system clock is supported"
 #endif
 
@@ -153,7 +153,7 @@ static void rtc_waitnotbusy(void)
 }
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -167,18 +167,18 @@ static void rtc_waitnotbusy(void)
 
 int up_timerisr(int irq, uint32_t *regs)
 {
-   /* Clear the pending timer interrupt */
+  /* Clear the pending timer interrupt */
 
-   putreg32(RTC_INT_TOPI, AVR32_RTC_ICR);
+  putreg32(RTC_INT_TOPI, AVR32_RTC_ICR);
 
-   /* Process timer interrupt */
+  /* Process timer interrupt */
 
-   sched_process_timer();
-   return 0;
+  sched_process_timer();
+  return 0;
 }
 
 /****************************************************************************
- * Function:  up_timerinit
+ * Function:  up_timer_initialize
  *
  * Description:
  *   This function is called during start-up to initialize the timer
@@ -187,7 +187,7 @@ int up_timerisr(int irq, uint32_t *regs)
  *
  ****************************************************************************/
 
-void up_timerinit(void)
+void up_timer_initialize(void)
 {
   uint32_t regval;
 

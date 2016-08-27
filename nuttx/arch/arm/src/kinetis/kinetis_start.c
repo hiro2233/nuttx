@@ -50,12 +50,12 @@
 #include "up_arch.h"
 #include "up_internal.h"
 
-#include "kinetis_internal.h"
-#include "kinetis_smc.h"
+#include "kinetis.h"
+#include "chip/kinetis_smc.h"
 #include "kinetis_userspace.h"
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -112,8 +112,8 @@ void __start(void)
     }
 
   /* Copy any necessary code sections from FLASH to RAM.  The correct
-   * destination in SRAM is geive by _sramfuncs and _eramfuncs.  The
-   * temporary location is in flash after the data initalization code
+   * destination in SRAM is given by _sramfuncs and _eramfuncs.  The
+   * temporary location is in flash after the data initialization code
    * at _framfuncs
    */
 
@@ -146,7 +146,7 @@ void __start(void)
    * segments.
    */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
   kinetis_userspace();
 #endif
 
@@ -156,8 +156,8 @@ void __start(void)
 
   /* Show reset status */
 
-  dbg("Reset status: %02x:%02x\n",
-      getreg8(KINETIS_SMC_SRSH), getreg8(KINETIS_SMC_SRSL));
+  _warn("Reset status: %02x:%02x\n",
+        getreg8(KINETIS_SMC_SRSH), getreg8(KINETIS_SMC_SRSL));
 
   /* Then start NuttX */
 
@@ -165,5 +165,5 @@ void __start(void)
 
   /* Shouldn't get here */
 
-  for (;;);
+  for (; ; );
 }

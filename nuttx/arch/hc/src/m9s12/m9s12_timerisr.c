@@ -46,16 +46,16 @@
 #include <nuttx/arch.h>
 #include <arch/board/board.h>
 
-#include "clock_internal.h"
+#include "clock/clock.h"
 #include "up_internal.h"
 #include "up_arch.h"
 
 #include "chip.h"
-#include "m9s12_internal.h"
+#include "m9s12.h"
 #include "m9s12_crg.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* The desired timer interrupt frequency is provided by the definition
@@ -115,8 +115,8 @@
  * OSCCLK / (CLK_TCK * PRER_DIV) - 1
  */
 
- #define MODCNT_DENOM  ((uint32_t)CLK_TCK * (uint32_t)PRER_DIV)
- #define MODCNT_VALUE  ((((uint32_t)HCS12_OSCCLK  + (MODCNT_DENOM/2))/ MODCNT_DENOM) - 1)
+#define MODCNT_DENOM  ((uint32_t)CLK_TCK * (uint32_t)PRER_DIV)
+#define MODCNT_VALUE  ((((uint32_t)HCS12_OSCCLK  + (MODCNT_DENOM/2))/ MODCNT_DENOM) - 1)
 
 /****************************************************************************
  * Private Types
@@ -127,7 +127,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -152,7 +152,7 @@ int up_timerisr(int irq, uint32_t *regs)
 }
 
 /****************************************************************************
- * Function:  up_timerinit
+ * Function:  up_timer_initialize
  *
  * Description:
  *   This function is called during start-up to initialize the system timer
@@ -160,7 +160,7 @@ int up_timerisr(int irq, uint32_t *regs)
  *
  ****************************************************************************/
 
-void up_timerinit(void)
+void up_timer_initialize(void)
 {
   uint32_t tmp;
   uint8_t  regval;

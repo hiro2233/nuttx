@@ -41,24 +41,24 @@
 
 #include <sys/types.h>
 #include <stdbool.h>
+#include <sched.h>
+#include <errno.h>
 
 #include <nuttx/fs/fs.h>
 
 #include "up_internal.h"
 
 /****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
-static ssize_t devconsole_read(struct file *, char *, size_t);
-static ssize_t devconsole_write(struct file *, const char *, size_t);
+static ssize_t devconsole_read(FAR struct file *filep, FAR char *buffer,
+                 size_t buflen);
+static ssize_t devconsole_write(FAR struct file *filep,
+                 FAR const char *buffer, size_t buflen);
 #ifndef CONFIG_DISABLE_POLL
 static int     devconsole_poll(FAR struct file *filep, FAR struct pollfd *fds,
-                               bool setup);
+                 bool setup);
 #endif
 
 /****************************************************************************
@@ -67,10 +67,10 @@ static int     devconsole_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
 static const struct file_operations devconsole_fops =
 {
-  .read		= devconsole_read,
-  .write	= devconsole_write,
+  .read   = devconsole_read,
+  .write  = devconsole_write,
 #ifndef CONFIG_DISABLE_POLL
-  .poll         = devconsole_poll,
+  .poll   = devconsole_poll,
 #endif
 };
 
@@ -78,15 +78,77 @@ static const struct file_operations devconsole_fops =
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: devconsole_read
+ ****************************************************************************/
+
 static ssize_t devconsole_read(struct file *filep, char *buffer, size_t len)
 {
-  return up_hostread(buffer, len);
+  size_t remaining = len;
+  ssize_t nread;
+  int ch;
+
+  /* Loop until all requested bytes have been read.  No error checking */
+
+  sched_lock();
+  for (remaining = len, nread = 0; remaining > 0; remaining--)
+    {
+      /* Read the next character from the console, we should only wait
+       * on the first read.
+       */
+
+      ch = simuart_getc();
+      if (ch < 0)
+        {
+          set_errno(EIO);
+          sched_unlock();
+          return ERROR;
+        }
+
+      *buffer++ = ch;
+       nread++;
+
+      /* We have at least one character.  Return now if no further
+       * characters are available without waiting.
+       */
+
+      if (!simuart_checkc())
+        {
+          break;
+        }
+    }
+
+  sched_unlock();
+  return nread;
 }
+
+/****************************************************************************
+ * Name: devconsole_write
+ ****************************************************************************/
 
 static ssize_t devconsole_write(struct file *filep, const char *buffer, size_t len)
 {
-  return up_hostwrite(buffer, len);
+  int remaining;
+  int ret = OK;
+
+  for (remaining = len; remaining > 0 && ret >= 0; remaining--)
+    {
+      unsigned char ch = *buffer++;
+      ret = simuart_putc((int)ch);
+    }
+
+  if (ret < 0)
+    {
+      set_errno(EIO);
+      return ERROR;
+    }
+
+  return len;
 }
+
+/****************************************************************************
+ * Name: devconsole_poll
+ ****************************************************************************/
 
 #ifndef CONFIG_DISABLE_POLL
 static int devconsole_poll(FAR struct file *filep, FAR struct pollfd *fds,
@@ -100,7 +162,23 @@ static int devconsole_poll(FAR struct file *filep, FAR struct pollfd *fds,
  * Public Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: up_devconsole
+ ****************************************************************************/
+
 void up_devconsole(void)
 {
   (void)register_driver("/dev/console", &devconsole_fops, 0666, NULL);
 }
+
+/****************************************************************************
+ * Name: up_putc
+ ****************************************************************************/
+
+int up_putc(int ch)
+{
+  /* Just map to the host simuart_putc routine */
+
+  return simuart_putc(ch);
+}
+

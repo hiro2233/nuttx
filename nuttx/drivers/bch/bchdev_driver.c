@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/bch/bchdev_driver.c
  *
- *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2014-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,11 +57,12 @@
 
 #include <nuttx/fs/fs.h>
 #include <nuttx/fs/ioctl.h>
+#include <nuttx/drivers/drivers.h>
 
-#include "bch_internal.h"
+#include "bch.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -70,12 +71,16 @@
 
 static int     bch_open(FAR struct file *filep);
 static int     bch_close(FAR struct file *filep);
+static off_t   bch_seek(FAR struct file *filep, off_t offset, int whence);
 static ssize_t bch_read(FAR struct file *filep, FAR char *buffer,
                  size_t buflen);
 static ssize_t bch_write(FAR struct file *filep, FAR const char *buffer,
                  size_t buflen);
 static int     bch_ioctl(FAR struct file *filep, int cmd,
                  unsigned long arg);
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+static int     bch_unlink(FAR struct inode *inode);
+#endif
 
 /****************************************************************************
  * Public Data
@@ -83,14 +88,17 @@ static int     bch_ioctl(FAR struct file *filep, int cmd,
 
 const struct file_operations bch_fops =
 {
-  bch_open,  /* open */
-  bch_close, /* close */
-  bch_read,  /* read */
-  bch_write, /* write */
-  0,         /* seek */
-  bch_ioctl  /* ioctl */
+  bch_open,    /* open */
+  bch_close,   /* close */
+  bch_read,    /* read */
+  bch_write,   /* write */
+  bch_seek,    /* seek */
+  bch_ioctl    /* ioctl */
 #ifndef CONFIG_DISABLE_POLL
-  , 0        /* poll */
+  , 0          /* poll */
+#endif
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+  , bch_unlink /* unlink */
 #endif
 };
 
@@ -124,8 +132,8 @@ static int bch_open(FAR struct file *filep)
     {
       bch->refs++;
     }
-  bchlib_semgive(bch);
 
+  bchlib_semgive(bch);
   return OK;
 }
 
@@ -151,7 +159,8 @@ static int bch_close(FAR struct file *filep)
   (void)bchlib_flushsector(bch);
 
   /* Decrement the reference count (I don't use bchlib_decref() because I
-   * want the entire close operation to be atomic wrt other driver operations.
+   * want the entire close operation to be atomic wrt other driver
+   * operations.
    */
 
   if (bch->refs == 0)
@@ -161,14 +170,104 @@ static int bch_close(FAR struct file *filep)
   else
     {
       bch->refs--;
-    }
-  bchlib_semgive(bch);
 
+      /* If the reference count decremented to zero AND if the character
+       * driver has been unlinked, then teardown the BCH device now.
+       */
+
+      if (bch->refs == 0 && bch->unlinked)
+        {
+           /* Tear the driver down now. */
+
+           ret = bchlib_teardown((FAR void *)bch);
+
+           /* bchlib_teardown() would only fail if there are outstanding
+            * references on the device.  Since we know that is not true, it
+            * should not fail at all.
+            */
+
+           DEBUGASSERT(ret >= 0);
+           if (ret >= 0)
+             {
+                /* Return without releasing the stale semaphore */
+
+                return OK;
+             }
+        }
+    }
+
+  bchlib_semgive(bch);
   return ret;
 }
 
 /****************************************************************************
- * Name:bch_read
+ * Name: bch_seek
+ ****************************************************************************/
+
+static off_t bch_seek(FAR struct file *filep, off_t offset, int whence)
+{
+  FAR struct inode *inode = filep->f_inode;
+  FAR struct bchlib_s *bch;
+  off_t newpos;
+  int ret;
+
+  DEBUGASSERT(inode && inode->i_private);
+
+  bch = (FAR struct bchlib_s *)inode->i_private;
+  bchlib_semtake(bch);
+
+  /* Determine the new, requested file position */
+
+  switch (whence)
+    {
+    case SEEK_CUR:
+      newpos = filep->f_pos + offset;
+      break;
+
+    case SEEK_SET:
+      newpos = offset;
+      break;
+
+    case SEEK_END:
+      newpos = bch->sectsize * bch->nsectors + offset;
+      break;
+
+    default:
+      /* Return EINVAL if the whence argument is invalid */
+
+      bchlib_semgive(bch);
+      return -EINVAL;
+    }
+
+  /* Opengroup.org:
+   *
+   *  "The lseek() function shall allow the file offset to be set beyond the end
+   *   of the existing data in the file. If data is later written at this point,
+   *   subsequent reads of data in the gap shall return bytes with the value 0
+   *   until data is actually written into the gap."
+   *
+   * We can conform to the first part, but not the second.  But return EINVAL if
+   *
+   *  "...the resulting file offset would be negative for a regular file, block
+   *   special file, or directory."
+   */
+
+  if (newpos >= 0)
+    {
+      filep->f_pos = newpos;
+      ret = newpos;
+    }
+  else
+    {
+      ret = -EINVAL;
+    }
+
+  bchlib_semgive(bch);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: bch_read
  ****************************************************************************/
 
 static ssize_t bch_read(FAR struct file *filep, FAR char *buffer, size_t len)
@@ -186,6 +285,7 @@ static ssize_t bch_read(FAR struct file *filep, FAR char *buffer, size_t len)
     {
       filep->f_pos += len;
     }
+
   bchlib_semgive(bch);
   return ret;
 }
@@ -211,6 +311,7 @@ static ssize_t bch_write(FAR struct file *filep, FAR const char *buffer, size_t 
         {
           filep->f_pos += len;
         }
+
       bchlib_semgive(bch);
     }
 
@@ -233,12 +334,14 @@ static int bch_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   DEBUGASSERT(inode && inode->i_private);
   bch = (FAR struct bchlib_s *)inode->i_private;
 
+  /* Is this a request to get the private data structure */
+
   if (cmd == DIOC_GETPRIV)
     {
       FAR struct bchlib_s **bchr = (FAR struct bchlib_s **)((uintptr_t)arg);
 
       bchlib_semtake(bch);
-      if (!bchr && bch->refs < 255)
+      if (!bchr || bch->refs == MAX_OPENCNT)
         {
           ret = -EINVAL;
         }
@@ -247,11 +350,89 @@ static int bch_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
           bch->refs++;
           *bchr = bch;
         }
+
       bchlib_semgive(bch);
+    }
+
+#ifdef CONFIG_BCH_ENCRYPTION
+  /* Is this a request to set the encryption key? */
+
+  else if (cmd == DIOC_SETKEY)
+    {
+      memcpy(bch->key, (FAR void *)arg, CONFIG_BCH_ENCRYPTION_KEY_SIZE);
+      ret = OK;
+    }
+#endif
+
+  /* Otherwise, pass the IOCTL command on to the contained block driver */
+
+  else
+    {
+      FAR struct inode *bchinode = bch->inode;
+
+      /* Does the block driver support the ioctl method? */
+
+      if (bchinode->u.i_bops->ioctl != NULL)
+        {
+          ret = bchinode->u.i_bops->ioctl(bchinode, cmd, arg);
+        }
     }
 
   return ret;
 }
+
+/****************************************************************************
+ * Name: bch_unlink
+ *
+ * Handle unlinking of the BCH device
+ *
+ ****************************************************************************/
+
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+static int bch_unlink(FAR struct inode *inode)
+{
+  FAR struct bchlib_s *bch;
+  int ret = OK;
+
+  DEBUGASSERT(inode && inode->i_private);
+  bch = (FAR struct bchlib_s *)inode->i_private;
+
+  /* Get exclusive access to the BCH device */
+
+  bchlib_semtake(bch);
+
+  /* Indicate that the driver has been unlinked */
+
+  bch->unlinked = true;
+
+  /* If there are no open references to the drvier then teardown the BCH
+   * device now.
+   */
+
+  if (bch->refs == 0)
+    {
+      /* Tear the driver down now. */
+
+      ret = bchlib_teardown((FAR void *)bch);
+
+      /* bchlib_teardown() would only fail if there are outstanding
+       * references on the device.  Since we know that is not true, it
+       * should not fail at all.
+       */
+
+      DEBUGASSERT(ret >= 0);
+      if (ret >= 0)
+        {
+          /* Return without releasing the stale semaphore */
+
+          return OK;
+        }
+    }
+
+  bchlib_semgive(bch);
+  return ret;
+}
+#endif
 
 /****************************************************************************
  * Public Functions

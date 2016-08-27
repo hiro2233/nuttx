@@ -1,7 +1,7 @@
 /************************************************************************************
  * arch/arm/src/armv6-m/svcall.h
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,8 +33,8 @@
  *
  ************************************************************************************/
 
-#ifndef __ARCH_ARM_SRC_COMMON_CORTEXM_SVCALL_H
-#define __ARCH_ARM_SRC_COMMON_CORTEXM_SVCALL_H
+#ifndef __ARCH_ARM_SRC_ARMV6_M_SVCALL_H
+#define __ARCH_ARM_SRC_ARMV6_M_SVCALL_H
 
 /************************************************************************************
  * Included Files
@@ -42,7 +42,7 @@
 
 #include <nuttx/config.h>
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_LIB_SYSCALL
 #  include <syscall.h>
 #endif
 
@@ -52,14 +52,23 @@
 
 /* Configuration ********************************************************************/
 /* This logic uses three system calls {0,1,2} for context switching and one for the
- * syscall return.  The first four syscall values must be reserved.
+ * syscall return.  So a minimum of four syscall values must be reserved.  If
+ * CONFIG_BUILD_PROTECTED is defined, then four more syscall values must be reserved.
  */
 
-#ifdef CONFIG_NUTTX_KERNEL
-#  ifndef CONFIG_SYS_RESERVED
-#    error "CONFIG_SYS_RESERVED must be defined to have the value 8"
-#  elif CONFIG_SYS_RESERVED != 8
-#    error "CONFIG_SYS_RESERVED must have the value 8"
+#ifdef CONFIG_LIB_SYSCALL
+#  ifdef CONFIG_BUILD_PROTECTED
+#    ifndef CONFIG_SYS_RESERVED
+#      error "CONFIG_SYS_RESERVED must be defined to have the value 8"
+#    elif CONFIG_SYS_RESERVED != 8
+#      error "CONFIG_SYS_RESERVED must have the value 8"
+#    endif
+#  else
+#    ifndef CONFIG_SYS_RESERVED
+#      error "CONFIG_SYS_RESERVED must be defined to have the value 4"
+#    elif CONFIG_SYS_RESERVED != 4
+#      error "CONFIG_SYS_RESERVED must have the value 4"
+#    endif
 #  endif
 #endif
 
@@ -86,7 +95,7 @@
 
 #define SYS_switch_context        (2)
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_LIB_SYSCALL
 /* SYS call 3:
  *
  * void up_syscall_return(void);
@@ -94,6 +103,7 @@
 
 #define SYS_syscall_return        (3)
 
+#ifdef CONFIG_BUILD_PROTECTED
 /* SYS call 4:
  *
  * void up_task_start(main_t taskentry, int argc, FAR char *argv[])
@@ -124,11 +134,13 @@
  */
 
 #define SYS_signal_handler_return (7)
-#endif
+
+#endif /* CONFIG_BUILD_PROTECTED */
+#endif /* CONFIG_LIB_SYSCALL */
 
 /************************************************************************************
  * Inline Functions
  ************************************************************************************/
 
-#endif  /* __ARCH_ARM_SRC_COMMON_CORTEXM_SVCALL_H */
+#endif  /* __ARCH_ARM_SRC_ARMV6_M_SVCALL_H */
 

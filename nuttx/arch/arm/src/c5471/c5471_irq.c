@@ -45,7 +45,6 @@
 #include "arm.h"
 #include "chip.h"
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 /****************************************************************************
@@ -59,7 +58,13 @@
  * Public Data
  ****************************************************************************/
 
-volatile uint32_t *current_regs;
+/* g_current_regs[] holds a references to the current interrupt level
+ * register storage structure.  If is non-NULL only during interrupt
+ * processing.  Access to g_current_regs[] must be through the macro
+ * CURRENT_REGS for portability.
+ */
+
+volatile uint32_t *g_current_regs[1];
 
 /****************************************************************************
  * Private Data
@@ -136,7 +141,7 @@ static inline void up_ackfiq(unsigned int irq)
 static inline void up_vectorinitialize(void)
 {
   up_vector_t *src  = g_vectorinittab;
-  up_vector_t *dest = (up_vector_t*)&_svectors;
+  up_vector_t *dest = (up_vector_t *)&_svectors;
   int i;
 
   for (i = 0; i < NVECTORS; i++)
@@ -175,12 +180,12 @@ void up_irqinitialize(void)
   /* Initialize hardware interrupt vectors */
 
   up_vectorinitialize();
-  current_regs = NULL;
+  CURRENT_REGS = NULL;
 
   /* And finally, enable interrupts */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
-  irqrestore(SVC_MODE | PSR_F_BIT);
+  up_irq_restore(SVC_MODE | PSR_F_BIT);
 #endif
 }
 
@@ -219,21 +224,16 @@ void up_enable_irq(int irq)
 }
 
 /****************************************************************************
- * Name: up_maskack_irq
+ * Name: up_ack_irq
  *
  * Description:
- *   Mask the IRQ and acknowledge it
+ *   Acknowledge the interrupt
  *
  ****************************************************************************/
 
-void up_maskack_irq(int irq)
+void up_ack_irq(int irq)
 {
   uint32_t reg;
-
-  /* Mask the interrupt */
-
-  reg = getreg32(MASK_IT_REG);
-  putreg32(reg | (1 << irq), MASK_IT_REG);
 
   /* Set the NEW_IRQ_AGR bit.  This clears the IRQ src register
    * enables generation of a new IRQ.

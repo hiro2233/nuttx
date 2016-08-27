@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/nxlines/nxlines_bkgd.c
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,8 +53,18 @@
 #include "nxlines.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
+
+#ifdef CONFIG_NX_ANTIALIASING
+  /* If anti-aliasing is enabled, then we must clear a slightly
+   * larger region to prevent wierd edge effects.
+   */
+
+#  define CLEAR_WIDTH (CONFIG_EXAMPLES_NXLINES_LINEWIDTH + 2)
+#else
+#  define CLEAR_WIDTH CONFIG_EXAMPLES_NXLINES_LINEWIDTH
+#endif
 
 #ifndef MIN
 #  define MIN(a,b) (a < b ? a : b)
@@ -74,7 +84,7 @@ static void nxlines_position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
                           FAR const struct nxgl_point_s *pos,
                           FAR const struct nxgl_rect_s *bounds,
                           FAR void *arg);
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
 static void nxlines_mousein(NXWINDOW hwnd, FAR const struct nxgl_point_s *pos,
                          uint8_t buttons, FAR void *arg);
 #endif
@@ -98,7 +108,7 @@ const struct nx_callback_s g_nxlinescb =
 {
   nxlines_redraw,   /* redraw */
   nxlines_position  /* position */
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
   , nxlines_mousein /* mousein */
 #endif
 #ifdef CONFIG_NX_KBD
@@ -117,7 +127,7 @@ const struct nx_callback_s g_nxlinescb =
 static void nxlines_redraw(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect,
                         bool more, FAR void *arg)
 {
-  gvdbg("hwnd=%p rect={(%d,%d),(%d,%d)} more=%s\n",
+  ginfo("hwnd=%p rect={(%d,%d),(%d,%d)} more=%s\n",
          hwnd, rect->pt1.x, rect->pt1.y, rect->pt2.x, rect->pt2.y,
          more ? "true" : "false");
 }
@@ -133,7 +143,7 @@ static void nxlines_position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
 {
   /* Report the position */
 
-  gvdbg("hwnd=%p size=(%d,%d) pos=(%d,%d) bounds={(%d,%d),(%d,%d)}\n",
+  ginfo("hwnd=%p size=(%d,%d) pos=(%d,%d) bounds={(%d,%d),(%d,%d)}\n",
         hwnd, size->w, size->h, pos->x, pos->y,
         bounds->pt1.x, bounds->pt1.y, bounds->pt2.x, bounds->pt2.y);
 
@@ -152,7 +162,7 @@ static void nxlines_position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
 
       g_nxlines.havepos = true;
       sem_post(&g_nxlines.sem);
-      gvdbg("Have xres=%d yres=%d\n", g_nxlines.xres, g_nxlines.yres);
+      ginfo("Have xres=%d yres=%d\n", g_nxlines.xres, g_nxlines.yres);
     }
 }
 
@@ -160,12 +170,12 @@ static void nxlines_position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
  * Name: nxlines_mousein
  ****************************************************************************/
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
 static void nxlines_mousein(NXWINDOW hwnd, FAR const struct nxgl_point_s *pos,
                          uint8_t buttons, FAR void *arg)
 {
-  message("nxlines_mousein: hwnd=%p pos=(%d,%d) button=%02x\n",
-          hwnd,  pos->x, pos->y, buttons);
+  printf("nxlines_mousein: hwnd=%p pos=(%d,%d) button=%02x\n",
+         hwnd,  pos->x, pos->y, buttons);
 }
 #endif
 
@@ -177,17 +187,17 @@ static void nxlines_mousein(NXWINDOW hwnd, FAR const struct nxgl_point_s *pos,
 static void nxlines_kbdin(NXWINDOW hwnd, uint8_t nch, FAR const uint8_t *ch,
                        FAR void *arg)
 {
-  gvdbg("hwnd=%p nch=%d\n", hwnd, nch);
+  ginfo("hwnd=%p nch=%d\n", hwnd, nch);
 
    /* In this example, there is no keyboard so a keyboard event is not
     * expected.
     */
 
-   message("nxlines_kbdin: Unexpected keyboard callback\n");
+   printf("nxlines_kbdin: Unexpected keyboard callback\n");
 }
 #endif
 
- /****************************************************************************
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -210,6 +220,8 @@ void nxlines_test(NXWINDOW hwnd)
   nxgl_coord_t halfx;
   nxgl_coord_t halfy;
   b16_t angle;
+  b16_t sinangle;
+  b16_t cosangle;
   int ret;
 
   /* Get the maximum radius and center of the circle */
@@ -225,7 +237,7 @@ void nxlines_test(NXWINDOW hwnd)
   ret = nx_fillcircle((NXWINDOW)hwnd, &center, radius, color);
   if (ret < 0)
     {
-      message("nxlines_test: nx_fillcircle failed: %d\n", ret);
+      printf("nxlines_test: nx_fillcircle failed: %d\n", ret);
     }
 
   /* Draw the circular border */
@@ -235,7 +247,7 @@ void nxlines_test(NXWINDOW hwnd)
                       CONFIG_EXAMPLES_NXLINES_BORDERWIDTH, color);
   if (ret < 0)
     {
-      message("nxlines_test: nx_fillcircle failed: %d\n", ret);
+      printf("nxlines_test: nx_fillcircle failed: %d\n", ret);
     }
 
   /* Back off the radius to account for the thickness of border line
@@ -279,34 +291,57 @@ void nxlines_test(NXWINDOW hwnd)
     {
       /* Determine the position of the line on this pass */
 
-      halfx = b16toi(b16muli(b16sin(angle), radius));
-      halfy = b16toi(b16muli(b16cos(angle), radius));
+      sinangle = b16sin(angle);
+      halfx = b16toi(b16muli(sinangle, radius));
+
+      cosangle = b16cos(angle);
+      halfy = b16toi(b16muli(cosangle, radius));
 
       vector.pt1.x = center.x + halfx;
       vector.pt1.y = center.y + halfy;
       vector.pt2.x = center.x - halfx;
       vector.pt2.y = center.y - halfy;
 
-      message("Angle: %08x vector: (%d,%d)->(%d,%d)\n",
-              angle, vector.pt1.x, vector.pt1.y, vector.pt2.x, vector.pt2.y);
+      printf("Angle: %08x vector: (%d,%d)->(%d,%d)\n",
+             angle, vector.pt1.x, vector.pt1.y, vector.pt2.x, vector.pt2.y);
 
       /* Clear the previous line by overwriting it with the circle color */
 
       color[0] = CONFIG_EXAMPLES_NXLINES_CIRCLECOLOR;
-      ret = nx_drawline((NXWINDOW)hwnd, &previous, CONFIG_EXAMPLES_NXLINES_LINEWIDTH, color);
+      ret = nx_drawline((NXWINDOW)hwnd, &previous, CLEAR_WIDTH, color,
+                        NX_LINECAP_NONE);
       if (ret < 0)
         {
-          message("nxlines_test: nx_drawline failed clearing: %d\n", ret);
+          printf("nxlines_test: nx_drawline failed clearing: %d\n", ret);
         }
 
       /* Draw the new line */
 
       color[0] = CONFIG_EXAMPLES_NXLINES_LINECOLOR;
-      ret = nx_drawline((NXWINDOW)hwnd, &vector, CONFIG_EXAMPLES_NXLINES_LINEWIDTH, color);
+      ret = nx_drawline((NXWINDOW)hwnd, &vector,
+                        CONFIG_EXAMPLES_NXLINES_LINEWIDTH, color,
+                        NX_LINECAP_NONE);
       if (ret < 0)
         {
-          message("nxlines_test: nx_drawline failed clearing: %d\n", ret);
+          printf("nxlines_test: nx_drawline failed clearing: %d\n", ret);
         }
+
+
+#ifdef CONFIG_NX_ANTIALIASING
+      /* If anti-aliasing is enabled, then we must clear a slightly
+       * larger region to prevent wierd edge effects.
+       */
+
+      halfx = b16toi(b16muli(sinangle, radius + 1));
+      halfy = b16toi(b16muli(cosangle, radius + 1));
+
+      previous.pt1.x = center.x + halfx;
+      previous.pt1.y = center.y + halfy;
+      previous.pt2.x = center.x - halfx;
+      previous.pt2.y = center.y - halfy;
+#else
+      memcpy(&previous, &vector, sizeof(struct nxgl_vector_s));
+#endif
 
       /* Set up for the next time through the loop then sleep for a bit. */
 
@@ -328,8 +363,6 @@ void nxlines_test(NXWINDOW hwnd)
           angle = 0;
 #endif
         }
-
-      memcpy(&previous, &vector, sizeof(struct nxgl_vector_s));
       usleep(500*1000);
     }
 }

@@ -1,8 +1,7 @@
 /****************************************************************************
- * arch/arm/src/m9s12/m9s12_dumpgpio.c
- * arch/arm/src/chip/m9s12_dumpgpio.c
+ * arch/hc/src/m9s12/m9s12_dumpgpio.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,19 +39,26 @@
 
 #include <nuttx/config.h>
 
+/* Output debug info -- even if debug is not selected. */
+
+#undef  CONFIG_DEBUG_FEATURES
+#undef  CONFIG_DEBUG_INFO
+#define CONFIG_DEBUG_FEATURES 1
+#define CONFIG_DEBUG_INFO 1
+
 #include <stdint.h>
 #include <debug.h>
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 
 #include "up_arch.h"
-#include "m9s12_internal.h"
+#include "m9s12.h"
 #include "m9s12_pim.h"
 #include "m9s12_mebi.h"
 
-#ifdef CONFIG_DEBUG_GPIO
+#ifdef CONFIG_DEBUG_GPIO_INFO
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* PIM ports (T,S,G,H,J,L) */
@@ -128,12 +134,12 @@ struct gpio_mebiinfo_s
 
 static const struct gpio_piminfo_s piminfo[HCS12_PIM_NPORTS] =
 {
- {HCS12_PIM_PORTT_BASE, 'T', PIMPORT_FORM1}, /* Port T */
- {HCS12_PIM_PORTS_BASE, 'S', PIMPORT_FORM2}, /* Port S */
- {HCS12_PIM_PORTG_BASE, 'G', PIMPORT_FORM3}, /* Port G */
- {HCS12_PIM_PORTH_BASE, 'H', PIMPORT_FORM3}, /* Port H */
- {HCS12_PIM_PORTJ_BASE, 'J', PIMPORT_FORM3}, /* Port J */
- {HCS12_PIM_PORTL_BASE, 'L', PIMPORT_FORM2}  /* Port L */
+  {HCS12_PIM_PORTT_BASE, 'T', PIMPORT_FORM1}, /* Port T */
+  {HCS12_PIM_PORTS_BASE, 'S', PIMPORT_FORM2}, /* Port S */
+  {HCS12_PIM_PORTG_BASE, 'G', PIMPORT_FORM3}, /* Port G */
+  {HCS12_PIM_PORTH_BASE, 'H', PIMPORT_FORM3}, /* Port H */
+  {HCS12_PIM_PORTJ_BASE, 'J', PIMPORT_FORM3}, /* Port J */
+  {HCS12_PIM_PORTL_BASE, 'L', PIMPORT_FORM2}  /* Port L */
 };
 
 static const struct gpio_mebiinfo_s mebiinfo[HCS12_MEBI_NPORTS] =
@@ -166,39 +172,39 @@ static inline void hcs12_pimdump(uint8_t portndx)
 
   if (portndx >= HCS12_PIM_NPORTS)
     {
-      lldbg("  Illegal PIM port index: %d\n", portndx);
+      gpioinfo("  Illegal PIM port index: %d\n", portndx);
       return;
     }
 
   ptr = &piminfo[portndx];
-  lldbg(" PIM Port%c:\n", ptr->name);
-  lldbg("   IO:%02x  INP:%02x DDR:%02x RDR:%02x\n",
-        getreg8(ptr->base+HCS12_PIM_IO_OFFSET),
-        getreg8(ptr->base+HCS12_PIM_INPUT_OFFSET),
-        getreg8(ptr->base+HCS12_PIM_DDR_OFFSET),
-        getreg8(ptr->base+HCS12_PIM_RDR_OFFSET));
+  gpioinfo(" PIM Port%c:\n", ptr->name);
+  gpioinfo("   IO:%02x  INP:%02x DDR:%02x RDR:%02x\n",
+           getreg8(ptr->base+HCS12_PIM_IO_OFFSET),
+           getreg8(ptr->base+HCS12_PIM_INPUT_OFFSET),
+           getreg8(ptr->base+HCS12_PIM_DDR_OFFSET),
+           getreg8(ptr->base+HCS12_PIM_RDR_OFFSET));
 
   switch (ptr->form)
     {
     case PIMPORT_FORM1:
-      lldbg("  PER:%02x  PS:%02x\n",
-            getreg8(ptr->base+HCS12_PIM_PER_OFFSET),
-            getreg8(ptr->base+HCS12_PIM_PS_OFFSET));
+      gpioinfo("  PER:%02x  PS:%02x\n",
+               getreg8(ptr->base+HCS12_PIM_PER_OFFSET),
+               getreg8(ptr->base+HCS12_PIM_PS_OFFSET));
       break;
 
     case PIMPORT_FORM2:
-      lldbg("  PER:%02x  PS:%02x WOM:%02x\n",
-            getreg8(ptr->base+HCS12_PIM_PER_OFFSET),
-            getreg8(ptr->base+HCS12_PIM_PS_OFFSET),
-            getreg8(ptr->base+HCS12_PIM_WOM_OFFSET));
+      gpioinfo("  PER:%02x  PS:%02x WOM:%02x\n",
+               getreg8(ptr->base+HCS12_PIM_PER_OFFSET),
+               getreg8(ptr->base+HCS12_PIM_PS_OFFSET),
+               getreg8(ptr->base+HCS12_PIM_WOM_OFFSET));
       break;
 
     case PIMPORT_FORM3:
-      lldbg("  PER:%02x  PS:%02x  IE:%02x  IF:%02x\n",
-            getreg8(ptr->base+HCS12_PIM_PER_OFFSET),
-            getreg8(ptr->base+HCS12_PIM_PS_OFFSET),
-            getreg8(ptr->base+HCS12_PIM_IE_OFFSET),
-            getreg8(ptr->base+HCS12_PIM_IF_OFFSET));
+      gpioinfo("  PER:%02x  PS:%02x  IE:%02x  IF:%02x\n",
+               getreg8(ptr->base+HCS12_PIM_PER_OFFSET),
+               getreg8(ptr->base+HCS12_PIM_PS_OFFSET),
+               getreg8(ptr->base+HCS12_PIM_IE_OFFSET),
+               getreg8(ptr->base+HCS12_PIM_IF_OFFSET));
       break;
 
     default:
@@ -220,30 +226,30 @@ static inline void hcs12_mebidump(uint8_t portndx)
 
   if (portndx >= HCS12_MEBI_NPORTS)
     {
-      lldbg("  Illegal MEBI port index: %d\n", portndx);
+      gpioinfo("  Illegal MEBI port index: %d\n", portndx);
       return;
     }
 
   ptr = &mebiinfo[portndx];
-  lldbg(" MEBI Port%c:\n", ptr->name);
+  gpioinfo(" MEBI Port%c:\n", ptr->name);
 
   switch (ptr->form)
     {
     case MEBIPORT_AB:
-      lldbg("   DATA:%02x DDR:%02x\n",
-            getreg8(ptr->data), getreg8(ptr->ddr));
+      gpioinfo("   DATA:%02x DDR:%02x\n",
+              getreg8(ptr->data), getreg8(ptr->ddr));
       break;
 
     case MEBIPORT_E:
-      lldbg("   DATA:%02x DDR:%02x MODE:%02x PEAR:%02x\n",
-            getreg8(ptr->data), getreg8(ptr->ddr),
-            getreg8(HCS12_MEBI_MODE), getreg8(HCS12_MEBI_PEAR));
+      gpioinfo("   DATA:%02x DDR:%02x MODE:%02x PEAR:%02x\n",
+               getreg8(ptr->data), getreg8(ptr->ddr),
+               getreg8(HCS12_MEBI_MODE), getreg8(HCS12_MEBI_PEAR));
       break;
 
     case MEBIPORT_K:
-      lldbg("   DATA:%02x DDR:%02x MODE:%02x\n",
-            getreg8(ptr->data), getreg8(ptr->ddr),
-            getreg8(HCS12_MEBI_MODE));
+      gpioinfo("   DATA:%02x DDR:%02x MODE:%02x\n",
+               getreg8(ptr->data), getreg8(ptr->ddr),
+               getreg8(HCS12_MEBI_MODE));
       break;
 
     default:
@@ -266,9 +272,9 @@ static inline void hcs12_mebidump(uint8_t portndx)
 int hcs12_dumpgpio(uint16_t pinset, const char *msg)
 {
   uint8_t portndx = HCS12_PORTNDX(pinset);
-  irqstate_t flags = irqsave();
+  irqstate_t flags = enter_critical_section();
 
-  lldbg("pinset: %08x -- %s\n", pinset, msg);
+  gpioinfo("pinset: %08x -- %s\n", pinset, msg);
 
   if (HCS12_PIMPORT(pinset))
     {
@@ -279,9 +285,8 @@ int hcs12_dumpgpio(uint16_t pinset, const char *msg)
       hcs12_mebidump(portndx);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
-#endif /* CONFIG_DEBUG_GPIO */
-
+#endif /* CONFIG_DEBUG_GPIO_INFO */

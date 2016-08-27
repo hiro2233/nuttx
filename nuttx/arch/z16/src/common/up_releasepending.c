@@ -1,7 +1,7 @@
 /****************************************************************************
- * common/up_releasepending.c
+ * arch/z16/src/common/up_releasepending.c
  *
- *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,22 +43,11 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/sched.h>
 
 #include "chip/chip.h"
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -77,19 +66,24 @@
 
 void up_release_pending(void)
 {
-  FAR struct tcb_s *rtcb = (FAR struct tcb_s*)g_readytorun.head;
+  FAR struct tcb_s *rtcb = this_task();
 
-  slldbg("From TCB=%p\n", rtcb);
+  sinfo("From TCB=%p\n", rtcb);
 
-  /* Merge the g_pendingtasks list into the g_readytorun task list */
+  /* Merge the g_pendingtasks list into the ready-to-run task list */
 
   /* sched_lock(); */
   if (sched_mergepending())
     {
-      /* The currently active task has changed!  We will need to
-       * switch contexts.  First check if we are operating in
-       * interrupt context:
+      /* The currently active task has changed!  We will need to switch
+       * contexts.
+       *
+       * Update scheduler parameters.
        */
+
+      sched_suspend_scheduler(rtcb);
+
+      /* Are we operating in interrupt context? */
 
       if (IN_INTERRUPT)
         {
@@ -100,11 +94,14 @@ void up_release_pending(void)
            SAVE_IRQCONTEXT(rtcb);
 
           /* Restore the exception context of the rtcb at the (new) head
-           * of the g_readytorun task list.
+           * of the ready-to-run task list.
            */
 
-          rtcb = (FAR struct tcb_s*)g_readytorun.head;
-          slldbg("New Active Task TCB=%p\n", rtcb);
+          rtcb = this_task();
+
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
 
           /* Then setup so that the context will be performed on exit
            * from the interrupt.
@@ -122,11 +119,14 @@ void up_release_pending(void)
       else if (!SAVE_USERCONTEXT(rtcb))
         {
           /* Restore the exception context of the rtcb at the (new) head
-           * of the g_readytorun task list.
+           * of the ready-to-run task list.
            */
 
-          rtcb = (FAR struct tcb_s*)g_readytorun.head;
-          slldbg("New Active Task TCB=%p\n", rtcb);
+          rtcb = this_task();
+
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
 
           /* Then switch contexts */
 

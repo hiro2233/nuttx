@@ -2,7 +2,7 @@
  * configs/mikroe-stm32f4/include/board.h
  * include/arch/board/board.h
  *
- *   Copyright (C) 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012-2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,7 +52,7 @@
 #include "stm32.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
@@ -154,15 +154,21 @@
  * Note: TIM1,8 are on APB2, others on APB1
  */
 
-#define STM32_TIM18_FREQUENCY   STM32_HCLK_FREQUENCY
-#define STM32_TIM27_FREQUENCY   (STM32_HCLK_FREQUENCY/2)
+#define BOARD_TIM1_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM2_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM3_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM4_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM5_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM6_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM7_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM8_FREQUENCY    STM32_HCLK_FREQUENCY
 
 /* LED definitions ******************************************************************/
 /* If CONFIG_ARCH_LEDS is not defined, then the user can control the LEDs in any
  * way.  The following definitions are used to access individual LEDs.
  */
 
-/* LED index values for use with stm32_setled() */
+/* LED index values for use with board_userled() */
 
 #if 0
 #define BOARD_LED1        0
@@ -178,7 +184,7 @@
 #define BOARD_LED_RED     BOARD_LED3
 #define BOARD_LED_BLUE    BOARD_LED4
 
-/* LED bits for use with stm32_setleds() */
+/* LED bits for use with board_userled_all() */
 
 #define BOARD_LED1_BIT    (1 << BOARD_LED1)
 #define BOARD_LED2_BIT    (1 << BOARD_LED2)
@@ -231,9 +237,9 @@
 
 /* SPI - Onboard devices use SPI3, plus SPI2 routes to the I/O header */
 
-#define GPIO_SPI2_MISO GPIO_SPI3_MISO_2
-#define GPIO_SPI2_MOSI GPIO_SPI3_MOSI_2
-#define GPIO_SPI2_SCK  GPIO_SPI3_SCK_2
+#define GPIO_SPI2_MISO GPIO_SPI2_MISO_1
+#define GPIO_SPI2_MOSI GPIO_SPI2_MOSI_1
+#define GPIO_SPI2_SCK  GPIO_SPI2_SCK_2
 #define DMACHAN_SPI2_RX DMAMAP_SPI2_RX
 #define DMACHAN_SPI2_TX DMAMAP_SPI2_TX
 
@@ -280,22 +286,6 @@ extern "C"
  ************************************************************************************/
 
 void stm32_boardinitialize(void);
-
-/************************************************************************************
- * Name:  stm32_ledinit, stm32_setled, and stm32_setleds
- *
- * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board LEDs.  If
- *   CONFIG_ARCH_LEDS is not defined, then the following interfacesare available to
- *   control the LEDs from user applications.
- *
- ************************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-void stm32_ledinit(void);
-void stm32_setled(int led, bool ledon);
-void stm32_setleds(uint8_t ledset);
-#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

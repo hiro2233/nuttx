@@ -41,7 +41,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <apps/ftpc.h>
+#include "netutils/ftpc.h"
 
 #include "ftpc.h"
 
@@ -181,7 +181,7 @@ int cmd_rrename(SESSION handle, int argc, char **argv)
 int cmd_rsize(SESSION handle, int argc, char **argv)
 {
   off_t size = ftpc_filesize(handle, argv[1]);
-  printf("SIZE: %lu\n", size);
+  printf("SIZE: %lu\n", (unsigned long)size);
   return OK;
 }
 
@@ -243,7 +243,7 @@ int cmd_rhelp(SESSION handle, int argc, char **argv)
       free(msg);
     }
 
- return ret;
+  return ret;
 }
 
 /****************************************************************************

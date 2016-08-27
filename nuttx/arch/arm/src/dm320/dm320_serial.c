@@ -57,7 +57,6 @@
 
 #include "chip.h"
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 #ifdef USE_SERIALDRIVER
@@ -72,14 +71,14 @@
 
 struct up_dev_s
 {
-  uint32_t uartbase;	/* Base address of UART registers */
-  uint32_t baud;		/* Configured baud */
-  uint16_t msr;			/* Saved MSR value */
-  uint8_t  irq;			/* IRQ associated with this UART */
-  uint8_t  parity;		/* 0=none, 1=odd, 2=even */
-  uint8_t  bits;		/* Number of bits (7 or 8) */
-  bool     stopbits2;	/* true: Configure with 2
-						 * stop bits instead of 1 */
+  uint32_t uartbase;    /* Base address of UART registers */
+  uint32_t baud;        /* Configured baud */
+  uint16_t msr;         /* Saved MSR value */
+  uint8_t  irq;         /* IRQ associated with this UART */
+  uint8_t  parity;      /* 0=none, 1=odd, 2=even */
+  uint8_t  bits;        /* Number of bits (7 or 8) */
+  bool     stopbits2;   /* true: Configure with 2
+                         * stop bits instead of 1 */
 };
 
 /****************************************************************************
@@ -101,7 +100,7 @@ static bool up_txready(struct uart_dev_s *dev);
 static bool up_txempty(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -269,6 +268,7 @@ static inline void up_waittxready(struct up_dev_s *priv)
 static inline void up_enablebreaks(struct up_dev_s *priv, bool enable)
 {
   uint16_t lcr = up_serialin(priv, UART_LCR);
+
   if (enable)
     {
       lcr |= UART_LCR_BOC;
@@ -277,6 +277,7 @@ static inline void up_enablebreaks(struct up_dev_s *priv, bool enable)
     {
       lcr &= ~UART_LCR_BOC;
     }
+
   up_serialout(priv, UART_LCR, lcr);
 }
 
@@ -293,7 +294,7 @@ static inline void up_enablebreaks(struct up_dev_s *priv, bool enable)
 static int up_setup(struct uart_dev_s *dev)
 {
 #ifndef CONFIG_SUPPRESS_UART_CONFIG
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint16_t brsr;
 
   /* Clear fifos */
@@ -337,7 +338,7 @@ static int up_setup(struct uart_dev_s *dev)
     }
   else
     {
-      priv->msr &= ~(UART_MSR_PSB|UART_MSR_PEB);
+      priv->msr &= ~(UART_MSR_PSB | UART_MSR_PEB);
     }
 
   /* Set up the BRSR */
@@ -403,7 +404,7 @@ static int up_setup(struct uart_dev_s *dev)
 
 static void up_shutdown(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_disableuartint(priv, NULL);
 }
 
@@ -424,7 +425,7 @@ static void up_shutdown(struct uart_dev_s *dev)
 
 static int up_attach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   int ret;
 
   /* Attach and enable the IRQ */
@@ -432,11 +433,11 @@ static int up_attach(struct uart_dev_s *dev)
   ret = irq_attach(priv->irq, up_interrupt);
   if (ret == OK)
     {
-       /* Enable the interrupt (RX and TX interrupts are still disabled
-        * in the UART
-        */
+      /* Enable the interrupt (RX and TX interrupts are still disabled
+       * in the UART
+       */
 
-       up_enable_irq(priv->irq);
+      up_enable_irq(priv->irq);
     }
   return ret;
 }
@@ -453,7 +454,7 @@ static int up_attach(struct uart_dev_s *dev)
 
 static void up_detach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_disable_irq(priv->irq);
   irq_detach(priv->irq);
 }
@@ -490,13 +491,13 @@ static int up_interrupt(int irq, void *context)
     {
       PANIC();
     }
-  priv = (struct up_dev_s*)dev->priv;
+  priv = (struct up_dev_s *)dev->priv;
 
   /* Loop until there are no characters to be transferred or,
    * until we have been looping for a long time.
    */
 
-  for (;;)
+  for (; ; )
     {
       /* Get the current UART status and check for loop
        * termination conditions
@@ -544,7 +545,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 {
   struct inode      *inode = filep->f_inode;
   struct uart_dev_s *dev   = inode->i_private;
-  struct up_dev_s   *priv  = (struct up_dev_s*)dev->priv;
+  struct up_dev_s   *priv  = (struct up_dev_s *)dev->priv;
   int                ret    = OK;
 
   switch (cmd)
@@ -552,7 +553,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 #ifdef CONFIG_SERIAL_TIOCSERGSTRUCT
     case TIOCSERGSTRUCT:
       {
-         struct up_dev_s *user = (struct up_dev_s*)arg;
+         struct up_dev_s *user = (struct up_dev_s *)arg;
          if (!user)
            {
              ret = -EINVAL;
@@ -567,18 +568,18 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
     case TIOCSBRK:  /* BSD compatibility: Turn break on, unconditionally */
       {
-        irqstate_t flags = irqsave();
+        irqstate_t flags = enter_critical_section();
         up_enablebreaks(priv, true);
-        irqrestore(flags);
+        leave_critical_section(flags);
       }
       break;
 
     case TIOCCBRK:  /* BSD compatibility: Turn break off, unconditionally */
       {
         irqstate_t flags;
-        flags = irqsave();
+        flags = enter_critical_section();
         up_enablebreaks(priv, false);
-        irqrestore(flags);
+        leave_critical_section(flags);
       }
       break;
 
@@ -602,7 +603,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
 static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint16_t dtrr;
 
   dtrr    = up_serialin(priv, UART_DTRR);
@@ -620,7 +621,7 @@ static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 
 static void up_rxint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   if (enable)
     {
 #ifndef CONFIG_SUPPRESS_SERIAL_INTS
@@ -644,7 +645,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
 
 static bool up_rxavailable(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   return ((up_serialin(priv, UART_SR) & UART_SR_RFNEF) != 0);
 }
 
@@ -658,7 +659,7 @@ static bool up_rxavailable(struct uart_dev_s *dev)
 
 static void up_send(struct uart_dev_s *dev, int ch)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_serialout(priv, UART_DTRR, (uint16_t)ch);
 }
 
@@ -672,7 +673,7 @@ static void up_send(struct uart_dev_s *dev, int ch)
 
 static void up_txint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   if (enable)
     {
 #ifndef CONFIG_SUPPRESS_SERIAL_INTS
@@ -696,7 +697,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
 
 static bool up_txready(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   return ((up_serialin(priv, UART_SR) & UART_SR_TFTI) != 0);
 }
 
@@ -710,7 +711,7 @@ static bool up_txready(struct uart_dev_s *dev)
 
 static bool up_txempty(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   return ((up_serialin(priv, UART_SR) & UART_SR_TREF) == 0);
 }
 
@@ -764,7 +765,7 @@ void up_serialinit(void)
 
 int up_putc(int ch)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)CONSOLE_DEV.priv;
+  struct up_dev_s *priv = (struct up_dev_s *)CONSOLE_DEV.priv;
   uint16_t  ier;
 
   up_disableuartint(priv, &ier);
@@ -789,7 +790,7 @@ int up_putc(int ch)
 #else /* USE_SERIALDRIVER */
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #  ifdef CONFIG_UART1_SERIAL_CONSOLE

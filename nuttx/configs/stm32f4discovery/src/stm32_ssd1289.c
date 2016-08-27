@@ -50,6 +50,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/lcd/lcd.h>
 #include <nuttx/lcd/ssd1289.h>
@@ -69,20 +70,6 @@
 
 #ifndef CONFIG_STM32_FSMC
 #  error "CONFIG_STM32_FSMC is required to use the LCD"
-#endif
-
-/* Define CONFIG_DEBUG_LCD to enable detailed LCD debug output. Verbose debug must
- * also be enabled.
- */
-
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_VERBOSE
-#  undef CONFIG_DEBUG_GRAPHICS
-#  undef CONFIG_DEBUG_LCD
-#endif
-
-#ifndef CONFIG_DEBUG_VERBOSE
-#  undef CONFIG_DEBUG_LCD
 #endif
 
 /* STM32F4Discovery LCD Hardware Definitions ******************************************/
@@ -106,23 +93,10 @@
 #define LCD_NADDRLINES   1   /* A16 */
 #define LCD_NDATALINES   16  /* D0-15 */
 
-/* Debug ******************************************************************************/
-
-#ifdef CONFIG_DEBUG_LCD
-#  define lcddbg         dbg
-#  define lcdvdbg        vdbg
-#else
-#  define lcddbg(x...)
-#  define lcdvdbg(x...)
-#endif
-
-/**************************************************************************************
- * Private Type Definition
- **************************************************************************************/
-
 /**************************************************************************************
  * Private Function Protototypes
  **************************************************************************************/
+
 /* Low Level LCD access */
 
 static void stm32_select(FAR struct ssd1289_lcd_s *dev);
@@ -324,7 +298,7 @@ void stm32_selectlcd(void)
 
   /* Bank1 NOR/SRAM timing register configuration */
 
-  putreg32(FSMC_BTR_ADDSET(5) | FSMC_BTR_ADDHLD(0) | FSMC_BTR_DATAST(9) | FSMC_BTR_BUSTRUN(0) |
+  putreg32(FSMC_BTR_ADDSET(5) | FSMC_BTR_ADDHLD(0) | FSMC_BTR_DATAST(9) | FSMC_BTR_BUSTURN(0) |
            FSMC_BTR_CLKDIV(0) | FSMC_BTR_DATLAT(0) | FSMC_BTR_ACCMODA, STM32_FSMC_BTR1);
 
   putreg32(0xffffffff, STM32_FSMC_BWTR1);
@@ -339,7 +313,7 @@ void stm32_selectlcd(void)
  **************************************************************************************/
 
 /**************************************************************************************
- * Name:  up_lcdinitialize
+ * Name:  board_lcd_initialize
  *
  * Description:
  *   Initialize the LCD video hardware.  The initial state of the LCD is fully
@@ -348,13 +322,13 @@ void stm32_selectlcd(void)
  *
  **************************************************************************************/
 
-int up_lcdinitialize(void)
+int board_lcd_initialize(void)
 {
   /* Only initialize the driver once */
 
   if (!g_ssd1289drvr)
     {
-      lcdvdbg("Initializing\n");
+      lcdinfo("Initializing\n");
 
       /* Configure GPIO pins and configure the FSMC to support the LCD */
 
@@ -372,7 +346,7 @@ int up_lcdinitialize(void)
       g_ssd1289drvr = ssd1289_lcdinitialize(&g_ssd1289);
       if (!g_ssd1289drvr)
         {
-          lcddbg("ERROR: ssd1289_lcdinitialize failed\n");
+          lcderr("ERROR: ssd1289_lcdinitialize failed\n");
           return -ENODEV;
         }
     }
@@ -390,7 +364,7 @@ int up_lcdinitialize(void)
 }
 
 /**************************************************************************************
- * Name:  up_lcdgetdev
+ * Name:  board_lcd_getdev
  *
  * Description:
  *   Return a a reference to the LCD object for the specified LCD.  This allows support
@@ -398,21 +372,21 @@ int up_lcdinitialize(void)
  *
  **************************************************************************************/
 
-FAR struct lcd_dev_s *up_lcdgetdev(int lcddev)
+FAR struct lcd_dev_s *board_lcd_getdev(int lcddev)
 {
   DEBUGASSERT(lcddev == 0);
   return g_ssd1289drvr;
 }
 
 /**************************************************************************************
- * Name:  up_lcduninitialize
+ * Name:  board_lcd_uninitialize
  *
  * Description:
  *   Unitialize the LCD support
  *
  **************************************************************************************/
 
-void up_lcduninitialize(void)
+void board_lcd_uninitialize(void)
 {
   /* Turn the display off */
 

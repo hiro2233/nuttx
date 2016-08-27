@@ -1,7 +1,7 @@
 /****************************************************************************
- * up_head.c
+ * arch/sim/src/up_head.c
  *
- *   Copyright (C) 2007-2009, 2011-2113 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011-2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,39 +47,123 @@
 
 #include <nuttx/init.h>
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/power/pm.h>
+
+#include "up_internal.h"
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static jmp_buf sim_abort;
+static jmp_buf g_simabort;
+static int g_exitcode = EXIT_SUCCESS;
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: main
+ *
+ * Description:
+ *   This is the main entry point into the simulation.
+ *
  ****************************************************************************/
 
 int main(int argc, char **argv, char **envp)
 {
+#ifdef CONFIG_SMP
+  /* In the SMP case, configure the main thread as CPU 0 */
+
+  sim_cpu0_initialize();
+#endif
+
+#ifdef CONFIG_PM
   /* Power management should be initialized early in the (simulated) boot
    * sequence.
    */
 
-#ifdef CONFIG_PM
   pm_initialize();
 #endif
 
   /* Then start NuttX */
 
-  if (setjmp(sim_abort) == 0)
+  if (setjmp(g_simabort) == 0)
     {
+#ifdef CONFIG_SMP
+      /* Start the CPU0 emulation.  This should not return. */
+
+      sim_cpu0_start();
+#else
+      /* Start the Nuttx emulation.  This should not return. */
+
       os_start();
+#endif
     }
-  return 0;
+
+  /* Restore the original terminal mode and return the exit code */
+
+  simuart_terminate();
+  return g_exitcode;
 }
+
+/****************************************************************************
+ * Name: up_assert
+ *
+ * Description:
+ *   Called to terminate the simulation abnormally in the event of a failed
+ *   assertion.
+ *
+ ****************************************************************************/
 
 void up_assert(const uint8_t *filename, int line)
 {
-  fprintf(stderr, "Assertion failed at file:%s line: %d\n", filename, line);
-  longjmp(sim_abort, 1);
+  /* Show the location of the failed assertion */
+
+#ifdef CONFIG_SMP
+  fprintf(stderr, "CPU%d: Assertion failed at file:%s line: %d\n",
+          up_cpu_index(), filename, line);
+#else
+  fprintf(stderr, "Assertion failed at file:%s line: %d\n",
+          filename, line);
+#endif
+
+  /* Allow for any board/configuration specific crash information */
+
+#ifdef CONFIG_BOARD_CRASHDUMP
+  board_crashdump(up_getsp(), this_task(), filename, line);
+#endif
+
+  /* Exit the simulation */
+
+  g_exitcode = EXIT_FAILURE;
+  longjmp(g_simabort, 1);
 }
+
+/****************************************************************************
+ * Name: board_power_off
+ *
+ * Description:
+ *   Power off the board.  This function may or may not be supported by a
+ *   particular board architecture.
+ *
+ * Input Parameters:
+ *   status - Status information provided with the power off event.
+ *
+ * Returned Value:
+ *   If this function returns, then it was not possible to power-off the
+ *   board due to some constraints.  The return value int this case is a
+ *   board-specific reason for the failure to shutdown.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_BOARDCTL_POWEROFF
+int board_power_off(int status)
+{
+  /* Save the return code and exit the simulation */
+
+  g_exitcode = status;
+  longjmp(g_simabort, 1);
+}
+#endif

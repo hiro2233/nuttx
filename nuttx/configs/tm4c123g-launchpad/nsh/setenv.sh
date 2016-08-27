@@ -52,6 +52,7 @@ fi
 # the CodeSourcery toolchain in any other location
 #export TOOLCHAIN_BIN="/cygdrive/c/Program Files (x86)/CodeSourcery/Sourcery G++ Lite/bin"
 #export TOOLCHAIN_BIN="/cygdrive/c/Program Files (x86)/CodeSourcery/Sourcery_CodeBench_Lite_for_ARM_EABI/bin"
+#export TOOLCHAIN_BIN="/cygdrive/c/Users/MyName/MentorGraphics/Sourcery_CodeBench_Lite_for_ARM_EABI/bin"
 
 # These are the Cygwin paths to the locations where I installed the Atollic
 # toolchain under windows.  You will also have to edit this if you install
@@ -63,7 +64,7 @@ fi
 
 # This is the Cygwin path to the location where I build the buildroot
 # toolchain.
-export TOOLCHAIN_BIN="${WD}/../misc/buildroot/build_arm_nofpu/staging_dir/bin"
+export TOOLCHAIN_BIN="${WD}/../buildroot/build_arm_nofpu/staging_dir/bin"
 
 # The tm4c123g-launchpad/tools directory
 export TOOL_DIR="${WD}/configs/tm4c123g-launchpad/tools"

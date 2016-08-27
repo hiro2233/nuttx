@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lpc17xx/lpc17_gpdma.c
  *
- *   Copyright (C) 2010 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 
 #include "up_internal.h"
@@ -60,7 +61,7 @@
 #ifdef CONFIG_LPC17_GPDMA
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -73,6 +74,7 @@ struct lpc17_dmach_s
   uint8_t chn;             /* The DMA channel number */
   bool inuse;              /* True: The channel is in use */
   bool inprogress;         /* True: DMA is in progress on this channel */
+  uint16_t nxfrs;          /* Number of transfers */
   dma_callback_t callback; /* DMA completion callback function */
   void *arg;               /* Argument to pass to the callback function */
 };
@@ -135,11 +137,11 @@ static void lpc17_dmainprogress(struct lpc17_dmach_s *dmach)
 
   /* Increment the DMA in progress counter */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   DEBUGASSERT(!dmach->inprogress && g_dma_inprogress < LPC17_NDMACH);
   g_dma_inprogress++;
   dmach->inprogress = true;
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -166,7 +168,7 @@ static void lpc17_dmadone(struct lpc17_dmach_s *dmach)
 
   /* Increment the DMA in progress counter */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (dmach->inprogress)
     {
       DEBUGASSERT(g_dma_inprogress > 0);
@@ -174,7 +176,7 @@ static void lpc17_dmadone(struct lpc17_dmach_s *dmach)
       g_dma_inprogress--;
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -464,7 +466,7 @@ int lpc17_dmasetup(DMA_HANDLE handle, uint32_t control, uint32_t config,
   uint32_t regval;
   uint32_t base;
 
-  DEBUGASSERT(dmach && dmach->inuse);
+  DEBUGASSERT(dmach && dmach->inuse && nxfrs < 4096);
 
   chbit = DMACH((uint32_t)dmach->chn);
   base  = LPC17_DMACH_BASE((uint32_t)dmach->chn);
@@ -480,13 +482,13 @@ int lpc17_dmasetup(DMA_HANDLE handle, uint32_t control, uint32_t config,
    *     has the highest priority and DMA channel 7 the lowest priority.
    */
 
-   regval = getreg32(LPC17_DMA_ENBLDCHNS);
-   if ((regval & chbit) != 0)
-     {
-       /* There is an active DMA on this channel! */
+  regval = getreg32(LPC17_DMA_ENBLDCHNS);
+  if ((regval & chbit) != 0)
+    {
+      /* There is an active DMA on this channel! */
 
-       return -EBUSY;
-     }
+      return -EBUSY;
+    }
 
   /* 2. "Clear any pending interrupts on the channel to be used by writing
    *     to the DMACIntTCClear and DMACIntErrClear register. The previous
@@ -518,9 +520,13 @@ int lpc17_dmasetup(DMA_HANDLE handle, uint32_t control, uint32_t config,
    * interrupt enable bit which is controlled by the driver.
    */
 
-  regval  = control & ~(DMACH_CONTROL_XFRSIZE_MASK|DMACH_CONTROL_I);
+  regval  = control & ~(DMACH_CONTROL_XFRSIZE_MASK | DMACH_CONTROL_I);
   regval |= ((uint32_t)nxfrs << DMACH_CONTROL_XFRSIZE_SHIFT);
   putreg32(regval, base + LPC17_DMACH_CONTROL_OFFSET);
+
+  /* Save the number of transfer to perform for lpc17_dmastart */
+
+  dmach->nxfrs = (uint16_t)nxfrs;
 
   /* 7. "Write the channel configuration information into the DMACCxConfig
    *     register. If the enable bit is set then the DMA channel is
@@ -530,7 +536,7 @@ int lpc17_dmasetup(DMA_HANDLE handle, uint32_t control, uint32_t config,
    * are provided by the caller.  Little endian is assumed.
    */
 
-  regval = config & (DMACH_CONFIG_SRCPER_MASK|DMACH_CONFIG_DSTPER_MASK|
+  regval = config & (DMACH_CONFIG_SRCPER_MASK | DMACH_CONFIG_DSTPER_MASK |
                      DMACH_CONFIG_XFRTYPE_MASK);
   putreg32(regval, base + LPC17_DMACH_CONFIG_OFFSET);
 
@@ -573,11 +579,15 @@ int lpc17_dmastart(DMA_HANDLE handle, dma_callback_t callback, void *arg)
   putreg32(chbit, LPC17_DMA_INTTCCLR);
   putreg32(chbit, LPC17_DMA_INTERRCLR);
 
-  /* Enable terminal count interrupt */
+  /* Enable terminal count interrupt.  Note that we need to restore the
+   * number transfers.  That is because the value has a different meaning
+   * when it is read.
+   */
 
   base    = LPC17_DMACH_BASE((uint32_t)dmach->chn);
   regval  = getreg32(base + LPC17_DMACH_CONTROL_OFFSET);
-  regval |= DMACH_CONTROL_I;
+  regval &= ~DMACH_CONTROL_XFRSIZE_MASK;
+  regval |= (DMACH_CONTROL_I | ((uint32_t)dmach->nxfrs << DMACH_CONTROL_XFRSIZE_SHIFT));
   putreg32(regval, base + LPC17_DMACH_CONTROL_OFFSET);
 
   /* Enable the channel and unmask terminal count and error interrupts.
@@ -644,7 +654,7 @@ void lpc17_dmastop(DMA_HANDLE handle)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_DMA
+#ifdef CONFIG__DEBUG_DMA_INFO
 void lpc17_dmasample(DMA_HANDLE handle, struct lpc17_dmaregs_s *regs)
 {
   struct lpc17_dmach_s *dmach = (DMA_HANDLE)handle;
@@ -676,7 +686,7 @@ void lpc17_dmasample(DMA_HANDLE handle, struct lpc17_dmaregs_s *regs)
   regs->ch.control      = getreg32(base + LPC17_DMACH_CONTROL_OFFSET);
   regs->ch.config       = getreg32(base + LPC17_DMACH_CONFIG_OFFSET);
 }
-#endif /* CONFIG_DEBUG_DMA */
+#endif /* CONFIG__DEBUG_DMA_INFO */
 
 /****************************************************************************
  * Name: lpc17_dmadump
@@ -686,7 +696,7 @@ void lpc17_dmasample(DMA_HANDLE handle, struct lpc17_dmaregs_s *regs)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_DMA
+#ifdef CONFIG__DEBUG_DMA_INFO
 void lpc17_dmadump(DMA_HANDLE handle, const struct lpc17_dmaregs_s *regs,
                    const char *msg)
 {
@@ -697,49 +707,49 @@ void lpc17_dmadump(DMA_HANDLE handle, const struct lpc17_dmaregs_s *regs,
 
   /* Dump the sampled global DMA registers */
 
-  dmadbg("Global GPDMA Registers: %s\n", msg);
-  dmadbg("       INTST[%08x]: %08x\n",
-         LPC17_DMA_INTST, regs->gbl.intst);
-  dmadbg("     INTTCST[%08x]: %08x\n",
-         LPC17_DMA_INTTCST, regs->gbl.inttcst);
-  dmadbg("    INTERRST[%08x]: %08x\n",
-         LPC17_DMA_INTERRST, regs->gbl.interrst);
-  dmadbg("  RAWINTTCST[%08x]: %08x\n",
-         LPC17_DMA_RAWINTTCST, regs->gbl.rawinttcst);
-  dmadbg(" RAWINTERRST[%08x]: %08x\n",
-         LPC17_DMA_RAWINTERRST, regs->gbl.rawinterrst);
-  dmadbg("   ENBLDCHNS[%08x]: %08x\n",
-         LPC17_DMA_ENBLDCHNS, regs->gbl.enbldchns);
-  dmadbg("    SOFTBREQ[%08x]: %08x\n",
-         LPC17_DMA_SOFTBREQ, regs->gbl.softbreq);
-  dmadbg("    SOFTSREQ[%08x]: %08x\n",
-         LPC17_DMA_SOFTSREQ, regs->gbl.softsreq);
-  dmadbg("   SOFTLBREQ[%08x]: %08x\n",
-         LPC17_DMA_SOFTLBREQ, regs->gbl.softlbreq);
-  dmadbg("   SOFTLSREQ[%08x]: %08x\n",
-         LPC17_DMA_SOFTLSREQ, regs->gbl.softlsreq);
-  dmadbg("      CONFIG[%08x]: %08x\n",
-         LPC17_DMA_CONFIG, regs->gbl.config);
-  dmadbg("        SYNC[%08x]: %08x\n",
-         LPC17_DMA_SYNC, regs->gbl.sync);
+  dmainfo("Global GPDMA Registers: %s\n", msg);
+  dmainfo("       INTST[%08x]: %08x\n",
+          LPC17_DMA_INTST, regs->gbl.intst);
+  dmainfo("     INTTCST[%08x]: %08x\n",
+          LPC17_DMA_INTTCST, regs->gbl.inttcst);
+  dmainfo("    INTERRST[%08x]: %08x\n",
+          LPC17_DMA_INTERRST, regs->gbl.interrst);
+  dmainfo("  RAWINTTCST[%08x]: %08x\n",
+          LPC17_DMA_RAWINTTCST, regs->gbl.rawinttcst);
+  dmainfo(" RAWINTERRST[%08x]: %08x\n",
+          LPC17_DMA_RAWINTERRST, regs->gbl.rawinterrst);
+  dmainfo("   ENBLDCHNS[%08x]: %08x\n",
+          LPC17_DMA_ENBLDCHNS, regs->gbl.enbldchns);
+  dmainfo("    SOFTBREQ[%08x]: %08x\n",
+          LPC17_DMA_SOFTBREQ, regs->gbl.softbreq);
+  dmainfo("    SOFTSREQ[%08x]: %08x\n",
+          LPC17_DMA_SOFTSREQ, regs->gbl.softsreq);
+  dmainfo("   SOFTLBREQ[%08x]: %08x\n",
+          LPC17_DMA_SOFTLBREQ, regs->gbl.softlbreq);
+  dmainfo("   SOFTLSREQ[%08x]: %08x\n",
+          LPC17_DMA_SOFTLSREQ, regs->gbl.softlsreq);
+  dmainfo("      CONFIG[%08x]: %08x\n",
+          LPC17_DMA_CONFIG, regs->gbl.config);
+  dmainfo("        SYNC[%08x]: %08x\n",
+          LPC17_DMA_SYNC, regs->gbl.sync);
 
   /* Dump the DMA channel registers */
 
   base = LPC17_DMACH_BASE((uint32_t)dmach->chn);
 
-  dmadbg("Channel GPDMA Registers: %d\n", dmach->chn);
+  dmainfo("Channel GPDMA Registers: %d\n", dmach->chn);
 
-  dmadbg("     SRCADDR[%08x]: %08x\n",
-         base + LPC17_DMACH_SRCADDR_OFFSET, regs->ch.srcaddr);
-  dmadbg("    DESTADDR[%08x]: %08x\n",
-         base + LPC17_DMACH_DESTADDR_OFFSET, regs->ch.destaddr);
-  dmadbg("         LLI[%08x]: %08x\n",
-         base + LPC17_DMACH_LLI_OFFSET, regs->ch.lli);
-  dmadbg("     CONTROL[%08x]: %08x\n",
-         base + LPC17_DMACH_CONTROL_OFFSET, regs->ch.control);
-  dmadbg("      CONFIG[%08x]: %08x\n",
-         base + LPC17_DMACH_CONFIG_OFFSET, regs->ch.config);
+  dmainfo("     SRCADDR[%08x]: %08x\n",
+          base + LPC17_DMACH_SRCADDR_OFFSET, regs->ch.srcaddr);
+  dmainfo("    DESTADDR[%08x]: %08x\n",
+          base + LPC17_DMACH_DESTADDR_OFFSET, regs->ch.destaddr);
+  dmainfo("         LLI[%08x]: %08x\n",
+          base + LPC17_DMACH_LLI_OFFSET, regs->ch.lli);
+  dmainfo("     CONTROL[%08x]: %08x\n",
+          base + LPC17_DMACH_CONTROL_OFFSET, regs->ch.control);
+  dmainfo("      CONFIG[%08x]: %08x\n",
+          base + LPC17_DMACH_CONFIG_OFFSET, regs->ch.config);
 }
-#endif /* CONFIG_DEBUG_DMA */
+#endif /* CONFIG__DEBUG_DMA_INFO */
 
 #endif /* CONFIG_LPC17_GPDMA */

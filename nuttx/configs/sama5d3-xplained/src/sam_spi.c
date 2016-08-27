@@ -1,5 +1,5 @@
 /************************************************************************************
- * configs/sama5d3-xplained/src/up_spi.c
+ * configs/sama5d3-xplained/src/sam_spi.c
  *
  *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -56,44 +56,18 @@
 #if defined(CONFIG_SAMA5_SPI0) || defined(CONFIG_SAMA5_SPI1)
 
 /************************************************************************************
- * Definitions
- ************************************************************************************/
-
-/* Enables debug output from this file (needs CONFIG_DEBUG too) */
-
-#undef SPI_DEBUG   /* Define to enable debug */
-#undef SPI_VERBOSE /* Define to enable verbose debug */
-
-#ifdef SPI_DEBUG
-#  define spidbg  lldbg
-#  ifdef SPI_VERBOSE
-#    define spivdbg lldbg
-#  else
-#    define spivdbg(x...)
-#  endif
-#else
-#  undef SPI_VERBOSE
-#  define spidbg(x...)
-#  define spivdbg(x...)
-#endif
-
-/************************************************************************************
- * Private Functions
- ************************************************************************************/
-
-/************************************************************************************
  * Public Functions
  ************************************************************************************/
 
 /************************************************************************************
- * Name: sam_spiinitialize
+ * Name: sam_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select PIO pins for the SAMA5D3-Xplained board.
  *
  ************************************************************************************/
 
-void weak_function sam_spiinitialize(void)
+void weak_function sam_spidev_initialize(void)
 {
 #ifdef CONFIG_SAMA5_SPI0
 #ifdef CONFIG_MTD_AT25
@@ -118,7 +92,7 @@ void weak_function sam_spiinitialize(void)
  *   o sam_spi[0|1]status and sam_spi[0|1]cmddata:  Implementations of the status
  *     and cmddata methods of the SPI interface defined by struct spi_ops_
  *     (see include/nuttx/spi/spi.h). All other methods including
- *     up_spiinitialize()) are provided by common SAM3/4 logic.
+ *     sam_spibus_initialize()) are provided by common SAM3/4 logic.
  *
  *  To use this common SPI logic on your board:
  *
@@ -131,9 +105,9 @@ void weak_function sam_spiinitialize(void)
  *      sam_spi[0|1]cmddata() functions in your board-specific logic.  This
  *      function will perform cmd/data selection operations using PIOs in
  *      the way your board is configured.
- *   3. Add a call to up_spiinitialize() in your low level application
+ *   3. Add a call to sam_spibus_initialize() in your low level application
  *      initialization logic
- *   4. The handle returned by up_spiinitialize() may then be used to bind the
+ *   4. The handle returned by sam_spibus_initialize() may then be used to bind the
  *      SPI driver to higher level logic (e.g., calling
  *      mmcsd_spislotinitialize(), for example, will bind the SPI driver to
  *      the SPI MMC/SD driver).

@@ -41,7 +41,7 @@
 
 #include <sys/types.h>
 #include <nuttx/arch.h>
-#include <apps/readline.h>
+#include "system/readline.h"
 
 #include "readline.h"
 
@@ -147,7 +147,7 @@ static void readline_write(FAR struct rl_common_s *vtbl,
  *   EOF is returned to indicate either an end of file condition or a
  *   failure.
  *
- **************************************************************************/
+ ****************************************************************************/
 
 ssize_t std_readline(FAR char *buf, int buflen)
 {

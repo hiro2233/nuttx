@@ -56,12 +56,11 @@
 
 #include "up_arch.h"
 #include "up_internal.h"
-#include "os_internal.h"
 
 #include "kinetis_config.h"
 #include "chip.h"
-#include "kinetis_uart.h"
-#include "kinetis_internal.h"
+#include "chip/kinetis_uart.h"
+#include "kinetis.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -233,7 +232,7 @@ struct up_dev_s
   uintptr_t uartbase;  /* Base address of UART registers */
   uint32_t  baud;      /* Configured baud */
   uint32_t  clock;     /* Clocking frequency of the UART module */
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   uint8_t   irqe;      /* Error IRQ associated with this UART (for enable) */
 #endif
   uint8_t   irqs;      /* Status IRQ associated with this UART (for enable) */
@@ -251,8 +250,8 @@ static int  up_setup(struct uart_dev_s *dev);
 static void up_shutdown(struct uart_dev_s *dev);
 static int  up_attach(struct uart_dev_s *dev);
 static void up_detach(struct uart_dev_s *dev);
-#ifdef CONFIG_DEBUG
-static int  up_interrupte(int irq, void *context);
+#ifdef CONFIG_DEBUG_FEATURES
+static int  up_interrupt(int irq, void *context);
 #endif
 static int  up_interrupts(int irq, void *context);
 static int  up_ioctl(struct file *filep, int cmd, unsigned long arg);
@@ -267,7 +266,7 @@ static bool up_txempty(struct uart_dev_s *dev);
 #endif
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -328,7 +327,7 @@ static struct up_dev_s g_uart0priv =
   .uartbase       = KINETIS_UART0_BASE,
   .clock          = BOARD_CORECLK_FREQ,
   .baud           = CONFIG_UART0_BAUD,
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   .irqe           = KINETIS_IRQ_UART0E,
 #endif
   .irqs           = KINETIS_IRQ_UART0S,
@@ -362,7 +361,7 @@ static struct up_dev_s g_uart1priv =
   .uartbase       = KINETIS_UART1_BASE,
   .clock          = BOARD_CORECLK_FREQ,
   .baud           = CONFIG_UART1_BAUD,
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   .irqe           = KINETIS_IRQ_UART1E,
 #endif
   .irqs           = KINETIS_IRQ_UART1S,
@@ -396,7 +395,7 @@ static struct up_dev_s g_uart2priv =
   .uartbase       = KINETIS_UART2_BASE,
   .clock          = BOARD_BUS_FREQ,
   .baud           = CONFIG_UART2_BAUD,
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   .irqe           = KINETIS_IRQ_UART2E,
 #endif
   .irqs           = KINETIS_IRQ_UART2S,
@@ -430,7 +429,7 @@ static struct up_dev_s g_uart3priv =
   .uartbase       = KINETIS_UART3_BASE,
   .clock          = BOARD_BUS_FREQ,
   .baud           = CONFIG_UART3_BAUD,
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   .irqe           = KINETIS_IRQ_UART3E,
 #endif
   .irqs           = KINETIS_IRQ_UART3S,
@@ -464,7 +463,7 @@ static struct up_dev_s g_uart4priv =
   .uartbase       = KINETIS_UART4_BASE,
   .clock          = BOARD_BUS_FREQ,
   .baud           = CONFIG_UART4_BAUD,
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   .irqe           = KINETIS_IRQ_UART4E,
 #endif
   .irqs           = KINETIS_IRQ_UART4S,
@@ -498,7 +497,7 @@ static struct up_dev_s g_uart5priv =
   .uartbase       = KINETIS_UART5_BASE,
   .clock          = BOARD_BUS_FREQ,
   .baud           = CONFIG_UART5_BAUD,
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   .irqe           = KINETIS_IRQ_UART5E,
 #endif
   .irqs           = KINETIS_IRQ_UART5S,
@@ -557,12 +556,12 @@ static void up_setuartint(struct up_dev_s *priv)
 
   /* Re-enable/re-disable interrupts corresponding to the state of bits in ie */
 
-  flags    = irqsave();
+  flags    = enter_critical_section();
   regval   = up_serialin(priv, KINETIS_UART_C2_OFFSET);
   regval  &= ~UART_C2_ALLINTS;
   regval  |= priv->ie;
   up_serialout(priv, KINETIS_UART_C2_OFFSET, regval);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -575,10 +574,10 @@ static void up_restoreuartint(struct up_dev_s *priv, uint8_t ie)
 
   /* Re-enable/re-disable interrupts corresponding to the state of bits in ie */
 
-  flags    = irqsave();
+  flags    = enter_critical_section();
   priv->ie = ie & UART_C2_ALLINTS;
   up_setuartint(priv);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -589,14 +588,14 @@ static void up_disableuartint(struct up_dev_s *priv, uint8_t *ie)
 {
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (ie)
-   {
-     *ie = priv->ie;
-   }
+    {
+      *ie = priv->ie;
+    }
 
   up_restoreuartint(priv, 0);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -611,7 +610,7 @@ static void up_disableuartint(struct up_dev_s *priv, uint8_t *ie)
 static int up_setup(struct uart_dev_s *dev)
 {
 #ifndef CONFIG_SUPPRESS_UART_CONFIG
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Configure the UART as an RS-232 UART */
 
@@ -627,7 +626,7 @@ static int up_setup(struct uart_dev_s *dev)
   /* Set up the interrupt priority */
 
   up_prioritize_irq(priv->irqs, priv->irqprio);
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   up_prioritize_irq(priv->irqe, priv->irqprio);
 #endif
 #endif
@@ -646,7 +645,7 @@ static int up_setup(struct uart_dev_s *dev)
 
 static void up_shutdown(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Disable interrupts */
 
@@ -674,7 +673,7 @@ static void up_shutdown(struct uart_dev_s *dev)
 
 static int up_attach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   int ret;
 
   /* Attach and enable the IRQ(s).  The interrupts are (probably) still
@@ -682,16 +681,16 @@ static int up_attach(struct uart_dev_s *dev)
    */
 
   ret = irq_attach(priv->irqs, up_interrupts);
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (ret == OK)
     {
-      ret = irq_attach(priv->irqe, up_interrupte);
+      ret = irq_attach(priv->irqe, up_interrupt);
     }
 #endif
 
   if (ret == OK)
     {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
       up_enable_irq(priv->irqe);
 #endif
       up_enable_irq(priv->irqs);
@@ -712,12 +711,12 @@ static int up_attach(struct uart_dev_s *dev)
 
 static void up_detach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Disable interrupts */
 
   up_restoreuartint(priv, 0);
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   up_disable_irq(priv->irqe);
 #endif
   up_disable_irq(priv->irqs);
@@ -725,13 +724,13 @@ static void up_detach(struct uart_dev_s *dev)
   /* Detach from the interrupt(s) */
 
   irq_detach(priv->irqs);
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   irq_detach(priv->irqe);
 #endif
 }
 
 /****************************************************************************
- * Name: up_interrupte
+ * Name: up_interrupt
  *
  * Description:
  *   This is the UART error interrupt handler.  It will be invoked when an
@@ -739,8 +738,8 @@ static void up_detach(struct uart_dev_s *dev)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG
-static int up_interrupte(int irq, void *context)
+#ifdef CONFIG_DEBUG_FEATURES
+static int up_interrupt(int irq, void *context)
 {
   struct uart_dev_s *dev = NULL;
   struct up_dev_s   *priv;
@@ -791,7 +790,8 @@ static int up_interrupte(int irq, void *context)
     {
       PANIC();
     }
-  priv = (struct up_dev_s*)dev->priv;
+
+  priv = (struct up_dev_s *)dev->priv;
   DEBUGASSERT(priv);
 
   /* Handle error interrupts.  This interrupt may be caused by:
@@ -805,11 +805,15 @@ static int up_interrupte(int irq, void *context)
    */
 
   regval = up_serialin(priv, KINETIS_UART_S1_OFFSET);
-  lldbg("S1: %02x\n", regval);
+  _info("S1: %02x\n", regval);
+  UNUSED(regval);
+
   regval = up_serialin(priv, KINETIS_UART_D_OFFSET);
+  UNUSED(regval);
+
   return OK;
 }
-#endif /* CONFIG_DEBUG */
+#endif /* CONFIG_DEBUG_FEATURES */
 
 /****************************************************************************
  * Name: up_interrupts
@@ -880,7 +884,7 @@ static int up_interrupts(int irq, void *context)
     {
       PANIC();
     }
-  priv = (struct up_dev_s*)dev->priv;
+  priv = (struct up_dev_s *)dev->priv;
   DEBUGASSERT(priv);
 
   /* Loop until there are no characters to be transferred or,
@@ -978,8 +982,8 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
   inode = filep->f_inode;
   dev   = inode->i_private;
 
-  DEBUGASSERT(dev, dev->priv)
-  priv = (struct up_dev_s*)dev->priv;
+  DEBUGASSERT(dev, dev->priv);
+  priv = (struct up_dev_s *)dev->priv;
 
   switch (cmd)
     {
@@ -1009,7 +1013,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
 static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint8_t s1;
 
   /* Get error status information:
@@ -1048,10 +1052,10 @@ static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 
 static void up_rxint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable)
     {
       /* Receive an interrupt when their is anything in the Rx data register (or an Rx
@@ -1065,7 +1069,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
     }
   else
     {
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 #  warning "Revisit:  How are errors enabled?"
       priv->ie |= UART_C2_RIE;
 #else
@@ -1074,7 +1078,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
       up_setuartint(priv);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -1087,7 +1091,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
 
 static bool up_rxavailable(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 #ifdef CONFIG_KINETIS_UARTFIFOS
   unsigned int count;
 
@@ -1117,7 +1121,7 @@ static bool up_rxavailable(struct uart_dev_s *dev)
 
 static void up_send(struct uart_dev_s *dev, int ch)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_serialout(priv, KINETIS_UART_D_OFFSET, (uint8_t)ch);
 }
 
@@ -1131,10 +1135,10 @@ static void up_send(struct uart_dev_s *dev, int ch)
 
 static void up_txint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable)
     {
       /* Enable the TX interrupt */
@@ -1158,7 +1162,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
       up_setuartint(priv);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -1171,7 +1175,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
 
 static bool up_txready(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
 #ifdef CONFIG_KINETIS_UARTFIFOS
   /* Read the number of bytes currently in the FIFO and compare that to the
@@ -1203,7 +1207,7 @@ static bool up_txready(struct uart_dev_s *dev)
 #ifdef CONFIG_KINETIS_UARTFIFOS
 static bool up_txempty(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Return true if the transmit buffer/fifo is "empty." */
 
@@ -1306,7 +1310,7 @@ void up_serialinit(void)
 int up_putc(int ch)
 {
 #ifdef HAVE_SERIAL_CONSOLE
-  struct up_dev_s *priv = (struct up_dev_s*)CONSOLE_DEV.priv;
+  struct up_dev_s *priv = (struct up_dev_s *)CONSOLE_DEV.priv;
   uint8_t ie;
 
   up_disableuartint(priv, &ie);

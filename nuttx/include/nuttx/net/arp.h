@@ -2,10 +2,10 @@
  * include/nuttx/net/arp.h
  * Macros and definitions for the ARP module.
  *
- *   Copyright (C) 2007, 2009-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009-2012, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
- * Derived from uIP with has a similar BSD-styple license:
+ * Derived from uIP with has a similar BSD-style license:
  *
  *   Author: Adam Dunkels <adam@dunkels.com>
  *   Copyright (c) 2001-2003, Adam Dunkels.
@@ -48,42 +48,32 @@
 #include <nuttx/config.h>
 #include <nuttx/compiler.h>
 
+#include <sys/socket.h>
 #include <stdint.h>
 
+#include <netinet/in.h>
 #include <net/ethernet.h>
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip.h>
+
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/ethernet.h>
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
-/* Recognized values of the type bytes in the Ethernet header */
+/* ARP protocol HARDWARE identifiers.  Provided as the sa_family member of a
+ * struct sockaddr.
+ *
+ * When sa_family is ARPHRD_ETHER, the 6 byte Ethernet address is provided
+ * in the first 6-bytes of the sockaddr sa_data array.
+ */
 
-#define UIP_ETHTYPE_ARP 0x0806 /* Address resolution protocol */
-#define UIP_ETHTYPE_IP  0x0800 /* IP protocol */
-#define UIP_ETHTYPE_IP6 0x86dd /* IP protocol version 6 */
-#define UIP_ETHTYPE_PAE 0x888e /* 802.1X Port Access Entity */
-
-/* Size of the Ethernet header */
-
-#define UIP_ETHH_LEN   14      /* Minimum size: 2*6 + 2 */
+#define ARPHRD_ETHER        1    /* Ethernet */
+#define ARPHRD_IEEE802154   804  /* IEEE 802.15.4 */
 
 /****************************************************************************
  * Public Types
  ****************************************************************************/
-
-/* The Ethernet header -- 14 bytes. The first two fields are type 'struct
- * ether_addr but are represented as a simple byte array here because
- * some compilers refuse to pack 6 byte structures.
- */
-
-struct uip_eth_hdr
-{
-  uint8_t  dest[6]; /* Ethernet destination address (6 bytes) */
-  uint8_t  src[6];  /* Ethernet source address (6 bytes) */
-  uint16_t type;    /* Type code (2 bytes) */
-};
 
 /* One entry in the ARP table (volatile!) */
 
@@ -91,8 +81,28 @@ struct arp_entry
 {
   in_addr_t         at_ipaddr;   /* IP address */
   struct ether_addr at_ethaddr;  /* Hardware address */
-  uint8_t           at_time;
+  uint8_t           at_time;     /* Time of last usage */
 };
+
+/* Used with the SIOCSARP, SIOCDARP, and SIOCGARP IOCTL commands to set,
+ * delete, or get an ARP table entry.
+ *
+ * SIOCSARP - Both values are inputs a define the new ARP table entry
+ * SIOCDARP - Only the protcol address is required as an input.  The ARP
+ *            table entry with that matching address will be deleted,
+ *            regardless of the hardware address.
+ * SIOCGARP - The protocol address is an input an identifies the table
+ *            entry to locate; The hardware address is an output and
+ *            on a successful lookup, provides the matching hardware
+ *            address.
+ */
+
+struct arpreq
+{
+  struct sockaddr   arp_pa;      /* Protocol address */
+  struct sockaddr   arp_ha;      /* Hardware address */
+};
+
 
 /****************************************************************************
  * Public Data
@@ -100,7 +110,8 @@ struct arp_entry
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -111,30 +122,22 @@ extern "C" {
 
 #ifdef CONFIG_NET_ARP
 /****************************************************************************
- * Name: arp_init
- *
- * Description:
- *   Initialize the ARP module. This function must be called before any of
- *   the other ARP functions.
- *
- ****************************************************************************/
-
-void arp_init(void);
-
-/****************************************************************************
  * Name: arp_ipin
  *
  * Description:
- *   The arp_ipin() function should be called whenever an IP packet
- *   arrives from the Ethernet. This function refreshes the ARP table or
- *   inserts a new mapping if none exists. The function assumes that an
- *   IP packet with an Ethernet header is present in the d_buf buffer
- *   and that the length of the packet is in the d_len field.
+ *   The arp_ipin() function should be called by Ethernet device drivers
+ *   whenever an IP packet arrives from the network.  The function will
+ *   check if the address is in the ARP cache, and if so the ARP cache entry
+ *   will be refreshed. If no ARP cache entry was found, a new one is created.
+ *
+ *   This function expects that an IP packet with an Ethernet header is
+ *   present in the d_buf buffer and that the length of the packet is in the
+ *   d_len field.
  *
  ****************************************************************************/
 
 #ifdef CONFIG_NET_ARP_IPIN
-void arp_ipin(struct uip_driver_s *dev);
+void arp_ipin(struct net_driver_s *dev);
 #else
 # define arp_ipin(dev)
 #endif
@@ -143,140 +146,63 @@ void arp_ipin(struct uip_driver_s *dev);
  * Name: arp_arpin
  *
  * Description:
- *   The arp_arpin() should be called when an ARP packet is received
- *   by the Ethernet driver. This function also assumes that the
- *   Ethernet frame is present in the d_buf buffer. When the
- *   arp_arpin() function returns, the contents of the d_buf
- *   buffer should be sent out on the Ethernet if the d_len field
- *   is > 0.
+ *   This function should be called by the Ethernet device driver when an ARP
+ *   packet has been received.   The function will act differently
+ *   depending on the ARP packet type: if it is a reply for a request
+ *   that we previously sent out, the ARP cache will be filled in with
+ *   the values from the ARP reply.  If the incoming ARP packet is an ARP
+ *   request for our IP address, an ARP reply packet is created and put
+ *   into the d_buf[] buffer.
+ *
+ *   On entry, this function expects that an ARP packet with a prepended
+ *   Ethernet header is present in the d_buf[] buffer and that the length of
+ *   the packet is set in the d_len field.
+ *
+ *   When the function returns, the value of the field d_len indicates whether
+ *   the device driver should send out the ARP reply packet or not. If d_len
+ *   is zero, no packet should be sent; If d_len is non-zero, it contains the
+ *   length of the outbound packet that is present in the d_buf[] buffer.
  *
  ****************************************************************************/
 
-void arp_arpin(struct uip_driver_s *dev);
+void arp_arpin(struct net_driver_s *dev);
 
 /****************************************************************************
- * Name: arp_arpin
+ * Name: arp_out
  *
  * Description:
- *   The arp_out() function should be called when an IP packet
- *   should be sent out on the Ethernet. This function creates an
- *   Ethernet header before the IP header in the d_buf buffer. The
- *   Ethernet header will have the correct Ethernet MAC destination
- *   address filled in if an ARP table entry for the destination IP
- *   address (or the IP address of the default router) is present. If no
- *   such table entry is found, the IP packet is overwritten with an ARP
- *   request and we rely on TCP to retransmit the packet that was
- *   overwritten. In any case, the d_len field holds the length of
- *   the Ethernet frame that should be transmitted.
+ *   This function should be called before sending out an IPv4 packet. The
+ *   function checks the destination IPv4 address of the IPv4 packet to see
+ *   what Ethernet MAC address that should be used as a destination MAC
+ *   address on the Ethernet.
+ *
+ *   If the destination IPv4 address is in the local network (determined
+ *   by logical ANDing of netmask and our IPv4 address), the function
+ *   checks the ARP cache to see if an entry for the destination IPv4
+ *   address is found.  If so, an Ethernet header is pre-pended at the
+ *   beginning of the packet and the function returns.
+ *
+ *   If no ARP cache entry is found for the destination IIPv4P address, the
+ *   packet in the d_buf[] is replaced by an ARP request packet for the
+ *   IPv4 address. The IPv4 packet is dropped and it is assumed that the
+ *   higher level protocols (e.g., TCP) eventually will retransmit the
+ *   dropped packet.
+ *
+ *   Upon return in either the case, a packet to be sent is present in the
+ *   d_buf[] buffer and the d_len field holds the length of the Ethernet
+ *   frame that should be transmitted.
  *
  ****************************************************************************/
 
-void arp_out(struct uip_driver_s *dev);
-
-/****************************************************************************
- * Function: arp_timer_init
- *
- * Description:
- *   Initialized the 10 second timer that is need by uIP to age ARP
- *   associations
- *
- * Parameters:
- *   None
- *
- * Returned Value:
- *   None
- *
- * Assumptions:
- *   Called once at system initialization time
- *
- ****************************************************************************/
-
-void arp_timer_init(void);
-
-/****************************************************************************
- * Name: arp_timer
- *
- * Description:
- *   This function performs periodic timer processing in the ARP module
- *   and should be called at regular intervals. The recommended interval
- *   is 10 seconds between the calls.  It is responsible for flushing old
- *   entries in the ARP table.
- *
- ****************************************************************************/
-
-void arp_timer(void);
-
-/****************************************************************************
- * Name: arp_update
- *
- * Description:
- *   Add the IP/HW address mapping to the ARP table -OR- change the IP
- *   address of an existing association.
- *
- * Input parameters:
- *   pipaddr - Refers to an IP address uint16_t[2] in network order
- *   ethaddr - Refers to a HW address uint8_t[IFHWADDRLEN]
- *
- * Assumptions
- *   Interrupts are disabled
- *
- ****************************************************************************/
-
-void arp_update(FAR uint16_t *pipaddr, FAR uint8_t *ethaddr);
-
-/****************************************************************************
- * Name: arp_find
- *
- * Description:
- *   Find the ARP entry corresponding to this IP address.
- *
- * Input parameters:
- *   ipaddr - Refers to an IP address in network order
- *
- * Assumptions
- *   Interrupts are disabled; Returned value will become unstable when
- *   interrupts are re-enabled or if any other uIP APIs are called.
- *
- ****************************************************************************/
-
-struct arp_entry *arp_find(in_addr_t ipaddr);
-
-/****************************************************************************
- * Name: arp_delete
- *
- * Description:
- *   Remove an IP association from the ARP table
- *
- * Input parameters:
- *   ipaddr - Refers to an IP address in network order
- *
- * Assumptions
- *   Interrupts are disabled
- *
- ****************************************************************************/
-
-#define arp_delete(ipaddr) \
-{ \
-  struct arp_entry *tabptr = arp_find(ipaddr); \
-  if (tabptr) \
-    { \
-      tabptr->at_ipaddr = 0; \
-    } \
-}
+void arp_out(FAR struct net_driver_s *dev);
 
 #else /* CONFIG_NET_ARP */
 
 /* If ARP is disabled, stub out all ARP interfaces */
 
-# define arp_init()
 # define arp_ipin(dev)
 # define arp_arpin(dev)
 # define arp_out(dev)
-# define arp_timer()
-# define arp_update(pipaddr,ethaddr)
-# define arp_find(ipaddr) NULL
-# define arp_delete(ipaddr)
-# define arp_timer_init(void);
 
 #endif /* CONFIG_NET_ARP */
 

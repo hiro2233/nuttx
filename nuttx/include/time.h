@@ -1,7 +1,7 @@
 /********************************************************************************
  * include/time.h
  *
- *   Copyright (C) 2007-2011, 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2011, 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
  ********************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/compiler.h>
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -55,13 +56,13 @@
  * replaced with CLOCKS_PER_SEC.  Both are defined here.
  *
  * The default value is 100Hz, but this default setting can be overridden by
- * defining the clock interval in milliseconds as CONFIG_MSEC_PER_TICK in the
+ * defining the clock interval in microseconds as CONFIG_USEC_PER_TICK in the
  * board configuration file.
  */
 
-#ifdef CONFIG_MSEC_PER_TICK
-# define CLK_TCK           (1000/CONFIG_MSEC_PER_TICK)
-# define CLOCKS_PER_SEC    (1000/CONFIG_MSEC_PER_TICK)
+#ifdef CONFIG_USEC_PER_TICK
+# define CLK_TCK           (1000000/CONFIG_USEC_PER_TICK)
+# define CLOCKS_PER_SEC    (1000000/CONFIG_USEC_PER_TICK)
 #else
 # define CLK_TCK           (100)
 # define CLOCKS_PER_SEC    (100)
@@ -80,45 +81,39 @@
 
 #define CLOCK_REALTIME     0
 
-/* If an RTC is supported, then the non-standard CLOCK_ACTIVETIME is also
- * supported to manage time based on the system timer interrupt separately
- * from the RTC.  This may be necessary, for example, in certain cases where
- * the system timer interrupt has been stopped in low power modes.
- *
- * CLOCK_ACTIVETIME is only recognized by clock_gettime() and clock_settime().
- */
-
-#ifdef CONFIG_RTC
-#  define CLOCK_ACTIVETIME 1
-#else
-#  define CLOCK_ACTIVETIME CLOCK_REALTIME
-#endif
-
 /* Clock that cannot be set and represents monotonic time since some
  * unspecified starting point. It is not affected by changes in the
  * system time-of-day clock.
  */
 
-#ifdef CLOCK_MONOTONIC
-#  define CLOCK_MONOTONIC  2
+#ifdef CONFIG_CLOCK_MONOTONIC
+#  define CLOCK_MONOTONIC  1
 #endif
 
 /* This is a flag that may be passed to the timer_settime() function */
 
 #define TIMER_ABSTIME      1
 
+#ifndef CONFIG_LIBC_LOCALTIME
 /* Local time is the same as gmtime in this implementation */
 
-#define localtime(c)       gmtime(c)
-#define localtime_r(c,r)   gmtime_r(c,r)
+#  define localtime(c)       gmtime(c)
+#  define localtime_r(c,r)   gmtime_r(c,r)
+#endif
 
 /********************************************************************************
  * Public Types
  ********************************************************************************/
 
+/* Scalar types */
+
 typedef uint32_t  time_t;         /* Holds time in seconds */
 typedef uint8_t   clockid_t;      /* Identifies one time base source */
 typedef FAR void *timer_t;        /* Represents one POSIX timer */
+
+/* struct timespec is the standard representation of time as seconds and
+ * nanoseconds.
+ */
 
 struct timespec
 {
@@ -126,24 +121,27 @@ struct timespec
   long   tv_nsec;                  /* Nanoseconds */
 };
 
-struct timeval
-{
-  time_t tv_sec;                   /* Seconds */
-  long tv_usec;                    /* Microseconds */
-};
+/* struct tm is the standard representation for "broken out" time.
+ *
+ * REVISIT: This structure could be packed better using uint8_t's and
+ * uint16_t's.  The standard definition does, however, call out type int for
+ * all of the members.  NOTE: Any changes to this structure must be also be
+ * reflected in struct rtc_time defined in include/nuttx/timers/rtc.h; these
+ * two structures must be cast compatible.
+ */
 
 struct tm
 {
-  int tm_sec;     /* second (0-61, allows for leap seconds) */
-  int tm_min;     /* minute (0-59) */
-  int tm_hour;    /* hour (0-23) */
-  int tm_mday;    /* day of the month (1-31) */
-  int tm_mon;     /* month (0-11) */
-  int tm_year;    /* years since 1900 */
-#if 0 /* not supported */
-  int tm_wday;    /* day of the week (0-6) */
-  int tm_yday;    /* day of the year (0-365) */
-  int tm_isdst;   /* non-0 if daylight savings time is in effect */
+  int tm_sec;     /* Seconds (0-61, allows for leap seconds) */
+  int tm_min;     /* Minutes (0-59) */
+  int tm_hour;    /* Hours (0-23) */
+  int tm_mday;    /* Day of the month (1-31) */
+  int tm_mon;     /* Month (0-11) */
+  int tm_year;    /* Years since 1900 */
+#if defined(CONFIG_LIBC_LOCALTIME) || defined(CONFIG_TIME_EXTENDED)
+  int tm_wday;    /* Day of the week (0-6) */
+  int tm_yday;    /* Day of the year (0-365) */
+  int tm_isdst;   /* Non-0 if daylight savings time is in effect */
 #endif
 };
 
@@ -163,19 +161,33 @@ struct sigevent;
  * Public Data
  ********************************************************************************/
 
-/* extern char *tznames[]; not supported */
+#undef EXTERN
+#if defined(__cplusplus)
+#define EXTERN extern "C"
+extern "C"
+{
+#else
+#define EXTERN extern
+#endif
+
+#ifdef CONFIG_LIBC_LOCALTIME
+
+/* daylight - Daylight savings time flag */
+/* EXTERN int daylight; not supported */
+
+/* timezone - Difference from UTC and local standard time */
+/* EXTERN long int timezone; not supported */
+
+/* tzname[] - Timezone strings
+ * Setup by tzset()
+ */
+
+EXTERN FAR char *tzname[2];
+#endif
 
 /********************************************************************************
  * Public Function Prototypes
  ********************************************************************************/
-
-#undef EXTERN
-#if defined(__cplusplus)
-#define EXTERN extern "C"
-extern "C" {
-#else
-#define EXTERN extern
-#endif
 
 clock_t clock(void);
 
@@ -183,13 +195,32 @@ int clock_settime(clockid_t clockid, FAR const struct timespec *tp);
 int clock_gettime(clockid_t clockid, FAR struct timespec *tp);
 int clock_getres(clockid_t clockid, FAR struct timespec *res);
 
-time_t mktime(FAR const struct tm *tp);
-FAR struct tm *gmtime(FAR const time_t *timer);
-FAR struct tm *gmtime_r(FAR const time_t *timer, FAR struct tm *result);
-size_t strftime(char *s, size_t max, FAR const char *format,
+time_t mktime(FAR struct tm *tp);
+FAR struct tm *gmtime(FAR const time_t *timep);
+FAR struct tm *gmtime_r(FAR const time_t *timep, FAR struct tm *result);
+
+#ifdef CONFIG_LIBC_LOCALTIME
+FAR struct tm *localtime(FAR const time_t *timep);
+FAR struct tm *localtime_r(FAR const time_t *timep, FAR struct tm *result);
+#endif
+
+size_t strftime(FAR char *s, size_t max, FAR const char *format,
                 FAR const struct tm *tm);
 
-time_t time(FAR time_t *tloc);
+#if defined(CONFIG_LIBC_LOCALTIME) || defined(CONFIG_TIME_EXTENDED)
+FAR char *asctime(FAR const struct tm *tp);
+FAR char *asctime_r(FAR const struct tm *tp, FAR char *buf);
+FAR char *ctime(FAR const time_t *timep);
+FAR char *ctime_r(FAR const time_t *timep, FAR char *buf);
+#endif
+
+time_t time(FAR time_t *timep);
+
+#ifdef CONFIG_HAVE_DOUBLE
+double difftime(time_t time1, time_t time0);
+#else
+float difftime(time_t time1, time_t time0);
+#endif
 
 int timer_create(clockid_t clockid, FAR struct sigevent *evp,
                  FAR timer_t *timerid);
@@ -201,6 +232,10 @@ int timer_gettime(timer_t timerid, FAR struct itimerspec *value);
 int timer_getoverrun(timer_t timerid);
 
 int nanosleep(FAR const struct timespec *rqtp, FAR struct timespec *rmtp);
+
+#ifdef CONFIG_LIBC_LOCALTIME
+void tzset(void);
+#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

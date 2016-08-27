@@ -47,7 +47,7 @@
 #include "nxglib_bitblit.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -127,7 +127,7 @@ static inline void nxgl_lowresmemcpy(FAR uint8_t *dline, FAR const uint8_t *slin
  *
  ****************************************************************************/
 
-void NXGL_FUNCNAME(nxgl_getrectangle,NXGLIB_SUFFIX)
+void NXGL_FUNCNAME(nxgl_getrectangle, NXGLIB_SUFFIX)
 (FAR struct fb_planeinfo_s *pinfo, FAR const struct nxgl_rect_s *rect,
  FAR void *dest, unsigned int deststride)
 {

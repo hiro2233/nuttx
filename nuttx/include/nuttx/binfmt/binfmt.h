@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/binfmt/binfmt.h
  *
- *   Copyright (C) 2009, 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2012, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -83,7 +83,7 @@ struct symtab_s;
 struct binary_s
 {
   /* If CONFIG_SCHED_HAVE_PARENT is defined then schedul_unload() will
-   * manage instances of struct binary_s allocated with kmalloc.  It
+   * manage instances of struct binary_s allocated with kmm_malloc.  It
    * will keep the binary data in a link list and when SIGCHLD is received
    * (meaning that the task has exit'ed, schedul_unload() will find the
    * data, unload the module, and free the structure.
@@ -97,7 +97,12 @@ struct binary_s
   /* Information provided to the loader to load and bind a module */
 
   FAR const char *filename;            /* Full path to the binary to be loaded (See NOTE 1 above) */
+#if defined(CONFIG_ARCH_ADDRENV) && defined(CONFIG_BUILD_KERNEL)
+  FAR char *argbuffer;                 /* Allocated argument list */
+  FAR char **argv;                     /* Copy of argument list */
+#else
   FAR char * const *argv;              /* Argument list */
+#endif
   FAR const struct symtab_s *exports;  /* Table of exported symbols */
   int nexports;                        /* The number of symbols in exports[] */
 
@@ -124,8 +129,8 @@ struct binary_s
    *   used to manage the tasks address space.
    */
 
-#ifdef CONFIG_ADDRENV
-  task_addrenv_t addrenv;              /* Task address environment */
+#ifdef CONFIG_ARCH_ADDRENV
+  group_addrenv_t addrenv;             /* Task group address environment */
 #endif
 
   size_t mapsize;                      /* Size of the mapped address region (needed for munmap) */
@@ -261,13 +266,13 @@ int exec_module(FAR const struct binary_s *bin);
  *   If CONFIG_SCHED_HAVE_PARENT is defined, this function may be called by
  *   the parent of the newly created task to automatically unload the
  *   module when the task exits.  This assumes that (1) the caller is the
- *   parent of the created task, (2) that bin was allocated with kmalloc()
- *   or friends.  It will also automatically free the structure with kfree()
+ *   parent of the created task, (2) that bin was allocated with kmm_malloc()
+ *   or friends.  It will also automatically free the structure with kmm_free()
  *   after unloading the module.
  *
  * Input Parameter:
  *   pid - The task ID of the child task
- *   bin - This structure must have been allocated with kmalloc() and must
+ *   bin - This structure must have been allocated with kmm_malloc() and must
  *         persist until the task unloads
  *
  * Returned Value:
@@ -286,9 +291,13 @@ int schedule_unload(pid_t pid, FAR struct binary_s *bin);
  *
  * Description:
  *   This is a convenience function that wraps load_ and exec_module into
- *   one call.  If CONFIG_SCHED_ONEXIT is also defined, this function will
- *   automatically call schedule_unload() to unload the module when task
- *   exits.
+ *   one call.  If CONFIG_SCHED_ONEXIT and CONFIG_SCHED_HAVE_PARENT are
+ *   also defined, this function will automatically call schedule_unload()
+ *   to unload the module when task exits.
+ *
+ *   NOTE: This function is flawed and useless without CONFIG_SCHED_ONEXIT
+ *   and CONFIG_SCHED_HAVE_PARENT because there is then no mechanism to
+ *   unload the module once it exits.
  *
  * Input Parameter:
  *   filename - Fulll path to the binary to be loaded
@@ -355,7 +364,7 @@ EXEPATH_HANDLE exepath_init(void);
  *   is marked executable).
  *
  *   NOTE: The string pointer return in the success case points to allocated
- *   memory.  This memory must be freed by the called by calling kfree().
+ *   memory.  This memory must be freed by the called by calling kmm_free().
  *
  *   NULL is returned if no path is found to any file with the provided
  *   'relpath' from any absolute path in the PATH variable.  In this case,

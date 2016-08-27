@@ -1,7 +1,7 @@
 /****************************************************************************
  *  arch/arm/src/armv7-m/up_releasepending.c
  *
- *   Copyright (C) 2007-2009, 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,21 +42,10 @@
 #include <sched.h>
 #include <debug.h>
 #include <nuttx/arch.h>
+#include <nuttx/sched.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -75,33 +64,42 @@
 
 void up_release_pending(void)
 {
-  struct tcb_s *rtcb = (struct tcb_s*)g_readytorun.head;
+  struct tcb_s *rtcb = this_task();
 
-  slldbg("From TCB=%p\n", rtcb);
+  sinfo("From TCB=%p\n", rtcb);
 
-  /* Merge the g_pendingtasks list into the g_readytorun task list */
+  /* Merge the g_pendingtasks list into the ready-to-run task list */
 
   /* sched_lock(); */
   if (sched_mergepending())
     {
       /* The currently active task has changed!  We will need to switch
-       * contexts.  First check if we are operating in interrupt context.
+       * contexts.
        */
 
-      if (current_regs)
+      /* Update scheduler parameters */
+
+      sched_suspend_scheduler(rtcb);
+
+      /* Are we operating in interrupt context? */
+
+      if (CURRENT_REGS)
         {
           /* Yes, then we have to do things differently. Just copy the
-           * current_regs into the OLD rtcb.
+           * CURRENT_REGS into the OLD rtcb.
            */
 
            up_savestate(rtcb->xcp.regs);
 
           /* Restore the exception context of the rtcb at the (new) head
-           * of the g_readytorun task list.
+           * of the ready-to-run task list.
            */
 
-          rtcb = (struct tcb_s*)g_readytorun.head;
-          slldbg("New Active Task TCB=%p\n", rtcb);
+          rtcb = this_task();
+
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
 
           /* Then switch contexts */
 
@@ -112,11 +110,16 @@ void up_release_pending(void)
 
       else
         {
+          struct tcb_s *nexttcb = this_task();
+
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(nexttcb);
+
           /* Switch context to the context of the task at the head of the
            * ready to run list.
            */
 
-          struct tcb_s *nexttcb = (struct tcb_s*)g_readytorun.head;
           up_switchcontext(rtcb->xcp.regs, nexttcb->xcp.regs);
 
           /* up_switchcontext forces a context switch to the task at the

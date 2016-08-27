@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/stm32/up_allocateheap.c
  *
- *   Copyright (C) 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,10 +41,12 @@
 
 #include <sys/types.h>
 #include <stdint.h>
+#include <string.h>
 #include <assert.h>
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/userspace.h>
 
@@ -57,7 +59,7 @@
 #include "stm32_mpuinit.h"
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Internal SRAM is available in all members of the STM32 family. The
  * following definitions must be provided to specify the size and
@@ -130,7 +132,7 @@
 
    /* Check if external FSMC SRAM is provided */
 
-#  if CONFIG_STM32_FSMC_SRAM
+#  ifdef CONFIG_STM32_FSMC_SRAM
 #    if CONFIG_MM_REGIONS < 2
 #      warning "FSMC SRAM not included in the heap"
 #      undef CONFIG_STM32_FSMC_SRAM
@@ -186,7 +188,9 @@
        /* Only one memory region.  Force Configuration 1 */
 
 #      ifndef CONFIG_STM32_CCMEXCLUDE
-#        warning "CCM SRAM excluded from the heap"
+#        if CONFIG_STM32_HAVE_CCM
+#          warning "CCM SRAM excluded from the heap"
+#        endif
 #        define CONFIG_STM32_CCMEXCLUDE 1
 #      endif
 
@@ -217,6 +221,31 @@
 #        endif
 #      endif
 #    endif
+
+/* All members of the STM32F37xxx families have 16-32 Kib ram in a single
+ * bank. No external RAM is supported (the F3 family has no FSMC).
+ */
+#elif defined(CONFIG_STM32_STM32F37XX)
+
+   /* Set the end of system SRAM */
+
+#  define SRAM1_END CONFIG_RAM_END
+
+   /* There is no FSMC */
+
+#  undef CONFIG_STM32_FSMC_SRAM
+
+   /* The STM32 F37xx has no CCM SRAM */
+
+#  undef CONFIG_STM32_CCMEXCLUDE
+#  define CONFIG_STM32_CCMEXCLUDE 1
+
+   /* Only one memory region can be support (internal SRAM) */
+
+#  if CONFIG_MM_REGIONS > 1
+#    error "CONFIG_MM_REGIONS > 1.  The STM32L15X has only one memory region."
+#  endif
+
 
 /* Most members of both the STM32F20xxx and STM32F40xxx families have 128Kib
  * in two banks:
@@ -252,9 +281,10 @@
 
 #elif defined(CONFIG_STM32_STM32F20XX) || defined(CONFIG_STM32_STM32F40XX)
 
-   /* The STM32 F2 and the STM32 F401 have no CCM SRAM */
+   /* The STM32 F2 and the STM32 F401/F411 have no CCM SRAM */
 
-#  if defined(CONFIG_STM32_STM32F20XX) || defined(CONFIG_STM32_STM32F401)
+#  if defined(CONFIG_STM32_STM32F20XX) || defined(CONFIG_STM32_STM32F401) || \
+      defined(CONFIG_STM32_STM32F411)
 #    undef CONFIG_STM32_CCMEXCLUDE
 #    define CONFIG_STM32_CCMEXCLUDE 1
 #  endif
@@ -365,7 +395,9 @@
 #    endif
 
 #    if CONFIG_MM_REGIONS < 2
-#      error "CCM SRAM excluded from the heap because CONFIG_MM_REGIONS < 2"
+#      if CONFIG_STM32_HAVE_CCM
+#        error "CCM SRAM excluded from the heap because CONFIG_MM_REGIONS < 2"
+#      endif
 #      undef CONFIG_STM32_CCMEXCLUDE
 #      define CONFIG_STM32_CCMEXCLUDE 1
 #    elif CONFIG_MM_REGIONS > 2
@@ -407,7 +439,7 @@
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_HEAP
+#ifdef CONFIG_HEAP_COLORATION
 static inline void up_heap_color(FAR void *start, size_t size)
 {
   memset(start, HEAP_COLOR, size);
@@ -426,7 +458,7 @@ static inline void up_heap_color(FAR void *start, size_t size)
  * Description:
  *   This function will be called to dynamically set aside the heap region.
  *
- *   For the kernel build (CONFIG_NUTTX_KERNEL=y) with both kernel- and
+ *   For the kernel build (CONFIG_BUILD_PROTECTED=y) with both kernel- and
  *   user-space heaps (CONFIG_MM_KERNEL_HEAP=y), this function provides the
  *   size of the unprotected, user-space heap.
  *
@@ -455,7 +487,7 @@ static inline void up_heap_color(FAR void *start, size_t size)
 
 void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 {
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#if defined(CONFIG_BUILD_PROTECTED) && defined(CONFIG_MM_KERNEL_HEAP)
   /* Get the unaligned size and position of the user-space heap.
    * This heap begins after the user-space .bss section at an offset
    * of CONFIG_MM_KERNEL_HEAPSIZE (subject to alignment).
@@ -480,13 +512,13 @@ void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 
   /* Return the user-space heap settings */
 
-  board_led_on(LED_HEAPALLOCATE);
-  *heap_start = (FAR void*)ubase;
+  board_autoled_on(LED_HEAPALLOCATE);
+  *heap_start = (FAR void *)ubase;
   *heap_size  = usize;
 
   /* Colorize the heap for debug */
 
-  up_heap_color((FAR void*)ubase, usize);
+  up_heap_color((FAR void *)ubase, usize);
 
   /* Allow user-mode access to the user heap memory */
 
@@ -495,8 +527,8 @@ void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 
   /* Return the heap settings */
 
-  board_led_on(LED_HEAPALLOCATE);
-  *heap_start = (FAR void*)g_idle_topstack;
+  board_autoled_on(LED_HEAPALLOCATE);
+  *heap_start = (FAR void *)g_idle_topstack;
   *heap_size  = SRAM1_END - g_idle_topstack;
 
   /* Colorize the heap for debug */
@@ -509,13 +541,13 @@ void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
  * Name: up_allocate_kheap
  *
  * Description:
- *   For the kernel build (CONFIG_NUTTX_KERNEL=y) with both kernel- and
+ *   For the kernel build (CONFIG_BUILD_PROTECTED=y) with both kernel- and
  *   user-space heaps (CONFIG_MM_KERNEL_HEAP=y), this function allocates
  *   (and protects) the kernel-space heap.
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#if defined(CONFIG_BUILD_PROTECTED) && defined(CONFIG_MM_KERNEL_HEAP)
 void up_allocate_kheap(FAR void **heap_start, size_t *heap_size)
 {
   /* Get the unaligned size and position of the user-space heap.
@@ -544,7 +576,7 @@ void up_allocate_kheap(FAR void **heap_start, size_t *heap_size)
    * that was not dedicated to the user heap).
    */
 
-  *heap_start = (FAR void*)USERSPACE->us_bssend;
+  *heap_start = (FAR void *)USERSPACE->us_bssend;
   *heap_size  = ubase - (uintptr_t)USERSPACE->us_bssend;
 }
 #endif
@@ -562,7 +594,7 @@ void up_allocate_kheap(FAR void **heap_start, size_t *heap_size)
 void up_addregion(void)
 {
 #ifndef CONFIG_STM32_CCMEXCLUDE
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#if defined(CONFIG_BUILD_PROTECTED) && defined(CONFIG_MM_KERNEL_HEAP)
 
   /* Allow user-mode access to the STM32F20xxx/STM32F40xxx CCM SRAM heap */
 
@@ -572,15 +604,15 @@ void up_addregion(void)
 
   /* Colorize the heap for debug */
 
-  up_heap_color((FAR void*)SRAM2_START, SRAM2_END-SRAM2_START);
+  up_heap_color((FAR void *)SRAM2_START, SRAM2_END-SRAM2_START);
 
   /* Add the STM32F20xxx/STM32F40xxx CCM SRAM user heap region. */
 
-  kumm_addregion((FAR void*)SRAM2_START, SRAM2_END-SRAM2_START);
+  kumm_addregion((FAR void *)SRAM2_START, SRAM2_END-SRAM2_START);
 #endif
 
 #ifdef CONFIG_STM32_FSMC_SRAM
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#if defined(CONFIG_BUILD_PROTECTED) && defined(CONFIG_MM_KERNEL_HEAP)
 
   /* Allow user-mode access to the FSMC SRAM user heap memory */
 
@@ -590,11 +622,11 @@ void up_addregion(void)
 
   /* Colorize the heap for debug */
 
-  up_heap_color((FAR void*)CONFIG_HEAP2_BASE, CONFIG_HEAP2_SIZE);
+  up_heap_color((FAR void *)CONFIG_HEAP2_BASE, CONFIG_HEAP2_SIZE);
 
   /* Add the external FSMC SRAM user heap region. */
 
-  kumm_addregion((FAR void*)CONFIG_HEAP2_BASE, CONFIG_HEAP2_SIZE);
+  kumm_addregion((FAR void *)CONFIG_HEAP2_BASE, CONFIG_HEAP2_SIZE);
 #endif
 }
 #endif

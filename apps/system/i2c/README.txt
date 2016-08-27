@@ -29,18 +29,6 @@ CONTENTS
 System Requirements
 ===================
 
-I2C Driver
-----------
-In order to use the I2C driver, you system -- in particular, your I2C driver --
-must meet certain requirements:
-
-1. It support calling up_i2cinitialize() numerous times, resetting the I2C
-   hardware on each (initial) time.  up_i2cuninitialize() will be called after
-   each call to up_i2cinitialize() to free any resources and disable the I2C.
-2. up_i2cinitialize must accept any interface number without crashing.  It
-   must simply return NULL if the device is not supported.
-3. The I2C driver must support the transfer method (CONFIG_I2C_TRANSFER=y).
-
 The I2C tool is designed to be implemented as a NuttShell (NSH) add-on.  Read
 the apps/nshlib/README.txt file for information about add-ons.
 
@@ -351,32 +339,16 @@ The I2C tools requires the following in your NuttX configuration:
 
      CONFIG_SYSTEM_I2C=y
 
-2. Device-specific I2C support must be enabled.  The I2C tool will call the
-   platform-specific function up_i2cinitialize() to get instances of the
-   I2C interface and the platform-specific function up_i2cuninitialize()
-   to discard instances of the I2C interface.
+2. Device-specific I2C driver support must be enabled:
 
-   NOTE 1: The I2C interface is defined in include/nuttx/i2c.h.
+     CONFIG_I2C_DRIVER=y
 
-   NOTE 2: This I2C tool uses direct I2C device interfaces.  As such, it
-   relies on internal OS interfaces that are not normally available to a
-   user-space program.  As a result, the I2C tool cannot be used if a
-   NuttX is built as a protected, supervisor kernel (CONFIG_NUTTX_KERNEL).
+   The I2C tool will then use the I2C character driver to access the I2C
+   bus.  These devices will reside at /dev/i2cN where N is the I2C bus
+   number.
 
-3. I2C driver configuration
-
-   The CONFIG_I2C_TRANSFER option must also be set in your NuttX
-   configuration.  This configuration is the defconfig file in your
-   configuration directory that is copied to the NuttX top-level
-   directory as .config when NuttX is configured.
-
-     CONFIG_I2C_TRANSFER=y
-
-   NOTE:  CONFIG_I2C_TRANSFER adds extra methods to the I2C interface.
-   Not all I2C interfaces support these extra methods.  If your platform's
-   I2C driver does not support these extra methods, then you cannot use
-   the I2C tool unless you extend the support in your platform I2C
-   driver.
+   NOTE 1: The I2C driver ioctl interface is defined in
+   include/nuttx/i2c/i2c_master.h.
 
 I2C Tool Configuration Options
 ------------------------------

@@ -9,7 +9,7 @@ Toolchain
   different from the default).
 
   If you have no ARM toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
 
   1. You must have already configured Nuttx in <some-dir>nuttx.
 
@@ -30,6 +30,15 @@ Toolchain
 
   8. Edit setenv.h so that the PATH variable includes the path to the
      newly built binaries.
+
+Issues
+^^^^^^
+
+  Title:       UART RECONFIGURATION
+  Description: UART re-configuration is untested and conditionally compiled out.
+  Status:      Open
+  Priority:    Medium.  ttyS1 is not configured, but not used; ttyS0 is configured
+               by the bootloader
 
 ARM/C5471-specific Configuration Options
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -133,7 +142,7 @@ Common Configuration Notes
      change a configurations using that tool, you should:
 
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-        and misc/tools/
+        see additional README.txt files in the NuttX tools repository.
 
      b. Execute 'make menuconfig' in nuttx/ in order to start the
         reconfiguration process.
@@ -160,4 +169,4 @@ Configuration Sub-Directories
 
   httpd
 
-    This configuration uses the tiny webserver for uiP.
+    This configuration uses the tiny webserver for uIP.

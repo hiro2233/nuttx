@@ -85,12 +85,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -156,7 +150,7 @@ NuttX buildroot Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -530,7 +524,7 @@ Configurations
     change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -548,7 +542,7 @@ Configurations
      Here are the relevant current settings:
 
      Build Setup:
-       CONFIG_HOST_WINDOS=y                : Microsoft Windows
+       CONFIG_HOST_WINDOWS=y               : Microsoft Windows
        CONFIG_WINDOWS_CYGWIN=y             : Using Cygwin or other POSIX environment
 
      System Type -> Toolchain:
@@ -648,7 +642,7 @@ Configurations
        RAMTest: Pattern test: 30000000 33554432 33333333 cccccccc
        RAMTest: Address-in-address test: 30000000 33554432
 
-    4. This configuration has been used to test USB host functionaly.  USB
+    4. This configuration has been used to test USB host functionality.  USB
        host is *not* enabled by default.  If you will to enable USB host
        support in the NSH configuration, please modify the NuttX
        configuration as follows:
@@ -657,7 +651,7 @@ Configurations
 
           Drivers -> USB Host Driver Support
             CONFIG_USBHOST=y              : General USB host support
-            CONFIG_USBHOST_INT_DISABLE=y  : Not needed (unless you use the keyboard)
+            CONFIG_USBHOST_INT_DISABLE=n  : Interrupt EPs need with hub, HID keyboard, and HID mouse
             CONFIG_USBHOST_ISOC_DISABLE=y : Not needed (or supported)
 
           System Type -> Peripherals
@@ -667,11 +661,40 @@ Configurations
             CONFIG_LPC31_EHCI_BUFSIZE=128
             CONFIG_LPC31_EHCI_PREALLOCATE=y
 
-          Library Routines
-            CONFIG_SCHED_WORKQUEUE=y      : Work queue support is needed
-            CONFIG_SCHED_WORKSTACKSIZE=1536
+          RTOS Features -> Work Queue Support
+            CONFIG_SCHED_WORKQUEUE=y      : High priority queue support is needed
+            CONFIG_SCHED_HPWORK=y
+            CONFIG_SCHED_HPWORKSTACKSIZE=1536 (1024 seems to work okay too)
 
-       b. USB Mass Storage Class.  With this class enabled, you can support
+       b. Hub Support.
+
+          Drivers -> USB Host Driver Support
+            CONFIG_USBHOST_INT_DISABLE=n  : Interrupt endpoint support needed
+            CONFIG_USBHOST_HUB=y          : Enable the hub class
+            CONFIG_USBHOST_ASYNCH=y       : Asynchronous I/O supported needed for hubs
+
+          RTOS Features -> Work Queue Support
+            CONFIG_SCHED_LPWORK=y         : Low priority queue support is needed
+            CONFIG_SCHED_LPNTHREADS=1
+            CONFIG_SCHED_LPWORKSTACKSIZE=1024
+
+          NOTES:
+
+          1. It is necessary to perform work on the low-priority work queue
+             (vs. the high priority work queue) because:
+
+             a. Deferred work requires some delays and waiting, and
+             b. There are dependencies between the waiting and driver
+                interrupt related work.  Since that interrupt related work
+                will performed on the high priority work queue, there would
+                be the likelihood of deadlocks if you wait for events on the
+                high priority work thread that can only occur if the high
+                priority work thread is available to post those events.
+
+          2. Logic nesting becomes deeper with a hub and it may also be
+             necessary to increase some stack sizes.
+
+       c. USB Mass Storage Class.  With this class enabled, you can support
           connection of USB FLASH storage drives.  Support for the USB
           mass storage class is enabled like this:
 
@@ -718,7 +741,7 @@ Configurations
 
             nsh> umount /mnt/flash
 
-       c. HID Keyboard support.  The following support will enable support
+       d. HID Keyboard support.  The following support will enable support
           for certain keyboard devices (only the so-called "boot" keyboard
           class is supported):
 
@@ -804,8 +827,8 @@ Configurations
            CONFIG_USBHOST_TRACE_VERBOSE=y
 
          Application Configuration -> System Add-Ons
-           CONFIG_SYSTEM_USBMONITOR=y
-           CONFIG_SYSTEM_USBMONITOR_INTERVAL=1
+           CONFIG_USBMONITOR=y
+           CONFIG_USBMONITOR_INTERVAL=1
 
        NOTE:  I have found that if you enable USB DEBUG and/or USB tracing,
        the resulting image requires to much memory to execute out of

@@ -42,6 +42,7 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 
+#include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -58,13 +59,9 @@
 #include <nuttx/arch.h>
 #include <nuttx/syslog/ramlog.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 
 #ifdef CONFIG_RAMLOG
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
 
 /****************************************************************************
  * Private Types
@@ -90,13 +87,20 @@ struct ramlog_dev_s
    */
 
 #ifndef CONFIG_DISABLE_POLL
-  struct pollfd *rl_fds[CONFIG_RAMLOG_NPOLLWAITERS];
+  FAR struct pollfd *rl_fds[CONFIG_RAMLOG_NPOLLWAITERS];
 #endif
 };
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
+
+/* Syslog channel methods */
+
+#ifdef CONFIG_RAMLOG_SYSLOG
+static int ramlog_flush(void);
+#endif
+
 /* Helper functions */
 
 #ifndef CONFIG_DISABLE_POLL
@@ -107,8 +111,10 @@ static ssize_t ramlog_addchar(FAR struct ramlog_dev_s *priv, char ch);
 
 /* Character driver methods */
 
-static ssize_t ramlog_read(FAR struct file *, FAR char *, size_t);
-static ssize_t ramlog_write(FAR struct file *, FAR const char *, size_t);
+static ssize_t ramlog_read(FAR struct file *filep, FAR char *buffer,
+                           size_t buflen);
+static ssize_t ramlog_write(FAR struct file *filep, FAR const char *buffer,
+                            size_t buflen);
 #ifndef CONFIG_DISABLE_POLL
 static int     ramlog_poll(FAR struct file *filep, FAR struct pollfd *fds,
                            bool setup);
@@ -118,16 +124,32 @@ static int     ramlog_poll(FAR struct file *filep, FAR struct pollfd *fds,
  * Private Data
  ****************************************************************************/
 
+#ifdef CONFIG_RAMLOG_SYSLOG
+static const struct syslog_channel_s g_ramlog_syslog_channel =
+{
+  ramlog_putc,
+  ramlog_putc,
+  ramlog_flush
+};
+#endif
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
 static const struct file_operations g_ramlogfops =
 {
-  0,             /* open */
-  0,             /* close */
-  ramlog_read,   /* read */
-  ramlog_write,  /* write */
-  0,             /* seek */
-  0              /* ioctl */
+  NULL,         /* open */
+  NULL,         /* close */
+  ramlog_read,  /* read */
+  ramlog_write, /* write */
+  NULL,         /* seek */
+  NULL          /* ioctl */
 #ifndef CONFIG_DISABLE_POLL
-  , ramlog_poll  /* poll */
+  , ramlog_poll /* poll */
+#endif
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+  , NULL        /* unlink */
 #endif
 };
 
@@ -136,10 +158,10 @@ static const struct file_operations g_ramlogfops =
  */
 
 #if defined(CONFIG_RAMLOG_CONSOLE) || defined(CONFIG_RAMLOG_SYSLOG)
-static char g_sysbuffer[CONFIG_RAMLOG_CONSOLE_BUFSIZE];
+static char g_sysbuffer[CONFIG_RAMLOG_BUFSIZE];
 
 /* This is the device structure for the console or syslogging function.  It
- * must be statically initialized because the RAMLOG syslog_putc function
+ * must be statically initialized because the RAMLOG ramlog_putc function
  * could be called before the driver initialization logic executes.
  */
 
@@ -154,7 +176,7 @@ static struct ramlog_dev_s g_sysdev =
 #ifndef CONFIG_RAMLOG_NONBLOCKING
   SEM_INITIALIZER(0),            /* rl_waitsem */
 #endif
-  CONFIG_RAMLOG_CONSOLE_BUFSIZE, /* rl_bufsize */
+  CONFIG_RAMLOG_BUFSIZE,         /* rl_bufsize */
   g_sysbuffer                    /* rl_buffer */
 };
 #endif
@@ -164,12 +186,23 @@ static struct ramlog_dev_s g_sysdev =
  ****************************************************************************/
 
 /****************************************************************************
+ * Name: ramlog_flush
+ ****************************************************************************/
+
+#ifdef CONFIG_RAMLOG_SYSLOG
+static int ramlog_flush(void)
+{
+  return OK;
+}
+#endif
+
+/****************************************************************************
  * Name: ramlog_pollnotify
  ****************************************************************************/
 
 #ifndef CONFIG_DISABLE_POLL
 static void ramlog_pollnotify(FAR struct ramlog_dev_s *priv,
-            pollevent_t eventset)
+                              pollevent_t eventset)
 {
   FAR struct pollfd *fds;
   irqstate_t flags;
@@ -179,7 +212,7 @@ static void ramlog_pollnotify(FAR struct ramlog_dev_s *priv,
 
   for (i = 0; i < CONFIG_RAMLOG_NPOLLWAITERS; i++)
     {
-      flags = irqsave();
+      flags = enter_critical_section();
       fds = priv->rl_fds[i];
       if (fds)
         {
@@ -189,7 +222,7 @@ static void ramlog_pollnotify(FAR struct ramlog_dev_s *priv,
               sem_post(fds->sem);
             }
         }
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 }
 #else
@@ -203,11 +236,11 @@ static void ramlog_pollnotify(FAR struct ramlog_dev_s *priv,
 static int ramlog_addchar(FAR struct ramlog_dev_s *priv, char ch)
 {
   irqstate_t flags;
-  int nexthead;
+  size_t nexthead;
 
   /* Disable interrupts (in case we are NOT called from interrupt handler) */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Calculate the write index AFTER the next byte is written */
 
@@ -223,7 +256,7 @@ static int ramlog_addchar(FAR struct ramlog_dev_s *priv, char ch)
     {
       /* Yes... Return an indication that nothing was saved in the buffer. */
 
-      irqrestore(flags);
+      leave_critical_section(flags);
       return -EBUSY;
     }
 
@@ -231,7 +264,7 @@ static int ramlog_addchar(FAR struct ramlog_dev_s *priv, char ch)
 
   priv->rl_buffer[priv->rl_head] = ch;
   priv->rl_head = nexthead;
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -241,8 +274,8 @@ static int ramlog_addchar(FAR struct ramlog_dev_s *priv, char ch)
 
 static ssize_t ramlog_read(FAR struct file *filep, FAR char *buffer, size_t len)
 {
-  struct inode *inode  = filep->f_inode;
-  struct ramlog_dev_s *priv;
+  FAR struct inode *inode = filep->f_inode;
+  FAR struct ramlog_dev_s *priv;
   ssize_t nread;
   char ch;
   int ret;
@@ -250,7 +283,7 @@ static ssize_t ramlog_read(FAR struct file *filep, FAR char *buffer, size_t len)
   /* Some sanity checking */
 
   DEBUGASSERT(inode && inode->i_private);
-  priv = inode->i_private;
+  priv = (FAR struct ramlog_dev_s *)inode->i_private;
 
   /* If the circular buffer is empty, then wait for something to be written
    * to it.  This function may NOT be called from an interrupt handler.
@@ -268,7 +301,7 @@ static ssize_t ramlog_read(FAR struct file *filep, FAR char *buffer, size_t len)
 
   /* Loop until something is read */
 
-  for (nread = 0; nread < len; )
+  for (nread = 0; (size_t)nread < len; )
     {
       /* Get the next byte from the buffer */
 
@@ -414,8 +447,8 @@ errout_without_sem:
 
 static ssize_t ramlog_write(FAR struct file *filep, FAR const char *buffer, size_t len)
 {
-  struct inode *inode = filep->f_inode;
-  struct ramlog_dev_s *priv;
+  FAR struct inode *inode = filep->f_inode;
+  FAR struct ramlog_dev_s *priv;
   ssize_t nwritten;
   char ch;
   int ret;
@@ -423,18 +456,18 @@ static ssize_t ramlog_write(FAR struct file *filep, FAR const char *buffer, size
   /* Some sanity checking */
 
   DEBUGASSERT(inode && inode->i_private);
-  priv = inode->i_private;
+  priv = (FAR struct ramlog_dev_s *)inode->i_private;
 
- /* Loop until all of the bytes have been written.  This function may be
-  * called from an interrupt handler!  Semaphores cannot be used!
-  *
-  * The write logic only needs to modify the rl_head index.  Therefore,
-  * there is a difference in the way that rl_head and rl_tail are protected:
-  * rl_tail is protected with a semaphore; rl_tail is protected by disabling
-  * interrupts.
-  */
+  /* Loop until all of the bytes have been written.  This function may be
+   * called from an interrupt handler!  Semaphores cannot be used!
+   *
+   * The write logic only needs to modify the rl_head index.  Therefore,
+   * there is a difference in the way that rl_head and rl_tail are protected:
+   * rl_tail is protected with a semaphore; rl_tail is protected by disabling
+   * interrupts.
+   */
 
-  for (nwritten = 0; nwritten < len; nwritten++)
+  for (nwritten = 0; (size_t)nwritten < len; nwritten++)
     {
       /* Get the next character to output */
 
@@ -467,7 +500,7 @@ static ssize_t ramlog_write(FAR struct file *filep, FAR const char *buffer, size
 
       /* Then output the character */
 
-      ret = ramlog_addchar(priv,ch);
+      ret = ramlog_addchar(priv, ch);
       if (ret < 0)
         {
           /* The buffer is full and nothing was saved. Break out of the
@@ -491,7 +524,7 @@ static ssize_t ramlog_write(FAR struct file *filep, FAR const char *buffer, size
 
       /* Are there threads waiting for read data? */
 
-      flags = irqsave();
+      flags = enter_critical_section();
 #ifndef CONFIG_RAMLOG_NONBLOCKING
       for (i = 0; i < priv->rl_nwaiters; i++)
         {
@@ -504,7 +537,7 @@ static ssize_t ramlog_write(FAR struct file *filep, FAR const char *buffer, size
       /* Notify all poll/select waiters that they can write to the FIFO */
 
       ramlog_pollnotify(priv, POLLIN);
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 #endif
 
@@ -526,14 +559,14 @@ int ramlog_poll(FAR struct file *filep, FAR struct pollfd *fds, bool setup)
   FAR struct inode *inode = filep->f_inode;
   FAR struct ramlog_dev_s *priv;
   pollevent_t eventset;
-  int ndx;
+  size_t ndx;
   int ret;
   int i;
 
   /* Some sanity checking */
 
   DEBUGASSERT(inode && inode->i_private);
-  priv = inode->i_private;
+  priv = (FAR struct ramlog_dev_s *)inode->i_private;
 
   /* Get exclusive access to the poll structures */
 
@@ -609,7 +642,7 @@ int ramlog_poll(FAR struct file *filep, FAR struct pollfd *fds, bool setup)
 
       struct pollfd **slot = (struct pollfd **)fds->priv;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
       if (!slot)
         {
           ret = -EIO;
@@ -653,8 +686,8 @@ int ramlog_register(FAR const char *devpath, FAR char *buffer, size_t buflen)
 
   /* Allocate a RAM logging device structure */
 
-  priv = (struct ramlog_dev_s *)kzalloc(sizeof(struct ramlog_dev_s));
-  if (priv)
+  priv = (struct ramlog_dev_s *)kmm_zalloc(sizeof(struct ramlog_dev_s));
+  if (priv != NULL)
     {
       /* Initialize the non-zero values in the RAM logging device structure */
 
@@ -670,7 +703,7 @@ int ramlog_register(FAR const char *devpath, FAR char *buffer, size_t buflen)
       ret = register_driver(devpath, &g_ramlogfops, 0666, priv);
       if (ret < 0)
         {
-          kfree(priv);
+          kmm_free(priv);
         }
     }
 
@@ -698,7 +731,7 @@ int ramlog_consoleinit(void)
 #endif
 
 /****************************************************************************
- * Name: ramlog_sysloginit
+ * Name: ramlog_syslog_channel
  *
  * Description:
  *   Use a pre-allocated RAM logging device and register it at the path
@@ -710,35 +743,40 @@ int ramlog_consoleinit(void)
  ****************************************************************************/
 
 #ifdef CONFIG_RAMLOG_SYSLOG
-int ramlog_sysloginit(void)
+int ramlog_syslog_channel(void)
 {
+  int ret;
+
   /* Register the syslog character driver */
 
-  return register_driver(CONFIG_SYSLOG_DEVPATH, &g_ramlogfops, 0666, &g_sysdev);
+  ret = register_driver(CONFIG_SYSLOG_DEVPATH, &g_ramlogfops, 0666, &g_sysdev);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  /* Use the RAMLOG as the SYSLOG channel */
+
+  return syslog_channel(&g_ramlog_syslog_channel);
 }
 #endif
 
 /****************************************************************************
- * Name: syslog_putc
+ * Name: ramlog_putc
  *
  * Description:
- *   This is the low-level system logging interface.  The debugging/syslogging
- *   interfaces are syslog() and lowsyslog().  The difference is that
- *   the syslog() internface writes to fd=1 (stdout) whereas lowsyslog() uses
- *   a lower level interface that works from interrupt handlers.  This
- *   function is a a low-level interface used to implement lowsyslog()
- *   when CONFIG_RAMLOG_SYSLOG=y and CONFIG_SYSLOG=y
+ *   This is the low-level system logging interface.
  *
  ****************************************************************************/
 
 #if defined(CONFIG_RAMLOG_CONSOLE) || defined(CONFIG_RAMLOG_SYSLOG)
-int syslog_putc(int ch)
+int ramlog_putc(int ch)
 {
   FAR struct ramlog_dev_s *priv = &g_sysdev;
-#ifdef CONFIG_RAMLOG_CRLF
   int ret;
 
-  /* Ignore carriage returns */
+#ifdef CONFIG_RAMLOG_CRLF
+  /* Ignore carriage returns.  But return success. */
 
   if (ch == '\r')
     {
@@ -754,13 +792,28 @@ int syslog_putc(int ch)
         {
           /* The buffer is full and nothing was saved. */
 
-          return ch;
+          goto errout;
         }
     }
 #endif
 
-  (void)ramlog_addchar(priv, ch);
-  return ch;
+  /* Add the character to the RAMLOG */
+
+  ret = ramlog_addchar(priv, ch);
+  if (ret >= 0)
+    {
+      /* Return the character added on success */
+
+      return ch;
+    }
+
+  /* On a failure, we need to return EOF and set the errno so that
+   * work like all other putc-like functions.
+   */
+
+errout:
+  set_errno(-ret);
+  return EOF;
 }
 #endif
 

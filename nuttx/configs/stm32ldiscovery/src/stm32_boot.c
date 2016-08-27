@@ -1,8 +1,7 @@
 /************************************************************************************
- * configs/stm32ldiscovery/src/up_boot.c
- * arch/arm/src/board/up_boot.c
+ * configs/stm32ldiscovery/src/stm32_boot.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,13 +41,14 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
 #include "stm32ldiscovery.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /************************************************************************************
@@ -72,19 +72,19 @@
 void stm32_boardinitialize(void)
 {
   /* Configure SPI chip selects if 1) SPI is not disabled, and 2) the weak function
-   * stm32_spiinitialize() has been brought into the link.
+   * stm32_spidev_initialize() has been brought into the link.
    */
 
 #if defined(CONFIG_STM32_SPI1) || defined(CONFIG_STM32_SPI2) || defined(CONFIG_STM32_SPI3)
-  if (stm32_spiinitialize)
+  if (stm32_spidev_initialize)
     {
-      stm32_spiinitialize();
+      stm32_spidev_initialize();
     }
 #endif
 
   /* Configure on-board LEDs if LED support has been selected. */
 
 #ifdef CONFIG_ARCH_LEDS
-  board_led_initialize();
+  board_autoled_initialize();
 #endif
 }

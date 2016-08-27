@@ -50,13 +50,16 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 #include <nuttx/fs/nfs.h>
 
 #include "nsh.h"
 #include "nsh_console.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -85,7 +88,7 @@
 
 #if CONFIG_NFILE_DESCRIPTORS > 0 && !defined(CONFIG_DISABLE_MOUNTPOINT) && \
     defined(CONFIG_FS_READABLE) && !defined(CONFIG_NSH_DISABLE_MOUNT)
-#ifndef CONFIG_NUTTX_KERNEL
+#if !defined(CONFIG_BUILD_PROTECTED) && !defined(CONFIG_BUILD_KERNEL)
 static const char* get_fstype(FAR struct statfs *statbuf)
 {
   FAR const char *fstype;
@@ -103,6 +106,12 @@ static const char* get_fstype(FAR struct statfs *statbuf)
 #ifdef CONFIG_FS_ROMFS
       case ROMFS_MAGIC:
         fstype = "romfs";
+        break;
+#endif
+
+#ifdef CONFIG_FS_TMPFS
+      case TMPFS_MAGIC:
+        fstype = "tmpfs";
         break;
 #endif
 
@@ -133,6 +142,18 @@ static const char* get_fstype(FAR struct statfs *statbuf)
 #ifdef CONFIG_FS_PROCFS
       case PROCFS_MAGIC:
         fstype = "procfs";
+        break;
+#endif
+
+#ifdef CONFIG_FS_UNIONFS
+      case UNIONFS_MAGIC:
+        fstype = "unionfs";
+        break;
+#endif
+
+#ifdef CONFIG_FS_HOSTFS
+      case HOSTFS_MAGIC:
+        fstype = "hostfs";
         break;
 #endif
 
@@ -224,7 +245,7 @@ static int df_man_readable_handler(FAR const char *mountpoint,
 
   usedlabel = labels[which];
 
-#ifndef CONFIG_NUTTX_KERNEL
+#if !defined(CONFIG_BUILD_PROTECTED) && !defined(CONFIG_BUILD_KERNEL)
   nsh_output(vtbl, "%-10s %6ld%c %8ld%c  %8ld%c %s\n", get_fstype(statbuf),
              size, sizelabel, used, usedlabel, free, freelabel,
              mountpoint);
@@ -246,7 +267,7 @@ static int df_man_readable_handler(FAR const char *mountpoint,
 
 #if CONFIG_NFILE_DESCRIPTORS > 0 && !defined(CONFIG_DISABLE_MOUNTPOINT) && \
     defined(CONFIG_FS_READABLE) && !defined(CONFIG_NSH_DISABLE_MOUNT)
-#ifndef CONFIG_NUTTX_KERNEL
+#if !defined(CONFIG_BUILD_PROTECTED) && !defined(CONFIG_BUILD_KERNEL)
 static int mount_handler(FAR const char *mountpoint,
                          FAR struct statfs *statbuf, FAR void *arg)
 {
@@ -271,7 +292,7 @@ static int mount_handler(FAR const char *mountpoint,
 
 #if CONFIG_NFILE_DESCRIPTORS > 0 && !defined(CONFIG_DISABLE_MOUNTPOINT) && \
     defined(CONFIG_FS_READABLE) && !defined(CONFIG_NSH_DISABLE_MOUNT)
-#ifndef CONFIG_NUTTX_KERNEL
+#if !defined(CONFIG_BUILD_PROTECTED) && !defined(CONFIG_BUILD_KERNEL)
 static inline int mount_show(FAR struct nsh_vtbl_s *vtbl, FAR const char *progname)
 {
   return foreach_mountpoint(mount_handler, (FAR void *)vtbl);
@@ -294,7 +315,7 @@ int cmd_df(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 #ifdef CONFIG_NSH_CMDOPT_DF_H
   if (argc > 1 && strcmp(argv[1], "-h") == 0)
     {
-#ifndef CONFIG_NUTTX_KERNEL
+#if !defined(CONFIG_BUILD_PROTECTED) && !defined(CONFIG_BUILD_KERNEL)
       nsh_output(vtbl, "Filesystem    Size      Used  Available Mounted on\n");
 #else
       nsh_output(vtbl, "Size      Used  Available Mounted on\n");
@@ -324,13 +345,14 @@ int cmd_mount(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
   FAR const char *target;
   FAR char *fulltarget;
   FAR const char *filesystem = NULL;
+  FAR const char *options = NULL;
   bool badarg = false;
   int option;
   int ret;
 
   /* The mount command behaves differently if no parameters are provided */
 
-#ifndef CONFIG_NUTTX_KERNEL
+#if !defined(CONFIG_BUILD_PROTECTED) && !defined(CONFIG_BUILD_KERNEL)
   if (argc < 2)
     {
       return mount_show(vtbl, argv[0]);
@@ -343,12 +365,16 @@ int cmd_mount(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
    * logic just sets 'badarg' and continues.
    */
 
-  while ((option = getopt(argc, argv, ":t:")) != ERROR)
+  while ((option = getopt(argc, argv, ":o:t:")) != ERROR)
     {
       switch (option)
         {
           case 't':
             filesystem = optarg;
+            break;
+
+          case 'o':
+            options = optarg;
             break;
 
           case ':':
@@ -436,7 +462,7 @@ int cmd_mount(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 
   /* Perform the mount */
 
-  ret = mount(fullsource, fulltarget, filesystem, 0, NULL);
+  ret = mount(fullsource, fulltarget, filesystem, 0, options);
   if (ret < 0)
     {
       nsh_output(vtbl, g_fmtcmdfailed, argv[0], "mount", NSH_ERRNO);
@@ -531,8 +557,8 @@ int cmd_nfsmount(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 
 #ifdef CONFIG_NET_IPv6
   sin                  = (FAR struct sockaddr_in6 *)&data.addr;
-  sin->sin_family      = AF_INET6;
-  sin->sin_port        = htons(NFS_PMAPPORT);
+  sin->sin6_family     = AF_INET6;
+  sin->sin6_port       = htons(NFS_PMAPPORT);
   memcpy(&sin->sin6_addr, &inaddr, sizeof(struct in6_addr));
   data.addrlen         = sizeof(struct sockaddr_in6);
 #else

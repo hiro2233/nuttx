@@ -16,6 +16,7 @@ Contents
   - NXFLAT Toolchain
   - Atmel Studio 6.1
   - Loading Code with J-Link
+  - Loading Code OpenOCD
   - Writing to FLASH using SAM-BA
   - LEDs
   - Serial Console
@@ -24,7 +25,7 @@ Contents
   - USB Full-Speed Device
   - HSMCI
   - Touchscreen
-  - ILI9325-Based LCD
+  - ILI9325/41-Based LCD
   - SAM4E-EK-specific Configuration Options
   - Configurations
 
@@ -85,12 +86,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This
-     is because the dependencies are generated using Windows paths which do
-     not work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
 IDEs
 ====
 
@@ -131,7 +126,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -191,8 +186,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -231,7 +226,7 @@ Atmel Studio 6.1
 
   - Debugging the NuttX Object File:
 
-    1) Rename object file from nutt to nuttx.elf.  That is an extension that
+    1) Rename object file from nuttx to nuttx.elf.  That is an extension that
        will be recognized by the file menu.
 
     2) Select the project name, the full path to the NuttX object (called
@@ -251,8 +246,8 @@ Atmel Studio 6.1
     STATUS: At this point, Atmel Studio 6.1 claims that my object files are
     not readable.  A little more needs to be done to wring out this procedure.
 
-Loading Code into SRAM with J-Link
-==================================
+Loading Code with J-Link
+========================
 
   Loading code with the Segger tools and GDB
   ------------------------------------------
@@ -281,6 +276,44 @@ Loading Code into SRAM with J-Link
   of the FLASH memory remain unchanged.  This may be because of issues with
   GPNVM1 settings and flash lock bits?  In any event, the GDB server works
   great for debugging after writing the program to FLASH using SAM-BA.
+
+Loading Code OpenOCD
+====================
+
+  OpenOCD scripts are available in the configs/sam4e-ek/tools directory.
+  These scripts were used with OpenOCD 0.8.0.  If you use a version after
+  OpenOCD 0.8.0, then you should comment out the following lines in the
+  openocd.cfg file:
+
+    # set CHIPNAME SAM4E16E
+    # source [find target/at91sam4sXX.cfg]
+
+  And uncomment this line:
+
+    source [find board/atmel_sam4e_ek.cfg]
+
+  This have been reported to work under Linux, but I have not been
+  successful using it under Windows OpenOCD 0.8.0 with libUSB.  I get
+
+    Open On-Chip Debugger 0.8.0 (2014-04-28-08:42)
+    ...
+    Error: libusb_open() failed with LIBUSB_ERROR_NOT_SUPPORTED
+    Error: Cannot find jlink Interface! Please check connection and permissions.
+    ...
+
+  This is telling me that the Segger J-Link USB driver is incompatible
+  with libUSB.  It may be necessary to replace the Segger J-Link driver
+  with the driver from libusb-win32-device-bin on sourceforge.
+
+    - Go into Control Panel/System/Device Manager and update the J-Link
+      driver to point at the new jlink.inf file made with the
+      libusb-win32/bin inf-wizard.  Browse to the unsigned driver
+      pointed to by the inf, libusb0.dll from the libusb-win32-device-bin
+      distribution to complete the installation.
+
+    - The Segger driver appeared under "Universal Serial Bus Controllers"
+      in Device Manager (winXP) while the libusb-win32 driver appears as
+      new top level Dev Mgr category "LibUSB-Win32 Devices".
 
 Writing to FLASH using SAM-BA
 =============================
@@ -380,8 +413,8 @@ Networking Support
   Networking Support
     CONFIG_NET=y                        : Enable Neworking
     CONFIG_NET_SOCKOPTS=y               : Enable socket operations
-    CONFIG_NET_BUFSIZE=562              : Maximum packet size (MTD) 1518 is more standard
-    CONFIG_NET_RECEIVE_WINDOW=536       : Should be the same as CONFIG_NET_BUFSIZE
+    CONFIG_NET_ETH_MTU=562              : Maximum packet size (MTU) 1518 is more standard
+    CONFIG_NET_ETH_TCP_RECVWNDO=536     : Should be the same as CONFIG_NET_ETH_MTU
     CONFIG_NET_TCP=y                    : Enable TCP/IP networking
     CONFIG_NET_TCPBACKLOG=y             : Support TCP/IP backlog
     CONFIG_NET_TCP_READAHEAD_BUFSIZE=536  Read-ahead buffer size
@@ -395,10 +428,10 @@ Networking Support
     CONFIG_ETH0_PHY_KSZ8051=y           : Select the KSZ8051 PHY (for EMAC)
 
   Application Configuration -> Network Utilities
-    CONFIG_NETUTILS_DNSCLIENT=y            : Enable host address resolution
+    CONFIG_NETDB_DNSCLIENT=y            : Enable host address resolution
     CONFIG_NETUTILS_TELNETD=y           : Enable the Telnet daemon
     CONFIG_NETUTILS_TFTPC=y             : Enable TFTP data file transfers for get and put commands
-    CONFIG_NETUTILS_UIPLIB=y            : Network library support is needed
+    CONFIG_NETUTILS_NETLIB=y            : Network library support is needed
     CONFIG_NETUTILS_WEBCLIENT=y         : Needed for wget support
                                         : Defaults should be okay for other options
   Application Configuration -> NSH Library
@@ -507,6 +540,32 @@ Networking Support
   a network because additional time will be required to fail with timeout
   errors.
 
+  This delay will be especially long if the board is not connected to
+  a network.  On the order of a minute!  You will probably think that
+  NuttX has crashed!  And then, when it finally does come up, the
+  network will not be available.
+
+  Network Initialization Thread
+  -----------------------------
+  There is a configuration option enabled by CONFIG_NSH_NETINIT_THREAD
+  that will do the NSH network bring-up asynchronously in parallel on
+  a separate thread.  This eliminates the (visible) networking delay
+  altogether.  This current implementation, however, has some limitations:
+
+    - If no network is connected, the network bring-up will fail and
+      the network initialization thread will simply exit.  There are no
+      retries and no mechanism to know if the network initialization was
+      successful (it could perform a network Ioctl to see if the link is
+      up and it now, keep trying, but it does not do that now).
+
+    - Furthermore, there is currently no support for detecting loss of
+      network connection and recovery of the connection (similarly, this
+      thread could poll periodically for network status, but does not).
+
+  Both of these shortcomings could be eliminated by enabling the network
+  monitor.  See the SAMA5 configurations for a description of what it would
+  take to incorporate the network monitor feature.
+
 AT25 Serial FLASH
 =================
 
@@ -572,7 +631,7 @@ AT25 Serial FLASH
       CONFIG_NSH_ARCHINIT=y                 : NSH board-initialization
 
     Board Selection
-      CONFIG_SAM4EEK_AT25_AUTOMOUNT=y       : Mounts AT25 for NSH
+      CONFIG_SAM4EEK_AT25_BLOCKMOUNT=y       : Mounts AT25 for NSH
       CONFIG_SAM4EEK_AT25_FTL=y             : Create block driver for FAT
 
   You can then format the AT25 FLASH for a FAT file system and mount the
@@ -756,7 +815,7 @@ USB Full-Speed Device
   --------------------
 
   There is normal console debug output available that can be enabled with
-  CONFIG_DEBUG + CONFIG_DEBUG_USB.  However, USB device operation is very
+  CONFIG_DEBUG_FEATURES + CONFIG_DEBUG_USB.  However, USB device operation is very
   time critical and enabling this debug output WILL interfere with the
   operation of the UDP.  USB device tracing is a less invasive way to get
   debug information:  If tracing is enabled, the USB device will save
@@ -778,15 +837,15 @@ USB Full-Speed Device
       CONFIG_NSH_ARCHINIT=y                   : Automatically start the USB monitor
 
     Application Configuration -> System NSH Add-Ons:
-      CONFIG_SYSTEM_USBMONITOR=y              : Enable the USB monitor daemon
-      CONFIG_SYSTEM_USBMONITOR_STACKSIZE=2048 : USB monitor daemon stack size
-      CONFIG_SYSTEM_USBMONITOR_PRIORITY=50    : USB monitor daemon priority
-      CONFIG_SYSTEM_USBMONITOR_INTERVAL=1     : Dump trace data every second
-      CONFIG_SYSTEM_USBMONITOR_TRACEINIT=y    : Enable TRACE output
-      CONFIG_SYSTEM_USBMONITOR_TRACECLASS=y
-      CONFIG_SYSTEM_USBMONITOR_TRACETRANSFERS=y
-      CONFIG_SYSTEM_USBMONITOR_TRACECONTROLLER=y
-      CONFIG_SYSTEM_USBMONITOR_TRACEINTERRUPTS=y
+      CONFIG_USBMONITOR=y              : Enable the USB monitor daemon
+      CONFIG_USBMONITOR_STACKSIZE=2048 : USB monitor daemon stack size
+      CONFIG_USBMONITOR_PRIORITY=50    : USB monitor daemon priority
+      CONFIG_USBMONITOR_INTERVAL=1     : Dump trace data every second
+      CONFIG_USBMONITOR_TRACEINIT=y    : Enable TRACE output
+      CONFIG_USBMONITOR_TRACECLASS=y
+      CONFIG_USBMONITOR_TRACETRANSFERS=y
+      CONFIG_USBMONITOR_TRACECONTROLLER=y
+      CONFIG_USBMONITOR_TRACEINTERRUPTS=y
 
   NOTE: If USB debug output is also enabled, both outputs will appear on the
   serial console.  However, the debug output will be asynchronous with the
@@ -854,7 +913,6 @@ Touchscreen
     Device Drivers
       CONFIG_SPI=y                          : Enable SPI support
       CONFIG_SPI_EXCHANGE=y                 : The exchange() method is supported
-      CONFIG_SPI_OWNBUS=y                   : Smaller code if this is the only SPI device
 
       CONFIG_INPUT=y                        : Enable support for input devices
       CONFIG_INPUT_ADS7843E=y               : Enable support for the ADS7843E
@@ -885,23 +943,21 @@ Touchscreen
     debug output on UART0 can be enabled with:
 
     Build Setup:
-      CONFIG_DEBUG=y                    : Enable debug features
-      CONFIG_DEBUG_VERBOSE=y            : Enable verbose debug output
-      CONFIG_DEBUG_INPUT=y              : Enable debug output from input devices
+      CONFIG_DEBUG_FEATURES=y               : Enable debug features
+      CONFIG_DEBUG_INFO=y                   : Enable verbose debug output
+      CONFIG_DEBUG_INPUT=y                  : Enable debug output from input devices
 
     STATUS: Verified 2014-05-14
 
-ILI9325-Based LCD
+ILI9325/41-Based LCD
 =================
 
   The SAM4E-EK carries a TFT transmissive LCD module with touch panel,
-  FTM280C34D. Its integrated driver IC is ILI9325. The LCD display area is
-  2.8 inches diagonally measured, with a native resolution of 240 x 320
+  FTM280C34D. Its integrated driver IC is either a ILI9325 ILI9342 (the
+  original schematics said ILI9325, but I learned the hard way that I had
+  an ILI9341-based LCD). The LCD display area is 2.8 inches diagonally
+  measured, with a native resolution of 240 x 320
   dots.
-
-  No driver has been developed for the SAM4E-EK LCD as of this writing.
-  Some technical information follows might be useful to anyone who is
-  inspired to develop that driver:
 
   Connectivity
   ------------
@@ -937,7 +993,7 @@ ILI9325-Based LCD
      21  PC11  RD
      22  PC8   WR
      23  PC19  RS
-     24  PD18  CS        Via J8, pulled high.  Connects to NRST.
+     24  PD18  CS        Via J8, pulled high.
      25        RESET     Connects to NSRST
      26        IM0       Pulled high
      27        IM1       Grounded
@@ -972,35 +1028,34 @@ ILI9325-Based LCD
     brightness control) from a 32-level logarithmic scale. Four resistors
     R93/R94/R95/R96 are implemented for optional current limitation.
 
-  Resources
-  ---------
+  Configuration
+  -------------
 
-    If you want to implement LCD support, here are some references that may
-    help you:
+    This is the basic configuration that enables the ILI9341-based LCD.
+    Of course additional settings would be necessary to enable the graphic
+    capabilities to do anything with the LCD.
 
-    1. Atmel Sample Code (ASF).  There is no example for the SAM4E-EK, but
-       there is for the SAM4S-EK.  The LCD and its processor connectivity
-       appear to be equivalent to the SAM4E-EK so this sample code should be
-       a good place to begin.  NOTE that the clock frequencies may be
-       different and pin usage may be different.  So it may be necessary to
-       adjust the SAM configuration to use this example.
+       System Type -> AT91SAM3/4 Configuration Options
+         CONFIG_SAM34_SMC=y                : SMC support
 
-    2. There is an example of an LCD driver for the SAM3U at
-       configs/sam4u-ek/src/up_lcd.c.  That LCD driver is for an LCD with a
-       different LCD controller but should provide the NuttX SAM framework
-       for an LCD driver.
+       Device Drivers -> LCD Driver Support
+         CONFIG_LCD=y                      : Enable LCD support
+         CONFIG_LCD_MAXCONTRAST=1          : Value should not matter
+         CONFIG_LCD_MAXPOWER=64            : Must be > 16
+         CONFIG_LCD_LANDSCAPE=y            : Landscape orientation
 
-    3. There are other LCD drivers for different MCUs that do support the
-       ILI9325 LCD.  Look at configs/shenzhou/src/up_ili93xx.c,
-       configs/stm3220g-eval/src/up_lcd.c, and
-       configs/stm3240g-eval/src/up_lcd.c.  I believe that the Shenzhou
-       driver is the most recent.
+       Board Selection
+         CONFIG_SAM4EEK_LCD_ILI9341=y      : For the ILI9341-based LCD
+         CONFIG_SAM4EEK_LCD_RGB565=y       : Color resolution
+         CONFIG_SAM4EEK_LCD_BGCOLOR=0x00   : Initial background color
 
   STATUS:
-    2014-05-14:  Fully implemented.  There is still a bug in in the LCD
-    communications.  The LCD ID is read as 0x0000 instead of 0x9325.
 
-    The LCD backlight appears to be functional.
+    2014-8-20:  Updated.  The ILI9341 LCD has some basic functionality.
+    Certainly it can transfer and display data fine.  But there are some
+    issues with the geometry of data that appears on the LCD..
+
+    The LCD backlight is functional.
 
 SAM4E-EK-specific Configuration Options
 =======================================
@@ -1134,10 +1189,10 @@ SAM4E-EK-specific Configuration Options
     CONFIG_SAM34_GPIOP_IRQ
     CONFIG_SAM34_GPIOQ_IRQ
 
-    CONFIG_USART0_ISUART
-    CONFIG_USART1_ISUART
-    CONFIG_USART2_ISUART
-    CONFIG_USART3_ISUART
+    CONFIG_USART0_SERIALDRIVER
+    CONFIG_USART1_SERIALDRIVER
+    CONFIG_USART2_SERIALDRIVER
+    CONFIG_USART3_SERIALDRIVER
 
   SAM3U specific device driver settings
 
@@ -1155,9 +1210,14 @@ SAM4E-EK-specific Configuration Options
   LCD Options.  Other than the standard LCD configuration options
   (see configs/README.txt), the SAM4E-EK driver also supports:
 
-    CONFIG_LCD_PORTRAIT - Present the display in the standard 240x320
-       "Portrait" orientation.  Default:  The display is rotated to
-       support a 320x240 "Landscape" orientation.
+    CONFIG_LCD_LANDSCAPE - Define for 320x240 display "landscape"
+      support. Default is this 320x240 "landscape" orientation
+    CONFIG_LCD_RLANDSCAPE - Define for 320x240 display "reverse
+      landscape" support.
+    CONFIG_LCD_PORTRAIT - Define for 240x320 display "portrait"
+      orientation support.
+    CONFIG_LCD_RPORTRAIT - Define for 240x320 display "reverse
+      portrait" orientation support.
 
 Configurations
 ==============
@@ -1173,7 +1233,7 @@ Configurations
     . ./setenv.sh
 
   Before sourcing the setenv.sh file above, you should examine it and perform
-  edits as necessary so that BUILDROOT_BIN is the correct path to the directory
+  edits as necessary so that TOOLCHAIN_BIN is the correct path to the directory
   than holds your toolchain binaries.
 
   And then build NuttX by simply typing the following.  At the conclusion of
@@ -1190,7 +1250,7 @@ Configurations
     change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -1274,7 +1334,7 @@ Configurations
        configuration settings above in the section entitled "Networking").
 
        NOTE: In boot-up sequence is very simple in this example; all
-       initialization is done sequential (vs. in parallel) and so you will
+       initialization is done sequentially (vs. in parallel) and so you will
        not see the NSH prompt until all initialization is complete.  The
        network bring-up in particular will add some delay before the NSH
        prompt appears.  In a real application, you would probably want to
@@ -1283,7 +1343,9 @@ Configurations
 
        This delay will be especially long if the board is not connected to
        a network because additional time will be required to fail with
-       timeout errors.
+       timeout errors.  This delay can be eliminated, however, if you enable
+       an NSH initialization option as described above in a paragraph
+       entitled, "Network Initialization Thread."
 
        STATUS:
        2014-3-13: The basic NSH serial console is working.  Network support
@@ -1331,18 +1393,11 @@ Configurations
                   does not mount on either the Linux or Windows host.  This
                   needs to be retested.
 
-    8. This configuration can be used to verify the touchscreen on on the
-       SAM4E-EK LCD.  See the instructions above in the paragraph entitled
-       "Touchscreen".
-
-       STATUS:
-         2014-3-21:  The touchscreen has not yet been tested.
-
-    9. Enabling HSMCI support. The SAM3U-KE provides a an SD memory card
+    8. Enabling HSMCI support. The SAM3U-KE provides a an SD memory card
        slot.  Support for the SD slot can be enabled following the
        instructions provided above in the paragraph entitled "HSMCI."
 
-   11. This configuration has been used for verifying the touchscreen on
+    9. This configuration has been used for verifying the touchscreen on
        on the SAM4E-EK LCD module.
 
        The NSH configuration can be used to verify the ADS7843E touchscreen on
@@ -1354,7 +1409,6 @@ Configurations
        Device Drivers
          CONFIG_SPI=y                      : Enable SPI support
          CONFIG_SPI_EXCHANGE=y             : The exchange() method is supported
-         CONFIG_SPI_OWNBUS=y               : Smaller code if this is the only SPI device
 
          CONFIG_INPUT=y                    : Enable support for input devices
          CONFIG_INPUT_ADS7843E=y           : Enable support for the ADS7843E
@@ -1385,11 +1439,11 @@ Configurations
        debug output on UART0 can be enabled with:
 
        Build Setup:
-         CONFIG_DEBUG=y                    : Enable debug features
-         CONFIG_DEBUG_VERBOSE=y            : Enable verbose debug output
+         CONFIG_DEBUG_FEATURES=y           : Enable debug features
+         CONFIG_DEBUG_INFO=y               : Enable verbose debug output
          CONFIG_DEBUG_INPUT=y              : Enable debug output from input devices
 
-   11. This configuration can be re-configured to test the on-board LCD
+   10. This configuration can be re-configured to test the on-board LCD
        module.
 
        System Type -> AT91SAM3/4 Configuration Options
@@ -1402,6 +1456,7 @@ Configurations
          CONFIG_LCD_LANDSCAPE=y            : Landscape orientation
 
        Board Selection
+         CONFIG_SAM4EEK_LCD_ILI9341=y      : For the ILI9341-based LCD
          CONFIG_SAM4EEK_LCD_RGB565=y       : Color resolution
          CONFIG_SAM4EEK_LCD_BGCOLOR=0x00   : Initial background color
 
@@ -1419,8 +1474,8 @@ Configurations
 
        Graphics Support -> Font Selections
          CONFIG_NXFONTS_CHARBITS=7
-         CONFIG_NXFONT_SANS22X29B=y
          CONFIG_NXFONT_SANS23X27=y
+         CONFIG_NXFONT_SANS22X29B=y
 
        Application Configuration -> Examples
          CONFIG_EXAMPLES_NXLINES=y
@@ -1446,9 +1501,9 @@ Configurations
 
          2014-05-14: The touchscreen interface was successfully verified.
 
-         2014-05-14: The LCD interface is fully implemented.  However,
-                     there is still a bug in in the LCD communications.  The
-                     LCD ID is read as 0x0000 instead of 0x9325.
+         2014-08-20: The LCD interface is fully implemented and data appears
+                     to be transferred okay.  However, there are errors in
+                     geometry that leave the LCD unusable still.
 
                      The LCD backlight appears to be functional.
 
@@ -1499,7 +1554,6 @@ Configurations
        the system logging device:
 
            File Systems -> Advanced SYSLOG Features
-             CONFIG_SYSLOG=y               : Enable output to syslog, not console
              CONFIG_SYSLOG_CHAR=y          : Use a character device for system logging
              CONFIG_SYSLOG_DEVPATH="/dev/ttyS0" : UART0 will be /dev/ttyS0
 
@@ -1532,3 +1586,81 @@ Configurations
         CONFIG_CDCACM_CONSOLE=n            : The CDC/ACM serial device is NOT the console
         CONFIG_PL2303=y                    : The Prolifics PL2303 emulation is enabled
         CONFIG_PL2303_CONSOLE=y            : The PL2303 serial device is the console
+
+  nxwm:
+
+    This is a special configuration setup for the NxWM window manager
+    UnitTest.  It integrates support for both the SAM4E-EK ILI9341 LCDC and
+    the SAM4E-EK ADS7843E touchscreen controller and provides a more
+    advanced graphics demo. It provides an interactive windowing experience.
+
+    The NxWM window manager is a tiny window manager tailored for use
+    with smaller LCDs.  It supports a task, a start window, and
+    multiple application windows with toolbars.  However, to make the best
+    use of the visible LCD space, only one application window is visible at
+    at time.
+
+    The NxWM window manager can be found here:
+
+      nuttx-git/NxWidgets/nxwm
+
+    The NxWM unit test can be found at:
+
+      nuttx-git/NxWidgets/UnitTests/nxwm
+
+    Documentation for installing the NxWM unit test can be found here:
+
+      nuttx-git/NxWidgets/UnitTests/README.txt
+
+    Here is the quick summary of the build steps.  These steps assume that
+    you have the entire NuttX GIT in some directory ~/nuttx-git.  You may
+    have these components installed elsewhere.  In that case, you will need
+    to adjust all of the paths in the following accordingly:
+
+    1. Install the nxwm configuration
+
+       $ cd ~/nuttx-git/nuttx/tools
+       $ ./configure.sh sam4e-ek/nxwm
+
+    2. Make the build context (only)
+
+       $ cd ..
+       $ . ./setenv.sh
+       $ make context
+       ...
+
+       NOTE: the use of the setenv.sh file is optional.  All that it will
+       do is to adjust your PATH variable so that the build system can find
+       your tools.  If you use it, you will most likely need to modify the
+       script so that it has the correct path to your tool binaries
+       directory.
+
+    3. Install the nxwm unit test
+
+       $ cd ~/nuttx-git/NxWidgets
+       $ tools/install.sh ~/nuttx-git/apps nxwm
+       Creating symbolic link
+        - To ~/nuttx-git/NxWidgets/UnitTests/nxwm
+        - At ~/nuttx-git/apps/external
+
+    4. Build the NxWidgets library
+
+       $ cd ~/nuttx-git/NxWidgets/libnxwidgets
+       $ make TOPDIR=~/nuttx-git/nuttx
+       ...
+
+    5. Build the NxWM library
+
+       $ cd ~/nuttx-git/NxWidgets/nxwm
+       $ make TOPDIR=~/nuttx-git/nuttx
+       ...
+
+    6. Built NuttX with the installed unit test as the application
+
+       $ cd ~/nuttx-git/nuttx
+       $ make
+
+    STATUS:
+    2014-08-20. I have seen the demo work well but it is not thoroughly
+                exercised.  I suspect some touchscreen issues.
+    2014-10-11. Today's build crashes in nxwm_main on startup.

@@ -39,7 +39,7 @@
 
 #include <nuttx/config.h>
 
-#if defined(CONFIG_DEBUG) && defined(CONFIG_IOB_DEBUG)
+#if defined(CONFIG_DEBUG_FEATURES) && defined(CONFIG_IOB_DEBUG)
 /* Force debug output (from this file only) */
 
 #  undef  CONFIG_DEBUG_NET
@@ -65,11 +65,11 @@
 #endif
 
 /****************************************************************************
- * Public Functions
+ * Private Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: iob_add_queue
+ * Name: iob_add_queue_internal
  *
  * Description:
  *   Add one I/O buffer chain to the end of a queue.  May fail due to lack
@@ -77,19 +77,10 @@
  *
  ****************************************************************************/
 
-int iob_add_queue(FAR struct iob_s *iob, FAR struct iob_queue_s *iobq)
+static int iob_add_queue_internal(FAR struct iob_s *iob,
+                                  FAR struct iob_queue_s *iobq,
+                                  FAR struct iob_qentry_s *qentry)
 {
-  FAR struct iob_qentry_s *qentry;
-
-  /* Allocate a container to hold the I/O buffer chain */
-
-  qentry = iob_alloc_qentry();
-  if (!qentry)
-    {
-      ndbg("ERROR: Failed to allocate a container\n");
-      return -ENOMEM;
-    }
-
   /* Add the I/O buffer chain to the container */
 
   qentry->qe_head = iob;
@@ -112,4 +103,57 @@ int iob_add_queue(FAR struct iob_s *iob, FAR struct iob_queue_s *iobq)
   return 0;
 }
 
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: iob_add_queue
+ *
+ * Description:
+ *   Add one I/O buffer chain to the end of a queue.  May fail due to lack
+ *   of resources.
+ *
+ ****************************************************************************/
+
+int iob_add_queue(FAR struct iob_s *iob, FAR struct iob_queue_s *iobq)
+{
+  FAR struct iob_qentry_s *qentry;
+
+  /* Allocate a container to hold the I/O buffer chain */
+
+  qentry = iob_alloc_qentry();
+  if (!qentry)
+    {
+      nerr("ERROR: Failed to allocate a container\n");
+      return -ENOMEM;
+    }
+
+  return iob_add_queue_internal(iob, iobq, qentry);
+}
+
+/****************************************************************************
+ * Name: iob_tryadd_queue
+ *
+ * Description:
+ *   Add one I/O buffer chain to the end of a queue without waiting for
+ *   resources to become free.
+ *
+ ****************************************************************************/
+
+int iob_tryadd_queue(FAR struct iob_s *iob, FAR struct iob_queue_s *iobq)
+{
+  FAR struct iob_qentry_s *qentry;
+
+  /* Allocate a container to hold the I/O buffer chain */
+
+  qentry = iob_tryalloc_qentry();
+  if (!qentry)
+    {
+      nerr("ERROR: Failed to allocate a container\n");
+      return -ENOMEM;
+    }
+
+  return iob_add_queue_internal(iob, iobq, qentry);
+}
 #endif /* CONFIG_IOB_NCHAINS > 0 */

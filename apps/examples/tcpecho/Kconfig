@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 config EXAMPLES_TCPECHO
@@ -31,7 +31,7 @@ config EXAMPLES_TCPECHO_DHCPC
 	default n
 	depends on EXAMPLES_TCPECHO && !NSH_BUILTIN_APPS
 	select NETUTILS_DHCPC
-	select NETUTILS_DNSCLIENT
+	select NETDB_DNSCLIENT
 
 config EXAMPLES_TCPECHO_NOMAC
 	bool "Use Canned MAC Address"

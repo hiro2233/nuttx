@@ -1,7 +1,7 @@
 /****************************************************************************
- * arch/mips/src/kl/kl_serial.c
+ * arch/arm/src/kl/kl_serial.c
  *
- *   Copyright (C) 2013-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,19 +56,17 @@
 
 #include "up_arch.h"
 #include "up_internal.h"
-#include "os_internal.h"
 
 #include "kl_config.h"
 #include "kl_lowputc.h"
-#include "kl_lowgetc.h"
 #include "chip.h"
 #include "kl_gpio.h"
 #include "chip/kl_uart.h"
 
-
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
 /* Some sanity checks *******************************************************/
 /* Is there at least one UART enabled and configured as a RS-232 device? */
 
@@ -183,7 +181,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable);
 static bool up_txready(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -343,12 +341,12 @@ static void up_setuartint(struct up_dev_s *priv)
 
   /* Re-enable/re-disable interrupts corresponding to the state of bits in ie */
 
-  flags    = irqsave();
+  flags    = enter_critical_section();
   regval   = up_serialin(priv, KL_UART_C2_OFFSET);
   regval  &= ~UART_C2_ALLINTS;
   regval  |= priv->ie;
   up_serialout(priv, KL_UART_C2_OFFSET, regval);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -361,10 +359,10 @@ static void up_restoreuartint(struct up_dev_s *priv, uint8_t ie)
 
   /* Re-enable/re-disable interrupts corresponding to the state of bits in ie */
 
-  flags    = irqsave();
+  flags    = enter_critical_section();
   priv->ie = ie & UART_C2_ALLINTS;
   up_setuartint(priv);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -375,14 +373,14 @@ static void up_disableuartint(struct up_dev_s *priv, uint8_t *ie)
 {
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (ie)
-   {
-     *ie = priv->ie;
-   }
+    {
+      *ie = priv->ie;
+    }
 
   up_restoreuartint(priv, 0);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -397,7 +395,7 @@ static void up_disableuartint(struct up_dev_s *priv, uint8_t *ie)
 static int up_setup(struct uart_dev_s *dev)
 {
 #ifndef CONFIG_SUPPRESS_UART_CONFIG
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Configure the UART as an RS-232 UART */
 
@@ -422,7 +420,7 @@ static int up_setup(struct uart_dev_s *dev)
 
 static void up_shutdown(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Disable interrupts */
 
@@ -450,7 +448,7 @@ static void up_shutdown(struct uart_dev_s *dev)
 
 static int up_attach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   int ret;
 
   /* Attach and enable the IRQ(s).  The interrupts are (probably) still
@@ -478,7 +476,7 @@ static int up_attach(struct uart_dev_s *dev)
 
 static void up_detach(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Disable interrupts */
 
@@ -498,7 +496,7 @@ static void up_detach(struct uart_dev_s *dev)
  *   interrupt received on the 'irq'  It should call uart_transmitchars or
  *   uart_receivechar to perform the appropriate data transfers.  The
  *   interrupt handling logic must be able to map the 'irq' number into the
- *   approprite uart_dev_s structure in order to call these functions.
+ *   appropriate uart_dev_s structure in order to call these functions.
  *
  ****************************************************************************/
 
@@ -534,7 +532,7 @@ static int up_interrupts(int irq, void *context)
     {
       PANIC();
     }
-  priv = (struct up_dev_s*)dev->priv;
+  priv = (struct up_dev_s *)dev->priv;
   DEBUGASSERT(priv);
 
   /* Loop until there are no characters to be transferred or,
@@ -596,10 +594,10 @@ static int up_interrupts(int irq, void *context)
        * OR: Receiver Overrun Flag.  To clear OR, write a logic 1 to the OR flag.
        */
 
-       if ((s1 & UART_S1_ERRORS) != 0)
-         {
-           up_serialout(priv, KL_UART_S1_OFFSET, (s1 & UART_S1_ERRORS));
-         }
+      if ((s1 & UART_S1_ERRORS) != 0)
+        {
+          up_serialout(priv, KL_UART_S1_OFFSET, (s1 & UART_S1_ERRORS));
+        }
     }
 
   return OK;
@@ -625,8 +623,8 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
   inode = filep->f_inode;
   dev   = inode->i_private;
 
-  DEBUGASSERT(dev, dev->priv)
-  priv = (struct up_dev_s*)dev->priv;
+  DEBUGASSERT(dev, dev->priv);
+  priv = (struct up_dev_s *)dev->priv;
 
   switch (cmd)
     {
@@ -656,7 +654,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
 static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint8_t s1;
 
   /* Get error status information:
@@ -695,14 +693,14 @@ static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 
 static void up_rxint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable)
     {
-      /* Receive an interrupt when their is anything in the Rx data register (or an Rx
-       * timeout occurs).
+      /* Receive an interrupt when their is anything in the Rx data register
+       * (or an Rx timeout occurs).
        */
 
 #ifndef CONFIG_SUPPRESS_SERIAL_INTS
@@ -716,7 +714,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
       up_setuartint(priv);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -729,7 +727,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
 
 static bool up_rxavailable(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Return true if the receive data register is full (RDRF).  NOTE:  If
    * FIFOS are enabled, this does not mean that the FIFO is full,
@@ -751,7 +749,7 @@ static bool up_rxavailable(struct uart_dev_s *dev)
 
 static void up_send(struct uart_dev_s *dev, int ch)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   up_serialout(priv, KL_UART_D_OFFSET, (uint8_t)ch);
 }
 
@@ -765,10 +763,10 @@ static void up_send(struct uart_dev_s *dev, int ch)
 
 static void up_txint(struct uart_dev_s *dev, bool enable)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable)
     {
       /* Enable the TX interrupt */
@@ -792,7 +790,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
       up_setuartint(priv);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -805,7 +803,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
 
 static bool up_txready(struct uart_dev_s *dev)
 {
-  struct up_dev_s *priv = (struct up_dev_s*)dev->priv;
+  struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
 
   /* Return true if the transmit data register is "empty."  NOTE:  If
    * FIFOS are enabled, this does not mean that the FIFO is empty,
@@ -828,8 +826,8 @@ static bool up_txready(struct uart_dev_s *dev)
  *   Performs the low level UART initialization early in debug so that the
  *   serial console will be available during bootup.  This must be called
  *   before up_serialinit.  NOTE:  This function depends on GPIO pin
- *   configuration performed in up_consoleinit() and main clock iniialization
- *   performed in up_clkinitialize().
+ *   configuration performed in up_consoleinit() and main clock
+ *   initialization performed in up_clkinitialize().
  *
  ****************************************************************************/
 
@@ -868,8 +866,8 @@ void up_earlyserialinit(void)
  * Name: up_serialinit
  *
  * Description:
- *   Register serial console and serial ports.  This assumes
- *   that up_earlyserialinit was called previously.
+ *   Register serial console and serial ports.  This assumes that
+ *   up_earlyserialinit was called previously.
  *
  ****************************************************************************/
 
@@ -912,7 +910,7 @@ void up_serialinit(void)
 int up_putc(int ch)
 {
 #ifdef HAVE_SERIAL_CONSOLE
-  struct up_dev_s *priv = (struct up_dev_s*)CONSOLE_DEV.priv;
+  struct up_dev_s *priv = (struct up_dev_s *)CONSOLE_DEV.priv;
   uint8_t ie;
 
   up_disableuartint(priv, &ie);
@@ -959,19 +957,4 @@ int up_putc(int ch)
   return ch;
 }
 
-/****************************************************************************
- * Name: up_getc
- *
- * Description:
- *   Provide priority, low-level access to support OS debug writes
- *
- ****************************************************************************/
-
-int up_getc(void)
-{
-  /* Check for LF */
-
-  return kl_lowgetc();
-}
 #endif /* USE_SERIALDRIVER */
-

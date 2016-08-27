@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/nxhello/nxhello_main.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
 #include <nuttx/config.h>
 
 #include <sys/types.h>
+#include <sys/boardctl.h>
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -52,13 +53,18 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/arch.h>
+#include <nuttx/board.h>
+
 #ifdef CONFIG_NX_LCDDRIVER
 #  include <nuttx/lcd/lcd.h>
 #else
 #  include <nuttx/video/fb.h>
+#  ifdef CONFIG_VNCSERVER
+#    include <nuttx/video/vnc.h>
+#  endif
 #endif
 
-#include <nuttx/arch.h>
 #include <nuttx/nx/nx.h>
 #include <nuttx/nx/nxglib.h>
 #include <nuttx/nx/nxfonts.h>
@@ -121,40 +127,48 @@ struct nxhello_data_s g_nxhello =
 static inline int nxhello_initialize(void)
 {
   FAR NX_DRIVERTYPE *dev;
+  int ret;
 
 #if defined(CONFIG_EXAMPLES_NXHELLO_EXTERNINIT)
+  struct boardioc_graphics_s devinfo;
+
   /* Use external graphics driver initialization */
 
-  message("nxhello_initialize: Initializing external graphics device\n");
-  dev = up_nxdrvinit(CONFIG_EXAMPLES_NXHELLO_DEVNO);
-  if (!dev)
+  printf("nxhello_initialize: Initializing external graphics device\n");
+
+  devinfo.devno = CONFIG_EXAMPLES_NXHELLO_DEVNO;
+  devinfo.dev = NULL;
+
+  ret = boardctl(BOARDIOC_GRAPHICS_SETUP, (uintptr_t)&devinfo);
+  if (ret < 0)
     {
-      message("nxhello_initialize: up_nxdrvinit failed, devno=%d\n",
-              CONFIG_EXAMPLES_NXHELLO_DEVNO);
+      printf("nxhello_initialize: boardctl failed, devno=%d: %d\n",
+             CONFIG_EXAMPLES_NXHELLO_DEVNO, errno);
       g_nxhello.code = NXEXIT_EXTINITIALIZE;
       return ERROR;
     }
 
-#elif defined(CONFIG_NX_LCDDRIVER)
-  int ret;
+  dev = devinfo.dev;
 
+#elif defined(CONFIG_NX_LCDDRIVER)
   /* Initialize the LCD device */
 
-  message("nxhello_initialize: Initializing LCD\n");
-  ret = up_lcdinitialize();
+  printf("nxhello_initialize: Initializing LCD\n");
+  ret = board_lcd_initialize();
   if (ret < 0)
     {
-      message("nxhello_initialize: up_lcdinitialize failed: %d\n", -ret);
+      printf("nxhello_initialize: board_lcd_initialize failed: %d\n", -ret);
       g_nxhello.code = NXEXIT_LCDINITIALIZE;
       return ERROR;
     }
 
   /* Get the device instance */
 
-  dev = up_lcdgetdev(CONFIG_EXAMPLES_NXHELLO_DEVNO);
+  dev = board_lcd_getdev(CONFIG_EXAMPLES_NXHELLO_DEVNO);
   if (!dev)
     {
-      message("nxhello_initialize: up_lcdgetdev failed, devno=%d\n", CONFIG_EXAMPLES_NXHELLO_DEVNO);
+      printf("nxhello_initialize: board_lcd_getdev failed, devno=%d\n",
+             CONFIG_EXAMPLES_NXHELLO_DEVNO);
       g_nxhello.code = NXEXIT_LCDGETDEV;
       return ERROR;
     }
@@ -162,24 +176,27 @@ static inline int nxhello_initialize(void)
   /* Turn the LCD on at 75% power */
 
   (void)dev->setpower(dev, ((3*CONFIG_LCD_MAXPOWER + 3)/4));
-#else
-  int ret;
 
+#else
   /* Initialize the frame buffer device */
 
-  message("nxhello_initialize: Initializing framebuffer\n");
-  ret = up_fbinitialize();
+  printf("nxhello_initialize: Initializing framebuffer\n");
+
+  ret = up_fbinitialize(0);
   if (ret < 0)
     {
-      message("nxhello_initialize: up_fbinitialize failed: %d\n", -ret);
+      printf("nxhello_initialize: up_fbinitialize failed: %d\n", -ret);
+
       g_nxhello.code = NXEXIT_FBINITIALIZE;
       return ERROR;
     }
 
-  dev = up_fbgetvplane(CONFIG_EXAMPLES_NXHELLO_VPLANE);
+  dev = up_fbgetvplane(0, CONFIG_EXAMPLES_NXHELLO_VPLANE);
   if (!dev)
     {
-      message("nxhello_initialize: up_fbgetvplane failed, vplane=%d\n", CONFIG_EXAMPLES_NXHELLO_VPLANE);
+      printf("nxhello_initialize: up_fbgetvplane failed, vplane=%d\n",
+             CONFIG_EXAMPLES_NXHELLO_VPLANE);
+
       g_nxhello.code = NXEXIT_FBGETVPLANE;
       return ERROR;
     }
@@ -187,14 +204,29 @@ static inline int nxhello_initialize(void)
 
   /* Then open NX */
 
-  message("nxhello_initialize: Open NX\n");
+  printf("nxhello_initialize: Open NX\n");
   g_nxhello.hnx = nx_open(dev);
   if (!g_nxhello.hnx)
     {
-      message("nxhello_initialize: nx_open failed: %d\n", errno);
+      printf("nxhello_initialize: nx_open failed: %d\n", errno);
       g_nxhello.code = NXEXIT_NXOPEN;
       return ERROR;
     }
+
+#ifdef CONFIG_VNCSERVER
+  /* Setup the VNC server to support keyboard/mouse inputs */
+
+  ret = vnc_default_fbinitialize(0, g_nxhello.hnx);
+  if (ret < 0)
+    {
+      printf("vnc_default_fbinitialize failed: %d\n", ret);
+
+      nx_close(g_nxhello.hnx);
+      g_nxhello.code = NXEXIT_FBINITIALIZE;
+      return ERROR;
+    }
+#endif
+
   return OK;
 }
 
@@ -206,7 +238,11 @@ static inline int nxhello_initialize(void)
  * Name: nxhello_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int nxhello_main(int argc, char *argv[])
+#endif
 {
   nxgl_mxpixel_t color;
   int ret;
@@ -214,10 +250,10 @@ int nxhello_main(int argc, char *argv[])
   /* Initialize NX */
 
   ret = nxhello_initialize();
-  message("nxhello_main: NX handle=%p\n", g_nxhello.hnx);
+  printf("nxhello_main: NX handle=%p\n", g_nxhello.hnx);
   if (!g_nxhello.hnx || ret < 0)
     {
-      message("nxhello_main: Failed to get NX handle: %d\n", errno);
+      printf("nxhello_main: Failed to get NX handle: %d\n", errno);
       g_nxhello.code = NXEXIT_NXOPEN;
       goto errout;
     }
@@ -227,21 +263,21 @@ int nxhello_main(int argc, char *argv[])
   g_nxhello.hfont = nxf_getfonthandle(CONFIG_EXAMPLES_NXHELLO_FONTID);
   if (!g_nxhello.hfont)
     {
-      message("nxhello_main: Failed to get font handle: %d\n", errno);
+      printf("nxhello_main: Failed to get font handle: %d\n", errno);
       g_nxhello.code = NXEXIT_FONTOPEN;
       goto errout;
     }
 
   /* Set the background to the configured background color */
 
-  message("nxhello_main: Set background color=%d\n",
-          CONFIG_EXAMPLES_NXHELLO_BGCOLOR);
+  printf("nxhello_main: Set background color=%d\n",
+         CONFIG_EXAMPLES_NXHELLO_BGCOLOR);
 
   color = CONFIG_EXAMPLES_NXHELLO_BGCOLOR;
   ret = nx_setbgcolor(g_nxhello.hnx, &color);
   if (ret < 0)
     {
-      message("nxhello_main: nx_setbgcolor failed: %d\n", errno);
+      printf("nxhello_main: nx_setbgcolor failed: %d\n", errno);
       g_nxhello.code = NXEXIT_NXSETBGCOLOR;
       goto errout_with_nx;
     }
@@ -251,7 +287,7 @@ int nxhello_main(int argc, char *argv[])
   ret = nx_requestbkgd(g_nxhello.hnx, &g_nxhellocb, NULL);
   if (ret < 0)
     {
-      message("nxhello_main: nx_setbgcolor failed: %d\n", errno);
+      printf("nxhello_main: nx_setbgcolor failed: %d\n", errno);
       g_nxhello.code = NXEXIT_NXREQUESTBKGD;
       goto errout_with_nx;
     }
@@ -264,7 +300,7 @@ int nxhello_main(int argc, char *argv[])
     {
       (void)sem_wait(&g_nxhello.sem);
     }
-  message("nxhello_main: Screen resolution (%d,%d)\n", g_nxhello.xres, g_nxhello.yres);
+  printf("nxhello_main: Screen resolution (%d,%d)\n", g_nxhello.xres, g_nxhello.yres);
 
   /* Now, say hello and exit, sleeping a little before each. */
 
@@ -279,7 +315,7 @@ int nxhello_main(int argc, char *argv[])
   /* Close NX */
 
 errout_with_nx:
-  message("nxhello_main: Close NX\n");
+  printf("nxhello_main: Close NX\n");
   nx_close(g_nxhello.hnx);
 errout:
   return g_nxhello.code;

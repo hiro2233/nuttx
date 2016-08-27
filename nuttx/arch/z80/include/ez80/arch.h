@@ -1,6 +1,5 @@
 /****************************************************************************
- * arch/ez80/arch.h
- * arch/chip/arch.h
+ * arch/z80/include/ez80/arch.h
  *
  *   Copyright (C) 2008 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -38,15 +37,15 @@
  * only indirectly through nuttx/arch.h (via arch/arch.h)
  */
 
-#ifndef __ARCH_EZ80_ARCH_H
-#define __ARCH_EZ80_ARCH_H
+#ifndef __ARCH_Z80_INCLUDE_EZ80_ARCH_H
+#define __ARCH_Z80_INCLUDE_EZ80_ARCH_H
 
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -54,7 +53,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -63,7 +62,8 @@
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -73,5 +73,5 @@ extern "C" {
 }
 #endif
 
-#endif /* __ARCH_EZ80_ARCH_H */
+#endif /* __ARCH_Z80_INCLUDE_EZ80_ARCH_H */
 

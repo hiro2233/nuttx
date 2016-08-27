@@ -42,7 +42,7 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <nuttx/can.h>
+#include <nuttx/drivers/can.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -73,31 +73,12 @@
 #  define CAN_PORT 2
 #endif
 
-/* Debug ***************************************************************************/
-/* Non-standard debug that may be enabled just for testing CAN */
-
-#ifdef CONFIG_DEBUG_CAN
-#  define candbg    dbg
-#  define canvdbg   vdbg
-#  define canlldbg  lldbg
-#  define canllvdbg llvdbg
-#else
-#  define candbg(x...)
-#  define canvdbg(x...)
-#  define canlldbg(x...)
-#  define canllvdbg(x...)
-#endif
-
-/************************************************************************************
- * Private Functions
- ************************************************************************************/
-
 /************************************************************************************
  * Public Functions
  ************************************************************************************/
 
 /************************************************************************************
- * Name: can_devinit
+ * Name: board_can_initialize
  *
  * Description:
  *   All LPC17 architectures must provide the following interface to work with
@@ -105,7 +86,7 @@
  *
  ************************************************************************************/
 
-int can_devinit(void)
+int board_can_initialize(void)
 {
   static bool initialized = false;
   struct can_dev_s *can;
@@ -120,7 +101,7 @@ int can_devinit(void)
       can = lpc17_caninitialize(CAN_PORT);
       if (can == NULL)
         {
-          candbg("ERROR:  Failed to get CAN interface\n");
+          canerr("ERROR:  Failed to get CAN interface\n");
           return -ENODEV;
         }
 
@@ -129,7 +110,7 @@ int can_devinit(void)
       ret = can_register("/dev/can0", can);
       if (ret < 0)
         {
-          candbg("ERROR: can_register failed: %d\n", ret);
+          canerr("ERROR: can_register failed: %d\n", ret);
           return ret;
         }
 

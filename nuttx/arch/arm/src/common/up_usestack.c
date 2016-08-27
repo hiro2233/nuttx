@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/common/up_usestack.c
  *
- *   Copyright (C) 2007-2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,11 +41,14 @@
 
 #include <sys/types.h>
 #include <stdint.h>
+#include <string.h>
 #include <sched.h>
+#include <assert.h>
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
 #include <nuttx/arch.h>
+#include <nuttx/tls.h>
 
 #include "up_internal.h"
 
@@ -77,15 +80,7 @@
 #define STACK_ALIGN_UP(a)   (((a) + STACK_ALIGN_MASK) & ~STACK_ALIGN_MASK)
 
 /****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -120,6 +115,12 @@ int up_use_stack(struct tcb_s *tcb, void *stack, size_t stack_size)
 {
   size_t top_of_stack;
   size_t size_of_stack;
+
+#ifdef CONFIG_TLS
+  /* Make certain that the user provided stack is properly aligned */
+
+  DEBUGASSERT(((uintptr_t)stack & TLS_STACK_MASK) == 0);
+#endif
 
   /* Is there already a stack allocated? */
 
@@ -159,8 +160,28 @@ int up_use_stack(struct tcb_s *tcb, void *stack, size_t stack_size)
 
   /* Save the adjusted stack values in the struct tcb_s */
 
-  tcb->adj_stack_ptr  = (uint32_t*)top_of_stack;
+  tcb->adj_stack_ptr  = (uint32_t *)top_of_stack;
   tcb->adj_stack_size = size_of_stack;
+
+#ifdef CONFIG_TLS
+  /* Initialize the TLS data structure */
+
+  memset(tcb->stack_alloc_ptr, 0, sizeof(struct tls_info_s));
+#endif
+
+#ifdef CONFIG_STACK_COLORATION
+  /* If stack debug is enabled, then fill the stack with a recognizable
+   * value that we can use later to test for high water marks.
+   */
+
+#ifdef CONFIG_TLS
+  up_stack_color(
+      (FAR void *)((uintptr_t)tcb->stack_alloc_ptr + sizeof(struct tls_info_s)),
+      tcb->adj_stack_size - sizeof(struct tls_info_s));
+#else
+  up_stack_color(tcb->stack_alloc_ptr, tcb->adj_stack_size);
+#endif
+#endif
 
   return OK;
 }

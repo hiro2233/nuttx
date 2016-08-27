@@ -1,7 +1,7 @@
 /************************************************************************************
  * arm/arm/src/lpc31xx/lpc31_spi.c
  *
- *   Copyright (C) 2009-2010, 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2010, 2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: David Hewson, deriving in part from other SPI drivers originally by
  *           Gregory Nutt <gnutt@nuttx.org>
  *
@@ -56,17 +56,17 @@
 #include "lpc31_ioconfig.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Configuration ********************************************************************/
 
 /* Debug ****************************************************************************/
 /* CONFIG_LPC31_SPI_REGDEBUG enabled very low, register-level debug output.
- * CONFIG_DEBUG must also be defined
+ * CONFIG_DEBUG_FEATURES must also be defined
  */
 
-#ifndef CONFIG_DEBUG
+#ifndef CONFIG_DEBUG_SPI_INFO
 #  undef CONFIG_LPC31_SPI_REGDEBUG
 #endif
 
@@ -142,6 +142,9 @@ static const struct spi_ops_s g_spiops =
   .setfrequency      = spi_setfrequency,
   .setmode           = spi_setmode,
   .setbits           = spi_setbits,
+#ifdef CONFIG_SPI_HWFEATURES
+  .hwfeatures        = 0,           /* Not supported */
+#endif
   .status            = spi_status,
 #ifdef CONFIG_SPI_CMDDATA
   .cmddata           = lpc31_spicmddata,
@@ -153,7 +156,7 @@ static const struct spi_ops_s g_spiops =
   .sndblock          = spi_sndblock,
   .recvblock         = spi_recvblock,
 #endif
-  .registercallback  = 0,
+  .registercallback  = 0,           /* Not supported */
 };
 
 static struct lpc31_spidev_s g_spidev =
@@ -204,7 +207,7 @@ static bool spi_checkreg(bool wr, uint32_t value, uint32_t address)
     {
       if (g_ntimes > 0)
         {
-          lldbg("...[Repeats %d times]...\n", g_ntimes);
+          spiinfo("...[Repeats %d times]...\n", g_ntimes);
         }
 
       g_wrlast      = wr;
@@ -236,7 +239,7 @@ static void spi_putreg(uint32_t value, uint32_t address)
 {
   if (spi_checkreg(true, value, address))
     {
-      lldbg("%08x<-%08x\n", address, value);
+      spiinfo("%08x<-%08x\n", address, value);
     }
   putreg32(value, address);
 }
@@ -262,7 +265,7 @@ static uint32_t spi_getreg(uint32_t address)
   uint32_t value = getreg32(address);
   if (spi_checkreg(false, value, address))
     {
-      lldbg("%08x->%08x\n", address, value);
+      spiinfo("%08x->%08x\n", address, value);
     }
   return value;
 }
@@ -504,8 +507,7 @@ static void spi_select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool sel
       return;
     }
 
-  /*
-   * Since we don't use sequential multi-slave mode, but rather
+  /* Since we don't use sequential multi-slave mode, but rather
    * perform the transfer piecemeal by consecutive calls to
    * SPI_SEND, then we must manually assert the chip select
    * across the whole transfer
@@ -555,7 +557,7 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
   uint32_t spi_clk, div, div1, div2;
 
   if (priv->frequency != frequency)
-  {
+    {
       /* The SPI clock is derived from the (main system oscillator / 2),
        * so compute the best divider from that clock */
 
@@ -580,8 +582,8 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
       priv->slv1 = (priv->slv1 & ~(SPI_SLV_1_CLKDIV2_MASK | SPI_SLV_1_CLKDIV1_MASK)) | (div2 << SPI_SLV_1_CLKDIV2_SHIFT) | (div1 << SPI_SLV_1_CLKDIV1_SHIFT);
 
       priv->frequency = frequency;
-      priv->actual    = frequency;                // FIXME
-  }
+      priv->actual    = frequency;                /* FIXME */
+    }
 
   return priv->actual;
 }
@@ -607,7 +609,7 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
   uint16_t setbits;
   uint16_t clrbits;
 
-/* Has the mode changed? */
+  /* Has the mode changed? */
 
   if (mode != priv->mode)
     {
@@ -617,7 +619,7 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
         {
         case SPIDEV_MODE0: /* SPO=0; SPH=0 */
           setbits = 0;
-          clrbits = SPI_SLV_2_SPO|SPI_SLV_2_SPH;
+          clrbits = SPI_SLV_2_SPO | SPI_SLV_2_SPH;
           break;
 
         case SPIDEV_MODE1: /* SPO=0; SPH=1 */
@@ -631,7 +633,7 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
           break;
 
         case SPIDEV_MODE3: /* SPO=1; SPH=1 */
-          setbits = SPI_SLV_2_SPO|SPI_SLV_2_SPH;
+          setbits = SPI_SLV_2_SPO | SPI_SLV_2_SPH;
           clrbits = 0;
           break;
 
@@ -689,10 +691,10 @@ static void spi_setbits(FAR struct spi_dev_s *dev, int nbits)
 
 static uint8_t spi_status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
 {
-    /* FIXME: is there anyway to determine this
-    *         it should probably be board dependant anyway */
+  /* FIXME: is there anyway to determine this
+   *        it should probably be board dependant anyway */
 
-    return SPI_STATUS_PRESENT;
+  return SPI_STATUS_PRESENT;
 }
 
 /************************************************************************************
@@ -720,7 +722,7 @@ static uint16_t spi_send(FAR struct spi_dev_s *dev, uint16_t word)
   return spi_readword(priv);
 }
 
-/*************************************************************************
+/****************************************************************************
  * Name: spi_exchange
  *
  * Description:
@@ -755,8 +757,8 @@ static void spi_exchange(FAR struct spi_dev_s *dev, FAR const void *txbuffer,
     {
       /* 16-bit mode */
 
-      const uint16_t *src  = (const uint16_t*)txbuffer;;
-            uint16_t *dest = (uint16_t*)rxbuffer;
+      const uint16_t *src  = (const uint16_t *)txbuffer;
+            uint16_t *dest = (uint16_t *)rxbuffer;
             uint16_t  word;
 
       while (nwords > 0)
@@ -795,8 +797,8 @@ static void spi_exchange(FAR struct spi_dev_s *dev, FAR const void *txbuffer,
     {
       /* 8-bit mode */
 
-      const uint8_t *src  = (const uint8_t*)txbuffer;;
-            uint8_t *dest = (uint8_t*)rxbuffer;
+      const uint8_t *src  = (const uint8_t *)txbuffer;
+            uint8_t *dest = (uint8_t *)rxbuffer;
             uint8_t  word;
 
       while (nwords > 0)
@@ -833,7 +835,7 @@ static void spi_exchange(FAR struct spi_dev_s *dev, FAR const void *txbuffer,
     }
 }
 
-/*************************************************************************
+/****************************************************************************
  * Name: spi_sndblock
  *
  * Description:
@@ -890,7 +892,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *rxbuffer, size_t 
  ************************************************************************************/
 
 /************************************************************************************
- * Name: up_spiinitialize
+ * Name: lpc31_spibus_initialize
  *
  * Description:
  *   Initialize the selected SPI port
@@ -903,7 +905,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *rxbuffer, size_t 
  *
  ************************************************************************************/
 
-FAR struct spi_dev_s *up_spiinitialize(int port)
+FAR struct spi_dev_s *lpc31_spibus_initialize(int port)
 {
   FAR struct lpc31_spidev_s *priv = &g_spidev;
 
@@ -919,10 +921,10 @@ FAR struct spi_dev_s *up_spiinitialize(int port)
    */
 
 #ifdef CONFIG_LPC31_SPI_REGDEBUG
-  lldbg("PINS: %08x MODE0: %08x MODE1: %08x\n",
-        spi_getreg(LPC31_IOCONFIG_SPI_PINS),
-        spi_getreg(LPC31_IOCONFIG_SPI_MODE0),
-        spi_getreg(LPC31_IOCONFIG_SPI_MODE1));
+  spiinfo("PINS: %08x MODE0: %08x MODE1: %08x\n",
+          spi_getreg(LPC31_IOCONFIG_SPI_PINS),
+          spi_getreg(LPC31_IOCONFIG_SPI_MODE0),
+          spi_getreg(LPC31_IOCONFIG_SPI_MODE1));
 #endif
 
   /* Enable SPI clocks */

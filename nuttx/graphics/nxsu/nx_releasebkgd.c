@@ -46,7 +46,7 @@
 #include "nxfe.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -88,7 +88,7 @@ int nx_releasebkgd(NXWINDOW hwnd)
 {
   FAR struct nxbe_window_s *bkgd = (FAR struct nxbe_window_s *)hwnd;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!bkgd)
     {
       errno = EINVAL;

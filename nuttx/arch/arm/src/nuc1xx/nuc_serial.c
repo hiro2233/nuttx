@@ -60,7 +60,6 @@
 #include <arch/board/board.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 #include "chip.h"
@@ -113,7 +112,7 @@ static bool up_txready(struct uart_dev_s *dev);
 static bool up_txempty(struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -338,7 +337,7 @@ static uint32_t up_setier(struct nuc_dev_s *priv,
 
   /* Make sure that this is atomic */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Get the current IER setting */
 
@@ -349,7 +348,7 @@ static uint32_t up_setier(struct nuc_dev_s *priv,
   priv->ier &= ~clrbits;
   priv->ier |= setbits;
   up_serialout(priv, NUC_UART_IER_OFFSET, priv->ier);
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   /* Return the value of the IER before modification */
 
@@ -450,7 +449,7 @@ static void up_rxto_enable(struct nuc_dev_s *priv)
 static int up_setup(struct uart_dev_s *dev)
 {
 #ifndef CONFIG_SUPPRESS_UART_CONFIG
-  struct nuc_dev_s *priv = (struct nuc_dev_s*)dev->priv;
+  struct nuc_dev_s *priv = (struct nuc_dev_s *)dev->priv;
   uint32_t regval;
 
   /* Reset the TX FIFO */
@@ -543,7 +542,7 @@ static int up_setup(struct uart_dev_s *dev)
 
 static void up_shutdown(struct uart_dev_s *dev)
 {
-  struct nuc_dev_s *priv = (struct nuc_dev_s*)dev->priv;
+  struct nuc_dev_s *priv = (struct nuc_dev_s *)dev->priv;
   up_disableuartint(priv, NULL);
 }
 
@@ -564,7 +563,7 @@ static void up_shutdown(struct uart_dev_s *dev)
 
 static int up_attach(struct uart_dev_s *dev)
 {
-  struct nuc_dev_s *priv = (struct nuc_dev_s*)dev->priv;
+  struct nuc_dev_s *priv = (struct nuc_dev_s *)dev->priv;
   int ret;
 
   /* Attach and enable the IRQ */
@@ -572,11 +571,11 @@ static int up_attach(struct uart_dev_s *dev)
   ret = irq_attach(priv->irq, up_interrupt);
   if (ret == OK)
     {
-       /* Enable the interrupt (RX and TX interrupts are still disabled
-        * in the UART
-        */
+      /* Enable the interrupt (RX and TX interrupts are still disabled
+       * in the UART
+       */
 
-       up_enable_irq(priv->irq);
+      up_enable_irq(priv->irq);
     }
 
   return ret;
@@ -594,7 +593,7 @@ static int up_attach(struct uart_dev_s *dev)
 
 static void up_detach(struct uart_dev_s *dev)
 {
-  struct nuc_dev_s *priv = (struct nuc_dev_s*)dev->priv;
+  struct nuc_dev_s *priv = (struct nuc_dev_s *)dev->priv;
   up_disable_irq(priv->irq);
   irq_detach(priv->irq);
 }
@@ -645,7 +644,7 @@ static int up_interrupt(int irq, void *context)
     {
       PANIC();
     }
-  priv = (struct nuc_dev_s*)dev->priv;
+  priv = (struct nuc_dev_s *)dev->priv;
 
   /* Loop until there are no characters to be transferred or,
    * until we have been looping for a long time.
@@ -701,7 +700,7 @@ static int up_interrupt(int irq, void *context)
        * data in the RX FIFO when we entered the interrupt handler?
        */
 
-      else if ((priv->ier & (UART_IER_RTO_IEN|UART_IER_RDA_IEN)) == UART_IER_RDA_IEN && !rxfe)
+      else if ((priv->ier & (UART_IER_RTO_IEN | UART_IER_RDA_IEN)) == UART_IER_RDA_IEN && !rxfe)
         {
           /* We are receiving data and the RX timeout is not enabled.
            * Set the RX FIFO threshold so that RX interrupts will only be
@@ -731,7 +730,7 @@ static int up_interrupt(int irq, void *context)
          up_serialout(priv, NUC_UART_MCR_OFFSET, regval | UART_MSR_DCTSF);
         }
 
-      /* Check for line status or buffer errors*/
+      /* Check for line status or buffer errors */
 
       if ((isr & UART_ISR_RLS_INT) != 0 ||
           (isr & UART_ISR_BUF_ERR_INT) != 0)
@@ -740,7 +739,7 @@ static int up_interrupt(int irq, void *context)
 
           regval = up_serialin(priv, NUC_UART_FCR_OFFSET);
           up_serialout(priv, NUC_UART_FCR_OFFSET, regval | UART_FCR_RFR);
-       }
+        }
     }
 
   return OK;
@@ -758,7 +757,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 {
   struct inode      *inode = filep->f_inode;
   struct uart_dev_s *dev   = inode->i_private;
-  struct nuc_dev_s   *priv  = (struct nuc_dev_s*)dev->priv;
+  struct nuc_dev_s   *priv  = (struct nuc_dev_s *)dev->priv;
   int                ret    = OK;
 
   switch (cmd)
@@ -766,7 +765,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 #ifdef CONFIG_SERIAL_TIOCSERGSTRUCT
     case TIOCSERGSTRUCT:
       {
-        struct nuc_dev_s *user = (struct nuc_dev_s*)arg;
+        struct nuc_dev_s *user = (struct nuc_dev_s *)arg;
         if (!user)
           {
             ret = -EINVAL;
@@ -787,7 +786,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 #ifdef CONFIG_SERIAL_TERMIOS
     case TCGETS:
       {
-        struct termios *termiosp = (struct termios*)arg;
+        struct termios *termiosp = (struct termios *)arg;
 
         if (!termiosp)
           {
@@ -807,7 +806,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
     case TCSETS:
       {
-        struct termios *termiosp = (struct termios*)arg;
+        struct termios *termiosp = (struct termios *)arg;
         uint32_t           lcr;  /* Holds current values of line control register */
         uint16_t           dl;   /* Divisor latch */
 
@@ -854,7 +853,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
 static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 {
-  struct nuc_dev_s *priv = (struct nuc_dev_s*)dev->priv;
+  struct nuc_dev_s *priv = (struct nuc_dev_s *)dev->priv;
   uint32_t rbr;
 
   *status = up_serialin(priv, NUC_UART_FSR_OFFSET);
@@ -872,14 +871,14 @@ static int up_receive(struct uart_dev_s *dev, uint32_t *status)
 
 static void up_rxint(struct uart_dev_s *dev, bool enable)
 {
-  struct nuc_dev_s *priv = (struct nuc_dev_s*)dev->priv;
+  struct nuc_dev_s *priv = (struct nuc_dev_s *)dev->priv;
 
   if (enable)
     {
 #ifndef CONFIG_SUPPRESS_SERIAL_INTS
       /* Enable receive data, line status and buffer error interrupts */
 
-      irqstate_t flags = irqsave();
+      irqstate_t flags = enter_critical_section();
       (void)up_setier(priv, 0,
                       (UART_IER_RDA_IEN | UART_IER_RLS_IEN |
                        UART_IER_BUF_ERR_IEN));
@@ -905,7 +904,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
           up_rxto_enable(priv);
         }
 
-    irqrestore(flags);
+    leave_critical_section(flags);
 #endif
     }
   else
@@ -930,7 +929,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
 
 static bool up_rxavailable(struct uart_dev_s *dev)
 {
-  struct nuc_dev_s *priv = (struct nuc_dev_s*)dev->priv;
+  struct nuc_dev_s *priv = (struct nuc_dev_s *)dev->priv;
   return ((up_serialin(priv, NUC_UART_FSR_OFFSET) & UART_FSR_RX_EMPTY) == 0);
 }
 
@@ -944,7 +943,7 @@ static bool up_rxavailable(struct uart_dev_s *dev)
 
 static void up_send(struct uart_dev_s *dev, int ch)
 {
-  struct nuc_dev_s *priv = (struct nuc_dev_s*)dev->priv;
+  struct nuc_dev_s *priv = (struct nuc_dev_s *)dev->priv;
   up_serialout(priv, NUC_UART_THR_OFFSET, (uint32_t)ch);
 }
 
@@ -958,14 +957,14 @@ static void up_send(struct uart_dev_s *dev, int ch)
 
 static void up_txint(struct uart_dev_s *dev, bool enable)
 {
-  struct nuc_dev_s *priv = (struct nuc_dev_s*)dev->priv;
+  struct nuc_dev_s *priv = (struct nuc_dev_s *)dev->priv;
 
   if (enable)
     {
 #ifndef CONFIG_SUPPRESS_SERIAL_INTS
       /* Enable the THR empty interrupt */
 
-      irqstate_t flags = irqsave();
+      irqstate_t flags = enter_critical_section();
       (void)up_setier(priv, 0, UART_IER_THRE_IEN);
 
       /* Fake a TX interrupt here by just calling uart_xmitchars() with
@@ -973,7 +972,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
        */
 
       uart_xmitchars(dev);
-      irqrestore(flags);
+      leave_critical_section(flags);
 #endif
     }
   else
@@ -994,7 +993,7 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
 
 static bool up_txready(struct uart_dev_s *dev)
 {
-  struct nuc_dev_s *priv = (struct nuc_dev_s*)dev->priv;
+  struct nuc_dev_s *priv = (struct nuc_dev_s *)dev->priv;
   uint32_t regval;
   int depth;
 
@@ -1013,7 +1012,7 @@ static bool up_txready(struct uart_dev_s *dev)
 
 static bool up_txempty(struct uart_dev_s *dev)
 {
-  struct nuc_dev_s *priv = (struct nuc_dev_s*)dev->priv;
+  struct nuc_dev_s *priv = (struct nuc_dev_s *)dev->priv;
   return ((up_serialin(priv, NUC_UART_FSR_OFFSET) & UART_FSR_TE_FLAG) != 0);
 }
 
@@ -1080,7 +1079,7 @@ void up_serialinit(void)
 int up_putc(int ch)
 {
 #ifdef HAVE_CONSOLE
-  struct nuc_dev_s *priv = (struct nuc_dev_s*)CONSOLE_DEV.priv;
+  struct nuc_dev_s *priv = (struct nuc_dev_s *)CONSOLE_DEV.priv;
   uint32_t ier;
   up_disableuartint(priv, &ier);
 #endif

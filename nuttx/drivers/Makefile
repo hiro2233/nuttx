@@ -1,7 +1,7 @@
 ############################################################################
 # drivers/Makefile
 #
-#   Copyright (C) 2007-2013 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2007-2014, 2016 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -52,10 +52,16 @@ VPATH = .
 include analog$(DELIM)Make.defs
 include audio$(DELIM)Make.defs
 include bch$(DELIM)Make.defs
+include i2c$(DELIM)Make.defs
 include input$(DELIM)Make.defs
+include ioexpander$(DELIM)Make.defs
 include lcd$(DELIM)Make.defs
+include leds$(DELIM)Make.defs
+include loop$(DELIM)Make.defs
 include mmcsd$(DELIM)Make.defs
+include modem$(DELIM)Make.defs
 include mtd$(DELIM)Make.defs
+include eeprom$(DELIM)Make.defs
 include net$(DELIM)Make.defs
 include pipes$(DELIM)Make.defs
 include power$(DELIM)Make.defs
@@ -64,16 +70,25 @@ include sercomm$(DELIM)Make.defs
 include serial$(DELIM)Make.defs
 include spi$(DELIM)Make.defs
 include syslog$(DELIM)Make.defs
+include timers$(DELIM)Make.defs
 include usbdev$(DELIM)Make.defs
 include usbhost$(DELIM)Make.defs
+include usbmonitor$(DELIM)Make.defs
 include video$(DELIM)Make.defs
 include wireless$(DELIM)Make.defs
 
 ifneq ($(CONFIG_NFILE_DESCRIPTORS),0)
-  CSRCS += dev_null.c dev_zero.c loop.c
+  CSRCS += dev_null.c dev_zero.c
 
 ifneq ($(CONFIG_DISABLE_MOUNTPOINT),y)
-  CSRCS += ramdisk.c rwbuffer.c
+  CSRCS += ramdisk.c
+ifeq ($(CONFIG_DRVR_WRITEBUFFER),y)
+  CSRCS += rwbuffer.c
+else
+ifeq ($(CONFIG_DRVR_READAHEAD),y)
+  CSRCS += rwbuffer.c
+endif
+endif
 endif
 
 ifeq ($(CONFIG_CAN),y)
@@ -84,14 +99,12 @@ ifeq ($(CONFIG_PWM),y)
   CSRCS += pwm.c
 endif
 
-ifeq ($(CONFIG_WATCHDOG),y)
-  CSRCS += watchdog.c
-endif
-
-ifeq ($(CONFIG_TIMER),y)
-  CSRCS += timer.c
+ifeq ($(CONFIG_DEV_URANDOM),y)
+ifneq ($(CONFIG_DEV_URANDOM_ARCH),y)
+  CSRCS += dev_urandom.c
 endif
 endif
+endif # CONFIG_NFILE_DESCRIPTORS != 0
 
 AOBJS = $(ASRCS:.S=$(OBJEXT))
 COBJS = $(CSRCS:.c=$(OBJEXT))
@@ -102,6 +115,7 @@ OBJS = $(AOBJS) $(COBJS)
 BIN = libdrivers$(LIBEXT)
 
 all: $(BIN)
+.PHONY: depend clean distclean
 
 $(AOBJS): %$(OBJEXT): %.S
 	$(call ASSEMBLE, $<, $@)

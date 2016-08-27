@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/spi/spi_bitbang.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,7 +49,7 @@
 
 #ifdef CONFIG_SPI_BITBANG
 
- /****************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 /* This file holds the static, device-independ portion of the generica SPI-
@@ -78,31 +78,6 @@
  *    information.
  */
 
-/* Debug ********************************************************************/
-/* Check if SPI debut is enabled (non-standard.. no support in
- * include/debug.h
- */
-
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_VERBOSE
-#  undef CONFIG_DEBUG_SPI
-#endif
-
-#ifdef CONFIG_DEBUG_SPI
-#  define spidbg lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define spivdbg lldbg
-#  else
-#    define spivdbg(x...)
-#  endif
-#else
-#  define spidbg(x...)
-#  define spivdbg(x...)
-#endif
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
 
 /****************************************************************************
  * Private Function Prototypes
@@ -110,9 +85,7 @@
 
 /* SPI methods */
 
-#ifndef CONFIG_SPI_OWNBUS
 static int      spi_lock(FAR struct spi_dev_s *dev, bool lock);
-#endif
 static void     spi_select(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
                   bool selected);
 static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev,
@@ -144,25 +117,26 @@ static int      spi_cmddata(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
 
 static const struct spi_ops_s g_spiops =
 {
-#ifndef CONFIG_SPI_OWNBUS
-  .lock              = spi_lock,
+  spi_lock,           /* lock */
+  spi_select,         /* select */
+  spi_setfrequency,   /* setfrequency */
+  spi_setmode,        /* setmode */
+  spi_setbits,        /* setbits */
+#ifdef CONFIG_SPI_HWFEATURES
+  0,                  /* hwfeatures */
 #endif
-  .select            = spi_select,
-  .setfrequency      = spi_setfrequency,
-  .setmode           = spi_setmode,
-  .setbits           = spi_setbits,
-  .status            = spi_status,
+  spi_status,         /* status */
 #ifdef CONFIG_SPI_CMDDATA
-  .cmddata           = spi_cmddata,
+  spi_cmddata,        /* cmddata */
 #endif
-  .send              = spi_send,
+  spi_send,           /* send */
 #ifdef CONFIG_SPI_EXCHANGE
-  .exchange          = spi_exchange,
+  spi_exchange,       /* exchange */
 #else
-  .sndblock          = spi_sndblock,
-  .recvblock         = spi_recvblock,
+  spi_sndblock,       /* sndblock */
+  spi_recvblock,      /* recvblock */
 #endif
-  .registercallback  = 0,                 /* Not implemented */
+   0                  /* registercallback */
 };
 
 /****************************************************************************
@@ -190,12 +164,11 @@ static const struct spi_ops_s g_spiops =
  *
  ****************************************************************************/
 
-#ifndef CONFIG_SPI_OWNBUS
 static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 {
   FAR struct spi_bitbang_s *priv = (FAR struct spi_bitbang_s *)dev;
 
-  spivdbg("lock=%d\n", lock);
+  spiinfo("lock=%d\n", lock);
   if (lock)
     {
       /* Take the semaphore (perhaps waiting) */
@@ -216,7 +189,6 @@ static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 
   return OK;
 }
-#endif
 
 /****************************************************************************
  * Name: spi_select
@@ -239,7 +211,7 @@ static void spi_select(FAR struct spi_dev_s *dev, enum spi_dev_e devid,
 {
   FAR struct spi_bitbang_s *priv = (FAR struct spi_bitbang_s *)dev;
 
-  spivdbg("devid=%d selected=%d\n", devid, selected);
+  spiinfo("devid=%d selected=%d\n", devid, selected);
   DEBUGASSERT(priv && priv->low->select);
   priv->low->select(priv, devid, selected);
 }
@@ -266,7 +238,7 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev, uint32_t frequency)
 
   DEBUGASSERT(priv && priv->low->setfrequency);
   actual = priv->low->setfrequency(priv, frequency);
-  spivdbg("frequency=%d holdtime=%d actual=%d\n",
+  spiinfo("frequency=%d holdtime=%d actual=%d\n",
           frequency, priv->holdtime, actual);
   return actual;
 }
@@ -292,7 +264,7 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
 
   DEBUGASSERT(priv && priv->low->setmode);
   priv->low->setmode(priv, mode);
-  spivdbg("mode=%d exchange=%p\n", mode, priv->exchange);
+  spiinfo("mode=%d exchange=%p\n", mode, priv->exchange);
 }
 
 /****************************************************************************
@@ -315,11 +287,11 @@ static void spi_setbits(FAR struct spi_dev_s *dev, int nbits)
 #ifdef CONFIG_SPI_BITBANG_VARWIDTH
   FAR struct spi_bitbang_s *priv = (FAR struct spi_bitbang_s *)dev;
 
-  spivdbg("nbits=%d\n", nbits);
+  spiinfo("nbits=%d\n", nbits);
   DEBUGASSERT(priv && nbits > 0 && nbits <= 16);
   priv->nbits = nbits;
 #else
-  spivdbg("nbits=%d\n", nbits);
+  spiinfo("nbits=%d\n", nbits);
   DEBUGASSERT(nbits == 8);
 #endif
 }
@@ -379,7 +351,7 @@ static void spi_exchange(FAR struct spi_dev_s *dev,
   uint16_t dataout;
   uint16_t datain;
 
-  spivdbg("txbuffer=%p rxbuffer=%p nwords=%d\n", txbuffer, rxbuffer, nwords);
+  spiinfo("txbuffer=%p rxbuffer=%p nwords=%d\n", txbuffer, rxbuffer, nwords);
   DEBUGASSERT(priv && priv->low && priv->low->exchange);
 
   /* If there is no data source, send 0xff */
@@ -438,7 +410,7 @@ static void spi_exchange(FAR struct spi_dev_s *dev,
     }
 }
 
-/***************************************************************************
+/****************************************************************************
  * Name: spi_sndblock
  *
  * Description:
@@ -567,7 +539,7 @@ FAR struct spi_dev_s *spi_create_bitbang(FAR const struct spi_bitbang_ops_s *low
   priv = (FAR struct spi_bitbang_s *)zalloc(sizeof(struct spi_bitbang_s));
   if (!priv)
     {
-      spidbg("Failed to allocate the device structure\n");
+      spierr("ERROR: Failed to allocate the device structure\n");
       return NULL;
     }
 

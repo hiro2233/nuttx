@@ -42,7 +42,7 @@
 #include "cfgdefine.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -69,6 +69,8 @@ static const char *dequote_list[] =
   "CONFIG_PASS1_TARGET",               /* Pass1 build target */
   "CONFIG_PASS1_OBJECT",               /* Pass1 build object */
   "CONFIG_DEBUG_OPTLEVEL",             /* Custom debug level */
+  "CONFIG_INIT_SYMTAB",                /* Global symbol table */
+  "CONFIG_INIT_NEXPORTS",              /* Global symbol table size */
 
   /* RGMP */
 
@@ -80,10 +82,15 @@ static const char *dequote_list[] =
   "CONFIG_NXWM_STOP_BITMAP",           /* Name of bitmap image class */
   "CONFIG_NXWM_MINIMIZE_BITMAP",       /* Name of bitmap image class */
   "CONFIG_NXWM_STARTWINDOW_ICON",      /* Name of bitmap image class */
-  "CONFIG_NXWM_NXCONSOLE_ICON",        /* Name of bitmap image class */
+  "CONFIG_NXWM_NXTERM_ICON",           /* Name of bitmap image class */
   "CONFIG_NXWM_CALIBRATION_ICON",      /* Name of bitmap image class */
   "CONFIG_NXWM_HEXCALCULATOR_ICON",    /* Name of bitmap image class */
 
+  /* apps/ definitions */
+
+  "CONFIG_EXAMPLES_HELLO_PROGNAME",    /* Name of installed hello example program */
+  "CONFIG_EXAMPLES_NSH_PROGNAME",      /* Name of installed NSH example program */
+  "CONFIG_THTTPD_INDEX_NAMES",         /* List of index file names */
   NULL                                 /* Marks the end of the list */
 };
 
@@ -91,7 +98,7 @@ static const char *dequote_list[] =
  * Private Functions
  ****************************************************************************/
 
- /* Skip over any spaces */
+/* Skip over any spaces */
 
 static char *skip_space(char *ptr)
 {
@@ -218,7 +225,9 @@ static char *dequote_value(const char *varname, char *varval)
 {
   const char **dqnam;
   char *dqval = varval;
+  char *ptr;
   int len;
+  int i;
 
   if (dqval)
     {
@@ -233,12 +242,12 @@ static char *dequote_value(const char *varname, char *varval)
         }
 
       /* Did we find the variable name in the list of configuration variables
-       * to be dequoated?
+       * to be dequoted?
        */
 
       if (*dqnam)
         {
-          /* Yes... Check if there is a traiing quote */
+          /* Yes... Check if there is a trailing quote */
 
           len = strlen(dqval);
           if (dqval[len-1] == '"')
@@ -257,6 +266,28 @@ static char *dequote_value(const char *varname, char *varval)
 
                dqval++;
                len--;
+             }
+
+           /* A special case is a quoted list of quoted strings.  In that case
+            * we will need to remove the backspaces from the internally quoted
+            * strings.  NOTE: this will not handle nested quoted quotes.
+            */
+
+           for (ptr = dqval; *ptr; ptr++)
+             {
+               /* Check for a quoted quote */
+
+               if (ptr[0] == '\\' && ptr[1] == '"')
+                 {
+                   /* Delete the backslash by moving the rest of the string */
+
+                   for (i = 0; ptr[i]; i++)
+                     {
+                       ptr[i] = ptr[i+1];
+                     }
+
+                   len--;
+                 }
              }
 
            /* Handle the case where nothing is left after dequoting */

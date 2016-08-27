@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/usbterm/usbterm_main.c
  *
- *   Copyright (C) 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2013, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/boardctl.h>
 
 #include <stdio.h>
 #include <unistd.h>
@@ -50,7 +51,7 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <apps/readline.h>
+#include "system/readline.h"
 
 #include <nuttx/usb/usbdev.h>
 #include <nuttx/usb/usbdev_trace.h>
@@ -64,14 +65,6 @@
 #endif
 
 #include "usbterm.h"
-
-/****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
 
 /****************************************************************************
  * Public Data
@@ -128,7 +121,7 @@ static void dumptrace(void)
 
 static FAR void *usbterm_listener(FAR void *parameter)
 {
-  message("usbterm_listener: Waiting for remote input\n");
+  printf("usbterm_listener: Waiting for remote input\n");
   for (;;)
     {
       /* Display the prompt string on the remote USB serial connection -- only
@@ -184,8 +177,14 @@ static FAR void *usbterm_listener(FAR void *parameter)
  *
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int usbterm_main(int argc, char *argv[])
+#endif
 {
+  struct boardioc_usbdev_ctrl_s ctrl;
+  FAR void *handle;
   pthread_attr_t attr;
   int ret;
 
@@ -198,31 +197,45 @@ int usbterm_main(int argc, char *argv[])
    */
 
 #ifdef CONFIG_EXAMPLES_USBTERM_DEVINIT
-  message("usbterm_main: Performing external device initialization\n");
+  printf("usbterm_main: Performing external device initialization\n");
   ret = usbterm_devinit();
   if (ret != OK)
     {
-      message("usbterm_main: usbterm_devinit failed: %d\n", ret);
+      printf("usbterm_main: usbterm_devinit failed: %d\n", ret);
       goto errout;
     }
 #endif
 
   /* Initialize the USB serial driver */
 
-  message("usbterm_main: Registering USB serial driver\n");
+  printf("usbterm_main: Registering USB serial driver\n");
+
 #ifdef CONFIG_CDCACM
-  ret = cdcacm_initialize(0, NULL);
+
+  ctrl.usbdev   = BOARDIOC_USBDEV_CDCACM;
+  ctrl.action   = BOARDIOC_USBDEV_CONNECT;
+  ctrl.instance = 0;
+  ctrl.handle   = &handle;
+
 #else
-  ret = usbdev_serialinitialize(0);
+
+  ctrl.usbdev   = BOARDIOC_USBDEV_PL2303;
+  ctrl.action   = BOARDIOC_USBDEV_CONNECT;
+  ctrl.instance = 0;
+  ctrl.handle   = &handle;
+
 #endif
+
+  ret = boardctl(BOARDIOC_USBDEV_CONTROL, (uintptr_t)&ctrl);
   if (ret < 0)
     {
-      message("usbterm_main: ERROR: Failed to create the USB serial device: %d\n", -ret);
+      printf("usbterm_main: ERROR: Failed to create the USB serial device: %d\n", -ret);
       goto errout_with_devinit;
     }
-  message("usbterm_main: Successfully registered the serial driver\n");
 
-#if CONFIG_USBDEV_TRACE && CONFIG_USBDEV_TRACE_INITIALIDSET != 0
+  printf("usbterm_main: Successfully registered the serial driver\n");
+
+#if defined(CONFIG_USBDEV_TRACE) && CONFIG_USBDEV_TRACE_INITIALIDSET != 0
   /* If USB tracing is enabled and tracing of initial USB events is specified,
    * then dump all collected trace data to stdout
    */
@@ -239,20 +252,20 @@ int usbterm_main(int argc, char *argv[])
 
   do
     {
-      message("usbterm_main: Opening USB serial driver\n");
+      printf("usbterm_main: Opening USB serial driver\n");
 
       g_usbterm.outstream = fopen(USBTERM_DEVNAME, "w");
       if (g_usbterm.outstream == NULL)
         {
           int errcode = errno;
-          message("usbterm_main: ERROR: Failed to open " USBTERM_DEVNAME " for writing: %d\n",
-                  errcode);
+          printf("usbterm_main: ERROR: Failed to open " USBTERM_DEVNAME " for writing: %d\n",
+                 errcode);
 
           /* ENOTCONN means that the USB device is not yet connected */
 
           if (errcode == ENOTCONN)
             {
-              message("usbterm_main:        Not connected. Wait and try again.\n");
+              printf("usbterm_main:        Not connected. Wait and try again.\n");
               sleep(5);
             }
           else
@@ -276,20 +289,20 @@ int usbterm_main(int argc, char *argv[])
   g_usbterm.instream = fopen(USBTERM_DEVNAME, "r");
   if (g_usbterm.instream == NULL)
     {
-      message("usbterm_main: ERROR: Failed to open " USBTERM_DEVNAME " for reading: %d\n", errno);
+      printf("usbterm_main: ERROR: Failed to open " USBTERM_DEVNAME " for reading: %d\n", errno);
       goto errout_with_outstream;
     }
 
-  message("usbterm_main: Successfully opened the serial driver\n");
+  printf("usbterm_main: Successfully opened the serial driver\n");
 
   /* Start the USB term listener thread */
 
-  message("usbterm_main: Starting the listener thread\n");
+  printf("usbterm_main: Starting the listener thread\n");
 
   ret = pthread_attr_init(&attr);
   if (ret != OK)
     {
-      message("usbterm_main: pthread_attr_init failed: %d\n", ret);
+      printf("usbterm_main: pthread_attr_init failed: %d\n", ret);
       goto errout_with_streams;
     }
 
@@ -297,13 +310,13 @@ int usbterm_main(int argc, char *argv[])
                        usbterm_listener, (pthread_addr_t)0);
   if (ret != 0)
     {
-      message("usbterm_main: Error in thread creation: %d\n", ret);
+      printf("usbterm_main: Error in thread creation: %d\n", ret);
       goto errout_with_streams;
     }
 
   /* Send messages and get responses -- forever */
 
-  message("usbterm_main: Waiting for local input\n");
+  printf("usbterm_main: Waiting for local input\n");
   for (;;)
     {
       /* Display the prompt string on stdout */
@@ -369,7 +382,7 @@ errout_with_devinit:
   usbterm_devuninit();
 errout:
 #endif
-  message("usbterm_main:        Aborting\n");
+  printf("usbterm_main:        Aborting\n");
   return 1;
 }
 

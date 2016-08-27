@@ -1,16 +1,16 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
-config SYSTEM_PRUN
+menuconfig SYSTEM_PRUN
 	bool "Pascal P-Code interpreter"
 	default n
 	depends on INTERPRETERS_PCODE
 	---help---
 		Build the Pascal P-Code interpreter / Virtual machine.  This selection
 		just builds a library of P-Code-related functions as described in
-		include/apps/prun.h.  This selection is also necessary to enable other
+		include/apps/system/prun.h.  This selection is also necessary to enable other
 		P-Code related features.
 
 if SYSTEM_PRUN

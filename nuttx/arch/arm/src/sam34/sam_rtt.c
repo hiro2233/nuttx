@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sam34/sam_rtt.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *            Bob Dioron
  *
@@ -46,7 +46,9 @@
 #include <stdint.h>
 #include <errno.h>
 #include <debug.h>
-#include <nuttx/timer.h>
+
+#include <nuttx/irq.h>
+#include <nuttx/timers/timer.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
@@ -56,7 +58,7 @@
 #if defined(CONFIG_TIMER) && (defined(CONFIG_SAM34_RTT))
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Clocking *****************************************************************/
 
@@ -67,23 +69,13 @@
 #  define RTT_PRES      1
 #endif
 
-#define RTT_FCLK        (BOARD_SLCK_FREQUENCY/RTT_PRES)
+#define RTT_FCLK        (BOARD_SCLK_FREQUENCY/RTT_PRES)
 #define RTT_MAXTIMEOUT  ((1000000ULL * (0x100000000ULL)) / RTT_FCLK)
 
 /* Configuration ************************************************************/
 
-/* Debug ********************************************************************/
-/* Non-standard debug that may be enabled just for testing the timer
- * driver.  NOTE: that only lldbg types are used so that the output is
- * immediately available.
- */
-
-#ifdef CONFIG_DEBUG_RTT
-#  define rttdbg    lldbg
-#  define rttvdbg   llvdbg
-#else
-#  define rttdbg(x...)
-#  define rttvdbg(x...)
+#ifndef CONFIG_DEBUG_TIMER_INFO
+#  undef CONFIG_SAM34_RTT_REGDEBUG
 #endif
 
 /****************************************************************************
@@ -113,7 +105,7 @@ struct sam34_lowerhalf_s
  ****************************************************************************/
 /* Register operations ******************************************************/
 
-#if defined(CONFIG_SAM34_RTT_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_SAM34_RTT_REGDEBUG
 static uint32_t sam34_getreg(uint32_t addr);
 static void     sam34_putreg(uint32_t val, uint32_t addr);
 #else
@@ -178,7 +170,7 @@ static inline uint32_t sam34_readvr(void)
     {
       v = getreg32(SAM_RTT_VR);
     }
-  while(v != getreg32(SAM_RTT_VR));
+  while (v != getreg32(SAM_RTT_VR));
 
   return v;
 }
@@ -191,7 +183,7 @@ static inline uint32_t sam34_readvr(void)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_SAM34_RTT_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_SAM34_RTT_REGDEBUG
 static uint32_t sam34_getreg(uint32_t addr)
 {
   static uint32_t prevaddr = 0;
@@ -210,10 +202,10 @@ static uint32_t sam34_getreg(uint32_t addr)
     {
       if (count == 0xffffffff || ++count > 3)
         {
-           if (count == 4)
-             {
-               lldbg("...\n");
-             }
+          if (count == 4)
+            {
+              tmrinfo("...\n");
+            }
 
           return val;
         }
@@ -223,25 +215,25 @@ static uint32_t sam34_getreg(uint32_t addr)
 
   else
     {
-       /* Did we print "..." for the previous value? */
+      /* Did we print "..." for the previous value? */
 
-       if (count > 3)
-         {
-           /* Yes.. then show how many times the value repeated */
+      if (count > 3)
+        {
+          /* Yes.. then show how many times the value repeated */
 
-           lldbg("[repeats %d more times]\n", count-3);
-         }
+          tmrinfo("[repeats %d more times]\n", count-3);
+        }
 
-       /* Save the new address, value, and count */
+      /* Save the new address, value, and count */
 
-       prevaddr = addr;
-       preval   = val;
-       count    = 1;
+      prevaddr = addr;
+      preval   = val;
+      count    = 1;
     }
 
   /* Show the register value read */
 
-  lldbg("%08lx->%08lx\n", addr, val);
+  tmrinfo("%08lx->%08lx\n", addr, val);
   return val;
 }
 #endif
@@ -254,12 +246,12 @@ static uint32_t sam34_getreg(uint32_t addr)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_SAM34_RTT_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_SAM34_RTT_REGDEBUG
 static void sam34_putreg(uint32_t val, uint32_t addr)
 {
   /* Show the register value being written */
 
-  lldbg("%08lx<-%08lx\n", addr, val);
+  tmrinfo("%08lx<-%08lx\n", addr, val);
 
   /* Write the value */
 
@@ -285,7 +277,7 @@ static int sam34_interrupt(int irq, FAR void *context)
 {
   FAR struct sam34_lowerhalf_s *priv = &g_tcdev;
 
-  rttvdbg("Entry\n");
+  tmrinfo("Entry\n");
   DEBUGASSERT(irq == SAM_IRQ_RTT);
 
   /* Check if the interrupt is really pending */
@@ -317,7 +309,7 @@ static int sam34_interrupt(int irq, FAR void *context)
            */
 
           lateticks = vr - priv->val;
-          if (lateticks <= (priv->clkticks>>1))
+          if (lateticks <= (priv->clkticks >> 1))
             {
               priv->clkticks -= lateticks;
             }
@@ -371,7 +363,7 @@ static int sam34_start(FAR struct timer_lowerhalf_s *lower)
   uint32_t mr;
   uint32_t vr;
 
-  rttvdbg("Entry\n");
+  tmrinfo("Entry\n");
   DEBUGASSERT(priv);
 
   if (priv->started)
@@ -431,16 +423,18 @@ static int sam34_start(FAR struct timer_lowerhalf_s *lower)
 static int sam34_stop(FAR struct timer_lowerhalf_s *lower)
 {
   FAR struct sam34_lowerhalf_s *priv = (FAR struct sam34_lowerhalf_s *)lower;
-  rttvdbg("Entry\n");
+  tmrinfo("Entry\n");
   DEBUGASSERT(priv);
 
-  if(!priv->started)
+  if (!priv->started)
     {
       return -EINVAL;
     }
 
 #if !(defined(CONFIG_RTC_HIRES) && defined (CONFIG_SAM34_RTC))
+#if defined(RTT_MR_RTTDIS)
   sam34_putreg(RTT_MR_RTTDIS, SAM_RTT_MR);    /* Disable RTT */
+#endif
   sam_rtt_disableclk();                       /* Disable peripheral clock */
 #endif
 
@@ -470,7 +464,7 @@ static int sam34_getstatus(FAR struct timer_lowerhalf_s *lower,
 {
   FAR struct sam34_lowerhalf_s *priv = (FAR struct sam34_lowerhalf_s *)lower;
 
-  rttvdbg("Entry\n");
+  tmrinfo("Entry\n");
   DEBUGASSERT(priv);
 
   /* Return the status bit */
@@ -494,9 +488,9 @@ static int sam34_getstatus(FAR struct timer_lowerhalf_s *lower,
 
   status->timeleft = 1000000ULL*(sam34_getreg(SAM_RTT_AR) - sam34_readvr())/RTT_FCLK;
 
-  rttvdbg("  flags    : %08x\n", status->flags);
-  rttvdbg("  timeout  : %d\n", status->timeout);
-  rttvdbg("  timeleft : %d\n", status->timeleft);
+  tmrinfo("  flags    : %08x\n", status->flags);
+  tmrinfo("  timeout  : %d\n", status->timeout);
+  tmrinfo("  timeleft : %d\n", status->timeleft);
   return OK;
 }
 
@@ -522,15 +516,18 @@ static int sam34_settimeout(FAR struct timer_lowerhalf_s *lower,
   FAR struct sam34_lowerhalf_s *priv = (FAR struct sam34_lowerhalf_s *)lower;
 
   DEBUGASSERT(priv);
-  rttvdbg("Entry: timeout=%d\n", timeout);
+  tmrinfo("Entry: timeout=%d\n", timeout);
 
-  if(priv->started) return -EPERM;
+  if (priv->started)
+    {
+      return -EPERM;
+    }
 
   /* Can this timeout be represented? */
 
   if (timeout < 1 || timeout > RTT_MAXTIMEOUT)
     {
-      rttdbg("Cannot represent timeout=%lu > %lu\n",
+      tmrerr("ERROR: Cannot represent timeout=%lu > %lu\n",
             timeout, RTT_MAXTIMEOUT);
       return -ERANGE;
     }
@@ -540,7 +537,7 @@ static int sam34_settimeout(FAR struct timer_lowerhalf_s *lower,
   timeout = (1000000ULL * priv->clkticks) / RTT_FCLK;          /* Truncated timeout */
   priv->adjustment = priv->timeout - timeout;                  /* Truncated time to be added to next interval (dither) */
 
-  rttvdbg("fclk=%d clkticks=%d timout=%d, adjustment=%d\n",
+  tmrinfo("fclk=%d clkticks=%d timout=%d, adjustment=%d\n",
          RTT_FCLK, priv->clkticks, priv->timeout, priv->adjustment);
 
   return OK;
@@ -572,10 +569,10 @@ static tccb_t sam34_sethandler(FAR struct timer_lowerhalf_s *lower,
   irqstate_t flags;
   tccb_t oldhandler;
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   DEBUGASSERT(priv);
-  rttvdbg("Entry: handler=%p\n", handler);
+  tmrinfo("Entry: handler=%p\n", handler);
 
   /* Get the old handler return value */
 
@@ -585,7 +582,7 @@ static tccb_t sam34_sethandler(FAR struct timer_lowerhalf_s *lower,
 
    priv->handler = handler;
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return oldhandler;
 }
 
@@ -616,7 +613,8 @@ static int sam34_ioctl(FAR struct timer_lowerhalf_s *lower, int cmd,
   int ret = -ENOTTY;
 
   DEBUGASSERT(priv);
-  rttvdbg("Entry: cmd=%d arg=%ld\n", cmd, arg);
+  tmrinfo("Entry: cmd=%d arg=%ld\n", cmd, arg);
+  UNUSED(priv);
 
   return ret;
 }
@@ -645,7 +643,7 @@ void sam_rttinitialize(FAR const char *devpath)
 {
   FAR struct sam34_lowerhalf_s *priv = &g_tcdev;
 
-  rttvdbg("Entry: devpath=%s\n", devpath);
+  tmrinfo("Entry: devpath=%s\n", devpath);
 
   /* Initialize the driver state structure.  Here we assume: (1) the state
    * structure lies in .bss and was zeroed at reset time.  (2) This function

@@ -284,12 +284,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -409,7 +403,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/).
+  Bitbucket download site (https://bitbucket.org/nuttx/nuttx/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -469,8 +463,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -505,7 +499,7 @@ LEDs
   - configs/lpcxpresso-lpc1768/include/board.h - Defines LED constants, types and
     prototypes the LED interface functions.
 
-  - configs/lpcxpresso-lpc1768/src/lpcxpresso_internal.h - GPIO settings for the LEDs.
+  - configs/lpcxpresso-lpc1768/src/lpcxpresso-lpc1768.h - GPIO settings for the LEDs.
 
   - configs/lpcxpresso-lpc1768/src/up_leds.c - LED control logic.
 
@@ -682,11 +676,11 @@ LPCXpresso Configuration Options
     CONFIG_NET_NRXDESC - Configured number of Rx descriptors. Default: 18
     CONFIG_NET_WOL - Enable Wake-up on Lan (not fully implemented).
     CONFIG_NET_REGDEBUG - Enabled low level register debug.  Also needs
-      CONFIG_DEBUG.
+      CONFIG_DEBUG_FEATURES.
     CONFIG_NET_DUMPPACKET - Dump all received and transmitted packets.
-      Also needs CONFIG_DEBUG.
+      Also needs CONFIG_DEBUG_FEATURES.
     CONFIG_NET_HASH - Enable receipt of near-perfect match frames.
-    CONFIG_NET_MULTICAST - Enable receipt of multicast (and unicast) frames.
+    CONFIG_LPC17_MULTICAST - Enable receipt of multicast (and unicast) frames.
       Automatically set if CONFIG_NET_IGMP is selected.
 
   LPC17xx USB Device Configuration
@@ -749,7 +743,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -767,7 +761,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -793,7 +787,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -817,7 +811,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -844,7 +838,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.

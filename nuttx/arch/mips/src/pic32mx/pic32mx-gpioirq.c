@@ -48,9 +48,9 @@
 
 #include "up_arch.h"
 #include "pic32mx-gpio.h"
-#include "pic32mx-internal.h"
+#include "pic32mx.h"
 
-#ifdef CONFIG_GPIO_IRQ
+#ifdef CONFIG_PIC32MX_GPIOIRQ
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -214,7 +214,7 @@ xcpt_t pic32mx_gpioattach(uint32_t pinset, unsigned int cn, xcpt_t handler)
     {
       /* Get the previously attached handler as the return value */
 
-      flags = irqsave();
+      flags = enter_critical_section();
       oldhandler = g_cnisrs[cn];
 
       /* Are we attaching or detaching? */
@@ -240,18 +240,18 @@ xcpt_t pic32mx_gpioattach(uint32_t pinset, unsigned int cn, xcpt_t handler)
         }
       else
         {
-           /* Make sure that any further interrupts are disabled.
-            * (disable the pull-up as well).
-            */
+          /* Make sure that any further interrupts are disabled.
+           * (disable the pull-up as well).
+           */
 
-           putreg32(1 << cn, PIC32MX_IOPORT_CNENCLR);
-           putreg32(1 << cn, PIC32MX_IOPORT_CNPUECLR);
+          putreg32(1 << cn, PIC32MX_IOPORT_CNENCLR);
+          putreg32(1 << cn, PIC32MX_IOPORT_CNPUECLR);
         }
 
       /* Set the new handler (perhaps NULLifying the current handler) */
 
       g_cnisrs[cn] = handler;
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 
   return oldhandler;
@@ -285,4 +285,4 @@ void pic32mx_gpioirqdisable(unsigned int cn)
   putreg32(1 << cn, PIC32MX_IOPORT_CNENCLR);
 }
 
-#endif /* CONFIG_GPIO_IRQ */
+#endif /* CONFIG_PIC32MX_GPIOIRQ */

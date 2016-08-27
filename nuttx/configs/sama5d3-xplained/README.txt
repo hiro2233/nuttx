@@ -64,6 +64,7 @@ Contents
   - Networking
   - AT25 Serial FLASH
   - HSMCI Card Slots
+  - Auto-Mounter
   - USB Ports
   - USB High-Speed Device
   - USB High-Speed Host
@@ -76,7 +77,9 @@ Contents
   - RTC
   - Watchdog Timer
   - TRNG and /dev/random
+  - Tickless OS
   - I2S Audio Support
+  - Shields
   - SAMA5D3-Xplained Configuration Options
   - Configurations
   - To-Do List
@@ -84,7 +87,7 @@ Contents
 Development Environment
 =======================
 
-  Several possible development environments may be use:
+  Several possible development environments may be used:
 
   - Linux or OSX native
   - Cygwin unders Windows
@@ -141,12 +144,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows paths which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
 IDEs
 ====
 
@@ -187,7 +184,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1.  You must have already configured Nuttx in <some-dir>/nuttx.
@@ -236,8 +233,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -459,7 +456,7 @@ Programming U-Boot
 
      http://www.at91.com/linux4sam/bin/view/Linux4SAM/U-Boot#Build_U_Boot_from_sources
 
-     A pre-Built binay image is available here:
+     A pre-Built binary image is available here:
 
      ftp://www.at91.com/pub/uboot/u-boot-v2013.07/u-boot-sama5d3_xplained-v2013.07-at91-r1.bin
 
@@ -639,6 +636,26 @@ Load NuttX with U-Boot on AT91 boards
     2014-3-30:  These instructions were adapted from the Linux4SAM website
                 but have not yet been used.
 
+  Using JTAG
+  ----------
+
+  This description assumes that you have a JTAG debugger such as Segger
+  J-Link connected to the SAMA5D3-Xplained.
+
+  1. Start the GDB server
+  2. Start GDB
+  3. Use the 'target remote localhost:xxxx' command to attach to the GDG
+     server
+  4. Do 'mon reset' then 'mon go' to start the internal boot loader (maybe
+     U-Boot).
+  5. Let the boot loader run until it completes SDRAM initialization, then
+     do 'mon halt'.
+  6. Now you have SDRAM initialized and you use 'load nuttx' to load the
+     ELF file into SDRAM.
+  7. Use 'file nuttx' to load symbols
+  8. Set the PC to the NuttX entry point 'mon pc 0x20008040' and start
+     nuttx using 'mon go'.
+
 Buttons and LEDs
 ================
 
@@ -735,7 +752,7 @@ Serial Console
    5  PE14 (available)
    6  GND
 
-  By default the DBUG is used as the NuttX serial console in all
+  By default the DBUG port is used as the NuttX serial console in all
   configurations (unless otherwise noted).  The DBGU is available at
   logic levels at pins RXD and TXD of the DEBUG connector (J23).  GND
   is available at J23 and +3.3V is available from J14
@@ -752,21 +769,21 @@ Networking
   -----------------------------
 
   System Type -> SAMA5 Peripheral Support
-    CONFIG_SAMA5_EMAC=y                 : Enable the EMAC peripheral
+    CONFIG_SAMA5_EMACA=y                 : Enable the EMAC A peripheral
 
   System Type -> EMAC device driver options
-    CONFIG_SAMA5_EMAC_NRXBUFFERS=16     : Set aside some RS and TX buffers
+    CONFIG_SAMA5_EMAC_NRXBUFFERS=16      : Set aside some RS and TX buffers
     CONFIG_SAMA5_EMAC_NTXBUFFERS=4
-    CONFIG_SAMA5_EMAC_PHYADDR=1         : KSZ9031 PHY is at address 1
-    CONFIG_SAMA5_EMAC_AUTONEG=y         : Use autonegotiation
-    CONFIG_SAMA5_EMAC_RMII=y            : Either MII or RMII interface should work
-    CONFIG_SAMA5_EMAC_PHYSR=30          : Address of PHY status register on KSZ9031
-    CONFIG_SAMA5_EMAC_PHYSR_ALTCONFIG=y : Needed for KSZ9031
-    CONFIG_SAMA5_EMAC_PHYSR_ALTMODE=0x7 : "    " " " "     "
-    CONFIG_SAMA5_EMAC_PHYSR_10HD=0x1    : "    " " " "     "
-    CONFIG_SAMA5_EMAC_PHYSR_100HD=0x2   : "    " " " "     "
-    CONFIG_SAMA5_EMAC_PHYSR_10FD=0x5    : "    " " " "     "
-    CONFIG_SAMA5_EMAC_PHYSR_100FD=0x6   : "    " " " "     "
+    CONFIG_SAMA5_EMAC_PHYADDR=1          : KSZ9031 PHY is at address 1
+    CONFIG_SAMA5_EMAC_AUTONEG=y          : Use autonegotiation
+    CONFIG_SAMA5_EMAC_RMII=y             : Either MII or RMII interface should work
+    CONFIG_SAMA5_EMAC_PHYSR=30           : Address of PHY status register on KSZ9031
+    CONFIG_SAMA5_EMAC_PHYSR_ALTCONFIG=y  : Needed for KSZ9031
+    CONFIG_SAMA5_EMAC_PHYSR_ALTMODE=0x7  : "    " " " "     "
+    CONFIG_SAMA5_EMAC_PHYSR_10HD=0x1     : "    " " " "     "
+    CONFIG_SAMA5_EMAC_PHYSR_100HD=0x2    : "    " " " "     "
+    CONFIG_SAMA5_EMAC_PHYSR_10FD=0x5     : "    " " " "     "
+    CONFIG_SAMA5_EMAC_PHYSR_100FD=0x6    : "    " " " "     "
 
   PHY selection.  Later in the configuration steps, you will need to select
   the KSZ9031 PHY for EMAC (See below)
@@ -775,17 +792,17 @@ Networking
   -----------------------------
 
   System Type -> SAMA5 Peripheral Support
-    CONFIG_SAMA5_GMAC=y                 : Enable the GMAC peripheral
+    CONFIG_SAMA5_GMAC=y                  : Enable the GMAC peripheral
 
   System Type -> GMAC device driver options
-    CONFIG_SAMA5_GMAC_NRXBUFFERS=16     : Set aside some RS and TX buffers
+    CONFIG_SAMA5_GMAC_NRXBUFFERS=16      : Set aside some RS and TX buffers
     CONFIG_SAMA5_GMAC_NTXBUFFERS=4
-    CONFIG_SAMA5_GMAC_PHYADDR=1         : KSZ8081 PHY is at address 1
-    CONFIG_SAMA5_GMAC_AUTONEG=y         : Use autonegotiation
+    CONFIG_SAMA5_GMAC_PHYADDR=1          : KSZ8081 PHY is at address 1
+    CONFIG_SAMA5_GMAC_AUTONEG=y          : Use autonegotiation
 
   If both EMAC and GMAC are selected, you will also need:
 
-    CONFIG_SAMA5_GMAC_ISETH0=y          : GMAC is "eth0"; EMAC is "eth1"
+    CONFIG_SAMA5_GMAC_ISETH0=y           : GMAC is "eth0"; EMAC is "eth1"
 
   PHY selection.  Later in the configuration steps, you will need to select
   the  KSZ9081 PHY for GMAC (See below)
@@ -794,36 +811,36 @@ Networking
   -----------------------------
 
   Networking Support
-    CONFIG_NET=y                        : Enable Neworking
-    CONFIG_NET_SOCKOPTS=y               : Enable socket operations
-    CONFIG_NET_BUFSIZE=562              : Maximum packet size (MTD) 1518 is more standard
-    CONFIG_NET_RECEIVE_WINDOW=562       : Should be the same as CONFIG_NET_BUFSIZE
-    CONFIG_NET_TCP=y                    : Enable TCP/IP networking
-    CONFIG_NET_TCPBACKLOG=y             : Support TCP/IP backlog
-    CONFIG_NET_TCP_READAHEAD_BUFSIZE=562  Read-ahead buffer size
-    CONFIG_NET_UDP=y                    : Enable UDP networking
-    CONFIG_NET_ICMP=y                   : Enable ICMP networking
-    CONFIG_NET_ICMP_PING=y              : Needed for NSH ping command
-                                        : Defaults should be okay for other options
+    CONFIG_NET=y                         : Enable Neworking
+    CONFIG_NET_SOCKOPTS=y                : Enable socket operations
+    CONFIG_NET_ETH_MTU=562               : Maximum packet size (MTU) 1518 is more standard
+    CONFIG_NET_ETH_TCP_RECVWNDO=562      : Should be the same as CONFIG_NET_ETH_MTU
+    CONFIG_NET_TCP=y                     : Enable TCP/IP networking
+    CONFIG_NET_TCPBACKLOG=y              : Support TCP/IP backlog
+    CONFIG_NET_TCP_READAHEAD_BUFSIZE=562 : Read-ahead buffer size
+    CONFIG_NET_UDP=y                     : Enable UDP networking
+    CONFIG_NET_ICMP=y                    : Enable ICMP networking
+    CONFIG_NET_ICMP_PING=y               : Needed for NSH ping command
+                                         : Defaults should be okay for other options
   Device drivers -> Network Device/PHY Support
-    CONFIG_NETDEVICES=y                 : Enabled PHY selection
-    CONFIG_ETH0_PHY_KSZ8081=y           : Select the KSZ8081 PHY (for EMAC), OR
-    CONFIG_ETH0_PHY_KSZ90x1=y           : Select the KSZ9031 PHY (for GMAC)
+    CONFIG_NETDEVICES=y                  : Enabled PHY selection
+    CONFIG_ETH0_PHY_KSZ8081=y            : Select the KSZ8081 PHY (for EMAC), OR
+    CONFIG_ETH0_PHY_KSZ90x1=y            : Select the KSZ9031 PHY (for GMAC)
 
   Application Configuration -> Network Utilities
-    CONFIG_NETUTILS_DNSCLIENT=y            : Enable host address resolution
-    CONFIG_NETUTILS_TELNETD=y           : Enable the Telnet daemon
-    CONFIG_NETUTILS_TFTPC=y             : Enable TFTP data file transfers for get and put commands
-    CONFIG_NETUTILS_UIPLIB=y            : Network library support is needed
-    CONFIG_NETUTILS_WEBCLIENT=y         : Needed for wget support
-                                        : Defaults should be okay for other options
+    CONFIG_NETDB_DNSCLIENT=y             : Enable host address resolution
+    CONFIG_NETUTILS_TELNETD=y            : Enable the Telnet daemon
+    CONFIG_NETUTILS_TFTPC=y              : Enable TFTP data file transfers for get and put commands
+    CONFIG_NETUTILS_NETLIB=y             : Network library support is needed
+    CONFIG_NETUTILS_WEBCLIENT=y          : Needed for wget support
+                                         : Defaults should be okay for other options
   Application Configuration -> NSH Library
-    CONFIG_NSH_TELNET=y                 : Enable NSH session via Telnet
-    CONFIG_NSH_IPADDR=0x0a000002        : Select an IP address
-    CONFIG_NSH_DRIPADDR=0x0a000001      : IP address of gateway/host PC
-    CONFIG_NSH_NETMASK=0xffffff00       : Netmask
-    CONFIG_NSH_NOMAC=y                  : Need to make up a bogus MAC address
-                                        : Defaults should be okay for other options
+    CONFIG_NSH_TELNET=y                  : Enable NSH session via Telnet
+    CONFIG_NSH_IPADDR=0x0a000002         : Select an IP address
+    CONFIG_NSH_DRIPADDR=0x0a000001       : IP address of gateway/host PC
+    CONFIG_NSH_NETMASK=0xffffff00        : Netmask
+    CONFIG_NSH_NOMAC=y                   : Need to make up a bogus MAC address
+                                         : Defaults should be okay for other options
 
   Using the network with NSH
   --------------------------
@@ -906,7 +923,77 @@ Networking
   so that access to the NSH prompt is not delayed.
 
   This delay will be especially long if the board is not connected to
-  a network.
+  a network.  On the order of a minute!  You will probably think that
+  NuttX has crashed!  And then, when it finally does come up, the
+  network will not be available.
+
+  Network Initialization Thread
+  -----------------------------
+  There is a configuration option enabled by CONFIG_NSH_NETINIT_THREAD
+  that will do the NSH network bring-up asynchronously in parallel on
+  a separate thread.  This eliminates the (visible) networking delay
+  altogether.  This networking initialization feature by itself has
+  some limitations:
+
+    - If no network is connected, the network bring-up will fail and
+      the network initialization thread will simply exit.  There are no
+      retries and no mechanism to know if the network initialization was
+      successful.
+
+    - Furthermore, there is no support for detecting loss of the network
+      connection and recovery of networking when the connection is restored.
+
+  Both of these shortcomings can be eliminated by enabling the network
+  monitor:
+
+  Network Monitor
+  ---------------
+  By default the network initialization thread will bring-up the network
+  then exit, freeing all of the resources that it required.  This is a
+  good behavior for systems with limited memory.
+
+  If the CONFIG_NSH_NETINIT_MONITOR option is selected, however, then the
+  network initialization thread will persist forever; it will monitor the
+  network status.  In the event that the network goes down (for example, if
+  a cable is removed), then the thread will monitor the link status and
+  attempt to bring the network back up.  In this case the resources
+  required for network initialization are never released.
+
+  Pre-requisites:
+
+    - CONFIG_NSH_NETINIT_THREAD as described above.
+
+    - CONFIG_NETDEV_PHY_IOCTL. Enable PHY IOCTL commands in the Ethernet
+      device driver. Special IOCTL commands must be provided by the Ethernet
+      driver to support certain PHY operations that will be needed for link
+      management. There operations are not complex and are implemented for
+      the Atmel SAMA5 family.
+
+    - CONFIG_ARCH_PHY_INTERRUPT. This is not a user selectable option.
+      Rather, it is set when you select a board that supports PHY interrupts.
+      In most architectures, the PHY interrupt is not associated with the
+      Ethernet driver at all. Rather, the PHY interrupt is provided via some
+      board-specific GPIO and the board-specific logic must provide support
+      for that GPIO interrupt. To do this, the board logic must do two things:
+      (1) It must provide the function arch_phy_irq() as described and
+      prototyped in the nuttx/include/nuttx/arch.h, and (2) it must select
+      CONFIG_ARCH_PHY_INTERRUPT in the board configuration file to advertise
+      that it supports arch_phy_irq().  This logic can be found at
+      nuttx/configs/sama5d3-xplained/src/sam_ethernet.c.
+
+    - And a few other things: UDP support is required (CONFIG_NET_UDP) and
+      signals must not be disabled (CONFIG_DISABLE_SIGNALS).
+
+  Given those prerequisites, the newtork monitor can be selected with these additional settings.
+
+    Networking Support -> Networking Device Support
+      CONFIG_NETDEV_PHY_IOCTL=y             : Enable PHY ioctl support
+
+    Application Configuration -> NSH Library -> Networking Configuration
+      CONFIG_NSH_NETINIT_THREAD             : Enable the network initialization thread
+      CONFIG_NSH_NETINIT_MONITOR=y          : Enable the network monitor
+      CONFIG_NSH_NETINIT_RETRYMSEC=2000     : Configure the network monitor as you like
+      CONFIG_NSH_NETINIT_SIGNO=18
 
 AT25 Serial FLASH
 =================
@@ -1041,6 +1128,7 @@ HSMCI Card Slots
     Device Drivers -> MMC/SD Driver Support
       CONFIG_MMCSD=y                        : Enable MMC/SD support
       CONFIG_MMSCD_NSLOTS=1                 : One slot per driver instance
+      CONFIG_MMCSD_MULTIBLOCK_DISABLE=y     : (REVISIT)
       CONFIG_MMCSD_HAVECARDDETECT=y         : Supports card-detect PIOs
       CONFIG_MMCSD_MMCSUPPORT=n             : Interferes with some SD cards
       CONFIG_MMCSD_SPI=n                    : No SPI-based MMC/SD support
@@ -1085,6 +1173,9 @@ HSMCI Card Slots
         nsh> cat /mnt/sd1/atest.txt
         This is a test
 
+       NOTE:  See the next section entitled "Auto-Mounter" for another way
+       to mount your SD card.
+
     4) Before removing the card, you must umount the file system.  This is
        equivalent to "ejecting" or "safely removing" the card on Windows:  It
        flushes any cached data to the card and makes the SD card unavailable
@@ -1096,6 +1187,29 @@ HSMCI Card Slots
        that can be used by an application to automatically unmount the
        volume when it is removed.  But those callbacks are not used in
        these configurations.
+
+Auto-Mounter
+============
+
+  NuttX implements an auto-mounter than can make working with SD cards
+  easier.  With the auto-mounter, the file system will be automatically
+  mounted when the SD card is inserted into the HSMCI slot and automatically
+  unmounted when the SD card is removed.
+
+  The auto-mounter is enable with:
+
+      CONFIG_FS_AUTOMOUNTER=y
+
+  However, to use the automounter you will to provide some additional
+  board-level support.  See configs/sama5d4-ek for and example of how
+  you might do this.
+
+  WARNING:  SD cards should never be removed without first unmounting
+  them.  This is to avoid data and possible corruption of the file
+  system.  Certainly this is the case if you are writing to the SD card
+  at the time of the removal.  If you use the SD card for read-only access,
+  however, then I cannot think of any reason why removing the card without
+  mounting would be harmful.
 
 USB Ports
 =========
@@ -1242,7 +1356,7 @@ USB High-Speed Device
   --------------------
 
   There is normal console debug output available that can be enabled with
-  CONFIG_DEBUG + CONFIG_DEBUG_USB.  However, USB device operation is very
+  CONFIG_DEBUG_FEATURES + CONFIG_DEBUG_USB.  However, USB device operation is very
   time critical and enabling this debug output WILL interfere with the
   operation of the UDPHS.  USB device tracing is a less invasive way to get
   debug information:  If tracing is enabled, the USB device will save
@@ -1260,15 +1374,15 @@ USB High-Speed Device
       CONFIG_NSH_ARCHINIT=y                   : Automatically start the USB monitor
 
     Application Configuration -> System NSH Add-Ons:
-      CONFIG_SYSTEM_USBMONITOR=y              : Enable the USB monitor daemon
-      CONFIG_SYSTEM_USBMONITOR_STACKSIZE=2048 : USB monitor daemon stack size
-      CONFIG_SYSTEM_USBMONITOR_PRIORITY=50    : USB monitor daemon priority
-      CONFIG_SYSTEM_USBMONITOR_INTERVAL=1     : Dump trace data every second
-      CONFIG_SYSTEM_USBMONITOR_TRACEINIT=y    : Enable TRACE output
-      CONFIG_SYSTEM_USBMONITOR_TRACECLASS=y
-      CONFIG_SYSTEM_USBMONITOR_TRACETRANSFERS=y
-      CONFIG_SYSTEM_USBMONITOR_TRACECONTROLLER=y
-      CONFIG_SYSTEM_USBMONITOR_TRACEINTERRUPTS=y
+      CONFIG_USBMONITOR=y              : Enable the USB monitor daemon
+      CONFIG_USBMONITOR_STACKSIZE=2048 : USB monitor daemon stack size
+      CONFIG_USBMONITOR_PRIORITY=50    : USB monitor daemon priority
+      CONFIG_USBMONITOR_INTERVAL=1     : Dump trace data every second
+      CONFIG_USBMONITOR_TRACEINIT=y    : Enable TRACE output
+      CONFIG_USBMONITOR_TRACECLASS=y
+      CONFIG_USBMONITOR_TRACETRANSFERS=y
+      CONFIG_USBMONITOR_TRACECONTROLLER=y
+      CONFIG_USBMONITOR_TRACEINTERRUPTS=y
 
   NOTE: If USB debug output is also enabled, both outputs will appear on the
   serial console.  However, the debug output will be asynchronous with the
@@ -1297,11 +1411,13 @@ USB High-Speed Host
       CONFIG_USBHOST_MSC=y                 : Enable the mass storage class driver
       CONFIG_USBHOST_HIDKBD=y              : Enable the HID keyboard class driver
 
-    Library Routines
-      CONFIG_SCHED_WORKQUEUE=y             : Worker thread support is required
+    RTOS Features -> Work Queue Support
+      CONFIG_SCHED_WORKQUEUE=y             : High priority worker thread support is required
+      CONFIG_SCHED_HPWORK=y                :
 
     Application Configuration -> NSH Library
-      CONFIG_NSH_ARCHINIT=y                 : NSH board-initialization
+      CONFIG_NSH_ARCHINIT=y                : NSH board-initialization
+file1: CONFIG_USBHOST_ISOC_DISABLE=y
 
   NOTE:  When OHCI is selected, the SAMA5 will operate at 384MHz instead of
   396MHz.  This is so that the PLL generates a frequency which is a multiple
@@ -1322,7 +1438,7 @@ USB High-Speed Host
     System Type -> USB High Speed Host driver options
       CONFIG_SAMA5_EHCI=y                  : High-speed EHCI support
       CONFIG_SAMA5_OHCI=y                  : Low/full-speed OHCI support
-                                               : Defaults for values probably OK for both
+                                           : Defaults for values probably OK for both
     Device Drivers
       CONFIG_USBHOST=y                     : Enable USB host support
       CONFIG_USBHOST_INT_DISABLE=y         : Interrupt endpoints not needed
@@ -1333,11 +1449,52 @@ USB High-Speed Host
       CONFIG_USBHOST_MSC=y                 : Enable the mass storage class driver
       CONFIG_USBHOST_HIDKBD=y              : Enable the HID keyboard class driver
 
-    Library Routines
-      CONFIG_SCHED_WORKQUEUE=y             : Worker thread support is required
+    RTOS Features -> Work Queue Support
+      CONFIG_SCHED_WORKQUEUE=y             : High priority worker thread support is required
+      CONFIG_SCHED_HPWORK=y                :
 
     Application Configuration -> NSH Library
-      CONFIG_NSH_ARCHINIT=y                 : NSH board-initialization
+      CONFIG_NSH_ARCHINIT=y                : NSH board-initialization
+
+  USB Hub Support
+  ----------------
+
+  USB hub support can be included by adding the following changes to the configuration (in addition to those listed above):
+
+    Drivers -> USB Host Driver Support
+      CONFIG_USBHOST_HUB=y                 : Enable the hub class
+      CONFIG_USBHOST_ASYNCH=y              : Asynchonous I/O supported needed for hubs
+
+    System Type -> USB High Speed Host driver options
+      CONFIG_SAMA5_OHCI_NEDS=12            : You will probably want more pipes
+      CONFIG_SAMA5_OHCI_NTDS=18
+      CONFIG_SAMA5_OHCI_TDBUFFERS=12
+      CONFIG_SAMA5_OHCI_TDBUFSIZE=128
+
+    Board Selection ->
+      CONFIG_SAMA5D3XPLAINED_USBHOST_STACKSIZE=2048 (bigger than it needs to be)
+
+    RTOS Features -> Work Queue Support
+      CONFIG_SCHED_LPWORK=y                 : Low priority queue support is needed
+      CONFIG_SCHED_LPNTHREADS=1
+      CONFIG_SCHED_LPWORKSTACKSIZE=1024
+
+    NOTES:
+
+    1. It is necessary to perform work on the low-priority work queue
+       (vs. the high priority work queue) because deferred hub-related
+       work requires some delays and waiting that is not appropriate on
+       the high priority work queue.
+
+    2. Stack usage make increase when USB hub support is enabled because
+       the nesting depth of certain USB host class logic can increase.
+
+    STATUS:
+    2015-05-01:
+      This USB host function does not work on the SAMA5D3-Xplained board.
+      Those same drivers work on the other SAMA5Dx boards and so I believe
+      that there is some issue with either clocking to USB or to powering
+      of the USB host ports.
 
   Mass Storage Device Usage
   -------------------------
@@ -1393,7 +1550,7 @@ USB High-Speed Host
   ------------------
 
   There is normal console debug output available that can be enabled with
-  CONFIG_DEBUG + CONFIG_DEBUG_USB.  However, USB host operation is very time
+  CONFIG_DEBUG_FEATURES + CONFIG_DEBUG_USB.  However, USB host operation is very time
   critical and enabling this debug output might interfere with the operation
   of the UDPHS.  USB host tracing is a less invasive way to get debug
   information:  If tracing is enabled, the USB host will save encoded trace
@@ -1411,10 +1568,10 @@ USB High-Speed Host
       CONFIG_NSH_ARCHINIT=y                   : Automatically start the USB monitor
 
     Application Configuration -> System NSH Add-Ons:
-      CONFIG_SYSTEM_USBMONITOR=y              : Enable the USB monitor daemon
-      CONFIG_SYSTEM_USBMONITOR_STACKSIZE=2048 : USB monitor daemon stack size
-      CONFIG_SYSTEM_USBMONITOR_PRIORITY=50    : USB monitor daemon priority
-      CONFIG_SYSTEM_USBMONITOR_INTERVAL=1     : Dump trace data every second
+      CONFIG_USBMONITOR=y              : Enable the USB monitor daemon
+      CONFIG_USBMONITOR_STACKSIZE=2048 : USB monitor daemon stack size
+      CONFIG_USBMONITOR_PRIORITY=50    : USB monitor daemon priority
+      CONFIG_USBMONITOR_INTERVAL=1     : Dump trace data every second
 
   NOTE: If USB debug output is also enabled, both outpus will appear on the
   serial console.  However, the debug output will be asynchronous with the
@@ -1508,7 +1665,7 @@ SDRAM Support
 
     System Type->Heap Configuration
       CONFIG_SAMA5_ISRAM_HEAP=n              : These do not apply in this case
-      CONFIG_SAMA5_DCRS_HEAP=n
+      CONFIG_SAMA5_DDRCS_HEAP=n
 
     System Type->Boot Memory Configuration
       CONFIG_RAM_START=0x20000000           : Physical address of SDRAM
@@ -1635,8 +1792,8 @@ NAND Support
       to enable SDRAM as described above.
 
     Board Selection
-      CONFIG_SAMA5D3XPLAINED_NAND_AUTOMOUNT=y     : Enable FS support on NAND
-      CONFIG_SAMA5D3XPLAINED_NAND_NXFFS=y         : Use the NXFFS file system
+      CONFIG_SAMA5D3XPLAINED_NAND_BLOCKMOUNT=y : Enable FS support on NAND
+      CONFIG_SAMA5D3XPLAINED_NAND_NXFFS=y      : Use the NXFFS file system
 
       Other file systems are not recommended because only NXFFS can handle
       bad blocks and only NXFFS performs wear-levelling.
@@ -1659,8 +1816,8 @@ NAND Support
       Defaults for all other NXFFS settings should be okay.
 
     Board Selection
-      CONFIG_SAMA5D3XPLAINED_NAND_AUTOMOUNT=y     : Enable FS support on NAND
-      CONFIG_SAMA5D3XPLAINED_NAND_FTL=y           : Use an flash translation layer
+      CONFIG_SAMA5D3XPLAINED_NAND_BLOCKMOUNT=y : Enable FS support on NAND
+      CONFIG_SAMA5D3XPLAINED_NAND_FTL=y        : Use an flash translation layer
 
       NOTE:  FTL will require some significant buffering because of
       the large size of the NAND flash blocks.  You will also need
@@ -1677,7 +1834,7 @@ NAND Support
     Using NAND with NXFFS
     ---------------------
 
-    With the options CONFIG_SAMA5D3XPLAINED_NAND_AUTOMOUNT=y and
+    With the options CONFIG_SAMA5D3XPLAINED_NAND_BLOCKMOUNT=y and
     CONFIG_SAMA5D3XPLAINED_NAND_NXFFS=y, the NAND FLASH will be mounted in the NSH
     start-up logic before the NSH prompt appears.  There is no feedback as
     to whether or not the mount was successful.  You can, however, see the
@@ -1848,6 +2005,12 @@ NAND Support
   4. As mentioned above, FAT does work but (1) has some performance issues on
      writes and (2) cannot handle bad blocks.
 
+  5. There was a major reorganization of the SAMA5 code after NuttX-7.11 to
+     add support for the SAMA5D2.  Only the SAMA5D4-EK nsh configuration was
+     re-verified on 2015-09-29.  But as of this writing, none of the SAMA5D3-
+     Xplained configurations a been re-verified.  Some regression testing is
+     needed.
+
 I2C Tool
 ========
 
@@ -1867,8 +2030,6 @@ I2C Tool
 
     Device Drivers -> I2C Driver Support
       CONFIG_I2C=y                          : Enable I2C support
-      CONFIG_I2C_TRANSFER=y                 : Driver supports the transfer() method
-      CONFIG_I2C_WRITEREAD=y                : Driver supports the writeread() method
 
     Application Configuration -> NSH Library
       CONFIG_SYSTEM_I2CTOOL=y               : Enable the I2C tool
@@ -2221,9 +2382,27 @@ RTC
       CONFIG_RTC=y                         : Use the RTC for system time
       CONFIG_RTC_DATETIME=y                : RTC supports data/time
 
-  The RTC supports an alarm that may be enable with the following settings.
-  However, there is nothing in the system that currently makes use of this
-  alarm.
+  You can set the RTC using the NSH date command:
+
+    NuttShell (NSH) NuttX-7.3
+    nsh> help date
+    date usage:  date [-s "MMM DD HH:MM:SS YYYY"]
+    nsh> date
+    Jan 01 00:34:45 2012
+    nsh> date -s "JUN 29 7:30:00 2014"
+    nsh> date
+    Jun 29 07:30:01 2014
+
+  After a power cycle and reboot:
+
+    NuttShell (NSH) NuttX-7.3
+    nsh> date
+    Jun 29 07:30:55 2014
+    nsh>
+
+  The RTC also supports an alarm that may be enable with the following
+  settings.  However, there is nothing in the system that currently makes
+  use of this alarm.
 
     Drivers:
       CONFIG_RTC_ALARM=y                   : Enable the RTC alarm
@@ -2265,18 +2444,137 @@ TRNG and /dev/random
 
   NSH can be configured to enable the SAMA5 TRNG peripheral so that it
   provides /dev/random.  The following configuration will enable the TRNG,
-  /dev/random, and the simple test of /dev/random at apps/examples/ranadom:
+  and support for /dev/random:
 
     System Type:
       CONFIG_SAMA5_TRNG=y                 : Enable the TRNG peripheral
 
-    Drivers (automatically selected):
+    Drivers:
       CONFIG_DEV_RANDOM=y                 : Enable /dev/random
+
+  A simple test of /dev/random is available at apps/examples/random and
+  can be enabled as a NSH application via the following additional
+  configuration settings:
 
     Applications -> Examples
       CONFIG_EXAMPLES_RANDOM=y            : Enable apps/examples/random
       CONFIG_EXAMPLES_MAXSAMPLES=64       : Default settings are probably OK
       CONFIG_EXAMPLES_NSAMPLES=8
+
+Tickless OS
+===========
+
+  Background
+  ----------
+  By default, a NuttX configuration uses a periodic timer interrupt that
+  drives all system timing. The timer is provided by architecture-specifi
+  code that calls into NuttX at a rate controlled by CONFIG_USEC_PER_TICK.
+  The default value of CONFIG_USEC_PER_TICK is 10000 microseconds which
+  corresponds to a timer interrupt rate of 100 Hz.
+
+  An option is to configure NuttX to operation in a "tickless" mode. Some
+  limitations of default system timer are, in increasing order of
+  importance:
+
+  - Overhead: Although the CPU usage of the system timer interrupt at 100Hz
+    is really very low, it is still mostly wasted processing time. One most
+    timer interrupts, there is really nothing that needs be done other than
+    incrementing the counter.
+  - Resolution: Resolution of all system timing is also determined by
+    CONFIG_USEC_PER_TICK. So nothing that be time with resolution finer than
+    10 milliseconds be default. To increase this resolution,
+    CONFIG_USEC_PER_TICK an be reduced. However, then the system timer
+    interrupts use more of the CPU bandwidth processing useless interrupts.
+  - Power Usage: But the biggest issue is power usage. When the system is
+    IDLE, it enters a light, low-power mode (for ARMs, this mode is entered
+    with the wfi or wfe instructions for example). But each interrupt
+    awakens the system from this low power mode. Therefore, higher rates
+    of interrupts cause greater power consumption.
+
+  The so-called Tickless OS provides one solution to issue. The basic
+  concept here is that the periodic, timer interrupt is eliminated and
+  replaced with a one-shot, interval timer. It becomes event driven
+  instead of polled: The default system timer is a polled design. On
+  each interrupt, the NuttX logic checks if it needs to do anything
+  and, if so, it does it.
+
+  Using an interval timer, one can anticipate when the next interesting
+  OS event will occur, program the interval time and wait for it to fire.
+  When the interval time fires, then the scheduled activity is performed.
+
+  Configuration
+  -------------
+  The following configuration options will enable support for the Tickless
+  OS for the SAMA5D platforms using TC0 channels 0-3 (other timers or
+  timer channels could be used making the obvious substitutions):
+
+    RTOS Features -> Clocks and Timers
+      CONFIG_SCHED_TICKLESS=y          : Configures the RTOS in tickless mode
+      CONFIG_SCHED_TICKLESS_ALARM=n    : (option not implemented)
+
+    System Type -> SAMA5 Peripheral Support
+      CONFIG_SAMA5_TC0=y               : Enable TC0 (TC channels 0-3
+
+    System Type -> Timer/counter Configuration
+      CONFIG_SAMA5_ONESHOT=y           : Enables one-shot timer wrapper
+      CONFIG_SAMA5_FREERUN=y           : Enabled free-running timer wrapper
+      CONFIG_SAMA5_TICKLESS_ONESHOT=0  : Selects TC0 channel 0 for the one-shot
+      CONFIG_SAMA5_TICKLESS_FREERUN=1  : Selects TC0 channel 1 for the free-
+                                       : running timer
+
+  The resolution of the clock is provided by the CONFIG_USEC_PER_TICK
+  setting in the configuration file.
+
+  NOTE: In most cases, the slow clock will be used as the timer/counter
+  input.  You should enable the 32.768KHz crystal for the slow clock by
+  calling sam_sckc_enable().  Otherwise, you will be doing all system
+  timing using the RC clock!  UPDATE: This will now be selected by default
+  when you configure for TICKLESS support.
+
+  The slow clock has a resolution of about 30.518 microseconds.  Ideally,
+  the value of CONFIG_USEC_PER_TICK should be the exact clock resolution.
+  Otherwise there will be cumulative timing inaccuracies.  But a choice
+  choice of:
+
+    CONFIG_USEC_PER_TICK=31
+
+  will have an error of 0.6%  and will have inaccuracies that will
+  effect the time due to long term error build-up.
+
+  UPDATE: As of this writing (2015-12-03), the Tickless support is
+  functional.  However, there are inaccuracies  in delays.  For example,
+
+    nsh> sleep 10
+
+  results in a delay of maybe 5.4 seconds.  But the timing accuracy is
+  correct if all competing uses of the interval timer are disabled (mostly
+  from the high priority work queue).  Therefore, I conclude that this
+  inaccuracy is due to the inaccuracies in the representation of the clock
+  rate.  30.518 usec cannot be represented accurately.   Each timing
+  calculation results in a small error.  When the interval timer is very
+  busy, long delays will be divided into many small pieces and each small
+  piece has a large error in the calculation.  The cumulative error is the
+  cause of the problem.
+
+  SAMA5 Timer Usage
+  -----------------
+  This current implementation uses two timers:  A one-shot timer to
+  provide the timed events and a free running timer to provide the current
+  time.  Since timers are a limited resource, that could be an issue on
+  some systems.
+
+  We could do the job with a single timer if we were to keep the single
+  timer in a free-running at all times.  The SAMA5 timer/counters have
+  32-bit counters with the capability to generate a compare interrupt when
+  the timer matches a compare value but also to continue counting without
+  stopping (giving another, different interrupt when the timer rolls over
+  from 0xffffffff to zero).  So we could potentially just set the compare
+  at the number of ticks you want PLUS the current value of timer.  Then
+  you could have both with a single timer:  An interval timer and a free-
+  running counter with the same timer!  In this case, you would want to
+  to set CONFIG_SCHED_TICKLESS_ALARM in the NuttX configuration.
+
+  Patches are welcome!
 
 I2S Audio Support
 =================
@@ -2368,6 +2666,122 @@ I2S Audio Support
 
     Library Routines
       CONFIG_SCHED_WORKQUEUE=y          : Driver needs work queue support
+
+Shields
+=======
+
+  Support is built in for the following shields:
+
+  Itead Joystick Shield
+  ---------------------
+  See http://imall.iteadstudio.com/im120417014.html for more information
+  about this joystick.
+
+  Itead Joystick Connection:
+
+    --------- ----------------- ---------------------------------
+    ARDUINO   ITEAD             SAMA5D3 XPLAINED
+    PIN NAME  SIGNAL            CONNECTOR  SIGNAL
+    --------- ----------------- ---------- ----------------------
+     D3       Button E Output   J18 pin 4  PC8
+     D4       Button D Output   J18 pin 5  PC28
+     D5       Button C Output   J18 pin 6  PC7
+     D6       Button B Output   J18 pin 7  PC6
+     D7       Button A Output   J18 pin 8  PC5
+     D8       Button F Output   J15 pin 1  PC4
+     D9       Button G Output   J15 pin 2  PC3
+     A0       Joystick Y Output J17 pin 1  PC18  AD0 (function 4)
+     A1       Joystick X Output J17 pin 2  PD21  AD1 (function 1)
+    --------- ----------------- ---------- ----------------------
+
+    All buttons are pulled on the shield.  A sensed low value indicates
+    when the button is pressed.
+
+  Possible conflicts:
+
+    ---- ----- --------------------------------------------------
+    ARDU SAMA5 SAMA5D3 XPLAINED
+    PIN  GPIO  SIGNAL            FUNCTION
+    ---- ----- ----------------- --------------------------------
+     D3  PC8   EMDC              10/100Mbit Ethernet MAC
+     D4  PC28  SPI1_NPCS3/ISI_D9 SPI1/ISI
+     D5  PC7   EREFCK            10/100Mbit Ethernet MAC
+     D6  PC6   ECRSDV            10/100Mbit Ethernet MAC
+     D7  PC5   ECRSDV            10/100Mbit Ethernet MAC
+     D8  PC4   ETXEN             10/100Mbit Ethernet MAC
+     D9  PC3   ERX1              10/100Mbit Ethernet MAC
+     A0  PC18  RK0               SSC/Audio
+     A1  PC21  RD0               SSC/Audio
+    ---- ----- ----------------- --------------------------------
+
+  Itead Joystick Signal interpretation:
+
+    --------- ----------------------- ---------------------------
+    BUTTON     TYPE                    NUTTX ALIAS
+    --------- ----------------------- ---------------------------
+    Button A  Large button A          JUMP/BUTTON 3
+    Button B  Large button B          FIRE/BUTTON 2
+    Button C  Joystick select button  SELECT/BUTTON 1
+    Button D  Tiny Button D           BUTTON 6
+    Button E  Tiny Button E           BUTTON 7
+    Button F  Large Button F          BUTTON 4
+    Button G  Large Button G          BUTTON 5
+    --------- ----------------------- ---------------------------
+
+  Itead Joystick configuration settings:
+
+    System Type -> SAMA5 Peripheral Support
+      CONFIG_SAMA5_ADC=y               : Enable ADC driver support
+      CONFIG_SAMA5_TC0=y               : Enable the Timer/counter library need for periodic sampling
+      CONFIG_SAMA5_EMACA=n             : 10/100Mbit Ethernet MAC conflicts
+      CONFIG_SAMA5_SSC0=n              : SSC0 Audio conflicts
+      CONFIG_SAMA5_SPI1=?              : SPI1 might conflict if PCS3 is used
+      CONFIG_SAMA5_ISI=?               : ISIS conflics if bit 9 is used
+
+    System Type -> PIO Interrupts
+      CONFIG_SAMA5_PIO_IRQ=y           : PIO interrupt support is required
+      CONFIG_SAMA5_PIOC_IRQ=y          : PIOC interrupt support is required
+
+    Drivers
+      CONFIG_ANALOG=y                  : Should be automatically selected
+      CONFIG_ADC=y                     : Should be automatically selected
+      CONFIG_INPUT=y                   : Select input device support
+      CONFIG_AJOYSTICK=y               : Select analog joystick support
+
+    System Type -> ADC Configuration
+      CONFIG_SAMA5_ADC_CHAN0=y         : These settings enable the sequencer to collect
+      CONFIG_SAMA5_ADC_CHAN1=y         : Samples from ADC channels 0-1 on each trigger
+      CONFIG_SAMA5_ADC_SEQUENCER=y
+      CONFIG_SAMA5_ADC_TIOA0TRIG=y     : Trigger on the TC0, channel 0 output A
+      CONFIG_SAMA5_ADC_TIOAFREQ=10     : At a frequency of 10Hz
+      CONFIG_SAMA5_ADC_TIOA_RISING=y   : Trigger on the rising edge
+
+    Default ADC settings (like gain and offset) may also be set if desired.
+
+    System Type -> Timer/counter Configuration
+      CONFIG_SAMA5_TC0_TIOA0=y         : Should be automatically selected
+
+    Library routines
+      CONFIG_SCHED_WORKQUEUE=y         : Work queue support is needed
+
+  There is nothing in the configuration that currently uses the joystick.
+  For testing, you can add the following configuration options to enable the
+  analog joystick example at apps/examples/ajoystick:
+
+    CONFIG_NSH_ARCHINIT=y
+    CONFIG_EXAMPLES_AJOYSTICK=y
+    CONFIG_EXAMPLES_AJOYSTICK_DEVNAME="/dev/ajoy0"
+    CONFIG_EXAMPLES_AJOYSTICK_SIGNO=13
+
+  STATUS:
+  2014-12-03:  As nearly I can tell, the Itead Joystick shield cannot be
+    used with the SAMA5D3-Xplained.  I believe that the EMAC PHY chip is
+    enableed and since it shares pins with the Joystick, it interferes with
+    the Joystick inputs.  There is probably more wrong than this; perhaps I
+    am not setting up the pins correctly.  But having seen the states of the
+    button output pins change when powering up the board, I have lost hope
+    of getting the shield to work on this board.  I leave the
+    implementation in place only for reference.
 
 SAMA5D3-Xplained Configuration Options
 =================================
@@ -2477,7 +2891,7 @@ SAMA5D3-Xplained Configuration Options
     CONFIG_SAMA5_UHPHS       - USB Host High Speed
     CONFIG_SAMA5_UDPHS       - USB Device High Speed
     CONFIG_SAMA5_GMAC        - Gigabit Ethernet MAC
-    CONFIG_SAMA5_EMAC        - Ethernet MAC
+    CONFIG_SAMA5_EMACA       - Ethernet MAC (type A)
     CONFIG_SAMA5_LCDC        - LCD Controller
     CONFIG_SAMA5_ISI         - Image Sensor Interface
     CONFIG_SAMA5_SSC0        - Synchronous Serial Controller 0
@@ -2501,10 +2915,10 @@ SAMA5D3-Xplained Configuration Options
     CONFIG_SAMA5_PIOD_IRQ    - Support PIOD interrupts
     CONFIG_SAMA5_PIOE_IRQ    - Support PIOE interrupts
 
-    CONFIG_USART0_ISUART     - USART0 is configured as a UART
-    CONFIG_USART1_ISUART     - USART1 is configured as a UART
-    CONFIG_USART2_ISUART     - USART2 is configured as a UART
-    CONFIG_USART3_ISUART     - USART3 is configured as a UART
+    CONFIG_USART0_SERIALDRIVER - USART0 is configured as a UART
+    CONFIG_USART1_SERIALDRIVER - USART1 is configured as a UART
+    CONFIG_USART2_SERIALDRIVER - USART2 is configured as a UART
+    CONFIG_USART3_SERIALDRIVER - USART3 is configured as a UART
 
   AT91SAMA5 specific device driver settings
 
@@ -2587,7 +3001,7 @@ Configurations
     change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -2657,6 +3071,8 @@ Configurations
   Summary:  Some of the descriptions below are long and wordy. Here is the
   concise summary of the available SAMA5D3-Xplained configurations:
 
+    bridge:  This is a simple testing that exercises EMAC and GMAC for
+      a simple UDP relay bridge test.
     nsh:  This is another NSH configuration, not too different from the
       demo configuration.  The nsh configuration is, however, bare bones.
       It is the simplest possible NSH configuration and is useful as a
@@ -2666,6 +3082,68 @@ Configurations
   before of the status of individual configurations.
 
   Now for the gory details:
+
+  bridge:
+
+    This is a simple testing that exercises EMAC and GEMAC for a simple
+    UDP relay bridge test using apps/examples/bridge.  See
+    apps/examples/README.txt for more information about this test.
+
+
+    NOTES:
+
+    1. This configuration uses the default DBGU serial console.  That
+       is easily changed by reconfiguring to (1) enable a different
+       serial peripheral, and (2) selecting that serial peripheral as
+       the console device.
+
+    2. By default, this configuration is set up to build on Windows
+       under either a Cygwin or MSYS environment using a recent, Windows-
+       native, generic ARM EABI GCC toolchain (such as the CodeSourcery
+       toolchain).  Both the build environment and the toolchain
+       selection can easily be changed by reconfiguring:
+
+       CONFIG_HOST_WINDOWS=y                   : Windows operating system
+       CONFIG_WINDOWS_CYGWIN=y                 : POSIX environment under windows
+       CONFIG_ARMV7A_TOOLCHAIN_CODESOURCERYW=y : CodeSourcery for Windows
+
+       If you are running on Linux, make *certain* that you have
+       CONFIG_HOST_LINUX=y *before* the first make or you will create a
+       corrupt configuration that may not be easy to recover from. See
+       the warning in the section "Information Common to All Configurations"
+       for further information.
+
+    3. This configuration executes out of SDRAM flash and is loaded into
+       SDRAM from NAND, Serial DataFlash, SD card or from a TFTPC sever via
+       U-Boot or BareBox.  Data also is positioned in SDRAM.
+
+       I did most testing with nuttx.bin on an SD card.  These are the
+       commands that I used to boot NuttX from the SD card:
+
+         U-Boot> fatload mmc 0 0x20008000 nuttx.bin
+         U-Boot> go 0x20008040
+
+    4. You will almost certainly need to adapt this configuration to
+       work in your network environment.  I did all testing with a
+       single 10.0.0.xx network and a 4+1 port switch:
+
+       - Host PC IP 10.0.0.1
+       - Target GMAC IP: 10.0.0.2
+       - Target EMAC IP: 10.0.0.3
+
+       Host PC, EMAC, and GMAC were all connected using an Ethernet
+       switch to the same 255.255.255.0 network.
+
+    STATUS:
+
+      2014-11-20:  Configuration created.  Partially verified.  Both the
+        EMAC and GMAC appear to be function; both respond to pings from
+        the host PC.  But I cannot perform the full bridge test yet
+        because there still is no host-side test driver in apps/examples/bridge.
+      2014-11-21:  Added the host-side test driver and correct a number
+        of errors in the test logic.  The testing is working (according
+        to WireShark), but I an having some procedural issues related to
+        the Windows firewall.
 
   nsh:
 
@@ -2769,7 +3247,19 @@ To-Do List
    endpoint support in the EHCI driver is untested (but works in similar
    EHCI drivers).
 
-2) HSCMI TX DMA support is currently commented out.
+2) HSCMI. CONFIG_MMCSD_MULTIBLOCK_DISABLE=y is set to disable multi-block
+   transfers because of some issues that I saw during testing.  The is very
+   low priority to me but might be important to you if you are need very
+   high performance SD card accesses.
+
+   HSMCI TX DMA is currently disabled for the SAMA5D3.  There is some
+   issue with the TX DMA setup (HSMCI TX DMA the same driver works with
+   the SAMA5D4 which has a different DMA subsystem).  This is a bug that
+   needs to be resolved.
+
+   UPDATE:  This problem may be fixed with a bug correct on 2015-03-15).
+   Need to retest.  That change is necessary, but may not be sufficient to
+   solve the problem.
 
 3) GMAC has only been tested on a 10/100Base-T network.  I don't have a
    1000Base-T network to support additional testing.

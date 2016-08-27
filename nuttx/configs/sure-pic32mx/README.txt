@@ -248,10 +248,14 @@ Toolchains
 
   C32 Toolchain Options:
 
-    CONFIG_PIC32MX_MICROCHIPW      - MicroChip full toolchain for Windows
-    CONFIG_PIC32MX_MICROCHIPL      - MicroChip full toolchain for Linux
-    CONFIG_PIC32MX_MICROCHIPW_LITE - MicroChip "Lite" toolchain for Windows
-    CONFIG_PIC32MX_MICROCHIPL_LITE - MicroChip "Lite" toolchain for Linux
+    CONFIG_MIPS32_TOOLCHAIN_MICROCHIPW      - MicroChip full toolchain for Windows
+    CONFIG_MIPS32_TOOLCHAIN_MICROCHIPL      - MicroChip full toolchain for Linux
+    CONFIG_MIPS32_TOOLCHAIN_MICROCHIPW_LITE - MicroChip "Lite" toolchain for Windows
+    CONFIG_MIPS32_TOOLCHAIN_MICROCHIPL_LITE - MicroChip "Lite" toolchain for Linux
+    CONFIG_MIPS32_TOOLCHAIN_PINGUINOL       - Pinquino toolchain for Linux
+    CONFIG_MIPS32_TOOLCHAIN_PINGUINOW       - Pinquino toolchain for Windows
+    CONFIG_MIPS32_TOOLCHAIN_MICROCHIPOPENL  - Microchip open toolchain for Linux
+    CONFIG_MIPS32_TOOLCHAIN_GNU_ELF         - General mips-elf toolchain for Linux
 
   NOTE:  The "Lite" versions of the toolchain does not support C++.  Also
   certain optimization levels are not supported by the "Lite" toolchain.
@@ -291,7 +295,7 @@ Toolchains
   well. This toolchain can be downloded from the Penguino website:
   http://wiki.pinguino.cc/index.php/Main_Page#Download . There is some general
   information about using the Penguino mips-elf toolchain in this thread:
-  http://tech.groups.yahoo.com/group/nuttx/message/1821
+  https://groups.yahoo.com/neo/groups/nuttx/conversations/messages/1821
 
   See also configs/mirtoo/README.txt.  There is an experimental (untested)
   configuration for the Mirtoo platform in that directory.
@@ -317,7 +321,7 @@ Toolchains
 
   Even then, there are more warnings from the linker and some undefined symbols
   for non-NuttX code that resides in the unused Microchip libraries.  See this
-  email thread at http://tech.groups.yahoo.com/group/nuttx/message/1458 for more
+  email thread at https://groups.yahoo.com/neo/groups/nuttx/conversations/messages/1458 for more
   information.  You will have to solve at least this undefined symbol problem if
   you want to used the XC32 toolchain.
 
@@ -343,12 +347,6 @@ Toolchains
        make clean_context all
 
      An alias in your .bashrc file might make that less painful.
-
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
 
 Loading NuttX with PICkit2
 ==========================
@@ -645,7 +643,7 @@ Configurations
   change any of these configurations using that tool, you should:
 
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-       and misc/tools/
+       see additional README.txt files in the NuttX tools repository.
 
     b. Execute 'make menuconfig' in nuttx/ in order to start the
        reconfiguration process.
@@ -737,13 +735,13 @@ Where <subdir> is one of the following:
 
        File Systems:
          CONFIG_FS_FAT=y            : FAT file system
-                                  : Other FAT options
+                                    : Other FAT options
 
     Debug output for testing the SD card can be enabled using:
 
        Build Setup:
-         CONFIG_DEBUG=y             : Enable debug features
-         CONFIG_DEBUG_VERBOSE=y     : Enable verbose debug output
+         CONFIG_DEBUG_FEATURES=y    : Enable debug features
+         CONFIG_DEBUG_INFO=y        : Enable verbose debug output
          CONFIG_DEBUG_FS=y          : Enable file system debug
          CONFIG_DEBUG_SPI=y         : Enable SPI debug
 
@@ -774,8 +772,8 @@ Where <subdir> is one of the following:
        To enable LCD debug output:
 
        Build Setup -> Debug Options:
-         CONFIG_DEBUG=y             : Enable debug features
-         CONFIG_DEBUG_VERBOSE=y     : Enable verbose debug output
+         CONFIG_DEBUG_FEATURES=y             : Enable debug features
+         CONFIG_DEBUG_INFO=y     : Enable verbose debug output
          CONFIG_DEBUG_LCD=y         : Enable LCD debug output
 
        NOTES:
@@ -849,7 +847,6 @@ Where <subdir> is one of the following:
        settings do nothing until you enable debug ouput.
 
         Device Drivers -> System Logging Device Options:
-          CONFIG_SYSLOG=y             : Configure SYSLOG output
           CONFIG_SYSLOG_CHAR=y
           CONFIG_SYSLOG_DEVPATH="/dev/ttyS0"
 
@@ -885,15 +882,15 @@ Where <subdir> is one of the following:
           CONFIG_NSH_ARCHINIT=y                   : Automatically start the USB monitor
 
         Application Configuration -> System NSH Add-Ons:
-          CONFIG_SYSTEM_USBMONITOR=y              : Enable the USB monitor daemon
-          CONFIG_SYSTEM_USBMONITOR_STACKSIZE=2048 : USB monitor daemon stack size
-          CONFIG_SYSTEM_USBMONITOR_PRIORITY=50    : USB monitor daemon priority
-          CONFIG_SYSTEM_USBMONITOR_INTERVAL=1     : Dump trace data every second
-          CONFIG_SYSTEM_USBMONITOR_TRACEINIT=y    : Enable TRACE output
-          CONFIG_SYSTEM_USBMONITOR_TRACECLASS=y
-          CONFIG_SYSTEM_USBMONITOR_TRACETRANSFERS=y
-          CONFIG_SYSTEM_USBMONITOR_TRACECONTROLLER=y
-          CONFIG_SYSTEM_USBMONITOR_TRACEINTERRUPTS=y
+          CONFIG_USBMONITOR=y              : Enable the USB monitor daemon
+          CONFIG_USBMONITOR_STACKSIZE=2048 : USB monitor daemon stack size
+          CONFIG_USBMONITOR_PRIORITY=50    : USB monitor daemon priority
+          CONFIG_USBMONITOR_INTERVAL=1     : Dump trace data every second
+          CONFIG_USBMONITOR_TRACEINIT=y    : Enable TRACE output
+          CONFIG_USBMONITOR_TRACECLASS=y
+          CONFIG_USBMONITOR_TRACETRANSFERS=y
+          CONFIG_USBMONITOR_TRACECONTROLLER=y
+          CONFIG_USBMONITOR_TRACEINTERRUPTS=y
 
        NOTE: USB debug output also be enabled in this case.  Both will appear
        on the serial SYSLOG output.  However, the debug output will be
@@ -915,16 +912,12 @@ Where <subdir> is one of the following:
         output will come the USB console, and 2) all debug output prior
         to connecting the USB console will be lost:
 
-        Device Drivers -> System Logging Device Options:
-           CONFIG_SYSLOG=n            : Disable SYSLOG output
-
         The second options is to configure a RAM SYLOG device.  This is
         a circular buffer that accumulated debug output in memory.  The
         contents of the circular buffer can be dumped from the NSH command
         line using the 'dmesg' command.
 
         Device Drivers -> System Logging Device Options:
-          CONFIG_SYSLOG=y             : Enables the System Logging feature.
           CONFIG_RAMLOG=y             : Enable the RAM-based logging feature.
           CONFIG_RAMLOG_CONSOLE=n     : (there is no default console device)
           CONFIG_RAMLOG_SYSLOG=y      : This enables the RAM-based logger as the
@@ -932,7 +925,7 @@ Where <subdir> is one of the following:
 
         Logging is currently can be set up to use any amount of memory (here 8KB):
 
-          CONFIG_RAMLOG_CONSOLE_BUFSIZE=8192
+          CONFIG_RAMLOG_BUFSIZE=8192
 
         STATUS:
           2013-7-4:  This configuration was last verified.

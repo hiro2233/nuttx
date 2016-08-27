@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sam34/sam_wdt.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014-2016 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *            Bob Doiron
  *
@@ -47,7 +47,8 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <nuttx/watchdog.h>
+#include <nuttx/irq.h>
+#include <nuttx/timers/watchdog.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
@@ -56,7 +57,7 @@
 #if defined(CONFIG_WATCHDOG) && defined(CONFIG_SAM34_WDT)
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Clocking *****************************************************************/
 /* The minimum frequency of the WWDG clock is:
@@ -71,7 +72,7 @@
  *   1000 * 64 / Fmin = 49.93 msec
  */
 
-#define WDT_FCLK        (BOARD_SLCK_FREQUENCY / 128)
+#define WDT_FCLK        (BOARD_SCLK_FREQUENCY / 128)
 #define WDT_MAXTIMEOUT  ((1000 * (WDT_MR_WDV_MAX+1)) / WDT_FCLK)
 
 /* Configuration ************************************************************/
@@ -80,18 +81,8 @@
 #  define CONFIG_SAM34_WDT_DEFTIMOUT WDT_MAXTIMEOUT
 #endif
 
-/* Debug ********************************************************************/
-/* Non-standard debug that may be enabled just for testing the watchdog
- * driver.  NOTE: that only lldbg types are used so that the output is
- * immediately available.
- */
-
-#ifdef CONFIG_DEBUG_WATCHDOG
-#  define wddbg    lldbg
-#  define wdvdbg   llvdbg
-#else
-#  define wddbg(x...)
-#  define wdvdbg(x...)
+#ifndef CONFIG_DEBUG_WATCHDOG_INFO
+#  undef CONFIG_SAM34_WDT_REGDEBUG
 #endif
 
 /****************************************************************************
@@ -117,7 +108,7 @@ struct sam34_lowerhalf_s
  ****************************************************************************/
 /* Register operations ******************************************************/
 
-#if defined(CONFIG_SAM34_WDT_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_SAM34_WDT_REGDEBUG
 static uint32_t sam34_getreg(uint32_t addr);
 static void     sam34_putreg(uint32_t val, uint32_t addr);
 #else
@@ -175,7 +166,7 @@ static struct sam34_lowerhalf_s g_wdgdev;
  *
  ****************************************************************************/
 
-#if defined(CONFIG_SAM34_WDT_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_SAM34_WDT_REGDEBUG
 static uint32_t sam34_getreg(uint32_t addr)
 {
   static uint32_t prevaddr = 0;
@@ -194,10 +185,11 @@ static uint32_t sam34_getreg(uint32_t addr)
     {
       if (count == 0xffffffff || ++count > 3)
         {
-           if (count == 4)
-             {
-               lldbg("...\n");
-             }
+          if (count == 4)
+            {
+              wdinfo("...\n");
+            }
+
           return val;
         }
     }
@@ -206,25 +198,25 @@ static uint32_t sam34_getreg(uint32_t addr)
 
   else
     {
-       /* Did we print "..." for the previous value? */
+      /* Did we print "..." for the previous value? */
 
-       if (count > 3)
-         {
-           /* Yes.. then show how many times the value repeated */
+      if (count > 3)
+        {
+          /* Yes.. then show how many times the value repeated */
 
-           lldbg("[repeats %d more times]\n", count-3);
-         }
+          wdinfo("[repeats %d more times]\n", count-3);
+        }
 
-       /* Save the new address, value, and count */
+      /* Save the new address, value, and count */
 
-       prevaddr = addr;
-       preval   = val;
-       count    = 1;
+      prevaddr = addr;
+      preval   = val;
+      count    = 1;
     }
 
   /* Show the register value read */
 
-  lldbg("%08x->%08x\n", addr, val);
+  wdinfo("%08x->%08x\n", addr, val);
   return val;
 }
 #endif
@@ -237,12 +229,12 @@ static uint32_t sam34_getreg(uint32_t addr)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_SAM34_WDT_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_SAM34_WDT_REGDEBUG
 static void sam34_putreg(uint32_t val, uint32_t addr)
 {
   /* Show the register value being written */
 
-  lldbg("%08x<-%08x\n", addr, val);
+  wdinfo("%08x<-%08x\n", addr, val);
 
   /* Write the value */
 
@@ -312,7 +304,7 @@ static int sam34_start(FAR struct watchdog_lowerhalf_s *lower)
   FAR struct sam34_lowerhalf_s *priv = (FAR struct sam34_lowerhalf_s *)lower;
   uint32_t mr_val = 0;
 
-  wdvdbg("Entry\n");
+  wdinfo("Entry\n");
   DEBUGASSERT(priv);
 
   /* The watchdog is always disabled after a reset. It is enabled by setting
@@ -328,7 +320,7 @@ static int sam34_start(FAR struct watchdog_lowerhalf_s *lower)
   }
 #endif
 
- /* TODO: WDT_MR_WDFIEN if handler available? WDT_MR_WDRPROC? */
+  /* TODO: WDT_MR_WDFIEN if handler available? WDT_MR_WDRPROC? */
 
   mr_val |= (WDT_MR_WDD(priv->window) | WDT_MR_WDV(priv->reload) | WDT_MR_WDRSTEN);
   sam34_putreg(mr_val, SAM_WDT_MR);
@@ -358,7 +350,7 @@ static int sam34_stop(FAR struct watchdog_lowerhalf_s *lower)
    * except by a reset.
    */
 
-  wdvdbg("Entry\n");
+  wdinfo("Entry\n");
   return -ENOSYS;
 }
 
@@ -371,7 +363,7 @@ static int sam34_stop(FAR struct watchdog_lowerhalf_s *lower)
  *   the watchdog timer or "petting the dog".
  *
  *   The application program must write in the WDT_CR register at regular
- *   intervals during normal operation to prevent an MCU reset. 
+ *   intervals during normal operation to prevent an MCU reset.
  *
  * Input Parameters:
  *   lower - A pointer the publicly visible representation of the "lower-half"
@@ -384,11 +376,8 @@ static int sam34_stop(FAR struct watchdog_lowerhalf_s *lower)
 
 static int sam34_keepalive(FAR struct watchdog_lowerhalf_s *lower)
 {
-  FAR struct sam34_lowerhalf_s *priv = (FAR struct sam34_lowerhalf_s *)lower;
+  wdinfo("Entry\n");
 
-  wdvdbg("Entry\n");
-  DEBUGASSERT(priv);
-  
   sam34_putreg((WDT_CR_KEY | WDT_CR_WDRSTT), SAM_WDT_CR);
   return OK;
 }
@@ -415,7 +404,7 @@ static int sam34_getstatus(FAR struct watchdog_lowerhalf_s *lower,
   FAR struct sam34_lowerhalf_s *priv = (FAR struct sam34_lowerhalf_s *)lower;
   uint32_t elapsed;
 
-  wdvdbg("Entry\n");
+  wdinfo("Entry\n");
   DEBUGASSERT(priv);
 
   /* Return the status bit */
@@ -425,7 +414,7 @@ static int sam34_getstatus(FAR struct watchdog_lowerhalf_s *lower,
     {
       status->flags |= WDFLAGS_ACTIVE;
     }
- 
+
   if (priv->handler)
     {
       status->flags |= WDFLAGS_CAPTURE;
@@ -442,10 +431,10 @@ static int sam34_getstatus(FAR struct watchdog_lowerhalf_s *lower,
 
   status->timeleft = (priv->timeout * elapsed) / (priv->reload + 1);
 
-  wdvdbg("Status     : %08x\n", sam34_getreg(SAM_WDT_SR));
-  wdvdbg("  flags    : %08x\n", status->flags);
-  wdvdbg("  timeout  : %d\n", status->timeout);
-  wdvdbg("  timeleft : %d\n", status->timeleft);
+  wdinfo("Status     : %08x\n", sam34_getreg(SAM_WDT_SR));
+  wdinfo("  flags    : %08x\n", status->flags);
+  wdinfo("  timeout  : %d\n", status->timeout);
+  wdinfo("  timeleft : %d\n", status->timeleft);
   return OK;
 }
 
@@ -472,18 +461,18 @@ static int sam34_settimeout(FAR struct watchdog_lowerhalf_s *lower,
   uint32_t reload;
 
   DEBUGASSERT(priv);
-  wdvdbg("Entry: timeout=%d\n", timeout);
+  wdinfo("Entry: timeout=%d\n", timeout);
 
   /* Can this timeout be represented? */
 
   if (timeout < 1 || timeout > WDT_MAXTIMEOUT)
     {
-      wddbg("Cannot represent timeout=%d > %d\n",
+      wderr("ERROR: Cannot represent timeout=%d > %d\n",
             timeout, WDT_MAXTIMEOUT);
       return -ERANGE;
     }
 
-   
+
     reload = ((timeout * WDT_FCLK) / 1000) - 1;
 
   /* Make sure that the final reload value is within range */
@@ -504,9 +493,9 @@ static int sam34_settimeout(FAR struct watchdog_lowerhalf_s *lower,
 
   priv->reload = reload;
 
-  wdvdbg("fwdt=%d reload=%d timout=%d\n",
+  wdinfo("fwdt=%d reload=%d timout=%d\n",
          WDT_FCLK, reload, priv->timeout);
-  
+
   /* Don't commit to MR register until started! */
 
   return OK;
@@ -537,17 +526,18 @@ static int sam34_settimeout(FAR struct watchdog_lowerhalf_s *lower,
 static xcpt_t sam34_capture(FAR struct watchdog_lowerhalf_s *lower,
                             xcpt_t handler)
 {
-#if 0 // TODO
+#if 0 /* TODO */
   FAR struct sam34_lowerhalf_s *priv = (FAR struct sam34_lowerhalf_s *)lower;
   irqstate_t flags;
   xcpt_t oldhandler;
   uint16_t regval;
 
   DEBUGASSERT(priv);
-  wdvdbg("Entry: handler=%p\n", handler);
+  wdinfo("Entry: handler=%p\n", handler);
 
   /* Get the old handler return value */
-  flags = irqsave();
+
+  flags = enter_critical_section();
   oldhandler = priv->handler;
 
   /* Save the new handler */
@@ -563,8 +553,8 @@ static xcpt_t sam34_capture(FAR struct watchdog_lowerhalf_s *lower,
 
       regval |= WWDG_CFR_EWI;
       sam34_putreg(regval, SAM_WDT_CFR);
- 
-      up_enable_irq(STM32_IRQ_WWDG);
+
+      up_enable_irq(SAM_IRQ_WWDG);
     }
   else
     {
@@ -573,11 +563,12 @@ static xcpt_t sam34_capture(FAR struct watchdog_lowerhalf_s *lower,
       regval &= ~WWDG_CFR_EWI;
       sam34_putreg(regval, SAM_WDT_CFR);
 
-      up_disable_irq(STM32_IRQ_WWDG);
+      up_disable_irq(SAM_IRQ_WWDG);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return oldhandler;
+
 #endif
   ASSERT(0);
   return NULL;
@@ -610,7 +601,7 @@ static int sam34_ioctl(FAR struct watchdog_lowerhalf_s *lower, int cmd,
   int ret = -ENOTTY;
 
   DEBUGASSERT(priv);
-  wdvdbg("Entry: cmd=%d arg=%ld\n", cmd, arg);
+  wdinfo("Entry: cmd=%d arg=%ld\n", cmd, arg);
 
   /* WDIOC_MINTIME: Set the minimum ping time.  If two keepalive ioctls
    * are received within this time, a reset event will be generated.
@@ -622,7 +613,7 @@ static int sam34_ioctl(FAR struct watchdog_lowerhalf_s *lower, int cmd,
       uint32_t mintime = (uint32_t)arg;
 
       ret = -EINVAL;
-      if (priv->started) 
+      if (priv->started)
         {
           ret = -ENOSYS; /* can't write the MR more than once! */
         }
@@ -634,8 +625,8 @@ static int sam34_ioctl(FAR struct watchdog_lowerhalf_s *lower, int cmd,
       else if (mintime < priv->timeout)
         {
           uint32_t window = (((priv->timeout - mintime) * WDT_FCLK) / 1000) - 1;
-          DEBUGASSERT(window < priv->reload);
-          priv->window = window; 
+          DEBUGASSERT(window <= priv->reload);
+          priv->window = window;
           ret = OK;
         }
     }
@@ -652,7 +643,7 @@ static int sam34_ioctl(FAR struct watchdog_lowerhalf_s *lower, int cmd,
  *
  * Description:
  *   Initialize the WDT watchdog timer.  The watchdog timer is initialized and
- *   registers as 'devpath'.  
+ *   registers as 'devpath'.
  *
  * Input Parameters:
  *   devpath - The full path to the watchdog.  This should be of the form
@@ -667,8 +658,15 @@ static int sam34_ioctl(FAR struct watchdog_lowerhalf_s *lower, int cmd,
 void sam_wdtinitialize(FAR const char *devpath)
 {
   FAR struct sam34_lowerhalf_s *priv = &g_wdgdev;
+  uint32_t mr_val;
 
-  wdvdbg("Entry: devpath=%s\n", devpath);
+  /* Enable watchdog with 5 sec timeout */
+
+  mr_val = (WDT_MR_WDD((5) * WDT_FCLK) | WDT_MR_WDV((5) * WDT_FCLK) |
+           WDT_MR_WDRSTEN);
+  sam34_putreg(mr_val, SAM_WDT_MR);
+
+  wdinfo("Entry: devpath=%s\n", devpath);
 
   /* NOTE we assume that clocking to the IWDG has already been provided by
    * the RCC initialization logic.
@@ -692,6 +690,10 @@ void sam_wdtinitialize(FAR const char *devpath)
 
   sam34_settimeout((FAR struct watchdog_lowerhalf_s *)priv,
                    CONFIG_WDT_TIMEOUT);
+
+  /* Disable minimum time feature for now. */
+
+  priv->window = priv->reload;
 
   /* Register the watchdog driver as /dev/watchdog0 */
 

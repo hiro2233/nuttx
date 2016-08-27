@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/nximage/nximage_main.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
 #include <nuttx/config.h>
 
 #include <sys/types.h>
+#include <sys/boardctl.h>
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -52,13 +53,18 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/arch.h>
+#include <nuttx/board.h>
+
 #ifdef CONFIG_NX_LCDDRIVER
 #  include <nuttx/lcd/lcd.h>
 #else
 #  include <nuttx/video/fb.h>
+#  ifdef CONFIG_VNCSERVER
+#    include <nuttx/video/vnc.h>
+#  endif
 #endif
 
-#include <nuttx/arch.h>
 #include <nuttx/nx/nx.h>
 #include <nuttx/nx/nxglib.h>
 #include <nuttx/nx/nxfonts.h>
@@ -125,40 +131,48 @@ struct nximage_data_s g_nximage =
 static inline int nximage_initialize(void)
 {
   FAR NX_DRIVERTYPE *dev;
+  int ret;
 
 #if defined(CONFIG_EXAMPLES_NXIMAGE_EXTERNINIT)
+  struct boardioc_graphics_s devinfo;
+
   /* Use external graphics driver initialization */
 
-  message("nximage_initialize: Initializing external graphics device\n");
-  dev = up_nxdrvinit(CONFIG_EXAMPLES_NXIMAGE_DEVNO);
-  if (!dev)
+  printf("nximage_initialize: Initializing external graphics device\n");
+
+  devinfo.devno = CONFIG_EXAMPLES_NXIMAGE_DEVNO;
+  devinfo.dev = NULL;
+
+  ret = boardctl(BOARDIOC_GRAPHICS_SETUP, (uintptr_t)&devinfo);
+  if (ret < 0)
     {
-      message("nximage_initialize: up_nxdrvinit failed, devno=%d\n",
-              CONFIG_EXAMPLES_NXIMAGE_DEVNO);
+      printf("nximage_initialize: boardctl failed, devno=%d: %d\n",
+             CONFIG_EXAMPLES_NXIMAGE_DEVNO, errno);
       g_nximage.code = NXEXIT_EXTINITIALIZE;
       return ERROR;
     }
 
-#elif defined(CONFIG_NX_LCDDRIVER)
-  int ret;
+  dev = devinfo.dev;
 
+#elif defined(CONFIG_NX_LCDDRIVER)
   /* Initialize the LCD device */
 
-  message("nximage_initialize: Initializing LCD\n");
-  ret = up_lcdinitialize();
+  printf("nximage_initialize: Initializing LCD\n");
+  ret = board_lcd_initialize();
   if (ret < 0)
     {
-      message("nximage_initialize: up_lcdinitialize failed: %d\n", -ret);
+      printf("nximage_initialize: board_lcd_initialize failed: %d\n", -ret);
       g_nximage.code = NXEXIT_LCDINITIALIZE;
       return ERROR;
     }
 
   /* Get the device instance */
 
-  dev = up_lcdgetdev(CONFIG_EXAMPLES_NXIMAGE_DEVNO);
+  dev = board_lcd_getdev(CONFIG_EXAMPLES_NXIMAGE_DEVNO);
   if (!dev)
     {
-      message("nximage_initialize: up_lcdgetdev failed, devno=%d\n", CONFIG_EXAMPLES_NXIMAGE_DEVNO);
+      printf("nximage_initialize: board_lcd_getdev failed, devno=%d\n",
+             CONFIG_EXAMPLES_NXIMAGE_DEVNO);
       g_nximage.code = NXEXIT_LCDGETDEV;
       return ERROR;
     }
@@ -167,23 +181,25 @@ static inline int nximage_initialize(void)
 
   (void)dev->setpower(dev, ((3*CONFIG_LCD_MAXPOWER + 3)/4));
 #else
-  int ret;
-
   /* Initialize the frame buffer device */
 
-  message("nximage_initialize: Initializing framebuffer\n");
-  ret = up_fbinitialize();
+  printf("nximage_initialize: Initializing framebuffer\n");
+
+  ret = up_fbinitialize(0);
   if (ret < 0)
     {
-      message("nximage_initialize: up_fbinitialize failed: %d\n", -ret);
+      printf("nximage_initialize: up_fbinitialize failed: %d\n", -ret);
+
       g_nximage.code = NXEXIT_FBINITIALIZE;
       return ERROR;
     }
 
-  dev = up_fbgetvplane(CONFIG_EXAMPLES_NXIMAGE_VPLANE);
+  dev = up_fbgetvplane(0, CONFIG_EXAMPLES_NXIMAGE_VPLANE);
   if (!dev)
     {
-      message("nximage_initialize: up_fbgetvplane failed, vplane=%d\n", CONFIG_EXAMPLES_NXIMAGE_VPLANE);
+      printf("nximage_initialize: up_fbgetvplane failed, vplane=%d\n",
+             CONFIG_EXAMPLES_NXIMAGE_VPLANE);
+
       g_nximage.code = NXEXIT_FBGETVPLANE;
       return ERROR;
     }
@@ -191,14 +207,30 @@ static inline int nximage_initialize(void)
 
   /* Then open NX */
 
-  message("nximage_initialize: Open NX\n");
+  printf("nximage_initialize: Open NX\n");
   g_nximage.hnx = nx_open(dev);
   if (!g_nximage.hnx)
     {
-      message("nximage_initialize: nx_open failed: %d\n", errno);
+      printf("nximage_initialize: nx_open failed: %d\n", errno);
+
       g_nximage.code = NXEXIT_NXOPEN;
       return ERROR;
     }
+
+#ifdef CONFIG_VNCSERVER
+  /* Setup the VNC server to support keyboard/mouse inputs */
+
+  ret = vnc_default_fbinitialize(0, g_nximage.hnx);
+  if (ret < 0)
+    {
+      printf("vnc_default_fbinitialize failed: %d\n", ret);
+
+      g_nximage.code = NXEXIT_FBINITIALIZE;
+      nx_close(g_nximage.hnx);
+      return ERROR;
+    }
+#endif
+
   return OK;
 }
 
@@ -214,7 +246,11 @@ static inline int nximage_initialize(void)
  *
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int nximage_main(int argc, char *argv[])
+#endif
 {
   nxgl_mxpixel_t color;
   int ret;
@@ -222,10 +258,10 @@ int nximage_main(int argc, char *argv[])
   /* Initialize NX */
 
   ret = nximage_initialize();
-  message("nximage_main: NX handle=%p\n", g_nximage.hnx);
+  printf("nximage_main: NX handle=%p\n", g_nximage.hnx);
   if (!g_nximage.hnx || ret < 0)
     {
-      message("nximage_main: Failed to get NX handle: %d\n", errno);
+      printf("nximage_main: Failed to get NX handle: %d\n", errno);
       g_nximage.code = NXEXIT_NXOPEN;
       goto errout;
     }
@@ -233,12 +269,12 @@ int nximage_main(int argc, char *argv[])
   /* Set the background to the configured background color */
 
   color =  nximage_bgcolor();
-  message("nximage_main: Set background color=%d\n", color);
+  printf("nximage_main: Set background color=%u\n", color);
 
   ret = nx_setbgcolor(g_nximage.hnx, &color);
   if (ret < 0)
     {
-      message("nximage_main: nx_setbgcolor failed: %d\n", errno);
+      printf("nximage_main: nx_setbgcolor failed: %d\n", errno);
       g_nximage.code = NXEXIT_NXSETBGCOLOR;
       goto errout_with_nx;
     }
@@ -248,7 +284,7 @@ int nximage_main(int argc, char *argv[])
   ret = nx_requestbkgd(g_nximage.hnx, &g_nximagecb, NULL);
   if (ret < 0)
     {
-      message("nximage_main: nx_setbgcolor failed: %d\n", errno);
+      printf("nximage_main: nx_setbgcolor failed: %d\n", errno);
       g_nximage.code = NXEXIT_NXREQUESTBKGD;
       goto errout_with_nx;
     }
@@ -261,7 +297,7 @@ int nximage_main(int argc, char *argv[])
     {
       (void)sem_wait(&g_nximage.sem);
     }
-  message("nximage_main: Screen resolution (%d,%d)\n", g_nximage.xres, g_nximage.yres);
+  printf("nximage_main: Screen resolution (%d,%d)\n", g_nximage.xres, g_nximage.yres);
 
   /* Now, put up the NuttX logo and wait a bit so that it visible. */
 
@@ -275,7 +311,7 @@ int nximage_main(int argc, char *argv[])
   /* Close NX */
 
 errout_with_nx:
-  message("nximage_main: Close NX\n");
+  printf("nximage_main: Close NX\n");
   nx_close(g_nximage.hnx);
 errout:
   return g_nximage.code;

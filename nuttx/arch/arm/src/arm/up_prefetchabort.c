@@ -1,7 +1,7 @@
 /****************************************************************************
  *  arch/arm/src/arm/up_prefetchabort.c
  *
- *   Copyright (C) 2007-2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2011, 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,23 +47,12 @@
 #  include <nuttx/page.h>
 #endif
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-
-/* Debug ********************************************************************/
-
-/* Output debug info if stack dump is selected -- even if
- * debug is not selected.
- */
-
-#ifdef CONFIG_ARCH_STACKDUMP
-# undef  lldbg
-# define lldbg lowsyslog
-#endif
 
 /****************************************************************************
  * Private Data
@@ -92,13 +81,13 @@ void up_prefetchabort(uint32_t *regs)
 #ifdef CONFIG_PAGING
    uint32_t *savestate;
 
-  /* Save the saved processor context in current_regs where it can be accessed
+  /* Save the saved processor context in CURRENT_REGS where it can be accessed
    * for register dumps and possibly context switching.
    */
 
-  savestate    = (uint32_t*)current_regs;
+  savestate    = (uint32_t *)CURRENT_REGS;
 #endif
-  current_regs = regs;
+  CURRENT_REGS = regs;
 
 #ifdef CONFIG_PAGING
   /* Get the (virtual) address of instruction that caused the prefetch abort.
@@ -110,8 +99,8 @@ void up_prefetchabort(uint32_t *regs)
    * virtual addresses.
    */
 
-  pglldbg("VADDR: %08x VBASE: %08x VEND: %08x\n",
-          regs[REG_PC], PG_PAGED_VBASE, PG_PAGED_VEND);
+  pginfo("VADDR: %08x VBASE: %08x VEND: %08x\n",
+         regs[REG_PC], PG_PAGED_VBASE, PG_PAGED_VEND);
 
   if (regs[REG_R15] >= PG_PAGED_VBASE && regs[REG_R15] < PG_PAGED_VEND)
     {
@@ -121,7 +110,7 @@ void up_prefetchabort(uint32_t *regs)
        * prefetch and data aborts.
        */
 
-      FAR struct tcb_s *tcb = (FAR struct tcb_s *)g_readytorun.head;
+      struct tcb_s *tcb = this_task();
       tcb->xcp.far  = regs[REG_R15];
 
       /* Call pg_miss() to schedule the page fill.  A consequences of this
@@ -138,17 +127,17 @@ void up_prefetchabort(uint32_t *regs)
 
       pg_miss();
 
-      /* Restore the previous value of current_regs.  NULL would indicate that
+      /* Restore the previous value of CURRENT_REGS.  NULL would indicate that
        * we are no longer in an interrupt handler.  It will be non-NULL if we
        * are returning from a nested interrupt.
        */
 
-      current_regs = savestate;
+      CURRENT_REGS = savestate;
     }
   else
 #endif
     {
-      lldbg("Prefetch abort. PC: %08x\n", regs[REG_PC]);
+      _alert("Prefetch abort. PC: %08x\n", regs[REG_PC]);
       PANIC();
     }
 }

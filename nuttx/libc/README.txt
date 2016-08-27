@@ -11,12 +11,15 @@ mode.  In that model, there is no real architectural distinction between
 what is a kernel-mode program and what is a user-mode program; the system is
 more like on multi-threaded program that all runs in kernel-mode.
 
-But if the CONFIG_NUTTX_KERNEL option is selected, NuttX will be built into
-distinct user-mode and kernel-mode sections.  In that case, most of the
+But if the CONFIG_BUILD_PROTECTED option is selected, NuttX will be built
+into distinct user-mode and kernel-mode sections.  In that case, most of the
 code in the nuttx/ directory will run in kernel-mode with with exceptions
 of (1) the user-mode "proxies" found in syscall/proxies, and (2) the
 standard C library functions found in this directory.  In this build model,
 it is critical to separate the user-mode OS interfaces in this way.
+
+If CONFIG_BUILD_KERNEL is selected, then only a NuttX kernel will be built
+with no applications.
 
 Sub-Directories
 ===============
@@ -25,11 +28,11 @@ The files in the libc/ directory are organized (mostly) according which file
 in the include/ directory provides the prototype for library functions.  So
 we have:
 
-  audio     - This part of the audio system: nuttx/audio/audio.h
+  audio     - This part of he audio system: nuttx/audio/audio.h
+  hex2bin   - hex2bin.h
   libgen    - libgen.h
   fixedmath - fixedmath.h
   math      - math.h
-  mqueue    - pthread.h
   net       - Various network-related header files: netinet/ether.h, arpa/inet.h
   pthread   - pthread.h
   queue     - queue.h
@@ -40,6 +43,9 @@ we have:
   string    - string.h
   time      - time.h
   unistd    - unistd.h
+
+Most of these are "standard" header files; some are not: hex2bin.h and
+fixemath.h are non-standard.
 
 There is also a misc/ subdirectory that contains various internal functions
 and interfaces from header files that are too few to warrant their own sub-
@@ -52,7 +58,7 @@ Library Database
 
 Information about functions available in the NuttX C library information is
 maintained in a database.  That "database" is implemented as a simple comma-
-separated-value file, lib.csv.  Most spreadsheets programs will accept this
+separated-value file, libc.csv.  Most spreadsheets programs will accept this
 format and can be used to maintain the library database.
 
 This library database will (eventually) be used to generate symbol library
@@ -78,7 +84,7 @@ Each type field has a format as follows:
         A similar situation exists for unions.  For example, the formal
         parameter type union sigval -- You cannot cast a uintptr_t to
         a union sigval, but you can cast to the type of one of the union
-        member types when passing the actual paramter.  Similarly, we
+        member types when passing the actual parameter.  Similarly, we
         cannot cast a union sigval to a uinptr_t either.  Rather, we need
         to cast a specific union member fieldname to uintptr_t.
 

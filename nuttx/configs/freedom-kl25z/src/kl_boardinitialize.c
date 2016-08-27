@@ -1,6 +1,5 @@
 /************************************************************************************
- * configs/freedom-kl25z/src/up_boot.c
- * arch/arm/src/board/up_boot.c
+ * configs/freedom-kl25z/src/kl_boardinitialize.c
  *
  *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -42,13 +41,14 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
 #include "freedom-kl25z.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /************************************************************************************
@@ -64,7 +64,7 @@
  *
  * Description:
  *   All K25Z architectures must provide the following entry point.  This entry point
- *   is called early in the intitialization -- after all memory has been configured
+ *   is called early in the initialization -- after all memory has been configured
  *   and mapped but before any devices have been initialized.
  *
  ************************************************************************************/
@@ -72,19 +72,19 @@
 void kl_boardinitialize(void)
 {
   /* Configure SPI chip selects if 1) SPI is not disabled, and 2) the weak function
-   * kl_spiinitialize() has been brought into the link.
+   * kl_spidev_initialize() has been brought into the link.
    */
 
 #if defined(CONFIG_KL_SPI0) || defined(CONFIG_KL_SPI1)
-  if (kl_spiinitialize)
+  if (kl_spidev_initialize)
     {
-      kl_spiinitialize();
+      kl_spidev_initialize();
     }
 #endif
 
   /* Initialize USB if the 1) USB device controller is in the configuration
    * and 2) disabled, and 3) the weak function kl_usbinitialize() has been
-   * brought into the build. Presumeably either CONFIG_USBHOST or
+   * brought into the build. Presumably either CONFIG_USBHOST or
    * CONFIG_USBDEV is also selected.
    */
 
@@ -98,7 +98,7 @@ void kl_boardinitialize(void)
   /* Configure on-board LED if LED support has been selected. */
 
 #ifdef CONFIG_ARCH_LEDS
-  kl_ledinit();
+  kl_led_initialize();
 #endif
 }
 
@@ -123,8 +123,14 @@ void board_initialize(void)
    * but the initialization function must run in kernel space.
    */
 
-#if defined(CONFIG_NSH_LIBRARY) && !defined(CONFIG_NSH_ARCHINIT)
-  (void)nsh_archinitialize();
+#if defined(CONFIG_NSH_LIBRARY) && !defined(CONFIG_LIB_BOARDCTL)
+  (void)board_app_initialize(0);
+#endif
+
+  /* CC3000 wireless initialization */
+
+#ifdef CONFIG_WL_CC3000
+  wireless_archinitialize(0);
 #endif
 }
 #endif

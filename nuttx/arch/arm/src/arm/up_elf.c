@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/arm/up_elf.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,7 +65,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: arch_checkarch
+ * Name: up_checkarch
  *
  * Description:
  *   Given the ELF header in 'hdr', verify that the ELF file is appropriate
@@ -80,13 +80,13 @@
  *
  ****************************************************************************/
 
-bool arch_checkarch(FAR const Elf32_Ehdr *ehdr)
+bool up_checkarch(FAR const Elf32_Ehdr *ehdr)
 {
   /* Make sure it's an ARM executable */
 
   if (ehdr->e_machine != EM_ARM)
     {
-      bdbg("Not for ARM: e_machine=%04x\n", ehdr->e_machine);
+      berr("ERROR: Not for ARM: e_machine=%04x\n", ehdr->e_machine);
       return -ENOEXEC;
     }
 
@@ -94,7 +94,7 @@ bool arch_checkarch(FAR const Elf32_Ehdr *ehdr)
 
   if (ehdr->e_ident[EI_CLASS] != ELFCLASS32)
     {
-      bdbg("Need 32-bit objects: e_ident[EI_CLASS]=%02x\n", ehdr->e_ident[EI_CLASS]);
+      berr("ERROR: Need 32-bit objects: e_ident[EI_CLASS]=%02x\n", ehdr->e_ident[EI_CLASS]);
       return -ENOEXEC;
     }
 
@@ -106,7 +106,7 @@ bool arch_checkarch(FAR const Elf32_Ehdr *ehdr)
   if (ehdr->e_ident[EI_DATA] != ELFDATA2LSB)
 #endif
     {
-      bdbg("Wrong endian-ness: e_ident[EI_DATA]=%02x\n", ehdr->e_ident[EI_DATA]);
+      berr("ERROR: Wrong endian-ness: e_ident[EI_DATA]=%02x\n", ehdr->e_ident[EI_DATA]);
       return -ENOEXEC;
     }
 
@@ -114,7 +114,7 @@ bool arch_checkarch(FAR const Elf32_Ehdr *ehdr)
 
   if ((ehdr->e_entry & 3) != 0)
     {
-      bdbg("Entry point is not properly aligned: %08x\n", ehdr->e_entry);
+      berr("ERROR: Entry point is not properly aligned: %08x\n", ehdr->e_entry);
       return -ENOEXEC
     }
 
@@ -123,7 +123,7 @@ bool arch_checkarch(FAR const Elf32_Ehdr *ehdr)
 }
 
 /****************************************************************************
- * Name: arch_relocate and arch_relocateadd
+ * Name: up_relocate and up_relocateadd
  *
  * Description:
  *   Perform on architecture-specific ELF relocation.  Every architecture
@@ -132,6 +132,10 @@ bool arch_checkarch(FAR const Elf32_Ehdr *ehdr)
  * Input Parameters:
  *   rel - The relocation type
  *   sym - The ELF symbol structure containing the fully resolved value.
+ *         There are a few relocation types for a few architectures that do
+ *         not require symbol information.  For those, this value will be
+ *         NULL.  Implementations of these functions must be able to handle
+ *         that case.
  *   addr - The address that requires the relocation.
  *
  * Returned Value:
@@ -140,12 +144,23 @@ bool arch_checkarch(FAR const Elf32_Ehdr *ehdr)
  *
  ****************************************************************************/
 
-int arch_relocate(FAR const Elf32_Rel *rel, FAR const Elf32_Sym *sym,
-                  uintptr_t addr)
+int up_relocate(FAR const Elf32_Rel *rel, FAR const Elf32_Sym *sym,
+                uintptr_t addr)
 {
   int32_t offset;
+  unsigned int relotype;
 
-  switch (ELF32_R_TYPE(rel->r_info))
+  /* All relocations depend upon having valid symbol information */
+
+  relotype = ELF32_R_TYPE(rel->r_info);
+  if (sym == NULL && relotype != R_ARM_NONE)
+    {
+      return -EINVAL;
+    }
+
+  /* Handle the relocation by relocation type */
+
+  switch (relotype)
     {
     case R_ARM_NONE:
       {
@@ -157,11 +172,11 @@ int arch_relocate(FAR const Elf32_Rel *rel, FAR const Elf32_Sym *sym,
     case R_ARM_CALL:
     case R_ARM_JUMP24:
       {
-        bvdbg("Performing PC24 [%d] link at addr %08lx [%08lx] to sym '%s' st_value=%08lx\n",
-              ELF32_R_TYPE(rel->r_info), (long)addr, (long)(*(uint32_t*)addr),
+        binfo("Performing PC24 [%d] link at addr %08lx [%08lx] to sym '%s' st_value=%08lx\n",
+              ELF32_R_TYPE(rel->r_info), (long)addr, (long)(*(uint32_t *)addr),
               sym, (long)sym->st_value);
 
-        offset = (*(uint32_t*)addr & 0x00ffffff) << 2;
+        offset = (*(uint32_t *)addr & 0x00ffffff) << 2;
         if (offset & 0x02000000)
           {
             offset -= 0x04000000;
@@ -170,7 +185,7 @@ int arch_relocate(FAR const Elf32_Rel *rel, FAR const Elf32_Sym *sym,
         offset += sym->st_value - addr;
         if (offset & 3 || offset <= (int32_t) 0xfe000000 || offset >= (int32_t) 0x02000000)
           {
-            bdbg("  ERROR: PC24 [%d] relocation out of range, offset=%08lx\n",
+            berr("ERROR: PC24 [%d] relocation out of range, offset=%08lx\n",
                  ELF32_R_TYPE(rel->r_info), offset);
 
             return -EINVAL;
@@ -178,54 +193,54 @@ int arch_relocate(FAR const Elf32_Rel *rel, FAR const Elf32_Sym *sym,
 
         offset >>= 2;
 
-        *(uint32_t*)addr &= 0xff000000;
-        *(uint32_t*)addr |= offset & 0x00ffffff;
+        *(uint32_t *)addr &= 0xff000000;
+        *(uint32_t *)addr |= offset & 0x00ffffff;
       }
       break;
 
     case R_ARM_ABS32:
     case R_ARM_TARGET1:  /* New ABI:  TARGET1 always treated as ABS32 */
       {
-        bvdbg("Performing ABS32 link at addr=%08lx [%08lx] to sym=%p st_value=%08lx\n",
-              (long)addr, (long)(*(uint32_t*)addr), sym, (long)sym->st_value);
+        binfo("Performing ABS32 link at addr=%08lx [%08lx] to sym=%p st_value=%08lx\n",
+              (long)addr, (long)(*(uint32_t *)addr), sym, (long)sym->st_value);
 
-        *(uint32_t*)addr += sym->st_value;
+        *(uint32_t *)addr += sym->st_value;
       }
       break;
 
     case R_ARM_V4BX:
       {
-        bvdbg("Performing V4BX link at addr=%08lx [%08lx]\n",
-              (long)addr, (long)(*(uint32_t*)addr));
+        binfo("Performing V4BX link at addr=%08lx [%08lx]\n",
+              (long)addr, (long)(*(uint32_t *)addr));
 
          /* Preserve only Rm and the condition code */
 
-        *(uint32_t*)addr &= 0xf000000f;
+        *(uint32_t *)addr &= 0xf000000f;
 
         /* Change instruction to 'mov pc, Rm' */
 
-        *(uint32_t*)addr |= 0x01a0f000;
+        *(uint32_t *)addr |= 0x01a0f000;
       }
       break;
 
     case R_ARM_PREL31:
       {
-        bvdbg("Performing PREL31 link at addr=%08lx [%08lx] to sym=%p st_value=%08lx\n",
-              (long)addr, (long)(*(uint32_t*)addr), sym, (long)sym->st_value);
+        binfo("Performing PREL31 link at addr=%08lx [%08lx] to sym=%p st_value=%08lx\n",
+              (long)addr, (long)(*(uint32_t *)addr), sym, (long)sym->st_value);
 
-        offset           = *(uint32_t*)addr + sym->st_value - addr;
-        *(uint32_t*)addr = offset & 0x7fffffff;
+        offset            = *(uint32_t *)addr + sym->st_value - addr;
+        *(uint32_t *)addr = offset & 0x7fffffff;
       }
       break;
 
     case R_ARM_MOVW_ABS_NC:
     case R_ARM_MOVT_ABS:
       {
-        bvdbg("Performing MOVx_ABS [%d] link at addr=%08lx [%08lx] to sym=%p st_value=%08lx\n",
-              ELF32_R_TYPE(rel->r_info), (long)addr, (long)(*(uint32_t*)addr),
+        binfo("Performing MOVx_ABS [%d] link at addr=%08lx [%08lx] to sym=%p st_value=%08lx\n",
+              ELF32_R_TYPE(rel->r_info), (long)addr, (long)(*(uint32_t *)addr),
               sym, (long)sym->st_value);
 
-        offset = *(uint32_t*)addr;
+        offset = *(uint32_t *)addr;
         offset = ((offset & 0xf0000) >> 4) | (offset & 0xfff);
         offset = (offset ^ 0x8000) - 0x8000;
 
@@ -235,23 +250,22 @@ int arch_relocate(FAR const Elf32_Rel *rel, FAR const Elf32_Sym *sym,
             offset >>= 16;
           }
 
-        *(uint32_t*)addr &= 0xfff0f000;
-        *(uint32_t*)addr |= ((offset & 0xf000) << 4) | (offset & 0x0fff);
+        *(uint32_t *)addr &= 0xfff0f000;
+        *(uint32_t *)addr |= ((offset & 0xf000) << 4) | (offset & 0x0fff);
       }
       break;
 
     default:
-      bdbg("Unsupported relocation: %d\n", ELF32_R_TYPE(rel->r_info));
+      berr("ERROR: Unsupported relocation: %d\n", ELF32_R_TYPE(rel->r_info));
       return -EINVAL;
     }
 
   return OK;
 }
 
-int arch_relocateadd(FAR const Elf32_Rela *rel, FAR const Elf32_Sym *sym,
-                     uintptr_t addr)
+int up_relocateadd(FAR const Elf32_Rela *rel, FAR const Elf32_Sym *sym,
+                   uintptr_t addr)
 {
-  bdbg("RELA relocation not supported\n");
+  berr("ERROR: RELA relocation not supported\n");
   return -ENOSYS;
 }
-

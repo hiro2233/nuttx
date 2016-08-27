@@ -1,7 +1,7 @@
 ############################################################################
 # Makefile.win
 #
-#   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2012, 2015 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -39,11 +39,18 @@ TOPDIR := ${shell echo %CD%}
 -include $(TOPDIR)\Make.defs
 
 # Control build verbosity
+#
+#  V=1,2: Enable echo of commands
+#  V=2:   Enable bug/verbose options in tools and scripts
 
 ifeq ($(V),1)
 export Q :=
 else
+ifeq ($(V),2)
+export Q :=
+else
 export Q := @
+endif
 endif
 
 # This define is passed as EXTRADEFINES for kernel-mode builds.  It is also passed
@@ -58,14 +65,15 @@ ARCH_SRC = $(ARCH_DIR)\src
 ARCH_INC = $(ARCH_DIR)\include
 
 ifeq ($(CONFIG_ARCH_BOARD_CUSTOM),y)
-  BOARD_DIR = $(CONFIG_ARCH_BOARD_CUSTOM_DIR)
+ifeq ($(CONFIG_ARCH_BOARD_CUSTOM_DIR_RELPATH),y)
+BOARD_DIR = $(TOPDIR)$(DELIM)$(CONFIG_ARCH_BOARD_CUSTOM_DIR)
 else
-  BOARD_DIR = configs$(DELIM)$(CONFIG_ARCH_BOARD)
+BOARD_DIR = $(CONFIG_ARCH_BOARD_CUSTOM_DIR)
+endif
+else
+BOARD_DIR = $(TOPDIR)$(DELIM)configs$(DELIM)$(CONFIG_ARCH_BOARD)
 endif
 
-# Add-on directories.  These may or may not be in place in the
-# NuttX source tree (they must be specifically installed)
-#
 # CONFIG_APPS_DIR can be over-ridden from the command line or in the .config file.
 # The default value of CONFIG_APPS_DIR is ..\apps.  Ultimately, the application
 # will be built if APPDIR is defined.  APPDIR will be defined if a directory containing
@@ -76,21 +84,12 @@ CONFIG_APPS_DIR = ..\apps
 endif
 APPDIR := ${shell if exist "$(CONFIG_APPS_DIR)\Makefile" echo $(CONFIG_APPS_DIR)}
 
-# All add-on directories.
+# Add-on directories.  These may or may not be in place in the
+# NuttX source tree (they must be specifically installed)
 #
 # NUTTX_ADDONS is the list of directories built into the NuttX kernel.
-# USER_ADDONS is the list of directories that will be built into the user application
-
-NUTTX_ADDONS :=
-USER_ADDONS :=
-
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
-USER_ADDONS += $(APPDIR)
-else
-NUTTX_ADDONS += $(APPDIR)
-endif
-
-# Lists of build directories.
+# USER_ADDONS is the list of directories that will be built into the user
+#   application
 #
 # FSDIRS depend on file descriptor support; NONFSDIRS do not (except for parts
 #   of FSDIRS).  We will exclude FSDIRS from the build if file descriptor
@@ -103,78 +102,18 @@ endif
 # OTHERDIRS - These are directories that are not built but probably should
 #   be cleaned to prevent garbage from collecting in them when changing
 #   configurations.
-
-NONFSDIRS = sched $(ARCH_SRC) $(NUTTX_ADDONS)
-FSDIRS = fs drivers binfmt
-CONTEXTDIRS = $(APPDIR)
-USERDIRS =
-OTHERDIRS = lib
-
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
-
-NONFSDIRS += syscall
-CONTEXTDIRS += syscall
-USERDIRS += syscall libc mm $(USER_ADDONS)
-ifeq ($(CONFIG_HAVE_CXX),y)
-USERDIRS += libxx
-endif
-
-else
-
-NONFSDIRS += libc mm
-OTHERDIRS += syscall $(USER_ADDONS)
-ifeq ($(CONFIG_HAVE_CXX),y)
-NONFSDIRS += libxx
-else
-OTHERDIRS += libxx
-endif
-
-endif
-
-ifeq ($(CONFIG_NX),y)
-NONFSDIRS += graphics libnx
-CONTEXTDIRS += graphics libnx
-else
-OTHERDIRS += graphics libnx
-endif
-
-ifeq ($(CONFIG_AUDIO),y)
-NONFSDIRS += audio
-else
-OTHERDIRS += audio
-endif
-
+#
 # CLEANDIRS are the directories that will clean in.  These are
 #   all directories that we know about.
 # KERNDEPDIRS are the directories in which we will build target dependencies.
-#   If NuttX and applications are built separately (CONFIG_NUTTX_KERNEL),
-#   then this holds only the directories containing kernel files.
-# USERDEPDIRS. If NuttX and applications are built separately (CONFIG_NUTTX_KERNEL),
-#   then this holds only the directories containing user files.
+#   If NuttX and applications are built separately (CONFIG_BUILD_PROTECTED or
+#   CONFIG_BUILD_KERNEL), then this holds only the directories containing
+#   kernel files.
+# USERDEPDIRS. If NuttX and applications are built separately (CONFIG_BUILD_PROTECTED),
+#   then this holds only the directories containing user files. If
+#   CONFIG_BUILD_KERNEL is selected, then applications are not build at all.
 
-CLEANDIRS = $(NONFSDIRS) $(FSDIRS) $(USERDIRS) $(OTHERDIRS)
-KERNDEPDIRS = $(NONFSDIRS)
-USERDEPDIRS = $(USERDIRS)
-
-# Add file system directories to KERNDEPDIRS (they are already in CLEANDIRS)
-
-ifeq ($(CONFIG_NFILE_DESCRIPTORS),0)
-ifeq ($(CONFIG_NET),y)
-ifneq ($(CONFIG_NSOCKET_DESCRIPTORS),0)
-KERNDEPDIRS += fs
-endif
-KERNDEPDIRS += drivers
-endif
-else
-KERNDEPDIRS += $(FSDIRS)
-endif
-
-# Add networking directories to KERNDEPDIRS and CLEANDIRS
-
-ifeq ($(CONFIG_NET),y)
-KERNDEPDIRS += net
-endif
-CLEANDIRS += net
+include Directories.mk
 
 #
 # Extra objects used in the final link.
@@ -187,97 +126,55 @@ ifeq ($(CONFIG_BUILD_2PASS),y)
 EXTRA_OBJS += $(CONFIG_PASS1_OBJECT)
 endif
 
+# Library build selections
+#
 # NUTTXLIBS is the list of NuttX libraries that is passed to the
 #   processor-specific Makefile to build the final NuttX target.
 #   Libraries in FSDIRS are excluded if file descriptor support
 #   is disabled.
 # USERLIBS is the list of libraries used to build the final user-space
 #   application
+# EXPORTLIBS is the list of libraries that should be exported by
+#   'make export' is
 
-NUTTXLIBS = lib\libsched$(LIBEXT)
-USERLIBS =
-
-# Add libraries for syscall support.  The C library will be needed by
-# both the kernel- and user-space builds.  For now, the memory manager (mm)
-# is placed in user space (only).
-
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
-NUTTXLIBS += lib\libstubs$(LIBEXT) lib\libkc$(LIBEXT) lib\libkmm$(LIBEXT)
-NUTTXLIBS += lib\libkarch$(LIBEXT)
-USERLIBS  += lib\libproxies$(LIBEXT) lib\libuc$(LIBEXT) lib\libumm$(LIBEXT)
-USERLIBS  += lib\libuarch$(LIBEXT)
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
+include ProtectedLibs.mk
 else
-NUTTXLIBS += lib\libc$(LIBEXT) lib\libmm$(LIBEXT) lib\libarch$(LIBEXT)
-endif
-
-# Add libraries for C++ support.  CXX, CXXFLAGS, and COMPILEXX must
-# be defined in Make.defs for this to work!
-
-ifeq ($(CONFIG_HAVE_CXX),y)
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
-USERLIBS += lib\libcxx$(LIBEXT)
+ifeq ($(CONFIG_BUILD_KERNEL),y)
+include KernelLibs.mk
 else
-NUTTXLIBS += lib\libcxx$(LIBEXT)
+include FlatLibs.mk
 endif
 endif
 
-# Add library for application support.
-
-ifneq ($(APPDIR),)
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
-USERLIBS += lib\libapps$(LIBEXT)
-else
-NUTTXLIBS += lib\libapps$(LIBEXT)
-endif
-endif
-
-# Add libraries for network support
-
-ifeq ($(CONFIG_NET),y)
-NUTTXLIBS += lib\libnet$(LIBEXT)
-endif
-
-# Add libraries for file system support
-
-ifeq ($(CONFIG_NFILE_DESCRIPTORS),0)
-ifneq ($(CONFIG_NSOCKET_DESCRIPTORS),0)
-NUTTXLIBS += lib\libfs$(LIBEXT)
-endif
-ifeq ($(CONFIG_NET),y)
-NUTTXLIBS += lib\libdrivers$(LIBEXT)
-endif
-else
-NUTTXLIBS += lib\libfs$(LIBEXT) lib\libdrivers$(LIBEXT) lib\libbinfmt$(LIBEXT)
-endif
-
-# Add libraries for the NX graphics sub-system
-
-ifeq ($(CONFIG_NX),y)
-NUTTXLIBS += lib\libgraphics$(LIBEXT)
-ifeq ($(CONFIG_NUTTX_KERNEL),y)
-NUTTXLIBS += lib\libknx$(LIBEXT)
-USERLIBS  += lib\libunx$(LIBEXT)
-else
-NUTTXLIBS += lib\libnx$(LIBEXT)
-endif
-endif
-
-# Add libraries for the Audio sub-system
-
-ifeq ($(CONFIG_AUDIO),y)
-NUTTXLIBS += lib\libaudio$(LIBEXT)
-endif
-
-# LINKLIBS derives from NUTTXLIBS and is simply the same list with the subdirectory removed
+# LINKLIBS derives from NUTTXLIBS and is simply the same list with the
+#   subdirectory removed
 
 LINKLIBS = $(patsubst lib\\%,%,$(NUTTXLIBS))
+
+# Export tool definitions
+
+MKEXPORT = tools\mkexport.bat
+MKEXPORT_ARGS = -w$(WINTOOL) -t "$(TOPDIR)"
+
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
+MKEXPORT_ARGS = -u
+else
+ifeq ($(CONFIG_BUILD_KERNEL),y)
+MKEXPORT_ARGS = -u
+endif
+endif
+
+ifeq ($(V),2)
+MKEXPORT_ARGS += -d
+endif
 
 # This is the name of the final target (relative to the top level directorty)
 
 BIN = nuttx$(EXEEXT)
 
 all: $(BIN)
-.PHONY: context clean_context check_context configenv config oldconfig menuconfig export subdir_clean clean subdir_distclean distclean apps_clean apps_distclean
+.PHONY: dirlinks context clean_context check_context configenv config oldconfig menuconfig export subdir_clean clean subdir_distclean distclean apps_clean apps_distclean
 
 # Target used to copy include\nuttx\math.h.  If CONFIG_ARCH_MATH_H is
 # defined, then there is an architecture specific math.h header file
@@ -378,19 +275,6 @@ tools\mkdeps$(HOSTEXEEXT):
 # setting up symbolic links with 'generic' directory names to specific,
 # configured directories.
 #
-# Link the apps\include directory to include\apps
-
-include\apps: Make.defs
-ifneq ($(APPDIR),)
-	@echo LN: include\apps $(APPDIR)\include
-ifeq ($(CONFIG_WINDOWS_MKLINK),y)
-	$(Q) /user:administrator mklink /d include\apps $(APPDIR)\include
-else
-	$(Q) xcopy $(APPDIR)\include include\apps /c /q /s /e /y /i
-	$(Q) echo FAKELNK > include\apps\.fakelnk
-endif
-endif
-
 # Link the arch\<arch-name>\include directory to include\arch
 
 include\arch: Make.defs
@@ -407,9 +291,9 @@ endif
 include\arch\board: include\arch Make.defs include\arch
 	@echo LN: include\arch\board to $(BOARD_DIR)\include
 ifeq ($(CONFIG_WINDOWS_MKLINK),y)
-	$(Q) /user:administrator mklink /d include\arch\board $(TOPDIR)\$(BOARD_DIR)\include
+	$(Q) /user:administrator mklink /d include\arch\board $(BOARD_DIR)\include
 else
-	$(Q) xcopy $(TOPDIR)\$(BOARD_DIR)\include include\arch\board /c /q /s /e /y /i
+	$(Q) xcopy $(BOARD_DIR)\include include\arch\board /c /q /s /e /y /i
 	$(Q) echo FAKELNK > include\arch\board\.fakelnk
 endif
 
@@ -418,9 +302,9 @@ endif
 $(ARCH_SRC)\board: Make.defs
 	@echo LN: $(ARCH_SRC)\board to $(BOARD_DIR)\src
 ifeq ($(CONFIG_WINDOWS_MKLINK),y)
-	$(Q) /user:administrator mklink /d $(ARCH_SRC)\board $(TOPDIR)\$(BOARD_DIR)\src
+	$(Q) /user:administrator mklink /d $(ARCH_SRC)\board $(BOARD_DIR)\src
 else
-	$(Q) xcopy $(TOPDIR)\$(BOARD_DIR)\src $(ARCH_SRC)\board /c /q /s /e /y /i
+	$(Q) xcopy $(BOARD_DIR)\src $(ARCH_SRC)\board /c /q /s /e /y /i
 	$(Q) echo FAKELNK > $(ARCH_SRC)\board\.fakelnk
 endif
 
@@ -450,7 +334,9 @@ else
 endif
 endif
 
-dirlinks: include\arch include\arch\board include\arch\chip $(ARCH_SRC)\board $(ARCH_SRC)\chip include\apps
+dirlinks: include\arch include\arch\board include\arch\chip $(ARCH_SRC)\board $(ARCH_SRC)\chip
+	$(Q) $(MAKE) -C configs dirlinks TOPDIR="$(TOPDIR)"
+	$(Q) $(MAKE) -C $(CONFIG_APPS_DIR) dirlinks TOPDIR="$(TOPDIR)"
 
 # context
 #
@@ -477,7 +363,6 @@ clean_context:
 	$(call DELDIR, include\arch)
 	$(call DELDIR, $(ARCH_SRC)\board)
 	$(call DELDIR, $(ARCH_SRC)\chip)
-	$(call DELDIR, include\apps)
 
 # check_context
 #
@@ -494,152 +379,8 @@ check_context:
 # libraries, one per configured source file directory.  The final NuttX
 # execution will then be built from those libraries.  The following targets
 # build those libraries.
-#
-# Possible kernel-mode builds
 
-libc\libkc$(LIBEXT): context
-	$(Q) $(MAKE) -C libc TOPDIR="$(TOPDIR)" libkc$(LIBEXT) EXTRADEFINES=$(KDEFINE)
-
-lib\libkc$(LIBEXT): libc\libkc$(LIBEXT)
-	$(Q) install libc\libkc$(LIBEXT) lib\libkc$(LIBEXT)
-
-libnx\libknx$(LIBEXT): context
-	$(Q) $(MAKE) -C libnx TOPDIR="$(TOPDIR)" libknx$(LIBEXT) EXTRADEFINES=$(KDEFINE)
-
-lib\libknx$(LIBEXT): libnx\libknx$(LIBEXT)
-	$(Q) install libnx\libknx$(LIBEXT) lib\libknx$(LIBEXT)
-
-mm\libkmm$(LIBEXT): context
-	$(Q) $(MAKE) -C mm TOPDIR="$(TOPDIR)" libkmm$(LIBEXT) EXTRADEFINES=$(KDEFINE)
-
-lib\libkmm$(LIBEXT): mm\libkmm$(LIBEXT)
-	$(Q) install mm\libkmm$(LIBEXT) lib\libkmm$(LIBEXT)
-
-$(ARCH_SRC)\libkarch$(LIBEXT): context
-	$(Q) $(MAKE) -C $(ARCH_SRC) TOPDIR="$(TOPDIR)" libkarch$(LIBEXT) EXTRADEFINES=$(KDEFINE)
-
-lib\libkarch$(LIBEXT): $(ARCH_SRC)\libkarch$(LIBEXT)
-	$(Q) install $(ARCH_SRC)\libkarch$(LIBEXT) lib\libkarch$(LIBEXT)
-
-
-sched\libsched$(LIBEXT): context
-	$(Q) $(MAKE) -C sched TOPDIR="$(TOPDIR)" libsched$(LIBEXT) EXTRADEFINES=$(KDEFINE)
-
-lib\libsched$(LIBEXT): sched\libsched$(LIBEXT)
-	$(Q) install sched\libsched$(LIBEXT) lib\libsched$(LIBEXT)
-
-net\libnet$(LIBEXT): context
-	$(Q) $(MAKE) -C net TOPDIR="$(TOPDIR)" libnet$(LIBEXT) EXTRADEFINES=$(KDEFINE)
-
-lib\libnet$(LIBEXT): net\libnet$(LIBEXT)
-	$(Q) install net\libnet$(LIBEXT) lib\libnet$(LIBEXT)
-
-fs\libfs$(LIBEXT): context
-	$(Q) $(MAKE) -C fs TOPDIR="$(TOPDIR)" libfs$(LIBEXT) EXTRADEFINES=$(KDEFINE)
-
-lib\libfs$(LIBEXT): fs\libfs$(LIBEXT)
-	$(Q) install fs\libfs$(LIBEXT) lib\libfs$(LIBEXT)
-
-drivers\libdrivers$(LIBEXT): context
-	$(Q) $(MAKE) -C drivers TOPDIR="$(TOPDIR)" libdrivers$(LIBEXT) EXTRADEFINES=$(KDEFINE)
-
-lib\libdrivers$(LIBEXT): drivers\libdrivers$(LIBEXT)
-	$(Q) install drivers\libdrivers$(LIBEXT) lib\libdrivers$(LIBEXT)
-
-binfmt\libbinfmt$(LIBEXT): context
-	$(Q) $(MAKE) -C binfmt TOPDIR="$(TOPDIR)" libbinfmt$(LIBEXT) EXTRADEFINES=$(KDEFINE)
-
-lib\libbinfmt$(LIBEXT): binfmt\libbinfmt$(LIBEXT)
-	$(Q) install binfmt\libbinfmt$(LIBEXT) lib\libbinfmt$(LIBEXT)
-
-graphics\libgraphics$(LIBEXT): context
-	$(Q) $(MAKE) -C graphics TOPDIR="$(TOPDIR)" libgraphics$(LIBEXT) EXTRADEFINES=$(KDEFINE)
-
-lib\libgraphics$(LIBEXT): graphics\libgraphics$(LIBEXT)
-	$(Q) install graphics\libgraphics$(LIBEXT) lib\libgraphics$(LIBEXT)
-
-audio\libaudio$(LIBEXT): context
-	$(Q) $(MAKE) -C audio TOPDIR="$(TOPDIR)" libaudio$(LIBEXT) EXTRADEFINES=$(KDEFINE)
-
-lib\libaudio$(LIBEXT): audio\libaudio$(LIBEXT)
-	$(Q) install audio\libaudio$(LIBEXT) lib\libaudio$(LIBEXT)
-
-syscall\libstubs$(LIBEXT): context
-	$(Q) $(MAKE) -C syscall TOPDIR="$(TOPDIR)" libstubs$(LIBEXT) EXTRADEFINES=$(KDEFINE)
-
-lib\libstubs$(LIBEXT): syscall\libstubs$(LIBEXT)
-	$(Q) install syscall\libstubs$(LIBEXT) lib\libstubs$(LIBEXT)
-
-# Possible user-mode builds
-
-libc\libuc$(LIBEXT): context
-	$(Q) $(MAKE) -C libc TOPDIR="$(TOPDIR)" libuc$(LIBEXT)
-
-lib\libuc$(LIBEXT): libc\libuc$(LIBEXT)
-	$(Q) install libc\libuc$(LIBEXT) lib\libuc$(LIBEXT)
-
-libnx\libunx$(LIBEXT): context
-	$(Q) $(MAKE) -C libnx TOPDIR="$(TOPDIR)" libunx$(LIBEXT)
-
-lib\libunx$(LIBEXT): libnx\libunx$(LIBEXT)
-	$(Q) install libnx\libunx$(LIBEXT) lib\libunx$(LIBEXT)
-
-mm\libumm$(LIBEXT): context
-	$(Q) $(MAKE) -C mm TOPDIR="$(TOPDIR)" libumm$(LIBEXT)
-
-lib\libumm$(LIBEXT): mm\libumm$(LIBEXT)
-	$(Q) install mm\libumm$(LIBEXT) lib\libumm$(LIBEXT)
-
-$(ARCH_SRC)\libuarch$(LIBEXT): context
-	$(Q) $(MAKE) -C $(ARCH_SRC) TOPDIR="$(TOPDIR)" libuarch$(LIBEXT)
-
-lib\libuarch$(LIBEXT): $(ARCH_SRC)\libuarch$(LIBEXT)
-	$(Q) install $(ARCH_SRC)\libuarch$(LIBEXT) lib\libuarch$(LIBEXT)
-
-
-libxx\libcxx$(LIBEXT): context
-	$(Q) $(MAKE) -C libxx TOPDIR="$(TOPDIR)" libcxx$(LIBEXT)
-
-lib\libcxx$(LIBEXT): libxx\libcxx$(LIBEXT)
-	$(Q) install libxx\libcxx$(LIBEXT) lib\libcxx$(LIBEXT)
-
-$(APPDIR)\libapps$(LIBEXT): context
-	$(Q) $(MAKE) -C $(APPDIR) TOPDIR="$(TOPDIR)" libapps$(LIBEXT)
-
-lib\libapps$(LIBEXT): $(APPDIR)\libapps$(LIBEXT)
-	$(Q) install $(APPDIR)\libapps$(LIBEXT) lib\libapps$(LIBEXT)
-
-syscall\libproxies$(LIBEXT): context
-	$(Q) $(MAKE) -C syscall TOPDIR="$(TOPDIR)" libproxies$(LIBEXT)
-
-lib\libproxies$(LIBEXT): syscall\libproxies$(LIBEXT)
-	$(Q) install syscall\libproxies$(LIBEXT) lib\libproxies$(LIBEXT)
-
-# Possible non-kernel builds
-
-libc\libc$(LIBEXT): context
-	$(Q) $(MAKE) -C libc TOPDIR="$(TOPDIR)" libc$(LIBEXT)
-
-lib\libc$(LIBEXT): libc\libc$(LIBEXT)
-	$(Q) install libc\libc$(LIBEXT) lib\libc$(LIBEXT)
-
-libnx\libnx$(LIBEXT): context
-	$(Q) $(MAKE) -C libnx TOPDIR="$(TOPDIR)" libnx$(LIBEXT)
-
-lib\libnx$(LIBEXT): libnx\libnx$(LIBEXT)
-	$(Q) install libnx\libnx$(LIBEXT) lib\libnx$(LIBEXT)
-
-mm\libmm$(LIBEXT): context
-	$(Q) $(MAKE) -C mm TOPDIR="$(TOPDIR)" libmm$(LIBEXT)
-
-lib\libmm$(LIBEXT): mm\libmm$(LIBEXT)
-	$(Q) install mm\libmm$(LIBEXT) lib\libmm$(LIBEXT)
-
-$(ARCH_SRC)\libarch$(LIBEXT): context
-	$(Q) $(MAKE) -C $(ARCH_SRC) TOPDIR="$(TOPDIR)" libarch$(LIBEXT)
-
-lib\libarch$(LIBEXT): $(ARCH_SRC)\libarch$(LIBEXT)
-	$(Q) install $(ARCH_SRC)\libarch$(LIBEXT) lib\libarch$(LIBEXT)
+include LibTargets.mk
 
 # pass1 and pass2
 #
@@ -727,14 +468,25 @@ pass2dep: context tools\mkdeps$(HOSTEXEEXT)
 # location: http://ymorin.is-a-geek.org/projects/kconfig-frontends.  See
 # misc\tools\README.txt for additional information.
 
-config:
+do_config: dirlinks apps_preconfig
 	$(Q) set APPSDIR=$(patsubst "%",%,${CONFIG_APPS_DIR})& kconfig-conf Kconfig
 
-oldconfig:
+config: do_config clean_context
+
+do_oldconfig: dirlinks apps_preconfig
 	$(Q) set APPSDIR=$(patsubst "%",%,${CONFIG_APPS_DIR})& kconfig-conf --oldconfig Kconfig
 
-menuconfig: configenv
+oldconfig: do_oldconfig clean_context
+
+do_olddefconfig: dirlinks apps_preconfig
+	$(Q) set APPSDIR=$(patsubst "%",%,${CONFIG_APPS_DIR})& kconfig-conf --olddefconfig Kconfig
+
+olddefconfig: do_olddefconfig clean_context
+
+do_menuconfig: dirlinks configenv apps_preconfig
 	$(Q) set APPSDIR=$(patsubst "%",%,${CONFIG_APPS_DIR})& kconfig-mconf Kconfig
+
+menuconfig: do_menuconfig clean_context
 
 # export
 #
@@ -745,7 +497,7 @@ menuconfig: configenv
 # that the archiver is 'ar'
 
 export: pass2deps
-	$(Q) tools\mkexport.sh -w$(WINTOOL) -t "$(TOPDIR)" -l "$(NUTTXLIBS)"
+	$(Q) $(MKEXPORT) $(MKEXPORT_ARGS) -w$(WINTOOL) -t "$(TOPDIR)" -l "$(EXPORTLIBS)"
 
 # General housekeeping targets:  dependencies, cleaning, etc.
 #
@@ -796,10 +548,16 @@ endif
 # as a convenience, the following targets are included to support housekeeping
 # functions in the user application directory from the NuttX build directory.
 #
+# apps_preconfig: Prepare applications to be configured
 # apps_clean:     Perform the clean operation only in the user application
 #                 directory
 # apps_distclean: Perform the distclean operation only in the user application
 #                 directory.
+
+apps_preconfig:
+ifneq ($(APPDIR),)
+	$(Q) $(MAKE) -C "$(APPDIR)" TOPDIR="$(TOPDIR)" preconfig
+endif
 
 apps_clean:
 ifneq ($(APPDIR),)

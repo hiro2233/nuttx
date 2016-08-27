@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sam34/sam4l_gpio.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,6 +44,7 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <arch/board/board.h>
 
@@ -55,24 +56,17 @@
 #include "chip/sam4l_gpio.h"
 
 /****************************************************************************
- * Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
  * Private Data
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_GPIO
+#ifdef CONFIG_DEBUG_GPIO_INFO
 static const char g_portchar[4]   = { 'A', 'B', 'C', 'D' };
 #endif
 
 /****************************************************************************
- * Private Function Prototypes
+ * Private Functions
  ****************************************************************************/
+
 /****************************************************************************
  * Name: sam_gpiobase
  *
@@ -181,7 +175,7 @@ static int sam_configinput(uintptr_t base, uint32_t pin, gpio_pinset_t cfgset)
       putreg32(pin, base + SAM_GPIO_STERC_OFFSET);
     }
 
- return OK;
+  return OK;
 }
 
 /****************************************************************************
@@ -218,13 +212,13 @@ static inline int sam_configinterrupt(uintptr_t base, uint32_t pin,
 
       if (edges == GPIO_INT_RISING)
         {
-          /* Rising only.. disable interrrupts on the falling edge */
+          /* Rising only.. disable interrupts on the falling edge */
 
           putreg32(pin, base + SAM_GPIO_IMR0S_OFFSET);
         }
       else if (edges == GPIO_INT_FALLING)
         {
-          /* Falling only.. disable interrrupts on the rising edge */
+          /* Falling only.. disable interrupts on the rising edge */
 
           putreg32(pin, base + SAM_GPIO_IMR1S_OFFSET);
         }
@@ -412,23 +406,23 @@ static inline int sam_configperiph(uintptr_t base, uint32_t pin,
       putreg32(pin, base + SAM_GPIO_IMR1S_OFFSET);
     }
 
- /* REVISIT:  Should event generation be enabled now?  I am assuming so */
+  /* REVISIT:  Should event generation be enabled now?  I am assuming so */
 
   if ((cfgset & GPIO_PERIPH_EVENTS) != 0)
     {
-      /* Rising only.. disable interrrupts on the falling edge */
+      /* Rising only.. disable interrupts on the falling edge */
 
       putreg32(pin, base + SAM_GPIO_EVERS_OFFSET);
     }
 
- /* Finally, drive the pen from the peripheral */
+  /* Finally, drive the pen from the peripheral */
 
   putreg32(pin, base + SAM_GPIO_GPERC_OFFSET);
   return OK;
 }
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -528,7 +522,7 @@ bool sam_gpioread(gpio_pinset_t pinset)
  *
  ************************************************************************************/
 
-#ifdef CONFIG_DEBUG_GPIO
+#ifdef CONFIG_DEBUG_GPIO_INFO
 int sam_dumpgpio(uint32_t pinset, const char *msg)
 {
   irqstate_t    flags;
@@ -544,25 +538,27 @@ int sam_dumpgpio(uint32_t pinset, const char *msg)
 
   /* The following requires exclusive access to the GPIO registers */
 
-  flags = irqsave();
-  lldbg("GPIO%c pinset: %08x base: %08x -- %s\n",
-        g_portchar[port], pinset, base, msg);
-  lldbg("    GPER: %08x  PMR0: %08x  PMR1: %08x  PMR2: %08x\n",
-        getreg32(base + SAM_GPIO_GPER_OFFSET), getreg32(base + SAM_GPIO_PMR0_OFFSET),
-        getreg32(base + SAM_GPIO_PMR1_OFFSET), getreg32(base + SAM_GPIO_PMR2_OFFSET));
-  lldbg("   ODER: %08x   OVR: %08x   PVR:  %08x  PUER: %08x\n",
-        getreg32(base + SAM_GPIO_ODER_OFFSET), getreg32(base + SAM_GPIO_OVR_OFFSET),
-        getreg32(base + SAM_GPIO_PVR_OFFSET), getreg32(base + SAM_GPIO_PUER_OFFSET));
-  lldbg("   PDER: %08x    IER: %08x  IMR0: %08x  IMR1: %08x\n",
-        getreg32(base + SAM_GPIO_PDER_OFFSET), getreg32(base + SAM_GPIO_IER_OFFSET),
-        getreg32(base + SAM_GPIO_IMR0_OFFSET), getreg32(base + SAM_GPIO_IMR1_OFFSET));
-  lldbg("   GFER: %08x    IFR: %08x ODCR0: %08x ODCR1: %08x\n",
-        getreg32(base + SAM_GPIO_GFER_OFFSET), getreg32(base + SAM_GPIO_IFR_OFFSET),
-        getreg32(base + SAM_GPIO_ODCR0_OFFSET), getreg32(base + SAM_GPIO_ODCR1_OFFSET));
-  lldbg("  OSRR0: %08x   EVER: %08x PARAM: %08x  VERS: %08x\n",
-        getreg32(base + SAM_GPIO_OSRR0_OFFSET), getreg32(base + SAM_GPIO_EVER_OFFSET),
-        getreg32(base + SAM_GPIO_PARAMETER_OFFSET), getreg32(base + SAM_GPIO_VERSION_OFFSET));
-  irqrestore(flags);
+  flags = enter_critical_section();
+
+  gpioinfo("GPIO%c pinset: %08x base: %08x -- %s\n",
+           g_portchar[port], pinset, base, msg);
+  gpioinfo("    GPER: %08x  PMR0: %08x  PMR1: %08x  PMR2: %08x\n",
+           getreg32(base + SAM_GPIO_GPER_OFFSET), getreg32(base + SAM_GPIO_PMR0_OFFSET),
+           getreg32(base + SAM_GPIO_PMR1_OFFSET), getreg32(base + SAM_GPIO_PMR2_OFFSET));
+  gpioinfo("   ODER: %08x   OVR: %08x   PVR:  %08x  PUER: %08x\n",
+           getreg32(base + SAM_GPIO_ODER_OFFSET), getreg32(base + SAM_GPIO_OVR_OFFSET),
+           getreg32(base + SAM_GPIO_PVR_OFFSET), getreg32(base + SAM_GPIO_PUER_OFFSET));
+  gpioinfo("   PDER: %08x    IER: %08x  IMR0: %08x  IMR1: %08x\n",
+           getreg32(base + SAM_GPIO_PDER_OFFSET), getreg32(base + SAM_GPIO_IER_OFFSET),
+           getreg32(base + SAM_GPIO_IMR0_OFFSET), getreg32(base + SAM_GPIO_IMR1_OFFSET));
+  gpioinfo("   GFER: %08x    IFR: %08x ODCR0: %08x ODCR1: %08x\n",
+           getreg32(base + SAM_GPIO_GFER_OFFSET), getreg32(base + SAM_GPIO_IFR_OFFSET),
+           getreg32(base + SAM_GPIO_ODCR0_OFFSET), getreg32(base + SAM_GPIO_ODCR1_OFFSET));
+  gpioinfo("  OSRR0: %08x   EVER: %08x PARAM: %08x  VERS: %08x\n",
+           getreg32(base + SAM_GPIO_OSRR0_OFFSET), getreg32(base + SAM_GPIO_EVER_OFFSET),
+           getreg32(base + SAM_GPIO_PARAMETER_OFFSET), getreg32(base + SAM_GPIO_VERSION_OFFSET));
+
+  leave_critical_section(flags);
   return OK;
 }
 #endif

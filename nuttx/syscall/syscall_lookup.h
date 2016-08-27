@@ -1,7 +1,7 @@
 /****************************************************************************
  * syscall/syscall_lookup.h
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,16 +56,30 @@ SYSCALL_LOOKUP(sched_setparam,            2, STUB_sched_setparam)
 SYSCALL_LOOKUP(sched_setscheduler,        3, STUB_sched_setscheduler)
 SYSCALL_LOOKUP(sched_unlock,              0, STUB_sched_unlock)
 SYSCALL_LOOKUP(sched_yield,               0, STUB_sched_yield)
-SYSCALL_LOOKUP(sem_close,                 1, STUB_sem_close)
+SYSCALL_LOOKUP(set_errno,                 1, STUB_set_errno)
+SYSCALL_LOOKUP(uname,                     1, STUB_uname)
+
+/* Semaphores */
+
 SYSCALL_LOOKUP(sem_destroy,               2, STUB_sem_destroy)
-SYSCALL_LOOKUP(sem_open,                  6, STUB_sem_open)
 SYSCALL_LOOKUP(sem_post,                  1, STUB_sem_post)
 SYSCALL_LOOKUP(sem_timedwait,             2, STUB_sem_timedwait)
 SYSCALL_LOOKUP(sem_trywait,               1, STUB_sem_trywait)
-SYSCALL_LOOKUP(sem_unlink,                1, STUB_sem_unlink)
 SYSCALL_LOOKUP(sem_wait,                  1, STUB_sem_wait)
-SYSCALL_LOOKUP(set_errno,                 1, STUB_set_errno)
+
+/* Named semaphores */
+
+#ifdef CONFIG_FS_NAMED_SEMAPHORES
+SYSCALL_LOOKUP(sem_open,                  6, STUB_sem_open)
+SYSCALL_LOOKUP(sem_close,                 1, STUB_sem_close)
+SYSCALL_LOOKUP(sem_unlink,                1, STUB_sem_unlink)
+#endif
+
+#ifndef CONFIG_BUILD_KERNEL
 SYSCALL_LOOKUP(task_create,               5, STUB_task_create)
+#else
+SYSCALL_LOOKUP(pgalloc,                   2, STUB_pgalloc)
+#endif
 SYSCALL_LOOKUP(task_delete,               1, STUB_task_delete)
 SYSCALL_LOOKUP(task_restart,              1, STUB_task_restart)
 SYSCALL_LOOKUP(up_assert,                 2, STUB_up_assert)
@@ -73,7 +87,7 @@ SYSCALL_LOOKUP(up_assert,                 2, STUB_up_assert)
 /* The following can be individually enabled */
 
 #ifdef CONFIG_ARCH_HAVE_VFORK
-  SYSCALL_LOOKUP(vfork,                   0, SYS_vfork)
+  SYSCALL_LOOKUP(vfork,                   0, STUB_vfork)
 #endif
 
 #ifdef CONFIG_SCHED_ATEXIT
@@ -92,18 +106,26 @@ SYSCALL_LOOKUP(up_assert,                 2, STUB_up_assert)
 #  endif
 #endif
 
+/* The following can only be defined if we are configured to load
+ * OS modules from a file system.
+ */
+
+#ifdef CONFIG_MODULE
+  SYSCALL_LOOKUP(insmod,                  2, STUB_insmod)
+  SYSCALL_LOOKUP(rmmod,                   1, STUB_rmmod)
+#endif
+
 /* The following can only be defined if we are configured to execute
  * programs from a file system.
  */
 
-#if defined(CONFIG_BINFMT_DISABLE) && defined(CONFIG_LIBC_EXECFUNCS)
+#if !defined(CONFIG_BINFMT_DISABLE) && defined(CONFIG_LIBC_EXECFUNCS)
 #  ifdef CONFIG_BINFMT_EXEPATH
-  SYSCALL_LOOKUP(posix_spawnp,            6, SYS_posixspawnp)
+  SYSCALL_LOOKUP(posix_spawnp,            6, STUB_posix_spawnp)
 #  else
-  SYSCALL_LOOKUP(posix_spawn,             6, SYS_posixspawn)
+  SYSCALL_LOOKUP(posix_spawn,             6, STUB_posix_spawn)
 #  endif
-  SYSCALL_LOOKUP(execv,                   2, SYS_execv)
-  SYSCALL_LOOKUP(execl,                   6, SYS_execl)
+  SYSCALL_LOOKUP(execv,                   2, STUB_execv)
 #endif
 
 /* The following are only defined is signals are supported in the NuttX
@@ -126,12 +148,12 @@ SYSCALL_LOOKUP(up_assert,                 2, STUB_up_assert)
  * NuttX configuration.
  */
 
-#ifndef CONFIG_DISABLE_CLOCK
   SYSCALL_LOOKUP(syscall_clock_systimer,  0, STUB_clock_systimer)
   SYSCALL_LOOKUP(clock_getres,            2, STUB_clock_getres)
   SYSCALL_LOOKUP(clock_gettime,           2, STUB_clock_gettime)
   SYSCALL_LOOKUP(clock_settime,           2, STUB_clock_settime)
-  SYSCALL_LOOKUP(gettimeofday,            2, STUB_gettimeofday)
+#ifdef CONFIG_CLOCK_TIMEKEEPING
+  SYSCALL_LOOKUP(adjtime,                 2, STUB_adjtime)
 #endif
 
 /* The following are defined only if POSIX timers are supported */
@@ -144,19 +166,41 @@ SYSCALL_LOOKUP(up_assert,                 2, STUB_up_assert)
   SYSCALL_LOOKUP(timer_settime,           4, STUB_timer_settime)
 #endif
 
+/* System logging */
+
+  SYSCALL_LOOKUP(_vsyslog,                3, STUB__vsyslog)
+
 /* The following are defined if either file or socket descriptor are
  * enabled.
  */
 
 #if CONFIG_NFILE_DESCRIPTORS > 0 || CONFIG_NSOCKET_DESCRIPTORS > 0
   SYSCALL_LOOKUP(close,                   1, STUB_close)
+#  ifdef CONFIG_LIBC_IOCTL_VARIADIC
+  SYSCALL_LOOKUP(fs_ioctl,                3, STUB_fs_ioctl)
+#  else
   SYSCALL_LOOKUP(ioctl,                   3, STUB_ioctl)
+#  endif
   SYSCALL_LOOKUP(read,                    3, STUB_read)
   SYSCALL_LOOKUP(write,                   3, STUB_write)
+  SYSCALL_LOOKUP(pread,                   4, STUB_pread)
+  SYSCALL_LOOKUP(pwrite,                  4, STUB_pwrite)
+#  ifdef CONFIG_FS_AIO
+  SYSCALL_LOOKUP(aio_read,                1, STUB_aio_read)
+  SYSCALL_LOOKUP(aio_write,               1, STUB_aio_write)
+  SYSCALL_LOOKUP(aio_fsync,               2, STUB_aio_fsync)
+  SYSCALL_LOOKUP(aio_cancel,              2, STUB_aio_cancel)
+#  endif
 #  ifndef CONFIG_DISABLE_POLL
   SYSCALL_LOOKUP(poll,                    3, STUB_poll)
   SYSCALL_LOOKUP(select,                  5, STUB_select)
 #  endif
+#endif
+
+/* Board support */
+
+#ifdef CONFIG_LIB_BOARDCTL
+  SYSCALL_LOOKUP(boardctl,                2, STUB_boardctl)
 #endif
 
 /* The following are defined if file descriptors are enabled */
@@ -167,17 +211,23 @@ SYSCALL_LOOKUP(up_assert,                 2, STUB_up_assert)
   SYSCALL_LOOKUP(dup2,                    2, STUB_dup2)
   SYSCALL_LOOKUP(fcntl,                   6, STUB_fcntl)
   SYSCALL_LOOKUP(lseek,                   3, STUB_lseek)
-  SYSCALL_LOOKUP(mkfifo,                  2, STUB_mkfifo)
   SYSCALL_LOOKUP(mmap,                    6, STUB_mmap)
   SYSCALL_LOOKUP(open,                    6, STUB_open)
   SYSCALL_LOOKUP(opendir,                 1, STUB_opendir)
-  SYSCALL_LOOKUP(pipe,                    1, STUB_pipe)
   SYSCALL_LOOKUP(readdir,                 1, STUB_readdir)
   SYSCALL_LOOKUP(rewinddir,               1, STUB_rewinddir)
   SYSCALL_LOOKUP(seekdir,                 2, STUB_seekdir)
   SYSCALL_LOOKUP(stat,                    2, STUB_stat)
   SYSCALL_LOOKUP(statfs,                  2, STUB_statfs)
   SYSCALL_LOOKUP(telldir,                 1, STUB_telldir)
+
+#  if defined(CONFIG_PIPES) && CONFIG_DEV_PIPE_SIZE > 0
+  SYSCALL_LOOKUP(pipe2,                   2, STUB_pipe2)
+#  endif
+
+#  if defined(CONFIG_PIPES) && CONFIG_DEV_FIFO_SIZE > 0
+  SYSCALL_LOOKUP(mkfifo2,                 3, STUB_mkfifo2)
+#  endif
 
 #  if CONFIG_NFILE_STREAMS > 0
   SYSCALL_LOOKUP(fdopen,                  3, STUB_fs_fdopen)
@@ -189,14 +239,25 @@ SYSCALL_LOOKUP(up_assert,                 2, STUB_up_assert)
 #  endif
 
 #  if !defined(CONFIG_DISABLE_MOUNTPOINT)
+#    if defined(CONFIG_FS_READABLE)
+  SYSCALL_LOOKUP(mount,                   5, STUB_mount)
+#    endif
   SYSCALL_LOOKUP(fsync,                   1, STUB_fsync)
   SYSCALL_LOOKUP(mkdir,                   2, STUB_mkdir)
-  SYSCALL_LOOKUP(mount,                   5, STUB_mount)
   SYSCALL_LOOKUP(rename,                  2, STUB_rename)
   SYSCALL_LOOKUP(rmdir,                   1, STUB_rmdir)
-  SYSCALL_LOOKUP(umount,                  1, STUB_umount)
+  SYSCALL_LOOKUP(umount2,                 2, STUB_umount2)
   SYSCALL_LOOKUP(unlink,                  1, STUB_unlink)
 #  endif
+#endif
+
+/* Shared memory interfaces */
+
+#ifdef CONFIG_MM_SHM
+  SYSCALL_LOOKUP(shmget,                  3, STUB_shmget)
+  SYSCALL_LOOKUP(shmat,                   3, STUB_shmat)
+  SYSCALL_LOOKUP(shmctl,                  3, STUB_shmctl)
+  SYSCALL_LOOKUP(shmdt,                   1, STUB_shmdt)
 #endif
 
 /* The following are defined if pthreads are enabled */
@@ -230,7 +291,11 @@ SYSCALL_LOOKUP(up_assert,                 2, STUB_up_assert)
   SYSCALL_LOOKUP(pthread_setschedprio,    2, STUB_pthread_setschedprio)
   SYSCALL_LOOKUP(pthread_setspecific,     2, STUB_pthread_setspecific)
   SYSCALL_LOOKUP(pthread_yield,           0, STUB_pthread_yield)
-#  ifndef CONFIG_DISABLE_SIGNAL
+#  ifdef CONFIG_SMP
+  SYSCALL_LOOKUP(pthread_setaffinity,     3, STUB_pthread_setaffinity)
+  SYSCALL_LOOKUP(pthread_getaffinity,     3, STUB_pthread_getaffinity)
+#  endif
+#  ifndef CONFIG_DISABLE_SIGNALS
   SYSCALL_LOOKUP(pthread_cond_timedwait,  3, STUB_pthread_cond_timedwait)
   SYSCALL_LOOKUP(pthread_kill,            2, STUB_pthread_kill)
   SYSCALL_LOOKUP(pthread_sigmask,         3, STUB_pthread_sigmask)
@@ -241,10 +306,12 @@ SYSCALL_LOOKUP(up_assert,                 2, STUB_up_assert)
 
 #ifndef CONFIG_DISABLE_MQUEUE
   SYSCALL_LOOKUP(mq_close,                1, STUB_mq_close)
+  SYSCALL_LOOKUP(mq_getattr,              2, STUB_mq_getattr)
   SYSCALL_LOOKUP(mq_notify,               2, STUB_mq_notify)
   SYSCALL_LOOKUP(mq_open,                 6, STUB_mq_open)
   SYSCALL_LOOKUP(mq_receive,              4, STUB_mq_receive)
   SYSCALL_LOOKUP(mq_send,                 4, STUB_mq_send)
+  SYSCALL_LOOKUP(mq_setattr,              3, STUB_mq_setattr)
   SYSCALL_LOOKUP(mq_timedreceive,         5, STUB_mq_timedreceive)
   SYSCALL_LOOKUP(mq_timedsend,            5, STUB_mq_timedsend)
   SYSCALL_LOOKUP(mq_unlink,               1, STUB_mq_unlink)
@@ -258,6 +325,12 @@ SYSCALL_LOOKUP(up_assert,                 2, STUB_up_assert)
   SYSCALL_LOOKUP(putenv,                  1, STUB_putenv)
   SYSCALL_LOOKUP(setenv,                  3, STUB_setenv)
   SYSCALL_LOOKUP(unsetenv,                1, STUB_unsetenv)
+#endif
+
+/* The following are defined only if netdb is supported */
+
+#ifdef CONFIG_LIBC_NETDB
+  SYSCALL_LOOKUP(sethostname,             2, STUB_sethostname)
 #endif
 
 /* The following are defined only if networking AND sockets are supported */
@@ -289,5 +362,3 @@ SYSCALL_LOOKUP(up_assert,                 2, STUB_up_assert)
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
-
-

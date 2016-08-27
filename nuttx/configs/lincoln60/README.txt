@@ -41,6 +41,13 @@ Lincoln 60 board
   P3[26]                            26  LED2
   P2[10]                            53  BTN1
 
+  microSD                          PIN   SIGNAL NAME
+  -------------------------------- ----- --------------
+  P0[15]                           J12 3  SPI SCK
+  P0[17]                           J12 4  SPI MISO
+  P0[18]                           J12 5  SPI MOSI
+  P0[16]                           J18 5  SPI slave select
+
   Console
   -------
 
@@ -100,12 +107,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -152,7 +153,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -212,8 +213,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -385,11 +386,11 @@ Lincoln 60 Configuration Options
     CONFIG_NET_NRXDESC - Configured number of Rx descriptors. Default: 18
     CONFIG_NET_WOL - Enable Wake-up on Lan (not fully implemented).
     CONFIG_NET_REGDEBUG - Enabled low level register debug.  Also needs
-      CONFIG_DEBUG.
+      CONFIG_DEBUG_FEATURES.
     CONFIG_NET_DUMPPACKET - Dump all received and transmitted packets.
-      Also needs CONFIG_DEBUG.
+      Also needs CONFIG_DEBUG_FEATURES.
     CONFIG_NET_HASH - Enable receipt of near-perfect match frames.
-    CONFIG_NET_MULTICAST - Enable receipt of multicast (and unicast) frames.
+    CONFIG_LPC17_MULTICAST - Enable receipt of multicast (and unicast) frames.
       Automatically set if CONFIG_NET_IGMP is selected.
 
   LPC17xx USB Device Configuration
@@ -476,6 +477,42 @@ as follow:
 
 Where <subdir> is one of the following:
 
+  netnsh:
+    Configures the NuttShell (nsh) located at apps/examples/nsh.  This
+    configuration is similar to the nsh configuration except that network 
+    upport is enabled.
+
+    NOTES:
+
+    1. This configuration uses the mconf-based configuration tool.  To
+       change this configurations using that tool, you should:
+
+       a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
+          see additional README.txt files in the NuttX tools repository.
+
+       b. Execute 'make menuconfig' in nuttx/ in order to start the
+          reconfiguration process.
+
+    2. This configuration is setup to build under Windows with Cygwin using
+       the CodeSourcery toolchain.  That is, however, easily reconfigured.
+
+    3. This configuration uses a serial console on UART0 at 115200 8N1.
+       This is the serial port at the connector labelled COM1 on the
+       Lincoln 60.
+
+    3. This example does initializes the network, then NSH sequentially.  It
+       does not use the NSH network monitor thread.  There are two
+       consequences to this:  1) There will be a delay booting to the NSH
+       prompt while the network is brought up.  This delay will normally be
+       small but it the network cable is unconnected, it can be very long
+       (you may thing that the firmware is hung).  and 2) if the network is
+       unplugged, then re-connected.  The network will not automatically be
+       brought back up.  But you should be able to do that manually with
+       the NSH ifup command.
+
+       If you want better, more responsive network management, look into
+       the NSH network monitor thread.
+
   nsh:
     Configures the NuttShell (nsh) located at apps/examples/nsh.
 
@@ -485,10 +522,38 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
 
-    2.  This configuration enables only the serial NSH interface.  See
-        notes above for enabling USB host support in this configuration.
+    2. This configuration is setup to build under Linux with the Nutt
+       buildroot toolchain.  That is, however, easily reconfigured.
+
+    3. This configuration uses a serial console on UART0 at 115200 8N1.
+       This is the serial port at the connector labelled COM1 on the
+       Lincoln 60.
+
+    3. This configuration enables only the serial NSH interface.  See
+       notes above for enabling USB host support in this configuration.
+
+  thttpd-binfs:
+    This builds the THTTPD web server example using the THTTPD and
+    the apps/examples/thttpd application.  This version uses the built-in
+    binary format with the BINFS file system and the Union File System.
+
+    NOTES:
+
+    1. Uses the CodeSourcery EABI toolchain under Windows.  But that is
+       easily reconfigured:
+
+       CONFIG_HOST_WINDOWS=y                   : Windows
+       CONFIG_HOST_WINDOWS_CYGWIN=y            : under Cygwin
+       CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y : CodeSourcery toolchain
+
+  STATUS:
+    2015-06-06:  The BINFS CGI files are seems to be running, but the
+      output that they generate does not appear in the browser window.
+      I am suspecting that the redirected output is not working correctly
+      with the BINFS applications.
+

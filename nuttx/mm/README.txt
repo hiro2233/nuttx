@@ -5,6 +5,8 @@ This directory contains the NuttX memory management logic.  This include:
 
 1) Standard Memory Management Functions:
 
+   Standard Functions:
+
      The standard memory management functions as prototyped in stdlib.h as
      specified in the  Base definitions volume of IEEE Std 1003.1-2001.  This
      include the files:
@@ -13,7 +15,7 @@ This directory contains the NuttX memory management logic.  This include:
        mm_memalign.c, mm_free.c
      o Less-Standard Interfaces: mm_zalloc.c, mm_mallinfo.c
      o Internal Implementation: mm_initialize.c mm_sem.c  mm_addfreechunk.c
-       mm_size2ndx.c mm_shrinkchunk.c, mm_internal.h
+       mm_size2ndx.c mm_shrinkchunk.c
      o Build and Configuration files: Kconfig, Makefile
 
    Memory Models:
@@ -38,11 +40,11 @@ This directory contains the NuttX memory management logic.  This include:
 
      This allocator can be used to manage multiple heaps (albeit with some
      non-standard interfaces).  A heap is represented by struct mm_heap_s
-     as defined in the file include/nuttx/mm.h.  To create another heap
+     as defined in the file include/nuttx/mm/mm.h.  To create another heap
      instance, you would allocate a heap structure, most likely statically
      in memory:
 
-       include <nuttx/mm.h>
+       include <nuttx/mm/mm.h>
        static struct mm_heap_s g_myheap;
 
      Then initialize the heap using:
@@ -50,7 +52,7 @@ This directory contains the NuttX memory management logic.  This include:
        mm_initialize(&g_myheap, myheap_start, myheap_size);
 
      Where mm_initialize() and all related interfaces are prototyped in the
-     header file include/nuttx/mm.h.
+     header file include/nuttx/mm/mm.h.
 
      After the new heap instance has been initialized, it can then be used
      with these almost familiar interfaces: mm_malloc(), mm_realloc(), mm_free(),
@@ -61,13 +63,24 @@ This directory contains the NuttX memory management logic.  This include:
      In fact, the standard malloc(), realloc(), free() use this same mechanism,
      but with a global heap structure called g_mmheap.
 
+   User/Kernel Heaps
+
+     This multiple heap capability is exploited in some of the more complex NuttX
+     build configurations to provide separate kernel-mode and user-mode heaps.
+
+   Sub-Directories:
+
+     mm/mm_heap  - Holds the common base logic for all heap allocators
+     mm/umm_heap - Holds the user-mode memory allocation interfaces
+     mm/kmm_heap - Holds the kernel-mode memory allocation interfaces
+
 2) Granule Allocator.
 
      A non-standard granule allocator is also available in this directory  The
      granule allocator allocates memory in units of a fixed sized block ("granule").
      Allocations may be aligned to a user-provided address boundary.
 
-     The granule allocator interfaces are defined in nuttx/include/nuttx/gran.h.
+     The granule allocator interfaces are defined in nuttx/include/nuttx/mm/gran.h.
      The granule allocator consists of these files in this directory:
 
        mm_gran.h, mm_granalloc.c, mm_grancritical.c, mm_granfree.c
@@ -110,3 +123,33 @@ This directory contains the NuttX memory management logic.  This include:
 
      The actual memory allocates will be 64 byte (wasting 17 bytes) and
      will be aligned at least to (1 << log2align).
+
+   Sub-Directories:
+
+     mm/mm_gran - Holds the granule allocation logic
+
+3) Page Allocator
+
+   The page allocator is an application of the granule allocator.  It is a
+   special purpose memory allocator intended to allocate physical memory
+   pages for use with systems that have a memory management unit (MMU).
+
+   Sub-Directories:
+
+     mm/mm_gran - The page allocator cohabits the same directory as the
+       granule allocator.
+
+4) Shared Memory Management
+
+   When NuttX is build in kernel mode with a separate, privileged, kernel-
+   mode address space and multiple, unprivileged, user-mode address spaces,
+   then shared memory regions must also be managed.  Shared memory regions
+   are user-accessible memory regions that can be attached into the user
+   process address space for sharing between user process.
+
+   Sub-Directories:
+
+     mm/shm - The shared memory logic
+
+   The shared memory management logic has its own README file that can be
+   found at nuttx/mm/shm/README.txt.

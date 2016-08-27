@@ -53,7 +53,7 @@
 #include "nxtext_internal.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define NBM_CACHE    8
@@ -73,7 +73,7 @@ static void nxpu_position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
                           FAR const struct nxgl_point_s *pos,
                           FAR const struct nxgl_rect_s *bounds,
                           FAR void *arg);
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
 static void nxpu_mousein(NXWINDOW hwnd, FAR const struct nxgl_point_s *pos,
                          uint8_t buttons, FAR void *arg);
 #endif
@@ -93,7 +93,7 @@ static const struct nx_callback_s g_pucb =
 {
   nxpu_redraw,   /* redraw */
   nxpu_position  /* position */
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
   , nxpu_mousein /* mousein */
 #endif
 #ifdef CONFIG_NX_KBD
@@ -150,7 +150,7 @@ static inline int nxpu_setsize(NXWINDOW hwnd, FAR struct nxgl_size_s *size)
   int ret = nx_setsize(hwnd, size);
   if (ret < 0)
     {
-      message("nxpu_setsize: nx_setsize failed: %d\n", errno);
+      printf("nxpu_setsize: nx_setsize failed: %d\n", errno);
       g_exitcode = NXEXIT_NXSETSIZE;
     }
   return ret;
@@ -165,7 +165,7 @@ static inline int nxpu_setposition(NXWINDOW hwnd, FAR struct nxgl_point_s *pos)
   int ret = nx_setposition(hwnd, pos);
   if (ret < 0)
     {
-      message("nxpu_setposition: nx_setposition failed: %d\n", errno);
+      printf("nxpu_setposition: nx_setposition failed: %d\n", errno);
       g_exitcode = NXEXIT_NXSETPOSITION;
     }
   return ret;
@@ -180,12 +180,14 @@ static inline void nxpu_fillwindow(NXWINDOW hwnd,
                                    FAR struct nxtext_state_s *st)
 {
   int ret;
+#ifdef CONFIG_NX_KBD
   int i;
+#endif
 
   ret = nx_fill(hwnd, rect, st->wcolor);
   if (ret < 0)
     {
-      message("nxpu_fillwindow: nx_fill failed: %d\n", errno);
+      printf("nxpu_fillwindow: nx_fill failed: %d\n", errno);
     }
 
   /* Fill each character on the display (Only the characters within rect
@@ -209,7 +211,7 @@ static void nxpu_redraw(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect,
                         bool more, FAR void *arg)
 {
   FAR struct nxtext_state_s *st = (FAR struct nxtext_state_s *)arg;
-  gvdbg("hwnd=%p rect={(%d,%d),(%d,%d)} more=%s\n",
+  ginfo("hwnd=%p rect={(%d,%d),(%d,%d)} more=%s\n",
           hwnd, rect->pt1.x, rect->pt1.y, rect->pt2.x, rect->pt2.y,
           more ? "true" : "false");
 
@@ -229,7 +231,7 @@ static void nxpu_position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
 
   /* Report the position */
 
-  gvdbg("hwnd=%p size=(%d,%d) pos=(%d,%d) bounds={(%d,%d),(%d,%d)}\n",
+  ginfo("hwnd=%p size=(%d,%d) pos=(%d,%d) bounds={(%d,%d),(%d,%d)}\n",
         hwnd, size->w, size->h, pos->x, pos->y,
         bounds->pt1.x, bounds->pt1.y, bounds->pt2.x, bounds->pt2.y);
 
@@ -246,12 +248,12 @@ static void nxpu_position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
  * Name: nxpu_mousein
  ****************************************************************************/
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
 static void nxpu_mousein(NXWINDOW hwnd, FAR const struct nxgl_point_s *pos,
                          uint8_t buttons, FAR void *arg)
 {
-  message("nxpu_mousein: hwnd=%p pos=(%d,%d) button=%02x\n",
-          hwnd,  pos->x, pos->y, buttons);
+  printf("nxpu_mousein: hwnd=%p pos=(%d,%d) button=%02x\n",
+         hwnd,  pos->x, pos->y, buttons);
 }
 #endif
 
@@ -278,7 +280,7 @@ static void nxpu_kbdin(NXWINDOW hwnd, uint8_t nch, FAR const uint8_t *ch,
                        FAR void *arg)
 {
   FAR struct nxtext_state_s *st = (FAR struct nxtext_state_s *)arg;
-  gvdbg("hwnd=%p nch=%d\n", hwnd, nch);
+  ginfo("hwnd=%p nch=%d\n", hwnd, nch);
   nxpu_puts(hwnd, st, nch, ch);
 }
 #endif
@@ -339,15 +341,15 @@ NXWINDOW nxpu_open(void)
 
   /* Create a pop-up window */
 
-  message("nxpu_open: Create pop-up\n");
+  printf("nxpu_open: Create pop-up\n");
   nxpu_initstate();
 
   hwnd = nx_openwindow(g_hnx, &g_pucb, (FAR void *)&g_pustate);
-  gvdbg("hwnd=%p\n", hwnd);
+  ginfo("hwnd=%p\n", hwnd);
 
   if (!hwnd)
     {
-      message("nxpu_open: nx_openwindow failed: %d\n", errno);
+      printf("nxpu_open: nx_openwindow failed: %d\n", errno);
       g_exitcode = NXEXIT_NXOPENWINDOW;
       goto errout_with_state;
     }
@@ -364,7 +366,7 @@ NXWINDOW nxpu_open(void)
 
   /* Set the position for the pop-up window */
 
-  message("nxpu_open: Set pop-up postion to (%d,%d)\n", pt.x, pt.y);
+  printf("nxpu_open: Set pop-up position to (%d,%d)\n", pt.x, pt.y);
   ret = nxpu_setposition(hwnd, &pt);
   if (ret < 0)
     {
@@ -373,7 +375,7 @@ NXWINDOW nxpu_open(void)
 
   /* Set the size of the pop-up window */
 
-  gvdbg("Set pop-up size to (%d,%d)\n", size.w, size.h);
+  ginfo("Set pop-up size to (%d,%d)\n", size.w, size.h);
   ret = nxpu_setsize(hwnd, &size);
   if (ret < 0)
     {
@@ -400,7 +402,7 @@ int nxpu_close(NXWINDOW hwnd)
   ret = nx_closewindow(hwnd);
   if (ret < 0)
     {
-      message("nxpu_close: nx_closewindow failed: %d\n", errno);
+      printf("nxpu_close: nx_closewindow failed: %d\n", errno);
       g_exitcode = NXEXIT_NXCLOSEWINDOW;
       return ret;
     }

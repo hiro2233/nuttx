@@ -1,13 +1,13 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 config NETUTILS_XMLRPC
 	bool "XML RPC library"
 	default n
 	depends on NET_TCP
-	select NETUTILS_UIPLIB
+	select NETUTILS_NETLIB
 	---help---
 		Enables the Embeddable Lightweight XML-RPC Server discussed at
 		http://www.drdobbs.com/web-development/an-embeddable-lightweight-xml-rpc-server/184405364

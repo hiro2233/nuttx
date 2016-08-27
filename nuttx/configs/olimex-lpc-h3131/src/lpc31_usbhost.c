@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/olimex-lpc-h3131/src/lpc31_usbhost.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,13 +47,14 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/usb/usbdev.h>
 #include <nuttx/usb/usbhost.h>
 #include <nuttx/usb/usbdev_trace.h>
 
 #include "up_arch.h"
 
-#include "lpc31_internal.h"
+#include "lpc31.h"
 #include "lpc_h3131.h"
 
 #ifdef HAVE_USBHOST
@@ -67,7 +68,11 @@
 #endif
 
 #ifndef CONFIG_USBHOST_STACKSIZE
-#  define CONFIG_USBHOST_STACKSIZE 1024
+#  ifdef CONFIG_USBHOST_HUB
+#    define CONFIG_USBHOST_STACKSIZE 1536
+#  else
+#    define CONFIG_USBHOST_STACKSIZE 1024
+#  endif
 #endif
 
 /************************************************************************************
@@ -97,35 +102,24 @@ static xcpt_t g_ochandler;
 
 static int ehci_waiter(int argc, char *argv[])
 {
-  bool connected = false;
-  int rhpndx;
-  int ret;
+  FAR struct usbhost_hubport_s *hport;
 
-  uvdbg("Waiter Running\n");
+  uinfo("ehci_waiter:  Running\n");
   for (;;)
     {
       /* Wait for the device to change state */
 
-      rhpndx = CONN_WAIT(g_ehciconn, &connected);
-      DEBUGASSERT(rhpndx >= 0 && rhpndx < 1);
-
-      connected = !connected;
-
-      uvdbg("RHport1 %s\n",
-            connected ? "connected" : "disconnected");
+      DEBUGVERIFY(CONN_WAIT(g_ehciconn, &hport));
+      syslog(LOG_INFO, "ehci_waiter: %s\n",
+             hport->connected ? "connected" : "disconnected");
 
       /* Did we just become connected? */
 
-      if (connected)
+      if (hport->connected)
         {
           /* Yes.. enumerate the newly connected device */
 
-          ret = CONN_ENUMERATE(g_ehciconn, rhpndx);
-          if (ret < 0)
-            {
-              uvdbg("RHport1 CONN_ENUMERATE failed: %d\n", ret);
-              connected = false;
-            }
+          (void)CONN_ENUMERATE(g_ehciconn, hport);
         }
     }
 
@@ -183,25 +177,45 @@ int lpc31_usbhost_initialize(void)
 
   /* First, register all of the class drivers needed to support the drivers
    * that we care about
-   *
-   * Register theUSB host Mass Storage Class:
    */
 
-#ifdef CONFIG_USBHOST_MSC
-  ret = usbhost_storageinit();
-  if (ret != OK)
+#ifdef CONFIG_USBHOST_HUB
+  /* Initialize USB hub support */
+
+  ret = usbhost_hub_initialize();
+  if (ret < 0)
     {
-      udbg("ERROR: Failed to register the mass storage class: %d\n", ret);
+      syslog(LOG_ERR, "ERROR: usbhost_hub_initialize failed: %d\n", ret);
     }
 #endif
 
-  /* Register the USB host HID keyboard class driver */
+#ifdef CONFIG_USBHOST_MSC
+  /* Register theUSB host Mass Storage Class */
+
+  ret = usbhost_msc_initialize();
+  if (ret != OK)
+    {
+      uerr("ERROR: Failed to register the mass storage class: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_USBHOST_CDCACM
+  /* Register the CDC/ACM serial class */
+
+  ret = usbhost_cdcacm_initialize();
+  if (ret != OK)
+    {
+      uerr("ERROR: Failed to register the CDC/ACM serial class\n");
+    }
+#endif
 
 #ifdef CONFIG_USBHOST_HIDKBD
+  /* Register the USB host HID keyboard class driver */
+
   ret = usbhost_kbdinit();
   if (ret != OK)
     {
-      udbg("ERROR: Failed to register the KBD class\n");
+      uerr("ERROR: Failed to register the KBD class\n");
     }
 #endif
 
@@ -210,17 +224,17 @@ int lpc31_usbhost_initialize(void)
   g_ehciconn = lpc31_ehci_initialize(0);
   if (!g_ehciconn)
     {
-      udbg("ERROR: lpc31_ehci_initialize failed\n");
+      uerr("ERROR: lpc31_ehci_initialize failed\n");
       return -ENODEV;
     }
 
   /* Start a thread to handle device connection. */
 
-  pid = TASK_CREATE("EHCI Monitor", CONFIG_USBHOST_DEFPRIO,  CONFIG_USBHOST_STACKSIZE,
+  pid = task_create("EHCI Monitor", CONFIG_USBHOST_DEFPRIO,  CONFIG_USBHOST_STACKSIZE,
                     (main_t)ehci_waiter, (FAR char * const *)NULL);
   if (pid < 0)
     {
-      udbg("ERROR: Failed to create ehci_waiter task: %d\n", ret);
+      uerr("ERROR: Failed to create ehci_waiter task: %d\n", ret);
       return -ENODEV;
     }
 
@@ -247,7 +261,7 @@ int lpc31_usbhost_initialize(void)
 
 void lpc31_usbhost_vbusdrive(int rhport, bool enable)
 {
-  uvdbg("RHPort%d: enable=%d\n", rhport+1, enable);
+  uinfo("RHPort%d: enable=%d\n", rhport+1, enable);
 
   /* The LPC3131 has only a single root hub port */
 
@@ -295,7 +309,7 @@ xcpt_t lpc31_setup_overcurrent(xcpt_t handler)
    * following operations are atomic.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Get the old button interrupt handler and save the new one */
 
@@ -307,7 +321,7 @@ xcpt_t lpc31_setup_overcurrent(xcpt_t handler)
 
   /* Return the old button handler (so that it can be restored) */
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return oldhandler;
 }
 #endif /* 0 */

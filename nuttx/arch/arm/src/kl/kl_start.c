@@ -94,7 +94,7 @@ const uint32_t g_idle_topstack = IDLE_STACK;
  *
  ****************************************************************************/
 
-#if defined(CONFIG_DEBUG)
+#if defined(CONFIG_DEBUG_FEATURES)
 #  define showprogress(c) kl_lowputc((uint32_t)c)
 #else
 #  define showprogress(c)
@@ -162,7 +162,7 @@ void __start(void)
    * segments.
    */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
   kl_userspace();
   showprogress('E');
 #endif
@@ -181,6 +181,6 @@ void __start(void)
 
   /* Shoulnd't get here */
 
-  for (;;);
+  for (; ; );
 }
 

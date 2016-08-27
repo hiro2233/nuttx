@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/usbdev/cdcacm.c
  *
- *   Copyright (C) 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,6 +51,7 @@
 #include <queue.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/arch.h>
 #include <nuttx/serial/serial.h>
@@ -67,10 +68,6 @@
 #  include <nuttx/usb/composite.h>
 #  include "composite.h"
 #endif
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
 
 /****************************************************************************
  * Private Types
@@ -92,7 +89,7 @@ struct cdcacm_dev_s
   FAR struct usbdev_s     *usbdev;     /* usbdev driver pointer */
 
   uint8_t config;                      /* Configuration number */
-  uint8_t nwrq;                        /* Number of queue write requests (in reqlist)*/
+  uint8_t nwrq;                        /* Number of queue write requests (in reqlist) */
   uint8_t nrdq;                        /* Number of queue read requests (in epbulkout) */
   uint8_t minor;                       /* The device minor number */
   bool    rxenabled;                   /* true: UART RX "interrupts" enabled */
@@ -114,7 +111,7 @@ struct cdcacm_dev_s
    */
 
   struct cdcacm_req_s wrreqs[CONFIG_CDCACM_NWRREQS];
-  struct cdcacm_req_s rdreqs[CONFIG_CDCACM_NWRREQS];
+  struct cdcacm_req_s rdreqs[CONFIG_CDCACM_NRDREQS];
 
   /* Serial I/O buffers */
 
@@ -201,28 +198,33 @@ static int     cdcuart_setup(FAR struct uart_dev_s *dev);
 static void    cdcuart_shutdown(FAR struct uart_dev_s *dev);
 static int     cdcuart_attach(FAR struct uart_dev_s *dev);
 static void    cdcuart_detach(FAR struct uart_dev_s *dev);
-static int     cdcuart_ioctl(FAR struct file *filep,int cmd,unsigned long arg);
+static int     cdcuart_ioctl(FAR struct file *filep, int cmd,
+                             unsigned long arg);
 static void    cdcuart_rxint(FAR struct uart_dev_s *dev, bool enable);
+#ifdef CONFIG_SERIAL_IFLOWCONTROL
+static bool    cdcuart_rxflowcontrol(FAR struct uart_dev_s *dev,
+                 unsigned int nbuffered, bool upper);
+#endif
 static void    cdcuart_txint(FAR struct uart_dev_s *dev, bool enable);
 static bool    cdcuart_txempty(FAR struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 /* USB class device *********************************************************/
 
 static const struct usbdevclass_driverops_s g_driverops =
 {
-  cdcacm_bind,          /* bind */
-  cdcacm_unbind,        /* unbind */
-  cdcacm_setup,         /* setup */
-  cdcacm_disconnect,    /* disconnect */
+  cdcacm_bind,           /* bind */
+  cdcacm_unbind,         /* unbind */
+  cdcacm_setup,          /* setup */
+  cdcacm_disconnect,     /* disconnect */
 #ifdef CONFIG_SERIAL_REMOVABLE
-  cdcacm_suspend,       /* suspend */
-  cdcacm_resume,        /* resume */
+  cdcacm_suspend,        /* suspend */
+  cdcacm_resume,         /* resume */
 #else
-  NULL,                 /* suspend */
-  NULL,                 /* resume */
+  NULL,                  /* suspend */
+  NULL,                  /* resume */
 #endif
 };
 
@@ -230,21 +232,21 @@ static const struct usbdevclass_driverops_s g_driverops =
 
 static const struct uart_ops_s g_uartops =
 {
-  cdcuart_setup,        /* setup */
-  cdcuart_shutdown,     /* shutdown */
-  cdcuart_attach,       /* attach */
-  cdcuart_detach,       /* detach */
-  cdcuart_ioctl,        /* ioctl */
-  NULL,                 /* receive */
-  cdcuart_rxint,        /* rxinit */
-  NULL,                 /* rxavailable */
+  cdcuart_setup,         /* setup */
+  cdcuart_shutdown,      /* shutdown */
+  cdcuart_attach,        /* attach */
+  cdcuart_detach,        /* detach */
+  cdcuart_ioctl,         /* ioctl */
+  NULL,                  /* receive */
+  cdcuart_rxint,         /* rxinit */
+  NULL,                  /* rxavailable */
 #ifdef CONFIG_SERIAL_IFLOWCONTROL
-  NULL,                 /* rxflowcontrol */
+  cdcuart_rxflowcontrol, /* rxflowcontrol */
 #endif
-  NULL,                 /* send */
-  cdcuart_txint,        /* txinit */
-  NULL,                 /* txready */
-  cdcuart_txempty       /* txempty */
+  NULL,                  /* send */
+  cdcuart_txint,         /* txinit */
+  NULL,                  /* txready */
+  cdcuart_txempty        /* txempty */
 };
 
 /****************************************************************************
@@ -277,7 +279,7 @@ static uint16_t cdcacm_fillrequest(FAR struct cdcacm_dev_s *priv, uint8_t *reqbu
 
   /* Disable interrupts */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Transfer bytes while we have bytes available and there is room in the request */
 
@@ -312,7 +314,7 @@ static uint16_t cdcacm_fillrequest(FAR struct cdcacm_dev_s *priv, uint8_t *reqbu
       uart_datasent(serdev);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return nbytes;
 }
 
@@ -337,7 +339,7 @@ static int cdcacm_sndpacket(FAR struct cdcacm_dev_s *priv)
   int len;
   int ret = OK;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (priv == NULL)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -345,7 +347,7 @@ static int cdcacm_sndpacket(FAR struct cdcacm_dev_s *priv)
     }
 #endif
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Use our IN endpoint for the transfer */
 
@@ -356,7 +358,7 @@ static int cdcacm_sndpacket(FAR struct cdcacm_dev_s *priv)
    * to be sent).
    */
 
-  uvdbg("head=%d tail=%d nwrq=%d empty=%d\n",
+  uinfo("head=%d tail=%d nwrq=%d empty=%d\n",
         priv->serdev.xmit.head, priv->serdev.xmit.tail,
         priv->nwrq, sq_empty(&priv->reqlist));
 
@@ -399,7 +401,7 @@ static int cdcacm_sndpacket(FAR struct cdcacm_dev_s *priv)
         }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return ret;
 }
 
@@ -425,7 +427,7 @@ static inline int cdcacm_recvpacket(FAR struct cdcacm_dev_s *priv,
   uint16_t nexthead;
   uint16_t nbytes = 0;
 
-  uvdbg("head=%d tail=%d nrdq=%d reqlen=%d\n",
+  uinfo("head=%d tail=%d nrdq=%d reqlen=%d\n",
         priv->serdev.recv.head, priv->serdev.recv.tail, priv->nrdq, reqlen);
 
   /* Get the next head index. During the time that RX interrupts are disabled, the
@@ -456,8 +458,16 @@ static inline int cdcacm_recvpacket(FAR struct cdcacm_dev_s *priv,
     }
 
   /* Then copy data into the RX buffer until either: (1) all of the data has been
-   * copied, or (2) the RX buffer is full.  NOTE:  If the RX buffer becomes full,
-   * then we have overrun the serial driver and data will be lost.
+   * copied, or (2) the RX buffer is full.
+   *
+   * NOTE:  If the RX buffer becomes full, then we have overrun the serial driver
+   * and data will be lost.  This is the correct behavior for a proper emulation
+   * of a serial link.  It should not NAK, it should drop data like a physical
+   * serial port.
+   *
+   * If you don't like that behavior.  DO NOT change it here.  Instead, you should
+   * finish the implementation of RX flow control which is the only proper way
+   * to throttle a serial device.
    */
 
   while (nexthead != recv->tail && nbytes < reqlen)
@@ -633,7 +643,7 @@ static int cdcacm_setconfig(FAR struct cdcacm_dev_s *priv, uint8_t config)
   int i;
   int ret = 0;
 
-#if CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (priv == NULL)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -689,6 +699,7 @@ static int cdcacm_setconfig(FAR struct cdcacm_dev_s *priv, uint8_t config)
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_EPINTINCONFIGFAIL), 0);
       goto errout;
     }
+
   priv->epintin->priv = priv;
 
   /* Configure the IN bulk endpoint */
@@ -806,7 +817,7 @@ static void cdcacm_rdcomplete(FAR struct usbdev_ep_s *ep,
 
   /* Sanity check */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!ep || !ep->priv || !req)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -816,11 +827,11 @@ static void cdcacm_rdcomplete(FAR struct usbdev_ep_s *ep,
 
   /* Extract references to private data */
 
-  priv = (FAR struct cdcacm_dev_s*)ep->priv;
+  priv = (FAR struct cdcacm_dev_s *)ep->priv;
 
   /* Process the received data unless this is some unusual condition */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   switch (req->result)
     {
     case 0: /* Normal completion */
@@ -831,7 +842,7 @@ static void cdcacm_rdcomplete(FAR struct usbdev_ep_s *ep,
     case -ESHUTDOWN: /* Disconnection */
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_RDSHUTDOWN), 0);
       priv->nrdq--;
-      irqrestore(flags);
+      leave_critical_section(flags);
       return;
 
     default: /* Some other error occurred */
@@ -848,7 +859,7 @@ static void cdcacm_rdcomplete(FAR struct usbdev_ep_s *ep,
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_RDSUBMIT), (uint16_t)-req->result);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -869,7 +880,7 @@ static void cdcacm_wrcomplete(FAR struct usbdev_ep_s *ep,
 
   /* Sanity check */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!ep || !ep->priv || !req || !req->priv)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -884,10 +895,10 @@ static void cdcacm_wrcomplete(FAR struct usbdev_ep_s *ep,
 
   /* Return the write request to the free list */
 
-  flags = irqsave();
-  sq_addlast((sq_entry_t*)reqcontainer, &priv->reqlist);
+  flags = enter_critical_section();
+  sq_addlast((FAR sq_entry_t *)reqcontainer, &priv->reqlist);
   priv->nwrq++;
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   /* Send the next packet unless this was some unusual termination
    * condition
@@ -931,7 +942,7 @@ static void cdcacm_wrcomplete(FAR struct usbdev_ep_s *ep,
 static int cdcacm_bind(FAR struct usbdevclass_driver_s *driver,
                        FAR struct usbdev_s *dev)
 {
-  FAR struct cdcacm_dev_s *priv = ((FAR struct cdcacm_driver_s*)driver)->dev;
+  FAR struct cdcacm_dev_s *priv = ((FAR struct cdcacm_driver_s *)driver)->dev;
   FAR struct cdcacm_req_s *reqcontainer;
   irqstate_t flags;
   uint16_t reqlen;
@@ -968,9 +979,9 @@ static int cdcacm_bind(FAR struct usbdevclass_driver_s *driver,
 
   /* Pre-allocate all endpoints... the endpoints will not be functional
    * until the SET CONFIGURATION request is processed in cdcacm_setconfig.
-   * This is done here because there may be calls to kmalloc and the SET
+   * This is done here because there may be calls to kmm_malloc and the SET
    * CONFIGURATION processing probably occurrs within interrupt handling
-   * logic where kmalloc calls will fail.
+   * logic where kmm_malloc calls will fail.
    */
 
   /* Pre-allocate the IN interrupt endpoint */
@@ -1065,10 +1076,10 @@ static int cdcacm_bind(FAR struct usbdevclass_driver_s *driver,
       reqcontainer->req->priv     = reqcontainer;
       reqcontainer->req->callback = cdcacm_wrcomplete;
 
-      flags = irqsave();
-      sq_addlast((sq_entry_t*)reqcontainer, &priv->reqlist);
+      flags = enter_critical_section();
+      sq_addlast((FAR sq_entry_t *)reqcontainer, &priv->reqlist);
       priv->nwrq++;     /* Count of write requests available */
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 
   /* Report if we are selfpowered (unless we are part of a composite device) */
@@ -1109,7 +1120,7 @@ static void cdcacm_unbind(FAR struct usbdevclass_driver_s *driver,
 
   usbtrace(TRACE_CLASSUNBIND, 0);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!driver || !dev)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -1119,9 +1130,9 @@ static void cdcacm_unbind(FAR struct usbdevclass_driver_s *driver,
 
   /* Extract reference to private data */
 
-  priv = ((FAR struct cdcacm_driver_s*)driver)->dev;
+  priv = ((FAR struct cdcacm_driver_s *)driver)->dev;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!priv)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_EP0NOTBOUND), 0);
@@ -1149,14 +1160,6 @@ static void cdcacm_unbind(FAR struct usbdevclass_driver_s *driver,
         {
           DEV_FREEEP(dev, priv->epintin);
           priv->epintin = NULL;
-        }
-
-      /* Free the bulk IN endpoint */
-
-      if (priv->epbulkin)
-        {
-          DEV_FREEEP(dev, priv->epbulkin);
-          priv->epbulkin = NULL;
         }
 
       /* Free the pre-allocated control request */
@@ -1194,7 +1197,7 @@ static void cdcacm_unbind(FAR struct usbdevclass_driver_s *driver,
        * of them)
        */
 
-      flags = irqsave();
+      flags = enter_critical_section();
       DEBUGASSERT(priv->nwrq == CONFIG_CDCACM_NWRREQS);
       while (!sq_empty(&priv->reqlist))
         {
@@ -1205,14 +1208,23 @@ static void cdcacm_unbind(FAR struct usbdevclass_driver_s *driver,
               priv->nwrq--;     /* Number of write requests queued */
             }
         }
+
       DEBUGASSERT(priv->nwrq == 0);
-      irqrestore(flags);
+      leave_critical_section(flags);
+
+      /* Free the bulk IN endpoint */
+
+      if (priv->epbulkin)
+        {
+          DEV_FREEEP(dev, priv->epbulkin);
+          priv->epbulkin = NULL;
+        }
+
+      /* Clear out all data in the circular buffer */
+
+      priv->serdev.xmit.head = 0;
+      priv->serdev.xmit.tail = 0;
     }
-
-  /* Clear out all data in the circular buffer */
-
-  priv->serdev.xmit.head = 0;
-  priv->serdev.xmit.tail = 0;
 }
 
 /****************************************************************************
@@ -1236,7 +1248,7 @@ static int cdcacm_setup(FAR struct usbdevclass_driver_s *driver,
   uint16_t len;
   int ret = -EOPNOTSUPP;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!driver || !dev || !ctrl)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -1247,9 +1259,9 @@ static int cdcacm_setup(FAR struct usbdevclass_driver_s *driver,
   /* Extract reference to private data */
 
   usbtrace(TRACE_CLASSSETUP, ctrl->req);
-  priv = ((FAR struct cdcacm_driver_s*)driver)->dev;
+  priv = ((FAR struct cdcacm_driver_s *)driver)->dev;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!priv || !priv->ctrlreq)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_EP0NOTBOUND), 0);
@@ -1264,7 +1276,7 @@ static int cdcacm_setup(FAR struct usbdevclass_driver_s *driver,
   index = GETUINT16(ctrl->index);
   len   = GETUINT16(ctrl->len);
 
-  uvdbg("type=%02x req=%02x value=%04x index=%04x len=%04x\n",
+  uinfo("type=%02x req=%02x value=%04x index=%04x len=%04x\n",
         ctrl->type, ctrl->req, value, index, len);
 
   if ((ctrl->type & USB_REQ_TYPE_MASK) == USB_REQ_TYPE_STANDARD)
@@ -1373,7 +1385,7 @@ static int cdcacm_setup(FAR struct usbdevclass_driver_s *driver,
           {
             if (ctrl->type == USB_DIR_IN)
               {
-                *(uint8_t*)ctrlreq->buf = priv->config;
+                *(FAR uint8_t *)ctrlreq->buf = priv->config;
                 ret = 1;
               }
           }
@@ -1398,13 +1410,13 @@ static int cdcacm_setup(FAR struct usbdevclass_driver_s *driver,
 
         case USB_REQ_GETINTERFACE:
           {
-            if (ctrl->type == (USB_DIR_IN|USB_REQ_RECIPIENT_INTERFACE) &&
+            if (ctrl->type == (USB_DIR_IN | USB_REQ_RECIPIENT_INTERFACE) &&
                 priv->config == CDCACM_CONFIGIDNONE)
               {
                 if ((index == CDCACM_NOTIFID && value == CDCACM_NOTALTIFID) ||
                     (index == CDCACM_DATAIFID && value == CDCACM_DATAALTIFID))
                    {
-                    *(uint8_t*) ctrlreq->buf = value;
+                    *(FAR uint8_t *) ctrlreq->buf = value;
                     ret = 1;
                   }
                 else
@@ -1435,7 +1447,7 @@ static int cdcacm_setup(FAR struct usbdevclass_driver_s *driver,
 
         case ACM_GET_LINE_CODING:
           {
-            if (ctrl->type == (USB_DIR_IN|USB_REQ_TYPE_CLASS|USB_REQ_RECIPIENT_INTERFACE) &&
+            if (ctrl->type == (USB_DIR_IN | USB_REQ_TYPE_CLASS | USB_REQ_RECIPIENT_INTERFACE) &&
             index == CDCACM_NOTIFID)
               {
                 /* Return the current line status from the private data structure */
@@ -1456,13 +1468,13 @@ static int cdcacm_setup(FAR struct usbdevclass_driver_s *driver,
 
         case ACM_SET_LINE_CODING:
           {
-            if (ctrl->type == (USB_DIR_OUT|USB_REQ_TYPE_CLASS|USB_REQ_RECIPIENT_INTERFACE) &&
+            if (ctrl->type == (USB_DIR_OUT | USB_REQ_TYPE_CLASS | USB_REQ_RECIPIENT_INTERFACE) &&
                 len == SIZEOF_CDC_LINECODING && /* dataout && len == outlen && */
                 index == CDCACM_NOTIFID)
               {
                 /* Save the new line coding in the private data structure.  NOTE:
                  * that this is conditional now because not all device controller
-                 * drivers supported provisioni of EP0 OUT data with the setup
+                 * drivers supported provision of EP0 OUT data with the setup
                  * command.
                  */
 
@@ -1470,6 +1482,8 @@ static int cdcacm_setup(FAR struct usbdevclass_driver_s *driver,
                   {
                     memcpy(&priv->linecoding, dataout, SIZEOF_CDC_LINECODING);
                   }
+
+                /* Respond with a zero length packet */
 
                 ret = 0;
 
@@ -1495,11 +1509,11 @@ static int cdcacm_setup(FAR struct usbdevclass_driver_s *driver,
 
         case ACM_SET_CTRL_LINE_STATE:
           {
-            if (ctrl->type == (USB_DIR_OUT|USB_REQ_TYPE_CLASS|USB_REQ_RECIPIENT_INTERFACE) &&
+            if (ctrl->type == (USB_DIR_OUT | USB_REQ_TYPE_CLASS | USB_REQ_RECIPIENT_INTERFACE) &&
                 index == CDCACM_NOTIFID)
               {
                 /* Save the control line state in the private data structure. Only bits
-                 * 0 and 1 have meaning.
+                 * 0 and 1 have meaning.  Respond with a zero length packet.
                  */
 
                 priv->ctrlline = value & 3;
@@ -1521,15 +1535,15 @@ static int cdcacm_setup(FAR struct usbdevclass_driver_s *driver,
           }
           break;
 
-        /*  Sends special carrier*/
+        /*  Sends special carrier */
 
         case ACM_SEND_BREAK:
           {
-            if (ctrl->type == (USB_DIR_OUT|USB_REQ_TYPE_CLASS|USB_REQ_RECIPIENT_INTERFACE) &&
+            if (ctrl->type == (USB_DIR_OUT | USB_REQ_TYPE_CLASS | USB_REQ_RECIPIENT_INTERFACE) &&
                 index == CDCACM_NOTIFID)
               {
                 /* If there is a registered callback to handle the SendBreak request,
-                 * then callout now.
+                 * then callout now.  Respond with a zero length packet.
                  */
 
                 ret = 0;
@@ -1584,6 +1598,8 @@ static int cdcacm_setup(FAR struct usbdevclass_driver_s *driver,
         }
     }
 
+  /* Returning a negative value will cause a STALL */
+
   return ret;
 }
 
@@ -1605,7 +1621,7 @@ static void cdcacm_disconnect(FAR struct usbdevclass_driver_s *driver,
 
   usbtrace(TRACE_CLASSDISCONNECT, 0);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!driver || !dev || !dev->ep0)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -1615,9 +1631,9 @@ static void cdcacm_disconnect(FAR struct usbdevclass_driver_s *driver,
 
   /* Extract reference to private data */
 
-  priv = ((FAR struct cdcacm_driver_s*)driver)->dev;
+  priv = ((FAR struct cdcacm_driver_s *)driver)->dev;
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!priv)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_EP0NOTBOUND), 0);
@@ -1629,7 +1645,7 @@ static void cdcacm_disconnect(FAR struct usbdevclass_driver_s *driver,
    * connection.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 #ifdef CONFIG_SERIAL_REMOVABLE
   uart_connected(&priv->serdev, false);
 #endif
@@ -1642,7 +1658,8 @@ static void cdcacm_disconnect(FAR struct usbdevclass_driver_s *driver,
 
   priv->serdev.xmit.head = 0;
   priv->serdev.xmit.tail = 0;
-  irqrestore(flags);
+  priv->rxhead = 0;
+  leave_critical_section(flags);
 
   /* Perform the soft connect function so that we will we can be
    * re-enumerated (unless we are part of a composite device)
@@ -1669,7 +1686,7 @@ static void cdcacm_suspend(FAR struct usbdevclass_driver_s *driver,
 
   usbtrace(TRACE_CLASSSUSPEND, 0);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!driver || !dev)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -1679,7 +1696,7 @@ static void cdcacm_suspend(FAR struct usbdevclass_driver_s *driver,
 
   /* Extract reference to private data */
 
-  priv = ((FAR struct cdcacm_driver_s*)driver)->dev;
+  priv = ((FAR struct cdcacm_driver_s *)driver)->dev;
 
   /* And let the "upper half" driver now that we are suspended */
 
@@ -1703,7 +1720,7 @@ static void cdcacm_resume(FAR struct usbdevclass_driver_s *driver,
 
   usbtrace(TRACE_CLASSRESUME, 0);
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!driver || !dev)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -1713,7 +1730,7 @@ static void cdcacm_resume(FAR struct usbdevclass_driver_s *driver,
 
   /* Extract reference to private data */
 
-  priv = ((FAR struct cdcacm_driver_s*)driver)->dev;
+  priv = ((FAR struct cdcacm_driver_s *)driver)->dev;
 
   /* Are we still configured? */
 
@@ -1746,7 +1763,7 @@ static int cdcuart_setup(FAR struct uart_dev_s *dev)
 
   /* Sanity check */
 
-#if CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!dev || !dev->priv)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -1756,7 +1773,7 @@ static int cdcuart_setup(FAR struct uart_dev_s *dev)
 
   /* Extract reference to private data */
 
-  priv = (FAR struct cdcacm_dev_s*)dev->priv;
+  priv = (FAR struct cdcacm_dev_s *)dev->priv;
 
   /* Check if we have been configured */
 
@@ -1787,7 +1804,7 @@ static void cdcuart_shutdown(FAR struct uart_dev_s *dev)
 
   /* Sanity check */
 
-#if CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!dev || !dev->priv)
     {
        usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -1813,8 +1830,8 @@ static int cdcuart_attach(FAR struct uart_dev_s *dev)
  * Name: cdcuart_detach
  *
  * Description:
-*   Does not apply to the USB serial class device
-  *
+ *   Does not apply to the USB serial class device
+ *
  ****************************************************************************/
 
 static void cdcuart_detach(FAR struct uart_dev_s *dev)
@@ -1830,7 +1847,7 @@ static void cdcuart_detach(FAR struct uart_dev_s *dev)
  *
  ****************************************************************************/
 
-static int cdcuart_ioctl(FAR struct file *filep,int cmd,unsigned long arg)
+static int cdcuart_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 {
   struct inode        *inode  = filep->f_inode;
   struct cdcacm_dev_s *priv   = inode->i_private;
@@ -1914,7 +1931,7 @@ static int cdcuart_ioctl(FAR struct file *filep,int cmd,unsigned long arg)
          * 1. Format and send a request header with:
          *
          *   bmRequestType:
-         *    USB_REQ_DIR_IN|USB_REQ_TYPE_CLASS|USB_REQ_RECIPIENT_INTERFACE
+         *    USB_REQ_DIR_IN | USB_REQ_TYPE_CLASS | USB_REQ_RECIPIENT_INTERFACE
          *   bRequest: ACM_SERIAL_STATE
          *   wValue: 0
          *   wIndex: 0
@@ -1930,7 +1947,7 @@ static int cdcuart_ioctl(FAR struct file *filep,int cmd,unsigned long arg)
 #ifdef CONFIG_SERIAL_TERMIOS
     case TCGETS:
       {
-        struct termios *termiosp = (struct termios*)arg;
+        struct termios *termiosp = (FAR struct termios *)arg;
 
         if (!termiosp)
           {
@@ -1948,7 +1965,7 @@ static int cdcuart_ioctl(FAR struct file *filep,int cmd,unsigned long arg)
 
     case TCSETS:
       {
-        struct termios *termiosp = (struct termios*)arg;
+        struct termios *termiosp = (FAR struct termios *)arg;
 
         if (!termiosp)
           {
@@ -1965,12 +1982,16 @@ static int cdcuart_ioctl(FAR struct file *filep,int cmd,unsigned long arg)
       break;
 #endif
 
+    /* Get the number of bytes that may be read from the RX buffer (without
+     * waiting)
+     */
+
     case FIONREAD:
       {
         int count;
-        irqstate_t state = irqsave();
+        irqstate_t flags = enter_critical_section();
 
-        /* Determine the number of bytes available in the buffer. */
+        /* Determine the number of bytes available in the RX buffer. */
 
         if (serdev->recv.tail <= serdev->recv.head)
           {
@@ -1981,19 +2002,46 @@ static int cdcuart_ioctl(FAR struct file *filep,int cmd,unsigned long arg)
             count = serdev->recv.size - (serdev->recv.tail - serdev->recv.head);
           }
 
-        irqrestore(state);
+        leave_critical_section(flags);
 
         *(int *)arg = count;
         ret = 0;
       }
       break;
 
+    /* Get the number of bytes that have been written to the TX buffer. */
+
     case FIONWRITE:
       {
         int count;
-        irqstate_t state = irqsave();
+        irqstate_t flags = enter_critical_section();
 
-        /* Determine the number of bytes free in the buffer. */
+        /* Determine the number of bytes waiting in the TX buffer. */
+
+        if (serdev->xmit.tail <= serdev->xmit.head)
+          {
+            count = serdev->xmit.head - serdev->xmit.tail;
+          }
+        else
+          {
+            count = serdev->xmit.size - (serdev->xmit.tail - serdev->xmit.head);
+          }
+
+        leave_critical_section(flags);
+
+        *(int *)arg = count;
+        ret = 0;
+      }
+      break;
+
+    /* Get the number of free bytes in the TX buffer */
+
+    case FIONSPACE:
+      {
+        int count;
+        irqstate_t flags = enter_critical_section();
+
+        /* Determine the number of bytes free in the TX buffer */
 
         if (serdev->xmit.head < serdev->xmit.tail)
           {
@@ -2004,7 +2052,7 @@ static int cdcuart_ioctl(FAR struct file *filep,int cmd,unsigned long arg)
             count = serdev->xmit.size - (serdev->xmit.head - serdev->xmit.tail) - 1;
           }
 
-        irqrestore(state);
+        leave_critical_section(flags);
 
         *(int *)arg = count;
         ret = 0;
@@ -2046,7 +2094,7 @@ static void cdcuart_rxint(FAR struct uart_dev_s *dev, bool enable)
 
   /* Sanity check */
 
-#if CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!dev || !dev->priv)
     {
        usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -2056,29 +2104,29 @@ static void cdcuart_rxint(FAR struct uart_dev_s *dev, bool enable)
 
   /* Extract reference to private data */
 
-  priv   = (FAR struct cdcacm_dev_s*)dev->priv;
+  priv   = (FAR struct cdcacm_dev_s *)dev->priv;
   serdev = &priv->serdev;
 
   /* We need exclusive access to the RX buffer and private structure
    * in the following.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable)
     {
-       /* RX "interrupts" are enabled.  Is this a transition from disabled
-        * to enabled state?
-        */
+      /* RX "interrupts" are enabled.  Is this a transition from disabled
+       * to enabled state?
+       */
 
-       if (!priv->rxenabled)
-         {
-           /* Yes.  During the time that RX interrupts are disabled, the
-            * the serial driver will be extracting data from the circular
-            * buffer and modifying recv.tail.  During this time, we
-            * should avoid modifying recv.head; When interrupts are restored,
-            * we can update the head pointer for all of the data that we
-            * put into circular buffer while "interrupts" were disabled.
-            */
+      if (!priv->rxenabled)
+        {
+          /* Yes.  During the time that RX interrupts are disabled, the
+           * the serial driver will be extracting data from the circular
+           * buffer and modifying recv.tail.  During this time, we
+           * should avoid modifying recv.head; When interrupts are restored,
+           * we can update the head pointer for all of the data that we
+           * put into circular buffer while "interrupts" were disabled.
+           */
 
           if (priv->rxhead != serdev->recv.head)
             {
@@ -2112,8 +2160,46 @@ static void cdcuart_rxint(FAR struct uart_dev_s *dev, bool enable)
       priv->rxhead    = serdev->recv.head;
       priv->rxenabled = false;
     }
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
+
+/****************************************************************************
+ * Name: cdcuart_rxflowcontrol
+ *
+ * Description:
+ *   Called when Rx buffer is full (or exceeds configured watermark levels
+ *   if CONFIG_SERIAL_IFLOWCONTROL_WATERMARKS is defined).
+ *   Return true if UART activated RX flow control to block more incoming
+ *   data
+ *
+ * Input parameters:
+ *   dev       - UART device instance
+ *   nbuffered - the number of characters currently buffered
+ *               (if CONFIG_SERIAL_IFLOWCONTROL_WATERMARKS is
+ *               not defined the value will be 0 for an empty buffer or the
+ *               defined buffer size for a full buffer)
+ *   upper     - true indicates the upper watermark was crossed where
+ *               false indicates the lower watermark has been crossed
+ *
+ * Returned Value:
+ *   true if RX flow control activated.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SERIAL_IFLOWCONTROL
+static bool cdcuart_rxflowcontrol(FAR struct uart_dev_s *dev,
+                                  unsigned int nbuffered, bool upper)
+{
+#ifdef CONFIG_CDCACM_IFLOWCONTROL
+  /* Allocate a request */
+  /* Format the SerialState notification */
+  /* Submit the request on the Interrupt IN endpoint */
+#  warning Missing logic
+#endif
+
+  return false;
+}
+#endif
 
 /****************************************************************************
  * Name: cdcuart_txint
@@ -2137,7 +2223,7 @@ static void cdcuart_txint(FAR struct uart_dev_s *dev, bool enable)
 
   /* Sanity checks */
 
-#if CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!dev || !dev->priv)
     {
        usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -2145,15 +2231,15 @@ static void cdcuart_txint(FAR struct uart_dev_s *dev, bool enable)
     }
 #endif
 
- /* Extract references to private data */
+  /* Extract references to private data */
 
-  priv = (FAR struct cdcacm_dev_s*)dev->priv;
+  priv = (FAR struct cdcacm_dev_s *)dev->priv;
 
   /* If the new state is enabled and if there is data in the XMIT buffer,
    * send the next packet now.
    */
 
-  uvdbg("enable=%d head=%d tail=%d\n",
+  uinfo("enable=%d head=%d tail=%d\n",
         enable, priv->serdev.xmit.head, priv->serdev.xmit.tail);
 
   if (enable && priv->serdev.xmit.head != priv->serdev.xmit.tail)
@@ -2176,11 +2262,11 @@ static void cdcuart_txint(FAR struct uart_dev_s *dev, bool enable)
 
 static bool cdcuart_txempty(FAR struct uart_dev_s *dev)
 {
-  FAR struct cdcacm_dev_s *priv = (FAR struct cdcacm_dev_s*)dev->priv;
+  FAR struct cdcacm_dev_s *priv = (FAR struct cdcacm_dev_s *)dev->priv;
 
   usbtrace(CDCACM_CLASSAPI_TXEMPTY, 0);
 
-#if CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!priv)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_INVALIDARG), 0);
@@ -2230,7 +2316,7 @@ int cdcacm_classobject(int minor, FAR struct usbdevclass_driver_s **classdev)
 
   /* Allocate the structures needed */
 
-  alloc = (FAR struct cdcacm_alloc_s*)kmalloc(sizeof(struct cdcacm_alloc_s));
+  alloc = (FAR struct cdcacm_alloc_s *)kmm_malloc(sizeof(struct cdcacm_alloc_s));
   if (!alloc)
     {
       usbtrace(TRACE_CLSERROR(USBSER_TRACEERR_ALLOCDEVSTRUCT), 0);
@@ -2309,7 +2395,7 @@ int cdcacm_classobject(int minor, FAR struct usbdevclass_driver_s **classdev)
   return OK;
 
 errout_with_class:
-  kfree(alloc);
+  kmm_free(alloc);
   return ret;
 }
 
@@ -2357,7 +2443,7 @@ int cdcacm_initialize(int minor, FAR void **handle)
 
   if (handle)
     {
-      *handle = (FAR void*)drvr;
+      *handle = (FAR void *)drvr;
     }
 
   return ret;
@@ -2414,7 +2500,7 @@ void cdcacm_uninitialize(FAR void *handle)
        * free the memory resources.
        */
 
-      kfree(priv);
+      kmm_free(priv);
       return;
     }
 #endif
@@ -2444,7 +2530,7 @@ void cdcacm_uninitialize(FAR void *handle)
 
   /* And free the driver structure */
 
-  kfree(priv);
+  kmm_free(priv);
 
 #else
   /* For the case of the composite driver, there is a two pass

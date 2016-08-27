@@ -1,5 +1,5 @@
 /****************************************************************************
- * common/up_releasestack.c
+ * arch/z80/src/common/up_releasestack.c
  *
  *   Copyright (C) 2007-2009, 2013 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -41,9 +41,10 @@
 
 #include <sched.h>
 #include <debug.h>
-#include <nuttx/arch.h>
 
-#include "os_internal.h"
+#include <nuttx/arch.h>
+#include <nuttx/kmalloc.h>
+
 #include "up_internal.h"
 
 /****************************************************************************
@@ -55,7 +56,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -78,7 +79,7 @@
  *     however, there are certain error recovery contexts where the TCB may
  *     not be fully initialized when up_release_stack is called.
  *
- *     If CONFIG_NUTTX_KERNEL is defined, then this thread type may affect
+ *     If CONFIG_BUILD_KERNEL is defined, then this thread type may affect
  *     how the stack is freed.  For example, kernel thread stacks may have
  *     been allocated from protected kernel memory.  Stacks for user tasks
  *     and threads must have come from memory that is accessible to user
@@ -95,7 +96,7 @@ void up_release_stack(FAR struct tcb_s *dtcb, uint8_t ttype)
 
   if (dtcb->stack_alloc_ptr)
     {
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#if defined(CONFIG_BUILD_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
       /* Use the kernel allocator if this is a kernel thread */
 
       if (ttype == TCB_FLAG_TTYPE_KERNEL)

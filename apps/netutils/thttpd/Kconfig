@@ -1,15 +1,17 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 config NETUTILS_THTTPD
 	bool "THTTPD webserver"
 	default n
+	depends on (NXFLAT || FS_BINFS) && !DISABLE_POLL
 	---help---
 		Enable support for the THTTPD webservert.
 
 if NETUTILS_THTTPD
+
 config THTTPD_PORT
 	int "THTTPD port number"
 	default 80
@@ -18,12 +20,12 @@ config THTTPD_PORT
 
 config THTTPD_IPADDR
 	hex "THTTPD IP address"
-	default 0x10000002
+	default 0x0a000002
 	---help---
-		Server IP address (no host name).  Default: 0x10000002
+		Server IP address (no host name).  Default: 0x0a000002
 
 		This is a 32-bit integer value in host order.  So, as an example,
-		the default value of 0x10000002 would correspond to 10.0.0.2.
+		the default value of 0x0a000002 would correspond to 10.0.0.2.
 
 config THTTPD_SERVER_ADDRESS
 	string "Reported server URL"
@@ -32,10 +34,25 @@ config THTTPD_SERVER_ADDRESS
 		SERVER_ADDRESS: response, Default: "http://www.nuttx.org"
 
 config THTTPD_SERVER_SOFTWARE
-	string "Reporter server software string"
+	string "Reported server software string"
 	default "thttpd/2.25b 29dec2003-NuttX"
 	---help---
 		SERVER_SOFTWARE: response, Default: "thttpd/2.25b 29dec2003-NuttX"
+
+choice
+	prompt "CGI file system"
+	default THTTPD_NXFLAT if NXFLAT && !FS_BINFS
+	default THTTPD_BINFS if !NXFLAT && FS_BINFS
+
+config THTTPD_NXFLAT
+	bool "NXFLAT"
+	depends on NXFLAT
+
+config THTTPD_BINFS
+	bool "binfs"
+	depends on FS_BINFS
+
+endchoice
 
 config THTTPD_PATH
 	string "Path to the server content"
@@ -59,7 +76,7 @@ config THTTPD_CGI_PATTERN
 
 config THTTPD_CGI_PRIORITY
 	int "CGI child priority"
-	default 50
+	default 100
 	---help---
 		Provides the priority of CGI child tasks.  Default: 50
 
@@ -177,7 +194,7 @@ config THTTPD_OCCASIONAL_MSEC
 config THTTPD_MEMDEBUG
 	bool "Enable memory debug"
 	default n
-	depends on DEBUG && DEBUG_NET
+	depends on DEBUG_FEATURES && DEBUG_NET
 	---help---
 		Enable THTTPD memory usage debug output.  Default: n
 
@@ -291,6 +308,7 @@ config THTTPD_TILDE_MAP2
 config THTTPD_GENERATE_INDICES
 	bool "Generate name indices"
 	default n
+	select TIME_EXTENDED
 	---help---
 
 config THTTPD_USE_URLPATTERN

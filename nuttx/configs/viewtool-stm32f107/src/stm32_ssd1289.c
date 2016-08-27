@@ -43,6 +43,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/lcd/lcd.h>
 #include <nuttx/lcd/ssd1289.h>
 
@@ -61,20 +62,6 @@
 
 #ifndef CONFIG_STM32_FSMC
 #  error "CONFIG_STM32_FSMC is required to use the LCD"
-#endif
-
-/* Define CONFIG_DEBUG_LCD to enable detailed LCD debug output. Verbose debug must
- * also be enabled.
- */
-
-#ifndef CONFIG_DEBUG
-#  undef CONFIG_DEBUG_VERBOSE
-#  undef CONFIG_DEBUG_GRAPHICS
-#  undef CONFIG_DEBUG_LCD
-#endif
-
-#ifndef CONFIG_DEBUG_VERBOSE
-#  undef CONFIG_DEBUG_LCD
 #endif
 
 /* Color depth and format */
@@ -99,20 +86,6 @@
 
 #define LCD_INDEX        0x60000000  /* RS = 0 */
 #define LCD_DATA         0x60020000  /* RS = 1 */
-
-/* Debug ******************************************************************************/
-
-#ifdef CONFIG_DEBUG_LCD
-#  define lcddbg         dbg
-#  define lcdvdbg        vdbg
-#else
-#  define lcddbg(x...)
-#  define lcdvdbg(x...)
-#endif
-
-/**************************************************************************************
- * Private Type Definition
- **************************************************************************************/
 
 /**************************************************************************************
  * Private Function Prototypes
@@ -424,26 +397,26 @@ static void init_lcd_backlight(void)
 
   /* Dump timer3 registers */
 
-  lcddbg("APB1ENR: %08x\n", getreg32(STM32_RCC_APB1ENR));
-  lcddbg("CR1:     %04x\n", getreg32(STM32_TIM3_CR1));
-  lcddbg("CR2:     %04x\n", getreg32(STM32_TIM3_CR2));
-  lcddbg("SMCR:    %04x\n", getreg32(STM32_TIM3_SMCR));
-  lcddbg("DIER:    %04x\n", getreg32(STM32_TIM3_DIER));
-  lcddbg("SR:      %04x\n", getreg32(STM32_TIM3_SR));
-  lcddbg("EGR:     %04x\n", getreg32(STM32_TIM3_EGR));
-  lcddbg("CCMR1:   %04x\n", getreg32(STM32_TIM3_CCMR1));
-  lcddbg("CCMR2:   %04x\n", getreg32(STM32_TIM3_CCMR2));
-  lcddbg("CCER:    %04x\n", getreg32(STM32_TIM3_CCER));
-  lcddbg("CNT:     %04x\n", getreg32(STM32_TIM3_CNT));
-  lcddbg("PSC:     %04x\n", getreg32(STM32_TIM3_PSC));
-  lcddbg("ARR:     %04x\n", getreg32(STM32_TIM3_ARR));
-  lcddbg("CCR1:    %04x\n", getreg32(STM32_TIM3_CCR1));
-  lcddbg("CCR2:    %04x\n", getreg32(STM32_TIM3_CCR2));
-  lcddbg("CCR3:    %04x\n", getreg32(STM32_TIM3_CCR3));
-  lcddbg("CCR4:    %04x\n", getreg32(STM32_TIM3_CCR4));
-  lcddbg("CCR4:    %04x\n", getreg32(STM32_TIM3_CCR4));
-  lcddbg("CCR4:    %04x\n", getreg32(STM32_TIM3_CCR4));
-  lcddbg("DMAR:    %04x\n", getreg32(STM32_TIM3_DMAR));
+  lcdinfo("APB1ENR: %08x\n", getreg32(STM32_RCC_APB1ENR));
+  lcdinfo("CR1:     %04x\n", getreg32(STM32_TIM3_CR1));
+  lcdinfo("CR2:     %04x\n", getreg32(STM32_TIM3_CR2));
+  lcdinfo("SMCR:    %04x\n", getreg32(STM32_TIM3_SMCR));
+  lcdinfo("DIER:    %04x\n", getreg32(STM32_TIM3_DIER));
+  lcdinfo("SR:      %04x\n", getreg32(STM32_TIM3_SR));
+  lcdinfo("EGR:     %04x\n", getreg32(STM32_TIM3_EGR));
+  lcdinfo("CCMR1:   %04x\n", getreg32(STM32_TIM3_CCMR1));
+  lcdinfo("CCMR2:   %04x\n", getreg32(STM32_TIM3_CCMR2));
+  lcdinfo("CCER:    %04x\n", getreg32(STM32_TIM3_CCER));
+  lcdinfo("CNT:     %04x\n", getreg32(STM32_TIM3_CNT));
+  lcdinfo("PSC:     %04x\n", getreg32(STM32_TIM3_PSC));
+  lcdinfo("ARR:     %04x\n", getreg32(STM32_TIM3_ARR));
+  lcdinfo("CCR1:    %04x\n", getreg32(STM32_TIM3_CCR1));
+  lcdinfo("CCR2:    %04x\n", getreg32(STM32_TIM3_CCR2));
+  lcdinfo("CCR3:    %04x\n", getreg32(STM32_TIM3_CCR3));
+  lcdinfo("CCR4:    %04x\n", getreg32(STM32_TIM3_CCR4));
+  lcdinfo("CCR4:    %04x\n", getreg32(STM32_TIM3_CCR4));
+  lcdinfo("CCR4:    %04x\n", getreg32(STM32_TIM3_CCR4));
+  lcdinfo("DMAR:    %04x\n", getreg32(STM32_TIM3_DMAR));
 }
 
 /************************************************************************************
@@ -471,7 +444,7 @@ static void stm32_selectlcd(void)
   /* Bank1 NOR/SRAM timing register configuration */
 
   putreg32(
-      FSMC_BTR_ADDSET(1)|FSMC_BTR_ADDHLD(0)|FSMC_BTR_DATAST(2)|FSMC_BTR_BUSTRUN(0)| FSMC_BTR_CLKDIV(0)|FSMC_BTR_DATLAT(0)|FSMC_BTR_ACCMODA,
+      FSMC_BTR_ADDSET(1)|FSMC_BTR_ADDHLD(0)|FSMC_BTR_DATAST(2)|FSMC_BTR_BUSTURN(0)| FSMC_BTR_CLKDIV(0)|FSMC_BTR_DATLAT(0)|FSMC_BTR_ACCMODA,
       STM32_FSMC_BTR1);
 
   /* As ext mode is not active the write timing is ignored!! */
@@ -532,7 +505,7 @@ static void stm32_enablefsmc(void)
  **************************************************************************************/
 
 /**************************************************************************************
- * Name:  up_lcdinitialize
+ * Name:  board_lcd_initialize
  *
  * Description:
  *   Initialize the LCD video hardware.  The initial state of the LCD is fully
@@ -541,13 +514,13 @@ static void stm32_enablefsmc(void)
  *
  **************************************************************************************/
 
-int up_lcdinitialize(void)
+int board_lcd_initialize(void)
 {
   /* Only initialize the driver once */
 
   if (!g_ssd1289drvr)
     {
-      lcdvdbg("Initializing\n");
+      lcdinfo("Initializing\n");
 
       /* Initialize the backlight */
 
@@ -563,7 +536,7 @@ int up_lcdinitialize(void)
       g_ssd1289drvr = ssd1289_lcdinitialize(&g_ssd1289);
       if (!g_ssd1289drvr)
         {
-          lcddbg("ERROR: ssd1289_lcdinitialize failed\n");
+          lcderr("ERROR: ssd1289_lcdinitialize failed\n");
           return -ENODEV;
         }
     }
@@ -575,7 +548,7 @@ int up_lcdinitialize(void)
 }
 
 /**************************************************************************************
- * Name:  up_lcdgetdev
+ * Name:  board_lcd_getdev
  *
  * Description:
  *   Return a a reference to the LCD object for the specified LCD.  This allows support
@@ -583,21 +556,21 @@ int up_lcdinitialize(void)
  *
  **************************************************************************************/
 
-FAR struct lcd_dev_s *up_lcdgetdev(int lcddev)
+FAR struct lcd_dev_s *board_lcd_getdev(int lcddev)
 {
   DEBUGASSERT(lcddev == 0);
   return g_ssd1289drvr;
 }
 
 /**************************************************************************************
- * Name:  up_lcduninitialize
+ * Name:  board_lcd_uninitialize
  *
  * Description:
  *   Unitialize the LCD support
  *
  **************************************************************************************/
 
-void up_lcduninitialize(void)
+void board_lcd_uninitialize(void)
 {
   /* Turn the display off */
 

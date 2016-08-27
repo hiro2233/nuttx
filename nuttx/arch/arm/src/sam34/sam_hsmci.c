@@ -45,16 +45,16 @@
 #include <string.h>
 #include <assert.h>
 #include <debug.h>
-#include <wdog.h>
 #include <errno.h>
 
-#include <nuttx/clock.h>
 #include <nuttx/arch.h>
+#include <nuttx/wdog.h>
+#include <nuttx/clock.h>
 #include <nuttx/sdio.h>
 #include <nuttx/wqueue.h>
 #include <nuttx/mmcsd.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -80,10 +80,10 @@
 #  include "chip/sam_pdc.h"
 #endif
 
-#if CONFIG_SAM34_HSMCI
+#ifdef CONFIG_SAM34_HSMCI
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Configuration ************************************************************/
@@ -104,7 +104,7 @@
 
 #define SAM34_HSMCI_PRIO NVIC_SYSH_PRIORITY_DEFAULT
 
-#if !defined(CONFIG_DEBUG_FS) || !defined(CONFIG_DEBUG_VERBOSE)
+#ifndef CONFIG_DEBUG_MEMCARD_INFO
 #  undef CONFIG_SAM34_HSMCI_CMDDEBUG
 #  undef CONFIG_SAM34_HSMCI_XFRDEBUG
 #endif
@@ -622,11 +622,11 @@ static void sam_configwaitints(struct sam_dev_s *priv, uint32_t waitmask,
 
   /* Save all of the data in one, atomic operation. */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   priv->waitevents = waitevents;
   priv->wkupevent  = 0;
   priv->waitmask   = waitmask;
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -653,12 +653,12 @@ static void sam_disablewaitints(struct sam_dev_s *priv,
    * operation.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   priv->waitevents = 0;
   priv->wkupevent  = wkupevent;
   priv->waitmask   = 0;
   putreg32(~priv->xfrmask, SAM_HSMCI_IDR);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -701,10 +701,10 @@ static inline void sam_configxfrints(struct sam_dev_s *priv, uint32_t xfrmask)
 
 static void sam_disablexfrints(struct sam_dev_s *priv)
 {
-  irqstate_t flags = irqsave();
+  irqstate_t flags = enter_critical_section();
   priv->xfrmask = 0;
   putreg32(~priv->waitmask, SAM_HSMCI_IDR);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -831,38 +831,38 @@ static void sam_hsmcisample(struct sam_hsmciregs_s *regs)
 #if defined(CONFIG_SAM34_HSMCI_XFRDEBUG) || defined(CONFIG_SAM34_HSMCI_CMDDEBUG)
 static void sam_hsmcidump(struct sam_hsmciregs_s *regs, const char *msg)
 {
-  fdbg("HSMCI Registers: %s\n", msg);
-  fdbg("     MR[%08x]: %08x\n", SAM_HSMCI_MR,       regs->mr);
-  fdbg("   DTOR[%08x]: %08x\n", SAM_HSMCI_DTOR,     regs->dtor);
-  fdbg("   SDCR[%08x]: %08x\n", SAM_HSMCI_SDCR,     regs->sdcr);
-  fdbg("   ARGR[%08x]: %08x\n", SAM_HSMCI_ARGR,     regs->argr);
-  fdbg("   BLKR[%08x]: %08x\n", SAM_HSMCI_BLKR,     regs->blkr);
-  fdbg("  CSTOR[%08x]: %08x\n", SAM_HSMCI_CSTOR,    regs->cstor);
-  fdbg("  RSPR0[%08x]: %08x\n", SAM_HSMCI_RSPR0,    regs->rsp0);
-  fdbg("  RSPR1[%08x]: %08x\n", SAM_HSMCI_RSPR1,    regs->rsp1);
-  fdbg("  RSPR2[%08x]: %08x\n", SAM_HSMCI_RSPR2,    regs->rsp2);
-  fdbg("  RSPR3[%08x]: %08x\n", SAM_HSMCI_RSPR3,    regs->rsp3);
-  fdbg("     SR[%08x]: %08x\n", SAM_HSMCI_SR,       regs->sr);
-  fdbg("    IMR[%08x]: %08x\n", SAM_HSMCI_IMR,      regs->imr);
+  mcinfo("HSMCI Registers: %s\n", msg);
+  mcinfo("     MR[%08x]: %08x\n", SAM_HSMCI_MR,       regs->mr);
+  mcinfo("   DTOR[%08x]: %08x\n", SAM_HSMCI_DTOR,     regs->dtor);
+  mcinfo("   SDCR[%08x]: %08x\n", SAM_HSMCI_SDCR,     regs->sdcr);
+  mcinfo("   ARGR[%08x]: %08x\n", SAM_HSMCI_ARGR,     regs->argr);
+  mcinfo("   BLKR[%08x]: %08x\n", SAM_HSMCI_BLKR,     regs->blkr);
+  mcinfo("  CSTOR[%08x]: %08x\n", SAM_HSMCI_CSTOR,    regs->cstor);
+  mcinfo("  RSPR0[%08x]: %08x\n", SAM_HSMCI_RSPR0,    regs->rsp0);
+  mcinfo("  RSPR1[%08x]: %08x\n", SAM_HSMCI_RSPR1,    regs->rsp1);
+  mcinfo("  RSPR2[%08x]: %08x\n", SAM_HSMCI_RSPR2,    regs->rsp2);
+  mcinfo("  RSPR3[%08x]: %08x\n", SAM_HSMCI_RSPR3,    regs->rsp3);
+  mcinfo("     SR[%08x]: %08x\n", SAM_HSMCI_SR,       regs->sr);
+  mcinfo("    IMR[%08x]: %08x\n", SAM_HSMCI_IMR,      regs->imr);
 #if defined(CONFIG_ARCH_CHIP_SAM3U)
-  fdbg("    DMA[%08x]: %08x\n", SAM_HSMCI_DMA,      regs->dma);
+  mcinfo("    DMA[%08x]: %08x\n", SAM_HSMCI_DMA,      regs->dma);
 #endif
-  fdbg("    CFG[%08x]: %08x\n", SAM_HSMCI_CFG,      regs->cfg);
-  fdbg("   WPMR[%08x]: %08x\n", SAM_HSMCI_WPMR,     regs->wpmr);
-  fdbg("   WPSR[%08x]: %08x\n", SAM_HSMCI_WPSR,     regs->wpsr);
+  mcinfo("    CFG[%08x]: %08x\n", SAM_HSMCI_CFG,      regs->cfg);
+  mcinfo("   WPMR[%08x]: %08x\n", SAM_HSMCI_WPMR,     regs->wpmr);
+  mcinfo("   WPSR[%08x]: %08x\n", SAM_HSMCI_WPSR,     regs->wpsr);
 
 #ifdef CONFIG_SAM34_PDCA
-  fdbg("HSMCI PDC Registers:\n");
-  fdbg("    RPR[%08x]: %08x\n", SAM_HSMCI_PDC_RPR,  regs->pdc_rpr);
-  fdbg("    RCR[%08x]: %08x\n", SAM_HSMCI_PDC_RCR,  regs->pdc_rcr);
-  fdbg("    TPR[%08x]: %08x\n", SAM_HSMCI_PDC_TPR,  regs->pdc_tpr);
-  fdbg("    TCR[%08x]: %08x\n", SAM_HSMCI_PDC_TCR,  regs->pdc_tcr);
-  fdbg("   RNPR[%08x]: %08x\n", SAM_HSMCI_PDC_RNPR, regs->pdc_rnpr);
-  fdbg("   RNCR[%08x]: %08x\n", SAM_HSMCI_PDC_RNCR, regs->pdc_rncr);
-  fdbg("   TNPR[%08x]: %08x\n", SAM_HSMCI_PDC_TNPR, regs->pdc_tnpr);
-  fdbg("   TNCR[%08x]: %08x\n", SAM_HSMCI_PDC_TNCR, regs->pdc_tncr);
-//fdbg("    TCR[%08x]: %08x\n", SAM_HSMCI_PDC_PTCR, regs->pdc_ptcr);
-  fdbg("   PTSR[%08x]: %08x\n", SAM_HSMCI_PDC_PTSR, regs->pdc_ptsr);
+  mcinfo("HSMCI PDC Registers:\n");
+  mcinfo("    RPR[%08x]: %08x\n", SAM_HSMCI_PDC_RPR,  regs->pdc_rpr);
+  mcinfo("    RCR[%08x]: %08x\n", SAM_HSMCI_PDC_RCR,  regs->pdc_rcr);
+  mcinfo("    TPR[%08x]: %08x\n", SAM_HSMCI_PDC_TPR,  regs->pdc_tpr);
+  mcinfo("    TCR[%08x]: %08x\n", SAM_HSMCI_PDC_TCR,  regs->pdc_tcr);
+  mcinfo("   RNPR[%08x]: %08x\n", SAM_HSMCI_PDC_RNPR, regs->pdc_rnpr);
+  mcinfo("   RNCR[%08x]: %08x\n", SAM_HSMCI_PDC_RNCR, regs->pdc_rncr);
+  mcinfo("   TNPR[%08x]: %08x\n", SAM_HSMCI_PDC_TNPR, regs->pdc_tnpr);
+  mcinfo("   TNCR[%08x]: %08x\n", SAM_HSMCI_PDC_TNCR, regs->pdc_tncr);
+//mcinfo("    TCR[%08x]: %08x\n", SAM_HSMCI_PDC_PTCR, regs->pdc_ptcr);
+  mcinfo("   PTSR[%08x]: %08x\n", SAM_HSMCI_PDC_PTSR, regs->pdc_ptsr);
 #endif
 }
 #endif
@@ -1042,7 +1042,7 @@ static void sam_dmacallback(DMA_HANDLE handle, void *arg, int result)
 
   priv->dmabusy = false;
 
-  sam_xfrsample((struct sam_dev_s*)arg, SAMPLENDX_DMA_CALLBACK);
+  sam_xfrsample((struct sam_dev_s *)arg, SAMPLENDX_DMA_CALLBACK);
 }
 #endif
 
@@ -1083,7 +1083,7 @@ static void sam_eventtimeout(int argc, uint32_t arg)
       /* Yes.. wake up any waiting threads */
 
       sam_endwait(priv, SDIOWAIT_TIMEOUT);
-      flldbg("Timeout\n");
+      mcerr("ERROR: Timeout\n");
     }
 }
 
@@ -1250,7 +1250,7 @@ static int sam_interrupt(int irq, void *context)
 
   /* Loop while there are pending interrupts. */
 
-  for (;;)
+  for (; ; )
     {
       /* Check the HSMCI status register.  Mask out all bits that don't
        * correspond to enabled interrupts.  (This depends on the fact that
@@ -1278,18 +1278,18 @@ static int sam_interrupt(int irq, void *context)
             {
               /* Yes.. Was it some kind of timeout error? */
 
-              flldbg("ERROR: enabled: %08x pending: %08x\n", enabled, pending);
+              mcerr("ERROR: enabled: %08x pending: %08x\n", enabled, pending);
               if ((pending & HSMCI_DATA_TIMEOUT_ERRORS) != 0)
                 {
                   /* Yes.. Terminate with a timeout. */
 
-                  sam_endtransfer(priv, SDIOWAIT_TRANSFERDONE|SDIOWAIT_TIMEOUT);
+                  sam_endtransfer(priv, SDIOWAIT_TRANSFERDONE | SDIOWAIT_TIMEOUT);
                 }
               else
                 {
                   /* No..  Terminate with an I/O error. */
 
-                  sam_endtransfer(priv, SDIOWAIT_TRANSFERDONE|SDIOWAIT_ERROR);
+                  sam_endtransfer(priv, SDIOWAIT_TRANSFERDONE | SDIOWAIT_ERROR);
                 }
             }
           else
@@ -1320,32 +1320,34 @@ static int sam_interrupt(int irq, void *context)
                 {
                   /* Yes.. Was the error some kind of timeout? */
 
-                  fllvdbg("ERROR: events: %08x SR: %08x\n",
-                          priv->cmdrmask, enabled);
+                  mcerr("ERROR: events: %08x SR: %08x\n",
+                        priv->cmdrmask, enabled);
 
                   if ((pending & HSMCI_RESPONSE_TIMEOUT_ERRORS) != 0)
                     {
                       /* Yes.. signal a timeout error */
 
-                      wkupevent = SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE|SDIOWAIT_TIMEOUT;
+                      wkupevent = SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE |
+                                  SDIOWAIT_TIMEOUT;
                     }
                   else
                     {
                       /* No.. signal some generic I/O error */
 
-                      wkupevent = SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE|SDIOWAIT_ERROR;
+                      wkupevent = SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE |
+                                  SDIOWAIT_ERROR;
                     }
                 }
               else
-               {
+                {
                   /* The Command-Response sequence ended with no error */
 
-                      wkupevent = SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE;
+                  wkupevent = SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE;
                 }
 
-             /* Yes.. Is there a thread waiting for this event set? */
+              /* Yes.. Is there a thread waiting for this event set? */
 
-             wkupevent &= priv->waitevents;
+              wkupevent &= priv->waitevents;
               if (wkupevent != 0)
                 {
                   /* Yes.. wake the thread up */
@@ -1383,7 +1385,7 @@ static void sam_reset(FAR struct sdio_dev_s *dev)
 
   /* Enable the MCI clock */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   sam_hsmci_enableclk();
 
   /* Reset the MCI */
@@ -1450,7 +1452,7 @@ static void sam_reset(FAR struct sdio_dev_s *dev)
   /* DMA data transfer support */
 
   priv->widebus    = false;
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -1539,10 +1541,10 @@ static void sam_clock(FAR struct sdio_dev_s *dev, enum sdio_clock_e rate)
   regval &= ~(HSMCI_MR_CLKDIV_MASK | HSMCI_MR_PWSDIV_MASK);
 #endif
 
- /* These clock devisor values that must be defined in the board-specific
-  * board.h header file: HSMCI_INIT_CLKDIV, HSMCI_MMCXFR_CLKDIV,
-  * HSMCI_SDXFR_CLKDIV, and HSMCI_SDWIDEXFR_CLKDIV.
-  */
+  /* These clock devisor values that must be defined in the board-specific
+   * board.h header file: HSMCI_INIT_CLKDIV, HSMCI_MMCXFR_CLKDIV,
+   * HSMCI_SDXFR_CLKDIV, and HSMCI_SDWIDEXFR_CLKDIV.
+   */
 
   switch (rate)
     {
@@ -1650,13 +1652,13 @@ static int sam_attach(FAR struct sdio_dev_s *dev)
 static int sam_sendcmd(FAR struct sdio_dev_s *dev,
                        uint32_t cmd, uint32_t arg)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   uint32_t regval;
   uint32_t cmdidx;
 
   sam_cmdsampleinit();
 
-    /* Set the HSMCI Argument value */
+  /* Set the HSMCI Argument value */
 
   putreg32(arg, SAM_HSMCI_ARGR);
 
@@ -1752,7 +1754,7 @@ static int sam_sendcmd(FAR struct sdio_dev_s *dev,
 
   /* Write the fully decorated command to CMDR */
 
-  fvdbg("cmd: %08x arg: %08x regval: %08x\n", cmd, arg, regval);
+  mcinfo("cmd: %08x arg: %08x regval: %08x\n", cmd, arg, regval);
   putreg32(regval, SAM_HSMCI_CMDR);
   sam_cmdsample1(SAMPLENDX_AFTER_CMDR);
   return OK;
@@ -1780,7 +1782,7 @@ static void sam_blocksetup(FAR struct sdio_dev_s *dev, unsigned int blocklen,
 
   DEBUGASSERT(dev != NULL && nblocks > 0 && nblocks < 65535 && blocklen < 65535);
 
- /* When TRTYP - Single or Multi, blocklen must be 1-511, 0-512 */
+  /* When TRTYP - Single or Multi, blocklen must be 1-511, 0-512 */
 
   DEBUGASSERT(blocklen <= 512);
 
@@ -1824,7 +1826,7 @@ static void sam_blocksetup(FAR struct sdio_dev_s *dev, unsigned int blocklen,
 
 static int sam_cancel(FAR struct sdio_dev_s *dev)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
 
   /* Disable all transfer- and event- related interrupts */
 
@@ -1883,7 +1885,7 @@ static int sam_cancel(FAR struct sdio_dev_s *dev)
 
 static int sam_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   uint32_t sr;
   uint32_t pending;
   int32_t  timeout;
@@ -1913,7 +1915,7 @@ static int sam_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd)
 
   /* Then wait for the response (or timeout) */
 
-  for (;;)
+  for (; ; )
     {
       /* Did a Command-Response sequence termination evernt occur? */
 
@@ -1931,21 +1933,23 @@ static int sam_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd)
             {
               /* Yes.. Was the error some kind of timeout? */
 
-              fdbg("ERROR: cmd: %08x events: %08x SR: %08x\n",
+              mcerr("ERROR: cmd: %08x events: %08x SR: %08x\n",
                    cmd, priv->cmdrmask, sr);
 
               if ((pending & HSMCI_RESPONSE_TIMEOUT_ERRORS) != 0)
                 {
                   /* Yes.. return a timeout error */
 
-                  priv->wkupevent = SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE|SDIOWAIT_TIMEOUT;
+                  priv->wkupevent = SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE |
+                                    SDIOWAIT_TIMEOUT;
                   return -ETIMEDOUT;
                 }
               else
                 {
                   /* No.. return some generic I/O error */
 
-                  priv->wkupevent = SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE|SDIOWAIT_ERROR;
+                  priv->wkupevent = SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE |
+                                    SDIOWAIT_ERROR;
                   return -EIO;
                 }
             }
@@ -1953,13 +1957,13 @@ static int sam_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd)
             {
               /* The Command-Response sequence ended with no error */
 
-              priv->wkupevent = SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE;
+              priv->wkupevent = SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE;
               return OK;
             }
        }
       else if (--timeout <= 0)
         {
-          fdbg("ERROR: Timeout cmd: %08x events: %08x SR: %08x\n",
+          mcerr("ERROR: Timeout cmd: %08x events: %08x SR: %08x\n",
                cmd, priv->cmdrmask, sr);
 
           priv->wkupevent = SDIOWAIT_TIMEOUT;
@@ -1993,7 +1997,7 @@ static int sam_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd)
 static int sam_recvshort(FAR struct sdio_dev_s *dev,
                          uint32_t cmd, uint32_t *rshort)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   int ret = OK;
 
   /* These responses could have CRC errors:
@@ -2031,10 +2035,10 @@ static int sam_recvshort(FAR struct sdio_dev_s *dev,
    *     0         1               End bit
    */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (!rshort)
     {
-      fdbg("ERROR: rshort=NULL\n");
+      mcerr("ERROR: rshort=NULL\n");
       ret = -EINVAL;
     }
 
@@ -2046,7 +2050,7 @@ static int sam_recvshort(FAR struct sdio_dev_s *dev,
            (cmd & MMCSD_RESPONSE_MASK) != MMCSD_R3_RESPONSE &&
            (cmd & MMCSD_RESPONSE_MASK) != MMCSD_R7_RESPONSE)
     {
-      fdbg("ERROR: Wrong response CMD=%08x\n", cmd);
+      mcerr("ERROR: Wrong response CMD=%08x\n", cmd);
       ret = -EINVAL;
     }
   else
@@ -2079,24 +2083,24 @@ static int sam_recvshort(FAR struct sdio_dev_s *dev,
 
 static int sam_recvlong(FAR struct sdio_dev_s *dev, uint32_t cmd, uint32_t rlong[4])
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   int ret = OK;
 
- /* R2  CID, CSD register (136-bit)
-  *     135       0               Start bit
-  *     134       0               Transmission bit (0=from card)
-  *     133:128   bit5   - bit0   Reserved
-  *     127:1     bit127 - bit1   127-bit CID or CSD register
-  *                               (including internal CRC)
-  *     0         1               End bit
-  */
+  /* R2  CID, CSD register (136-bit)
+   *     135       0               Start bit
+   *     134       0               Transmission bit (0=from card)
+   *     133:128   bit5   - bit0   Reserved
+   *     127:1     bit127 - bit1   127-bit CID or CSD register
+   *                               (including internal CRC)
+   *     0         1               End bit
+   */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   /* Check that R1 is the correct response to this command */
 
   if ((cmd & MMCSD_RESPONSE_MASK) != MMCSD_R2_RESPONSE)
     {
-      fdbg("ERROR: Wrong response CMD=%08x\n", cmd);
+      mcerr("ERROR: Wrong response CMD=%08x\n", cmd);
       ret = -EINVAL;
     }
   else
@@ -2135,7 +2139,7 @@ static int sam_recvlong(FAR struct sdio_dev_s *dev, uint32_t cmd, uint32_t rlong
 static int sam_recvnotimpl(FAR struct sdio_dev_s *dev,
                            uint32_t cmd, uint32_t *rnotimpl)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   priv->wkupevent = 0;
   return -ENOSYS;
 }
@@ -2178,7 +2182,7 @@ static int sam_recvnotimpl(FAR struct sdio_dev_s *dev,
 static void sam_waitenable(FAR struct sdio_dev_s *dev,
                            sdio_eventset_t eventset)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   uint32_t waitmask;
 
   DEBUGASSERT(priv != NULL);
@@ -2192,7 +2196,7 @@ static void sam_waitenable(FAR struct sdio_dev_s *dev,
    */
 
   waitmask = 0;
-  if ((eventset & (SDIOWAIT_CMDDONE|SDIOWAIT_RESPONSEDONE)) != 0)
+  if ((eventset & (SDIOWAIT_CMDDONE | SDIOWAIT_RESPONSEDONE)) != 0)
     {
       waitmask |= priv->cmdrmask;
     }
@@ -2237,7 +2241,7 @@ static void sam_waitenable(FAR struct sdio_dev_s *dev,
 static sdio_eventset_t sam_eventwait(FAR struct sdio_dev_s *dev,
                                      uint32_t timeout)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
   sdio_eventset_t wkupevent = 0;
   int ret;
 
@@ -2268,18 +2272,18 @@ static sdio_eventset_t sam_eventwait(FAR struct sdio_dev_s *dev,
 
       if (!timeout)
         {
-           return SDIOWAIT_TIMEOUT;
+          return SDIOWAIT_TIMEOUT;
         }
 
       /* Start the watchdog timer */
 
-      delay = (timeout + (MSEC_PER_TICK-1)) / MSEC_PER_TICK;
+      delay = MSEC2TICK(timeout);
       ret   = wd_start(priv->waitwdog, delay, (wdentry_t)sam_eventtimeout,
                        1, (uint32_t)priv);
       if (ret != OK)
         {
-           fdbg("ERROR: wd_start failed: %d\n", ret);
-         }
+          mcerr("ERROR: wd_start failed: %d\n", ret);
+        }
     }
 
   /* Loop until the event (or the timeout occurs). Race conditions are avoided
@@ -2288,7 +2292,7 @@ static sdio_eventset_t sam_eventwait(FAR struct sdio_dev_s *dev,
    * may have already occurred before this function was called!
    */
 
-  for (;;)
+  for (; ; )
     {
       /* Wait for an event in event set to occur.  If this the event has already
        * occurred, then the semaphore will already have been incremented and
@@ -2342,9 +2346,9 @@ static sdio_eventset_t sam_eventwait(FAR struct sdio_dev_s *dev,
 static void sam_callbackenable(FAR struct sdio_dev_s *dev,
                                sdio_eventset_t eventset)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
 
-  fvdbg("eventset: %02x\n", eventset);
+  mcinfo("eventset: %02x\n", eventset);
   DEBUGASSERT(priv != NULL);
 
   priv->cbevents = eventset;
@@ -2376,11 +2380,11 @@ static void sam_callbackenable(FAR struct sdio_dev_s *dev,
 static int sam_registercallback(FAR struct sdio_dev_s *dev,
                                 worker_t callback, void *arg)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)dev;
+  struct sam_dev_s *priv = (struct sam_dev_s *)dev;
 
   /* Disable callbacks and register this callback and is argument */
 
-  fvdbg("Register %p(%p)\n", callback, arg);
+  mcinfo("Register %p(%p)\n", callback, arg);
   DEBUGASSERT(priv != NULL);
 
   priv->cbevents = 0;
@@ -2468,7 +2472,8 @@ static int sam_dmarecvsetup(FAR struct sdio_dev_s *dev, FAR uint8_t *buffer,
 
 #ifdef CONFIG_SAM34_PDCA
   modifyreg32(SAM_HSMCI_MR, 0, HSMCI_MR_PDCMODE);
-  fdbg("SAM_HSMCI_MR = 0x%08X\n", getreg32(SAM_HSMCI_MR));
+  mcinfo("SAM_HSMCI_MR = 0x%08X\n", getreg32(SAM_HSMCI_MR));
+
   putreg32((uint32_t)buffer, SAM_HSMCI_PDC_RPR);
   putreg32(buflen/4, SAM_HSMCI_PDC_RCR);
   putreg32(PDC_PTCR_RXTEN, SAM_HSMCI_PDC_PTCR);
@@ -2537,7 +2542,8 @@ static int sam_dmasendsetup(FAR struct sdio_dev_s *dev,
 
 #ifdef CONFIG_SAM34_PDCA
   modifyreg32(SAM_HSMCI_MR, 0, HSMCI_MR_PDCMODE);
-  fdbg("SAM_HSMCI_MR = 0x%08X\n", getreg32(SAM_HSMCI_MR));
+  mcinfo("SAM_HSMCI_MR = 0x%08X\n", getreg32(SAM_HSMCI_MR));
+
   putreg32((uint32_t)buffer, SAM_HSMCI_PDC_TPR);
   putreg32(buflen/4, SAM_HSMCI_PDC_TCR);
   putreg32(PDC_PTCR_TXTEN, SAM_HSMCI_PDC_PTCR);
@@ -2572,12 +2578,12 @@ static int sam_dmasendsetup(FAR struct sdio_dev_s *dev,
 
 static void sam_callback(void *arg)
 {
-  struct sam_dev_s *priv = (struct sam_dev_s*)arg;
+  struct sam_dev_s *priv = (struct sam_dev_s *)arg;
 
   /* Is a callback registered? */
 
   DEBUGASSERT(priv != NULL);
-  fvdbg("Callback %p(%p) cbevents: %02x cdstatus: %02x\n",
+  mcinfo("Callback %p(%p) cbevents: %02x cdstatus: %02x\n",
         priv->callback, priv->cbarg, priv->cbevents, priv->cdstatus);
 
   if (priv->callback)
@@ -2589,8 +2595,8 @@ static void sam_callback(void *arg)
           /* Media is present.  Is the media inserted event enabled? */
 
           if ((priv->cbevents & SDIOMEDIA_INSERTED) == 0)
-           {
-             /* No... return without performing the callback */
+            {
+              /* No... return without performing the callback */
 
               return;
             }
@@ -2622,14 +2628,14 @@ static void sam_callback(void *arg)
         {
           /* Yes.. queue it */
 
-           fllvdbg("Queuing callback to %p(%p)\n", priv->callback, priv->cbarg);
+           mcinfo("Queuing callback to %p(%p)\n", priv->callback, priv->cbarg);
           (void)work_queue(LPWORK, &priv->cbwork, (worker_t)priv->callback, priv->cbarg, 0);
         }
       else
         {
           /* No.. then just call the callback here */
 
-          fvdbg("Callback to %p(%p)\n", priv->callback, priv->cbarg);
+          mcinfo("Callback to %p(%p)\n", priv->callback, priv->cbarg);
           priv->callback(priv->cbarg);
         }
     }
@@ -2659,7 +2665,7 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
 
   struct sam_dev_s *priv = &g_sdiodev;
 
-  fdbg("slotno: %d\n", slotno);
+  mcinfo("slotno: %d\n", slotno);
 
   /* Initialize the HSMCI slot structure */
 
@@ -2726,7 +2732,7 @@ void sdio_mediachange(FAR struct sdio_dev_s *dev, bool cardinslot)
 
   /* Update card status */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   cdstatus = priv->cdstatus;
   if (cardinslot)
     {
@@ -2737,7 +2743,7 @@ void sdio_mediachange(FAR struct sdio_dev_s *dev, bool cardinslot)
       priv->cdstatus &= ~SDIO_STATUS_PRESENT;
     }
 
-  fllvdbg("cdstatus OLD: %02x NEW: %02x\n", cdstatus, priv->cdstatus);
+  mcinfo("cdstatus OLD: %02x NEW: %02x\n", cdstatus, priv->cdstatus);
 
   /* Perform any requested callback if the status has changed */
 
@@ -2746,7 +2752,7 @@ void sdio_mediachange(FAR struct sdio_dev_s *dev, bool cardinslot)
       sam_callback(priv);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -2772,7 +2778,7 @@ void sdio_wrprotect(FAR struct sdio_dev_s *dev, bool wrprotect)
 
   /* Update card status */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (wrprotect)
     {
       priv->cdstatus |= SDIO_STATUS_WRPROTECTED;
@@ -2782,7 +2788,7 @@ void sdio_wrprotect(FAR struct sdio_dev_s *dev, bool wrprotect)
       priv->cdstatus &= ~SDIO_STATUS_WRPROTECTED;
     }
 
-  fvdbg("cdstatus: %02x\n", priv->cdstatus);
-  irqrestore(flags);
+  mcinfo("cdstatus: %02x\n", priv->cdstatus);
+  leave_critical_section(flags);
 }
 #endif /* CONFIG_SAM34_HSMCI */

@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/sim/src/up_createstack.c
  *
- *   Copyright (C) 2007-2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,23 +41,13 @@
 
 #include <sys/types.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/tls.h>
 #include <nuttx/kmalloc.h>
 
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -93,11 +83,6 @@
  *     however, there are certain contexts where the TCB may not be fully
  *     initialized when up_create_stack is called.
  *
- *     If CONFIG_NUTTX_KERNEL is defined, then this thread type may affect
- *     how the stack is allocated.  For example, kernel thread stacks should
- *     be allocated from protected kernel memory.  Stacks for user tasks and
- *     threads must come from memory that is accessible to user code.
- *
  ****************************************************************************/
 
 int up_create_stack(FAR struct tcb_s *tcb, size_t stack_size, uint8_t ttype)
@@ -105,25 +90,34 @@ int up_create_stack(FAR struct tcb_s *tcb, size_t stack_size, uint8_t ttype)
   uint32_t *stack_alloc_ptr;
   int ret = ERROR;
 
+#ifdef CONFIG_TLS
+   /* Add the size of the TLS information structure */
+
+   stack_size += sizeof(struct tls_info_s);
+
+   /* The allocated stack size must not exceed the maximum possible for the
+    * TLS feature.
+    */
+
+   DEBUGASSERT(stack_size <= TLS_MAXSTACK);
+   if (stack_size >= TLS_MAXSTACK)
+     {
+       stack_size = TLS_MAXSTACK;
+     }
+#endif
+
   /* Move up to next even word boundary if necessary */
 
-  size_t adj_stack_size = (stack_size + 3) & ~3;
+  size_t adj_stack_size  = (stack_size + 3) & ~3;
   size_t adj_stack_words = adj_stack_size >> 2;
 
   /* Allocate the memory for the stack */
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
-  /* Use the kernel allocator if this is a kernel thread */
-
-  if (ttype == TCB_FLAG_TTYPE_KERNEL)
-    {
-      stack_alloc_ptr = (uint32_t *)kmalloc(stack_size);
-    }
-  else
-#endif
-    {
-      stack_alloc_ptr = (uint32_t*)kumalloc(adj_stack_size);
-    }
+#ifdef CONFIG_TLS
+  stack_alloc_ptr = (FAR uint32_t *)kumm_memalign(TLS_STACK_ALIGN, adj_stack_size);
+#else /* CONFIG_TLS */
+  stack_alloc_ptr = (FAR uint32_t *)kumm_malloc(adj_stack_size);
+#endif /* CONFIG_TLS */
 
   /* Was the allocation successful? */
 
@@ -131,13 +125,20 @@ int up_create_stack(FAR struct tcb_s *tcb, size_t stack_size, uint8_t ttype)
     {
       /* This is the address of the last word in the allocation */
 
-      size_t *adj_stack_ptr = &stack_alloc_ptr[adj_stack_words - 1];
+      FAR void *adj_stack_ptr = &stack_alloc_ptr[adj_stack_words - 1];
 
       /* Save the values in the TCB */
 
       tcb->adj_stack_size  = adj_stack_size;
       tcb->stack_alloc_ptr = stack_alloc_ptr;
       tcb->adj_stack_ptr   = adj_stack_ptr;
+
+#ifdef CONFIG_TLS
+      /* Initialize the TLS data structure */
+
+      memset(stack_alloc_ptr, 0, sizeof(struct tls_info_s));
+#endif
+
       ret = OK;
     }
 

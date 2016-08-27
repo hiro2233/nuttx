@@ -108,7 +108,7 @@
  *   Wait until the console is ready to add another character to the TX
  *   FIFO.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 #ifdef HAVE_SERIAL_CONSOLE
 static inline void nuc_console_ready(void)
@@ -142,7 +142,7 @@ static inline void nuc_console_ready(void)
  * Description:
  *   Called at the very beginning of _start.  Performs low level initialization.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 void nuc_lowsetup(void)
 {
@@ -160,8 +160,8 @@ void nuc_lowsetup(void)
   regval = getreg32(NUC_GCR_GPB_MFP);
 
 #ifdef CONFIG_NUC_UART0
-#ifdef CONFIG_UART0_FLOW_CONTROL
-  regval |= (GCR_GPB_MFP0 | GCR_GPB_MFP1 | GCR_GPB_MFP2| GCR_GPB_MFP3);
+#ifdef CONFIG_UART0_FLOWCONTROL
+  regval |= (GCR_GPB_MFP0 | GCR_GPB_MFP1 | GCR_GPB_MFP2 | GCR_GPB_MFP3);
 #else
   regval |= (GCR_GPB_MFP0 | GCR_GPB_MFP1);
 #endif
@@ -173,8 +173,8 @@ void nuc_lowsetup(void)
    */
 
 #ifdef CONFIG_NUC_UART1
-#ifdef CONFIG_UART1_FLOW_CONTROL
-  regval |= (GCR_GPB_MFP4 | GCR_GPB_MFP5 | GCR_GPB_MFP6| GCR_GPB_MFP7)
+#ifdef CONFIG_UART1_FLOWCONTROL
+  regval |= (GCR_GPB_MFP4 | GCR_GPB_MFP5 | GCR_GPB_MFP6 | GCR_GPB_MFP7)
 #else
   regval |= (GCR_GPB_MFP4 | GCR_GPB_MFP5);
 #endif
@@ -182,14 +182,14 @@ void nuc_lowsetup(void)
 
   putreg32(regval, NUC_GCR_GPB_MFP);
 
-#if defined(CONFIG_UART0_FLOW_CONTROL) || defined(CONFIG_UART1_FLOW_CONTROL)
+#if defined(CONFIG_UART0_FLOWCONTROL) || defined(CONFIG_UART1_FLOWCONTROL)
   regval = getreg32(NUC_GCR_ALT_MFP);
   regval &= ~GCR_ALT_MFP_EBI_EN;
-#ifdef CONFIG_UART0_FLOW_CONTROL
+#ifdef CONFIG_UART0_FLOWCONTROL
   regval &= ~(GCR_ALT_MFP_EBI_NWRL_EN | GCR_ALT_MFP_EBI_NWRH_WN);
 #endif
   putreg32(NUC_GCR_ALT_MFP);
-#endif /* CONFIG_UART0_FLOW_CONTROL || CONFIG_UART1_FLOW_CONTROL */
+#endif /* CONFIG_UART0_FLOWCONTROL || CONFIG_UART1_FLOWCONTROL */
 #endif /* CONFIG_NUC_UART0 || CONFIG_NUC_UART1 */
 
   /* UART1 TX/RX support requires that GPIOD bits 14 and 15 be set.  UART2
@@ -323,7 +323,7 @@ void nuc_lowsetup(void)
  * Description:
  *   Output one character to the UART using a simple polling method.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 void nuc_lowputc(uint32_t ch)
 {
@@ -353,7 +353,7 @@ void nuc_lowputc(uint32_t ch)
  * Here we assume that the default clock source for the UART modules is
  * the external high speed crystal.
  *
- *****************************************************************************/
+ ****************************************************************************/
 
 #ifdef HAVE_UART
 void nuc_setbaud(uintptr_t base, uint32_t baud)
@@ -365,7 +365,7 @@ void nuc_setbaud(uintptr_t base, uint32_t baud)
 
   regval = getreg32(base + NUC_UART_BAUD_OFFSET);
 
-   /* Mode 0: Source Clock mod 16 < 3 => Using Divider X = 16 */
+  /* Mode 0: Source Clock mod 16 < 3 => Using Divider X = 16 */
 
   clksperbit = (NUC_UART_CLK + (baud >> 1)) / baud;
   if ((clksperbit & 15) < 3)

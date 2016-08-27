@@ -45,17 +45,20 @@
 #include <assert.h>
 #include <errno.h>
 
+#include <nuttx/board.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/input/touchscreen.h>
 #include <nuttx/input/ads7843e.h>
 
 #include "sam_gpio.h"
+#include "sam_spi.h"
+
 #include "sam4e-ek.h"
 
 #if defined(CONFIG_INPUT) && defined(CONFIG_INPUT_ADS7843E)
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 
@@ -150,7 +153,7 @@ static int tsc_attach(FAR struct ads7843e_config_s *state, xcpt_t isr)
 {
   /* Attach the ADS7843E interrupt */
 
-  ivdbg("Attaching %p to IRQ %d\n", isr, SAM_TCS_IRQ);
+  iinfo("Attaching %p to IRQ %d\n", isr, SAM_TCS_IRQ);
   return irq_attach(SAM_TCS_IRQ, isr);
 }
 
@@ -158,7 +161,7 @@ static void tsc_enable(FAR struct ads7843e_config_s *state, bool enable)
 {
   /* Attach and enable, or detach and disable */
 
-  ivdbg("IRQ:%d enable:%d\n", SAM_TCS_IRQ, enable);
+  iinfo("IRQ:%d enable:%d\n", SAM_TCS_IRQ, enable);
   if (enable)
     {
       sam_gpioirqenable(SAM_TCS_IRQ);
@@ -176,7 +179,7 @@ static void tsc_clear(FAR struct ads7843e_config_s *state)
 
 static bool tsc_busy(FAR struct ads7843e_config_s *state)
 {
-#if defined(CONFIG_DEBUG_INPUT) && defined(CONFIG_DEBUG_VERBOSE)
+#if defined(CONFIG_DEBUG_INPUT) && defined(CONFIG_DEBUG_INFO)
   static bool last = (bool)-1;
 #endif
 
@@ -185,10 +188,10 @@ static bool tsc_busy(FAR struct ads7843e_config_s *state)
    */
 
   bool busy = sam_gpioread(GPIO_TCS_BUSY);
-#if defined(CONFIG_DEBUG_INPUT) && defined(CONFIG_DEBUG_VERBOSE)
+#if defined(CONFIG_DEBUG_INPUT) && defined(CONFIG_DEBUG_INFO)
   if (busy != last)
     {
-      ivdbg("busy:%d\n", busy);
+      iinfo("busy:%d\n", busy);
       last = busy;
     }
 #endif
@@ -201,7 +204,7 @@ static bool tsc_pendown(FAR struct ads7843e_config_s *state)
   /* The /PENIRQ value is active low */
 
   bool pendown = !sam_gpioread(GPIO_TCS_IRQ);
-  ivdbg("pendown:%d\n", pendown);
+  iinfo("pendown:%d\n", pendown);
   return pendown;
 }
 
@@ -210,7 +213,7 @@ static bool tsc_pendown(FAR struct ads7843e_config_s *state)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: arch_tcinitialize
+ * Name: board_tsc_setup
  *
  * Description:
  *   Each board that supports a touchscreen device must provide this function.
@@ -227,12 +230,12 @@ static bool tsc_pendown(FAR struct ads7843e_config_s *state)
  *
  ****************************************************************************/
 
-int arch_tcinitialize(int minor)
+int board_tsc_setup(int minor)
 {
   FAR struct spi_dev_s *dev;
   int ret;
 
-  idbg("minor %d\n", minor);
+  iinfo("minor %d\n", minor);
   DEBUGASSERT(minor == 0);
 
   /* Configure and enable the ADS7843E interrupt pin as an input */
@@ -246,10 +249,10 @@ int arch_tcinitialize(int minor)
 
   /* Get an instance of the SPI interface for the touchscreen chip select */
 
-  dev = up_spiinitialize(TSC_CSNUM);
+  dev = sam_spibus_initialize(TSC_CSNUM);
   if (!dev)
     {
-      idbg("Failed to initialize SPI chip select %d\n", TSC_CSNUM);
+      ierr("ERROR: Failed to initialize SPI chip select %d\n", TSC_CSNUM);
       return -ENODEV;
     }
 
@@ -258,8 +261,8 @@ int arch_tcinitialize(int minor)
   ret = ads7843e_register(dev, &g_tscinfo, CONFIG_ADS7843E_DEVMINOR);
   if (ret < 0)
     {
-      idbg("Failed to initialize SPI chip select %d\n", TSC_CSNUM);
-      /* up_spiuninitialize(dev); */
+      ierr("ERROR: Failed to initialize SPI chip select %d\n", TSC_CSNUM);
+      /* sam_spibus_uninitialize(dev); */
       return -ENODEV;
     }
 
@@ -267,7 +270,7 @@ int arch_tcinitialize(int minor)
 }
 
 /****************************************************************************
- * Name: arch_tcuninitialize
+ * Name: board_tsc_teardown
  *
  * Description:
  *   Each board that supports a touchscreen device must provide this function.
@@ -282,7 +285,7 @@ int arch_tcinitialize(int minor)
  *
  ****************************************************************************/
 
-void arch_tcuninitialize(void)
+void board_tsc_teardown(void)
 {
   /* No support for un-initializing the touchscreen ADS7843E device yet */
 }

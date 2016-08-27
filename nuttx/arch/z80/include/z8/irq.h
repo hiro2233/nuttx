@@ -1,8 +1,7 @@
 /****************************************************************************
- * arch/z8/include/z8/irq.h
- * arch/chip/irq.h
+ * arch/z80/include/z8/irq.h
  *
- *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,8 +37,8 @@
  * only indirectly through nuttx/irq.h (via arch/irq.h)
  */
 
-#ifndef __ARCH_Z8_IRQ_H
-#define __ARCH_Z8_IRQ_H
+#ifndef __ARCH_Z80_INCLUDE_Z8_IRQ_H
+#define __ARCH_Z80_INCLUDE_Z8_IRQ_H
 
 /****************************************************************************
  * Included Files
@@ -50,7 +49,7 @@
 #endif
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* This is similar configuration information that is contained in ez8.h.
@@ -340,7 +339,7 @@ struct xcptcontext
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -350,13 +349,23 @@ struct xcptcontext
 #ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
 
-EXTERN irqstate_t irqsave(void);
-EXTERN void irqrestore(irqstate_t flags);
+/* Name: up_irq_save, up_irq_restore, and friends.
+ *
+ * NOTE: This function should never be called from application code and,
+ * as a general rule unless you really know what you are doing, this
+ * function should not be called directly from operation system code either:
+ * Typically, the wrapper functions, enter_critical_section() and
+ * leave_critical section(), are probably what you really want.
+ */
+
+irqstate_t up_irq_save(void);
+void up_irq_restore(irqstate_t flags);
 
 #undef EXTERN
 #ifdef __cplusplus
@@ -364,5 +373,5 @@ EXTERN void irqrestore(irqstate_t flags);
 #endif
 #endif
 
-#endif /* __ARCH_Z8_IRQ_H */
+#endif /* __ARCH_Z80_INCLUDE_Z8_IRQ_H */
 

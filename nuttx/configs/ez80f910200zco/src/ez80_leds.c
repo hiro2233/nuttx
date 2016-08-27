@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/ez80f910200zco/src/ez80_leds.c
  *
- *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,12 +41,14 @@
 
 #include <stdint.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
+
 #include "ez80f910200zco.h"
 #include "up_internal.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -212,11 +214,11 @@ static int8_t  g_intcount         = 0;
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_led_initialize
+ * Name: board_autoled_initialize
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void board_led_initialize(void)
+void board_autoled_initialize(void)
 {
   g_currglyph  = g_chspace;
   g_prevglyph  = g_chspace;
@@ -225,10 +227,10 @@ void board_led_initialize(void)
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  ****************************************************************************/
 
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   FAR const uint8_t *tmp = g_currglyph;
   switch (led)
@@ -277,10 +279,10 @@ void board_led_on(int led)
 }
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  ****************************************************************************/
 
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   if (led == LED_INIRQ)
     {
@@ -300,7 +302,7 @@ void board_led_off(int led)
  * Name: up_timerhook
  ****************************************************************************/
 
- void up_timerhook(void)
+void up_timerhook(void)
 {
   if (g_cathoderow > 6)
     {

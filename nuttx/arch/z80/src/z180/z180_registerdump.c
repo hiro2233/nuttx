@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z80/src/z180/z180_registerdump.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,25 +45,9 @@
 #include <nuttx/arch.h>
 
 #include "chip/switch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/* Output debug info if stack dump is selected -- even if
- * debug is not selected.
- */
-
 #ifdef CONFIG_ARCH_STACKDUMP
-# undef  lldbg
-# define lldbg lowsyslog
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -73,21 +57,21 @@
  * Name: z180_registerdump
  ****************************************************************************/
 
-#ifdef CONFIG_ARCH_STACKDUMP
 static void z180_registerdump(void)
 {
-  if (current_regs)
+  if (g_current_regs)
     {
-      lldbg("AF: %04x  I: %04x\n",
-            current_regs[XCPT_AF], current_regs[XCPT_I]);
-      lldbg("BC: %04x DE: %04x HL: %04x\n",
-            current_regs[XCPT_BC], current_regs[XCPT_DE], current_regs[XCPT_HL]);
-      lldbg("IX: %04x IY: %04x\n",
-            current_regs[XCPT_IX], current_regs[XCPT_IY]);
-      lldbg("SP: %04x PC: %04x\n"
-            current_regs[XCPT_SP], current_regs[XCPT_PC]);
-      lldbg("CBAR: %02x BBR: %02x CBR: %02x\n"
+      _alert("AF: %04x  I: %04x\n",
+            g_current_regs[XCPT_AF], g_current_regs[XCPT_I]);
+      _alert("BC: %04x DE: %04x HL: %04x\n",
+            g_current_regs[XCPT_BC], g_current_regs[XCPT_DE], g_current_regs[XCPT_HL]);
+      _alert("IX: %04x IY: %04x\n",
+            g_current_regs[XCPT_IX], g_current_regs[XCPT_IY]);
+      _alert("SP: %04x PC: %04x\n"
+            g_current_regs[XCPT_SP], g_current_regs[XCPT_PC]);
+      _alert("CBAR: %02x BBR: %02x CBR: %02x\n"
             inp(Z180_MMU_CBAR), inp(Z180_MMU_BBR), inp(Z180_MMU_CBR));
     }
 }
-#endif
+
+#endif /* CONFIG_ARCH_STACKDUMP */

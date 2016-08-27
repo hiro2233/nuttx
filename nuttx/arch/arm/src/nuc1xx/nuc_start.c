@@ -92,7 +92,7 @@ const uint32_t g_idle_topstack = IDLE_STACK;
  *
  ****************************************************************************/
 
-#if defined(CONFIG_DEBUG) && defined(HAVE_SERIAL_CONSOLE)
+#if defined(CONFIG_DEBUG_FEATURES) && defined(HAVE_SERIAL_CONSOLE)
 #  define showprogress(c) nuc_lowputc((uint32_t)c)
 #else
 #  define showprogress(c)
@@ -156,7 +156,7 @@ void __start(void)
    * segments.
    */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
   nuc_userspace();
   showprogress('E');
 #endif
@@ -174,5 +174,5 @@ void __start(void)
 
   /* Shoulnd't get here */
 
-  for (;;);
+  for (; ; );
 }

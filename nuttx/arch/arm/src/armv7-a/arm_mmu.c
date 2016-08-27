@@ -45,18 +45,6 @@
 #include "mmu.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -67,7 +55,7 @@
  *   Set a one level 1 translation table entry.  Only a single L1 page table
  *   is supported.
  *
- * Input Paramters:
+ * Input Parameters:
  *   paddr - The physical address to be mapped.  Must be aligned to a 1MB
  *     address boundary
  *   vaddr - The virtual address to be mapped.  Must be aligned to a 1MB
@@ -79,12 +67,12 @@
 #ifndef CONFIG_ARCH_ROMPGTABLE
 void mmu_l1_setentry(uint32_t paddr, uint32_t vaddr, uint32_t mmuflags)
 {
-  uint32_t *l1table = (uint32_t*)PGTABLE_BASE_VADDR;
+  uint32_t *l1table = (uint32_t *)PGTABLE_BASE_VADDR;
   uint32_t  index   = vaddr >> 20;
 
   /* Save the page table entry */
 
-  l1table[index]  = (paddr | mmuflags);
+  l1table[index] = (paddr | mmuflags);
 
   /* Flush the data cache entry.  Make sure that the modified contents
    * of the page table are flushed into physical memory.
@@ -95,6 +83,41 @@ void mmu_l1_setentry(uint32_t paddr, uint32_t vaddr, uint32_t mmuflags)
   /* Invalidate the TLB cache associated with virtual address range */
 
   mmu_invalidate_region(vaddr, 1024*1024);
+}
+#endif
+
+/****************************************************************************
+ * Name: mmu_l1_restore
+ *
+ * Description:
+ *   Restore one L1 table entry previously returned by mmu_l1_getentry() (or
+ *   any other encoded L1 page table value).
+ *
+ * Input Parameters:
+ *   vaddr - A virtual address to be mapped
+ *   l1entry - The value to write into the page table entry
+ *
+ ****************************************************************************/
+
+#if !defined(CONFIG_ARCH_ROMPGTABLE) && defined(CONFIG_ARCH_ADDRENV)
+void mmu_l1_restore(uintptr_t vaddr, uint32_t l1entry)
+{
+  uint32_t *l1table = (uint32_t *)PGTABLE_BASE_VADDR;
+  uint32_t  index   = vaddr >> 20;
+
+  /* Set the encoded page table entry */
+
+  l1table[index] = l1entry;
+
+  /* Flush the data cache entry.  Make sure that the modified contents
+   * of the page table are flushed into physical memory.
+   */
+
+  cp15_clean_dcache_bymva((uint32_t)&l1table[index]);
+
+  /* Invalidate the TLB cache associated with virtual address range */
+
+  mmu_invalidate_region(vaddr & PMD_PTE_PADDR_MASK, 1024*1024);
 }
 #endif
 
@@ -119,7 +142,7 @@ void mmu_l1_setentry(uint32_t paddr, uint32_t vaddr, uint32_t mmuflags)
 void mmu_l2_setentry(uint32_t l2vaddr, uint32_t paddr, uint32_t vaddr,
                      uint32_t mmuflags)
 {
-  uint32_t *l2table  = (uint32_t*)l2vaddr;
+  uint32_t *l2table  = (uint32_t *)l2vaddr;
   uint32_t  index;
 
   /* The table divides a 1Mb address space up into 256 entries, each

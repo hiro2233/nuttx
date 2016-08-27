@@ -69,6 +69,10 @@
 #  define CONFIG_M25P_SPIMODE SPIDEV_MODE0
 #endif
 
+#ifndef CONFIG_M25P_SPIFREQUENCY
+#  define CONFIG_M25P_SPIFREQUENCY 20000000
+#endif
+
 /* Various manufacturers may have produced the parts.  0x20 is the manufacturer ID
  * for the STMicro MP25x serial FLASH.  If, for example, you are using the a Macronix
  * International MX25 serial FLASH, the correct manufacturer ID would be 0xc2.
@@ -85,66 +89,79 @@
 /* M25P Registers *******************************************************************/
 /* Indentification register values */
 
-#define M25P_MANUFACTURER         CONFIG_M25P_MANUFACTURER
-#define M25P_MEMORY_TYPE          CONFIG_M25P_MEMORY_TYPE
-#define M25P_RES_ID               0x13
-#define M25P_M25P1_CAPACITY       0x11 /* 1 M-bit */
-#define M25P_EN25F80_CAPACITY     0x14 /* 8 M-bit */
-#define M25P_M25P32_CAPACITY      0x16 /* 32 M-bit */
-#define M25P_M25P64_CAPACITY      0x17 /* 64 M-bit */
-#define M25P_M25P128_CAPACITY     0x18 /* 128 M-bit */
+#define M25P_MANUFACTURER          CONFIG_M25P_MANUFACTURER
+#define M25P_MEMORY_TYPE           CONFIG_M25P_MEMORY_TYPE
+#define M25P_RES_ID                0x13
+#define M25P_M25P1_CAPACITY        0x11 /* 1 M-bit */
+#define M25P_EN25F80_CAPACITY      0x14 /* 8 M-bit */
+#define M25P_M25P16_CAPACITY       0x15 /* 16 M-bit */
+#define M25P_M25P32_CAPACITY       0x16 /* 32 M-bit */
+#define M25P_M25P64_CAPACITY       0x17 /* 64 M-bit */
+#define M25P_M25P128_CAPACITY      0x18 /* 128 M-bit */
 
 /*  M25P1 capacity is 131,072 bytes:
  *  (4 sectors) * (32,768 bytes per sector)
  *  (512 pages) * (256 bytes per page)
  */
 
-#define M25P_M25P1_SECTOR_SHIFT  15    /* Sector size 1 << 15 = 65,536 */
-#define M25P_M25P1_NSECTORS      4
-#define M25P_M25P1_PAGE_SHIFT    8     /* Page size 1 << 8 = 256 */
-#define M25P_M25P1_NPAGES        512
+#define M25P_M25P1_SECTOR_SHIFT    15    /* Sector size 1 << 15 = 65,536 */
+#define M25P_M25P1_NSECTORS        4
+#define M25P_M25P1_PAGE_SHIFT      8     /* Page size 1 << 8 = 256 */
+#define M25P_M25P1_NPAGES          512
 
 /*  EN25F80 capacity is 1,048,576 bytes:
  *  (16 sectors) * (65,536 bytes per sector)
  *  (512 pages) * (256 bytes per page)
  */
 
-#define M25P_EN25F80_SECTOR_SHIFT 16    /* Sector size 1 << 15 = 65,536 */
-#define M25P_EN25F80_NSECTORS     16
-#define M25P_EN25F80_PAGE_SHIFT   8     /* Page size 1 << 8 = 256 */
-#define M25P_EN25F80_NPAGES       4096
+#define M25P_EN25F80_SECTOR_SHIFT  16    /* Sector size 1 << 15 = 65,536 */
+#define M25P_EN25F80_NSECTORS      16
+#define M25P_EN25F80_PAGE_SHIFT    8     /* Page size 1 << 8 = 256 */
+#define M25P_EN25F80_NPAGES        4096
 #define M25P_EN25F80_SUBSECT_SHIFT 12   /* Sub-Sector size 1 << 12 = 4,096 */
-#define M25P_EN25F80_NSUBSECTORS  256
+#define M25P_EN25F80_NSUBSECTORS   256
+
+/*  M25P16 capacity is 2,097,152 bytes:
+ *  (32 sectors) * (65,536 bytes per sector)
+ *  (8192 pages) * (256 bytes per page)
+ */
+
+#define M25P_M25P16_SECTOR_SHIFT   16    /* Sector size 1 << 16 = 65,536 */
+#define M25P_M25P16_NSECTORS       32
+#define M25P_M25P16_PAGE_SHIFT     8     /* Page size 1 << 8 = 256 */
+#define M25P_M25P16_NPAGES         8192
+#define M25P_M25PX16_SUBSECT_SHIFT 12   /* Sub-Sector size 1 << 12 = 4,096 */
 
 /*  M25P32 capacity is 4,194,304 bytes:
  *  (64 sectors) * (65,536 bytes per sector)
  *  (16384 pages) * (256 bytes per page)
  */
 
-#define M25P_M25P32_SECTOR_SHIFT  16    /* Sector size 1 << 16 = 65,536 */
-#define M25P_M25P32_NSECTORS      64
-#define M25P_M25P32_PAGE_SHIFT    8     /* Page size 1 << 8 = 256 */
-#define M25P_M25P32_NPAGES        16384
+#define M25P_M25P32_SECTOR_SHIFT   16    /* Sector size 1 << 16 = 65,536 */
+#define M25P_M25P32_NSECTORS       64
+#define M25P_M25P32_PAGE_SHIFT     8     /* Page size 1 << 8 = 256 */
+#define M25P_M25P32_NPAGES         16384
+#define M25P_M25PX32_SUBSECT_SHIFT 12    /* Sub-Sector size 1 << 12 = 4,096 */
 
 /*  M25P64 capacity is 8,338,608 bytes:
  *  (128 sectors) * (65,536 bytes per sector)
  *  (32768 pages) * (256 bytes per page)
  */
 
-#define M25P_M25P64_SECTOR_SHIFT  16    /* Sector size 1 << 16 = 65,536 */
-#define M25P_M25P64_NSECTORS      128
-#define M25P_M25P64_PAGE_SHIFT    8     /* Page size 1 << 8 = 256 */
-#define M25P_M25P64_NPAGES        32768
+#define M25P_M25P64_SECTOR_SHIFT   16    /* Sector size 1 << 16 = 65,536 */
+#define M25P_M25P64_NSECTORS       128
+#define M25P_M25P64_PAGE_SHIFT     8     /* Page size 1 << 8 = 256 */
+#define M25P_M25P64_NPAGES         32768
 
 /*  M25P128 capacity is 16,777,216 bytes:
  *  (64 sectors) * (262,144 bytes per sector)
  *  (65536 pages) * (256 bytes per page)
  */
 
-#define M25P_M25P128_SECTOR_SHIFT 18    /* Sector size 1 << 18 = 262,144 */
-#define M25P_M25P128_NSECTORS     64
-#define M25P_M25P128_PAGE_SHIFT   8     /* Page size 1 << 8 = 256 */
-#define M25P_M25P128_NPAGES       65536
+#define M25P_M25P128_SECTOR_SHIFT  18    /* Sector size 1 << 18 = 262,144 */
+#define M25P_M25P128_NSECTORS      64
+#define M25P_M25P128_PAGE_SHIFT    8     /* Page size 1 << 8 = 256 */
+#define M25P_M25P128_NPAGES        65536
 
 /* Instructions */
 /*      Command        Value      N Description             Addr Dummy Data   */
@@ -272,7 +289,8 @@ static void m25p_lock(FAR struct spi_dev_s *dev)
 
   SPI_SETMODE(dev, CONFIG_M25P_SPIMODE);
   SPI_SETBITS(dev, 8);
-  (void)SPI_SETFREQUENCY(dev, 20000000);
+  (void)SPI_HWFEATURES(dev, 0);
+  (void)SPI_SETFREQUENCY(dev, CONFIG_M25P_SPIFREQUENCY);
 }
 
 /************************************************************************************
@@ -294,7 +312,7 @@ static inline int m25p_readid(struct m25p_dev_s *priv)
   uint16_t memory;
   uint16_t capacity;
 
-  fvdbg("priv: %p\n", priv);
+  finfo("priv: %p\n", priv);
 
   /* Lock the SPI bus, configure the bus, and select this FLASH part. */
 
@@ -313,7 +331,7 @@ static inline int m25p_readid(struct m25p_dev_s *priv)
   SPI_SELECT(priv->dev, SPIDEV_FLASH, false);
   m25p_unlock(priv->dev);
 
-  fvdbg("manufacturer: %02x memory: %02x capacity: %02x\n",
+  finfo("manufacturer: %02x memory: %02x capacity: %02x\n",
         manufacturer, memory, capacity);
 
   /* Check for a valid manufacturer and memory type */
@@ -330,10 +348,10 @@ static inline int m25p_readid(struct m25p_dev_s *priv)
         {
            /* Save the FLASH geometry */
 
-           priv->sectorshift = M25P_M25P1_SECTOR_SHIFT;
-           priv->nsectors    = M25P_M25P1_NSECTORS;
-           priv->pageshift   = M25P_M25P1_PAGE_SHIFT;
-           priv->npages      = M25P_M25P1_NPAGES;
+           priv->sectorshift    = M25P_M25P1_SECTOR_SHIFT;
+           priv->nsectors       = M25P_M25P1_NSECTORS;
+           priv->pageshift      = M25P_M25P1_PAGE_SHIFT;
+           priv->npages         = M25P_M25P1_NPAGES;
            return OK;
         }
       else if (capacity == M25P_EN25F80_CAPACITY)
@@ -349,34 +367,50 @@ static inline int m25p_readid(struct m25p_dev_s *priv)
 #endif
            return OK;
         }
+      else if (capacity == M25P_M25P16_CAPACITY)
+        {
+           /* Save the FLASH geometry */
+
+           priv->sectorshift    = M25P_M25P16_SECTOR_SHIFT;
+           priv->nsectors       = M25P_M25P16_NSECTORS;
+           priv->pageshift      = M25P_M25P16_PAGE_SHIFT;
+           priv->npages         = M25P_M25P16_NPAGES;
+#ifdef CONFIG_M25P_SUBSECTOR_ERASE
+           priv->subsectorshift = M25P_M25PX16_SUBSECT_SHIFT;
+#endif
+           return OK;
+        }
       else if (capacity == M25P_M25P32_CAPACITY)
         {
            /* Save the FLASH geometry */
 
-           priv->sectorshift = M25P_M25P32_SECTOR_SHIFT;
-           priv->nsectors    = M25P_M25P32_NSECTORS;
-           priv->pageshift   = M25P_M25P32_PAGE_SHIFT;
-           priv->npages      = M25P_M25P32_NPAGES;
+           priv->sectorshift    = M25P_M25P32_SECTOR_SHIFT;
+           priv->nsectors       = M25P_M25P32_NSECTORS;
+           priv->pageshift      = M25P_M25P32_PAGE_SHIFT;
+           priv->npages         = M25P_M25P32_NPAGES;
+#ifdef CONFIG_M25P_SUBSECTOR_ERASE
+           priv->subsectorshift = M25P_M25PX32_SUBSECT_SHIFT;
+#endif
            return OK;
         }
       else if (capacity == M25P_M25P64_CAPACITY)
         {
            /* Save the FLASH geometry */
 
-           priv->sectorshift = M25P_M25P64_SECTOR_SHIFT;
-           priv->nsectors    = M25P_M25P64_NSECTORS;
-           priv->pageshift   = M25P_M25P64_PAGE_SHIFT;
-           priv->npages      = M25P_M25P64_NPAGES;
+           priv->sectorshift    = M25P_M25P64_SECTOR_SHIFT;
+           priv->nsectors       = M25P_M25P64_NSECTORS;
+           priv->pageshift      = M25P_M25P64_PAGE_SHIFT;
+           priv->npages         = M25P_M25P64_NPAGES;
            return OK;
         }
       else if (capacity == M25P_M25P128_CAPACITY)
         {
            /* Save the FLASH geometry */
 
-           priv->sectorshift = M25P_M25P128_SECTOR_SHIFT;
-           priv->nsectors    = M25P_M25P128_NSECTORS;
-           priv->pageshift   = M25P_M25P128_PAGE_SHIFT;
-           priv->npages      = M25P_M25P128_NPAGES;
+           priv->sectorshift    = M25P_M25P128_SECTOR_SHIFT;
+           priv->nsectors       = M25P_M25P128_NSECTORS;
+           priv->pageshift      = M25P_M25P128_PAGE_SHIFT;
+           priv->npages         = M25P_M25P128_NPAGES;
            return OK;
         }
     }
@@ -391,34 +425,6 @@ static inline int m25p_readid(struct m25p_dev_s *priv)
 static void m25p_waitwritecomplete(struct m25p_dev_s *priv)
 {
   uint8_t status;
-
-  /* Are we the only device on the bus? */
-
-#ifdef CONFIG_SPI_OWNBUS
-
-  /* Select this FLASH part */
-
-  SPI_SELECT(priv->dev, SPIDEV_FLASH, true);
-
-  /* Send "Read Status Register (RDSR)" command */
-
-  (void)SPI_SEND(priv->dev, M25P_RDSR);
-
-  /* Loop as long as the memory is busy with a write cycle */
-
-  do
-    {
-      /* Send a dummy byte to generate the clock needed to shift out the status */
-
-      status = SPI_SEND(priv->dev, M25P_DUMMY);
-    }
-  while ((status & M25P_SR_WIP) != 0);
-
-  /* Deselect the FLASH */
-
-  SPI_SELECT(priv->dev, SPIDEV_FLASH, false);
-
-#else
 
   /* Loop as long as the memory is busy with a write cycle */
 
@@ -453,9 +459,8 @@ static void m25p_waitwritecomplete(struct m25p_dev_s *priv)
         }
     }
   while ((status & M25P_SR_WIP) != 0);
-#endif
 
-  fvdbg("Complete\n");
+  finfo("Complete\n");
 }
 
 /************************************************************************************
@@ -475,7 +480,7 @@ static void m25p_writeenable(struct m25p_dev_s *priv)
   /* Deselect the FLASH */
 
   SPI_SELECT(priv->dev, SPIDEV_FLASH, false);
-  fvdbg("Enabled\n");
+  finfo("Enabled\n");
 }
 
 /************************************************************************************
@@ -497,7 +502,7 @@ static void m25p_sectorerase(struct m25p_dev_s *priv, off_t sector, uint8_t type
       offset = sector << priv->sectorshift;
     }
 
-  fvdbg("sector: %08lx\n", (long)sector);
+  finfo("sector: %08lx\n", (long)sector);
 
   /* Wait for any preceding write to complete.  We could simplify things by
    * perform this wait at the end of each write operation (rather than at
@@ -533,7 +538,7 @@ static void m25p_sectorerase(struct m25p_dev_s *priv, off_t sector, uint8_t type
   /* Deselect the FLASH */
 
   SPI_SELECT(priv->dev, SPIDEV_FLASH, false);
-  fvdbg("Erased\n");
+  finfo("Erased\n");
 }
 
 /************************************************************************************
@@ -542,7 +547,7 @@ static void m25p_sectorerase(struct m25p_dev_s *priv, off_t sector, uint8_t type
 
 static inline int m25p_bulkerase(struct m25p_dev_s *priv)
 {
-  fvdbg("priv: %p\n", priv);
+  finfo("priv: %p\n", priv);
 
   /* Wait for any preceding write to complete.  We could simplify things by
    * perform this wait at the end of each write operation (rather than at
@@ -567,7 +572,7 @@ static inline int m25p_bulkerase(struct m25p_dev_s *priv)
   /* Deselect the FLASH */
 
   SPI_SELECT(priv->dev, SPIDEV_FLASH, false);
-  fvdbg("Return: OK\n");
+  finfo("Return: OK\n");
   return OK;
 }
 
@@ -580,7 +585,7 @@ static inline void m25p_pagewrite(struct m25p_dev_s *priv, FAR const uint8_t *bu
 {
   off_t offset = page << priv->pageshift;
 
-  fvdbg("page: %08lx offset: %08lx\n", (long)page, (long)offset);
+  finfo("page: %08lx offset: %08lx\n", (long)page, (long)offset);
 
   /* Wait for any preceding write to complete.  We could simplify things by
    * perform this wait at the end of each write operation (rather than at
@@ -615,7 +620,7 @@ static inline void m25p_pagewrite(struct m25p_dev_s *priv, FAR const uint8_t *bu
   /* Deselect the FLASH: Chip Select high */
 
   SPI_SELECT(priv->dev, SPIDEV_FLASH, false);
-  fvdbg("Written\n");
+  finfo("Written\n");
 }
 
 /************************************************************************************
@@ -626,7 +631,7 @@ static inline void m25p_pagewrite(struct m25p_dev_s *priv, FAR const uint8_t *bu
 static inline void m25p_bytewrite(struct m25p_dev_s *priv, FAR const uint8_t *buffer,
                                   off_t offset, uint16_t count)
 {
-  fvdbg("offset: %08lx  count:%d\n", (long)offset, count);
+  finfo("offset: %08lx  count:%d\n", (long)offset, count);
 
   /* Wait for any preceding write to complete.  We could simplify things by
    * perform this wait at the end of each write operation (rather than at
@@ -661,7 +666,7 @@ static inline void m25p_bytewrite(struct m25p_dev_s *priv, FAR const uint8_t *bu
   /* Deselect the FLASH: Chip Select high */
 
   SPI_SELECT(priv->dev, SPIDEV_FLASH, false);
-  fvdbg("Written\n");
+  finfo("Written\n");
 }
 #endif
 
@@ -674,7 +679,7 @@ static int m25p_erase(FAR struct mtd_dev_s *dev, off_t startblock, size_t nblock
   FAR struct m25p_dev_s *priv = (FAR struct m25p_dev_s *)dev;
   size_t blocksleft = nblocks;
 
-  fvdbg("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+  finfo("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 
   /* Lock access to the SPI bus until we complete the erase */
 
@@ -742,7 +747,7 @@ static ssize_t m25p_bread(FAR struct mtd_dev_s *dev, off_t startblock, size_t nb
   FAR struct m25p_dev_s *priv = (FAR struct m25p_dev_s *)dev;
   ssize_t nbytes;
 
-  fvdbg("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+  finfo("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 
   /* On this device, we can handle the block read just like the byte-oriented read */
 
@@ -766,7 +771,7 @@ static ssize_t m25p_bwrite(FAR struct mtd_dev_s *dev, off_t startblock, size_t n
   size_t blocksleft = nblocks;
   size_t pagesize = 1 << priv->pageshift;
 
-  fvdbg("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+  finfo("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 
   /* Lock the SPI bus and write each page to FLASH */
 
@@ -791,7 +796,7 @@ static ssize_t m25p_read(FAR struct mtd_dev_s *dev, off_t offset, size_t nbytes,
 {
   FAR struct m25p_dev_s *priv = (FAR struct m25p_dev_s *)dev;
 
-  fvdbg("offset: %08lx nbytes: %d\n", (long)offset, (int)nbytes);
+  finfo("offset: %08lx nbytes: %d\n", (long)offset, (int)nbytes);
 
   /* Wait for any preceding write to complete.  We could simplify things by
    * perform this wait at the end of each write operation (rather than at
@@ -824,7 +829,7 @@ static ssize_t m25p_read(FAR struct mtd_dev_s *dev, off_t offset, size_t nbytes,
 
   SPI_SELECT(priv->dev, SPIDEV_FLASH, false);
   m25p_unlock(priv->dev);
-  fvdbg("return nbytes: %d\n", (int)nbytes);
+  finfo("return nbytes: %d\n", (int)nbytes);
   return nbytes;
 }
 
@@ -844,7 +849,7 @@ static ssize_t m25p_write(FAR struct mtd_dev_s *dev, off_t offset, size_t nbytes
   int    pagesize;
   int    bytestowrite;
 
-  fvdbg("offset: %08lx nbytes: %d\n", (long)offset, (int)nbytes);
+  finfo("offset: %08lx nbytes: %d\n", (long)offset, (int)nbytes);
 
   /* We must test if the offset + count crosses one or more pages
    * and perform individual writes.  The devices can only write in
@@ -909,7 +914,7 @@ static int m25p_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
   FAR struct m25p_dev_s *priv = (FAR struct m25p_dev_s *)dev;
   int ret = -EINVAL; /* Assume good command with bad parameters */
 
-  fvdbg("cmd: %d \n", cmd);
+  finfo("cmd: %d \n", cmd);
 
   switch (cmd)
     {
@@ -944,7 +949,7 @@ static int m25p_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
 
               ret = OK;
 
-              fvdbg("blocksize: %d erasesize: %d neraseblocks: %d\n",
+              finfo("blocksize: %d erasesize: %d neraseblocks: %d\n",
                     geo->blocksize, geo->erasesize, geo->neraseblocks);
             }
         }
@@ -966,7 +971,7 @@ static int m25p_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
         break;
     }
 
-  fvdbg("return %d\n", ret);
+  finfo("return %d\n", ret);
   return ret;
 }
 
@@ -989,7 +994,7 @@ FAR struct mtd_dev_s *m25p_initialize(FAR struct spi_dev_s *dev)
   FAR struct m25p_dev_s *priv;
   int ret;
 
-  fvdbg("dev: %p\n", dev);
+  finfo("dev: %p\n", dev);
 
   /* Allocate a state structure (we allocate the structure instead of using
    * a fixed, static allocation so that we can handle multiple FLASH devices.
@@ -998,11 +1003,11 @@ FAR struct mtd_dev_s *m25p_initialize(FAR struct spi_dev_s *dev)
    * to be extended to handle multiple FLASH parts on the same SPI bus.
    */
 
-  priv = (FAR struct m25p_dev_s *)kzalloc(sizeof(struct m25p_dev_s));
+  priv = (FAR struct m25p_dev_s *)kmm_zalloc(sizeof(struct m25p_dev_s));
   if (priv)
     {
       /* Initialize the allocated structure. (unsupported methods were
-       * nullified by kzalloc).
+       * nullified by kmm_zalloc).
        */
 
       priv->mtd.erase  = m25p_erase;
@@ -1026,9 +1031,9 @@ FAR struct mtd_dev_s *m25p_initialize(FAR struct spi_dev_s *dev)
         {
           /* Unrecognized! Discard all of that work we just did and return NULL */
 
-          fdbg("Unrecognized\n");
-          kfree(priv);
-          priv = NULL;
+          ferr("ERROR: Unrecognized\n");
+          kmm_free(priv);
+          return NULL;
         }
     }
 
@@ -1040,6 +1045,6 @@ FAR struct mtd_dev_s *m25p_initialize(FAR struct spi_dev_s *dev)
 
   /* Return the implementation-specific state structure as the MTD device */
 
-  fvdbg("Return %p\n", priv);
+  finfo("Return %p\n", priv);
   return (FAR struct mtd_dev_s *)priv;
 }

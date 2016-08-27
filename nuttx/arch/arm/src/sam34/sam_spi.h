@@ -46,18 +46,19 @@
 #include <stdbool.h>
 
 #include "chip.h"
+#include "chip/sam_spi.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* The SPI port number used as an input to up_spiinitialize encodes
+/* The SPI port number used as an input to sam_spibus_initialize encodes
  * information about the SPI controller (0 or 1) and the SPI chip select
  * (0-3).
  *
  * NOTE that this is this is backward compatible with older implementations
  * that support only SPI0 and provide only the chip select number to
- * up_spiinitialize().
+ * sam_spibus_initialize().
  */
 
 #define __SPI_CS_SHIFT  (0)      /* Bits 0-1: SPI chip select number */
@@ -108,6 +109,25 @@ extern "C"
  * Public Function Prototypes
  ****************************************************************************/
 
+struct spi_dev_s;  /* Forward reference */
+enum spi_dev_e;    /* Forward reference */
+
+/****************************************************************************
+ * Name: sam_spibus_initialize
+ *
+ * Description:
+ *   Initialize the selected SPI port
+ *
+ * Input Parameter:
+ *   cs - Chip select number (identifying the "logical" SPI port)
+ *
+ * Returned Value:
+ *   Valid SPI device structure reference on success; a NULL on failure
+ *
+ ****************************************************************************/
+
+struct spi_dev_s *sam_spibus_initialize(int port);
+
 /****************************************************************************
  * Name:  sam_spi[0|1]select, sam_spi[0|1]status, and sam_spi[0|1]cmddata
  *
@@ -120,7 +140,7 @@ extern "C"
  *   o sam_spi[0|1]status and sam_spi[0|1]cmddata:  Implementations of the
  *     status and cmddata methods of the SPI interface defined by struct
  *     spi_ops_ (see include/nuttx/spi/spi.h). All other methods including
- *     up_spiinitialize()) are provided by common SAM3/4 logic.
+ *     sam_spibus_initialize()) are provided by common SAM3/4 logic.
  *
  *  To use this common SPI logic on your board:
  *
@@ -133,18 +153,14 @@ extern "C"
  *      sam_spi[0|1]cmddata() functions in your board-specific logic.  This
  *      function will perform cmd/data selection operations using PIOs in
  *      the way your board is configured.
- *   3. Add a call to up_spiinitialize() in your low level application
+ *   3. Add a call to sam_spibus_initialize() in your low level application
  *      initialization logic
- *   4. The handle returned by up_spiinitialize() may then be used to bind the
+ *   4. The handle returned by sam_spibus_initialize() may then be used to bind the
  *      SPI driver to higher level logic (e.g., calling
  *      mmcsd_spislotinitialize(), for example, will bind the SPI driver to
  *      the SPI MMC/SD driver).
  *
  ****************************************************************************/
-
-#ifdef CONFIG_SAM34_SPI0
-struct spi_dev_s;
-enum spi_dev_e;
 
 /****************************************************************************
  * Name: sam_spi[0|1]select
@@ -233,7 +249,6 @@ int sam_spi0cmddata(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool cmd);
 int sam_spi1cmddata(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool cmd);
 #endif
 #endif
-#endif /* CONFIG_SAM34_SPI0 */
 
 #undef EXTERN
 #if defined(__cplusplus)

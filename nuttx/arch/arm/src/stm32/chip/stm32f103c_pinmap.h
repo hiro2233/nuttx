@@ -46,6 +46,8 @@
 
 #include <nuttx/config.h>
 
+#include "stm32_gpio.h"
+
 /************************************************************************************
  * Pre-processor Definitions
  ************************************************************************************/
@@ -254,7 +256,6 @@
 #  define GPIO_USART3_CTS   (GPIO_INPUT|GPIO_CNF_INFLOAT|GPIO_MODE_INPUT|GPIO_PORTB|GPIO_PIN13)
 #  define GPIO_USART3_RTS   (GPIO_ALT|GPIO_CNF_AFPP|GPIO_MODE_50MHz|GPIO_PORTB|GPIO_PIN14)
 #endif
-
 
 #define GPIO_WKUP               (GPIO_ALT|GPIO_CNF_AFPP|GPIO_MODE_50MHz|GPIO_PORTA|GPIO_PIN0)
 

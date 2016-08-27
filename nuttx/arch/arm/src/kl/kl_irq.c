@@ -48,26 +48,31 @@
 
 #include "nvic.h"
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 #include "kl_irq.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Get a 32-bit version of the default priority */
 
 #define DEFPRIORITY32 \
-  (NVIC_SYSH_PRIORITY_DEFAULT << 24 | NVIC_SYSH_PRIORITY_DEFAULT << 16 |\
+  (NVIC_SYSH_PRIORITY_DEFAULT << 24 | NVIC_SYSH_PRIORITY_DEFAULT << 16 | \
    NVIC_SYSH_PRIORITY_DEFAULT << 8  | NVIC_SYSH_PRIORITY_DEFAULT)
 
 /****************************************************************************
  * Public Data
  ****************************************************************************/
 
-volatile uint32_t *current_regs;
+/* g_current_regs[] holds a references to the current interrupt level
+ * register storage structure.  If is non-NULL only during interrupt
+ * processing.  Access to g_current_regs[] must be through the macro
+ * CURRENT_REGS for portability.
+ */
+
+volatile uint32_t *g_current_regs[1];
 
 /****************************************************************************
  * Private Data
@@ -85,36 +90,36 @@ volatile uint32_t *current_regs;
  *
  ****************************************************************************/
 
-#if defined(CONFIG_DEBUG_IRQ)
+#if defined(CONFIG_DEBUG_IRQ_INFO)
 static void kl_dumpnvic(const char *msg, int irq)
 {
   irqstate_t flags;
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
-  lldbg("NVIC (%s, irq=%d):\n", msg, irq);
-  lldbg("  ISER:       %08x ICER:   %08x\n",
-        getreg32(ARMV6M_NVIC_ISER), getreg32(ARMV6M_NVIC_ICER));
-  lldbg("  ISPR:       %08x ICPR:   %08x\n",
-        getreg32(ARMV6M_NVIC_ISPR), getreg32(ARMV6M_NVIC_ICPR));
-  lldbg("  IRQ PRIO:   %08x %08x %08x %08x\n",
-        getreg32(ARMV6M_NVIC_IPR0), getreg32(ARMV6M_NVIC_IPR1),
-        getreg32(ARMV6M_NVIC_IPR2), getreg32(ARMV6M_NVIC_IPR3));
-  lldbg("              %08x %08x %08x %08x\n",
-        getreg32(ARMV6M_NVIC_IPR4), getreg32(ARMV6M_NVIC_IPR5),
-        getreg32(ARMV6M_NVIC_IPR6), getreg32(ARMV6M_NVIC_IPR7));
+  irqinfo("NVIC (%s, irq=%d):\n", msg, irq);
+  irqinfo("  ISER:       %08x ICER:   %08x\n",
+          getreg32(ARMV6M_NVIC_ISER), getreg32(ARMV6M_NVIC_ICER));
+  irqinfo("  ISPR:       %08x ICPR:   %08x\n",
+          getreg32(ARMV6M_NVIC_ISPR), getreg32(ARMV6M_NVIC_ICPR));
+  irqinfo("  IRQ PRIO:   %08x %08x %08x %08x\n",
+          getreg32(ARMV6M_NVIC_IPR0), getreg32(ARMV6M_NVIC_IPR1),
+          getreg32(ARMV6M_NVIC_IPR2), getreg32(ARMV6M_NVIC_IPR3));
+  irqinfo("              %08x %08x %08x %08x\n",
+          getreg32(ARMV6M_NVIC_IPR4), getreg32(ARMV6M_NVIC_IPR5),
+          getreg32(ARMV6M_NVIC_IPR6), getreg32(ARMV6M_NVIC_IPR7));
 
-  lldbg("SYSCON:\n");
-  lldbg("  CPUID:      %08x\n",
-        getreg32(ARMV6M_SYSCON_CPUID));
-  lldbg("  ICSR:       %08x AIRCR:  %08x\n",
-        getreg32(ARMV6M_SYSCON_ICSR), getreg32(ARMV6M_SYSCON_AIRCR));
-  lldbg("  SCR:        %08x CCR:    %08x\n",
-        getreg32(ARMV6M_SYSCON_SCR), getreg32(ARMV6M_SYSCON_CCR));
-  lldbg("  SHPR2:      %08x SHPR3:  %08x\n",
-        getreg32(ARMV6M_SYSCON_SHPR2), getreg32(ARMV6M_SYSCON_SHPR3));
+  irqinfo("SYSCON:\n");
+  irqinfo("  CPUID:      %08x\n",
+          getreg32(ARMV6M_SYSCON_CPUID));
+  irqinfo("  ICSR:       %08x AIRCR:  %08x\n",
+          getreg32(ARMV6M_SYSCON_ICSR), getreg32(ARMV6M_SYSCON_AIRCR));
+  irqinfo("  SCR:        %08x CCR:    %08x\n",
+          getreg32(ARMV6M_SYSCON_SCR), getreg32(ARMV6M_SYSCON_CCR));
+  irqinfo("  SHPR2:      %08x SHPR3:  %08x\n",
+         getreg32(ARMV6M_SYSCON_SHPR2), getreg32(ARMV6M_SYSCON_SHPR3));
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 #else
@@ -132,27 +137,27 @@ static void kl_dumpnvic(const char *msg, int irq)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 static int kl_nmi(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! NMI received\n");
+  (void)up_irq_save();
+  _err("PANIC!!! NMI received\n");
   PANIC();
   return 0;
 }
 
 static int kl_pendsv(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! PendSV received\n");
+  (void)up_irq_save();
+  _err("PANIC!!! PendSV received\n");
   PANIC();
   return 0;
 }
 
 static int kl_reserved(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! Reserved interrupt\n");
+  (void)up_irq_save();
+  _err("PANIC!!! Reserved interrupt\n");
   PANIC();
   return 0;
 }
@@ -218,7 +223,7 @@ void up_irqinitialize(void)
 
   /* currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  CURRENT_REGS = NULL;
 
   /* Attach the SVCall and Hard Fault exception handlers.  The SVCall
    * exception is used for performing context switches; The Hard Fault
@@ -231,7 +236,7 @@ void up_irqinitialize(void)
 
   /* Attach all other processor exceptions (except reset and sys tick) */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   irq_attach(KL_IRQ_NMI, kl_nmi);
   irq_attach(KL_IRQ_PENDSV, kl_pendsv);
   irq_attach(KL_IRQ_RESERVED, kl_reserved);
@@ -239,11 +244,19 @@ void up_irqinitialize(void)
 
   kl_dumpnvic("initial", NR_IRQS);
 
+  /* Initialize logic to support a second level of interrupt decoding for
+   * configured pin interrupts.
+   */
+
+#ifdef CONFIG_KL_GPIOIRQ
+  kl_gpioirqinitialize();
+#endif
+
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
 
   /* And finally, enable interrupts */
 
-  irqenable();
+  up_irq_enable();
 #endif
 }
 

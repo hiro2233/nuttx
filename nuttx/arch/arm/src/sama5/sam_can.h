@@ -45,7 +45,7 @@
 #include "chip.h"
 #include "chip/sam_can.h"
 
-#include <nuttx/can.h>
+#include <nuttx/drivers/can.h>
 
 #if defined(CONFIG_CAN) && (defined(CONFIG_SAMA5_CAN0) || defined(CONFIG_SAMA5_CAN1))
 
@@ -109,7 +109,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

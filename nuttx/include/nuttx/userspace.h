@@ -49,13 +49,13 @@
 
 #include <nuttx/arch.h>
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
-/* If CONFIG_NUTTX_KERNEL, then CONFIG_NUTTX_USERSPACE must be defined to
+/* If CONFIG_BUILD_PROTECTED, then CONFIG_NUTTX_USERSPACE must be defined to
  * provide the address where the user-space header can be found in memory.
  */
 
@@ -83,22 +83,13 @@
  * they can be called through the userspace structure.
  */
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(__KERNEL__)
-#  define umm_initialize(b,s) USERSPACE->mm_initialize(b,s)
-#  define umm_addregion(b,s)  USERSPACE->mm_addregion(b,s)
-#  define umm_trysemaphore()  USERSPACE->mm_trysemaphore()
-#  define umm_givesemaphore() USERSPACE->mm_givesemaphore()
-#  define umm_malloc(s)       USERSPACE->mm_malloc(s)
-#  define umm_zalloc(s)       USERSPACE->mm_zalloc(s)
-#  define umm_realloc(p,s)    USERSPACE->mm_realloc(p,s)
-#  define umm_memalign(a,s)   USERSPACE->mm_memalign(a,s)
-#  define umm_free(p)         USERSPACE->mm_free(p)
-#endif
-
 /****************************************************************************
- * Type Definitions
+ * Public Type Definitions
  ****************************************************************************/
-/* Every user-space blob starts with a header that provides information about
+
+struct mm_heaps_s; /* Forward reference */
+
+ /* Every user-space blob starts with a header that provides information about
  * the blob.  The form of that header is provided by struct userspace_s.  An
  * instance of this structure is expected to reside at CONFIG_NUTTX_USERSPACE.
  */
@@ -116,6 +107,10 @@ struct userspace_s
   uintptr_t us_bssstart;
   uintptr_t us_bssend;
 
+  /* Memory manager heap structure */
+
+  FAR struct mm_heap_s *us_heap;
+
   /* Task/thread startup routines */
 
   void (*task_startup)(main_t entrypt, int argc, FAR char *argv[])
@@ -132,24 +127,9 @@ struct userspace_s
     FAR siginfo_t *info, FAR void *ucontext);
 #endif
 
-  /* Memory manager entry points */
-
-  void (*mm_initialize)(FAR void *heap_start, size_t heap_size);
-  void (*mm_addregion)(FAR void *heap_start, size_t heap_size);
-  int  (*mm_trysemaphore)(void);
-  void (*mm_givesemaphore)(void);
-
-  FAR void *(*mm_malloc)(size_t size);
-  FAR void *(*mm_realloc)(FAR void *oldmem, size_t newsize);
-#if 0 /* Not yet integrated */
-  FAR void *(*mm_memalign)(size_t alignment, size_t size);
-#endif
-  FAR void *(*mm_zalloc)(size_t size);
-  void (*mm_free)(FAR void *mem);
-
   /* User-space work queue support */
 
-#if defined(CONFIG_SCHED_WORKQUEUE) && defined(CONFIG_SCHED_USRWORK)
+#ifdef CONFIG_LIB_USRWORK
   int (*work_usrstart)(void);
 #endif
 };
@@ -186,7 +166,7 @@ extern "C"
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NUTTX_KERNEL) && !defined(__KERNEL__)
+#if defined(CONFIG_BUILD_PROTECTED) && !defined(__KERNEL__)
 void task_startup(main_t entrypt, int argc, FAR char *argv[]) noreturn_function;
 #endif
 
@@ -206,7 +186,7 @@ void task_startup(main_t entrypt, int argc, FAR char *argv[]) noreturn_function;
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NUTTX_KERNEL) && !defined(__KERNEL__) && !defined(CONFIG_DISABLE_PTHREAD)
+#if defined(CONFIG_BUILD_PROTECTED) && !defined(__KERNEL__) && !defined(CONFIG_DISABLE_PTHREAD)
 void pthread_startup(pthread_startroutine_t entrypt, pthread_addr_t arg);
 #endif
 
@@ -215,5 +195,5 @@ void pthread_startup(pthread_startroutine_t entrypt, pthread_addr_t arg);
 }
 #endif
 
-#endif /* CONFIG_NUTTX_KERNEL */
+#endif /* CONFIG_BUILD_PROTECTED */
 #endif /* __INCLUDE_NUTTX_USERSPACE_H */

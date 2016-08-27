@@ -59,7 +59,7 @@
 #include <assert.h>
 #include <errno.h>
 
-#include <apps/zmodem.h>
+#include "system/zmodem.h"
 
 #include "zm.h"
 
@@ -670,7 +670,7 @@ static int zmr_filename(FAR struct zm_state_s *pzm)
   bremaining = 0;
   filetype   = 0;
 
-  sscanf((FAR char *)pktptr, "%ld %lo %o %o %d %ld %d",
+  sscanf((FAR char *)pktptr, "%lu %lo %o %o %d %lu %d",
          &filesize, &timestamp, &mode, &serialno, &fremaining, &bremaining,
          &filetype);
 
@@ -839,7 +839,7 @@ static int zmr_filedata(FAR struct zm_state_s *pzm)
  *   Timed out waiting:
  *
  *   1) In state ZMR_INITWAIT - Received ZSINIT, waiting for data, or
- *   2) In state XMRS_FILENAME - Received ZFILE, waiting for file info
+ *   2) In state XMRS_FILENAME - Received ZFILE, waiting for file _info
  *
  ****************************************************************************/
 

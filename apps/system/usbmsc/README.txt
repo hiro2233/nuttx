@@ -5,11 +5,12 @@ system/usbmsc
   the device using the USB storage class driver.  In order to use this
   add-on, your board-specific logic must provide the function:
 
-    void usbmsc_archinitialize(void);
+    void board_usbmsc_initialize(void);
 
-  This function will be called by the system/usbmsc in order to
-  do the actual registration of the block device drivers.  For examples
-  of the implementation of usbmsc_archinitialize() see
+  This function will be called by the system/usbmsc indirectly via the
+  boarctl BOARDIOC_USBDEV_CONTROL command in order to do the actual
+  registration of the block device drivers.  For examples of the
+  implementation of board_usbmsc_initialize() see
   configs/mcu123-lpc124x/src/up_usbmsc.c or
   configs/stm3210e-eval/src/usbmsc.c
 
@@ -19,6 +20,10 @@ system/usbmsc
     This add-on can be built as two NSH "built-in" commands if this option
     is selected: 'msconn' will connect the USB mass storage device; 'msdis'
     will disconnect the USB storage device.
+  CONFIG_LIB_BOARDCTL
+    Enables the boardctl() interfaces.
+  CONFIG_BOARDCTL_USBDEVCTRL
+    Enables the BOARDIOC_USBDEV_CONTROL boardctl() command.
   CONFIG_SYSTEM_USBMSC_NLUNS
     Defines the number of logical units (LUNs) exported by the USB storage
     driver.  Each LUN corresponds to one exported block driver (or partition
@@ -38,7 +43,7 @@ system/usbmsc
   CONFIG_SYSTEM_USBMSC_DEBUGMM
     Enables some debug tests to check for memory usage and memory leaks.
 
-  If CONFIG_USBDEV_TRACE is enabled (or CONFIG_DEBUG and CONFIG_DEBUG_USB), then
+  If CONFIG_USBDEV_TRACE is enabled (or CONFIG_DEBUG_FEATURES and CONFIG_DEBUG_USB), then
   the code will also manage the USB trace output.  The amount of trace output
   can be controlled using:
 
@@ -73,4 +78,5 @@ system/usbmsc
   NOTE 2: This add-on used internal USB device driver interfaces.  As such,
   it relies on internal OS interfaces that are not normally available to a
   user-space program.  As a result, this add-on cannot be used if a
-  NuttX is built as a protected, supervisor kernel (CONFIG_NUTTX_KERNEL).
+  NuttX is built as a protected, supervisor kernel (CONFIG_BUILD_PROTECTED
+  or CONFIG_BUILD_KERNEL).

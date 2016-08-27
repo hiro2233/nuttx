@@ -1,12 +1,12 @@
 README
-^^^^^^
+======
 
 README for NuttX port to the Tiva TM4C123G LaunchPad.  The Tiva TM4C123G
 LaunchPad Evaluation Board is a low-cost evaluation platform for ARM®
 Cortex™-M4F-based microcontrollers from Texas Instruments.
 
 Contents
-^^^^^^^^
+========
 
   On-Board GPIO Usage
   Development Environment
@@ -18,6 +18,8 @@ Contents
   LEDs
   Serial Console
   USB Device Controller Functions
+  AT24 Serial EEPROM
+  I2C Tool
   Using OpenOCD and GDB with an FT2232 JTAG emulator
   TM4C123G LaunchPad Configuration Options
   Configurations
@@ -38,7 +40,7 @@ PIN SIGNAL(S)                                LanchPad Function
 
  45 PB0/T2CCP0/U1Rx                          GPIO, J1 pin 3
  46 PB1/T2CCP1/U1Tx                          GPIO, J1 pin 4
- 47 PB2/I2C0SCL/T3CCP0                       GPIO, J2, pin 3
+ 47 PB2/I2C0SCL/T3CCP0                       GPIO, J2 pin 2
  48 PB3/I2C0SDA/T3CCP1                       GPIO, J4 pin 3
  58 PB4/AIN10/CAN0Rx/SSI2CLK/T1CCP0          GPIO, J1 pin 7
  57 PB5/AIN11/CAN0Tx/SSI2FSS/T1CCP1          GPIO, J1 pin 2
@@ -79,8 +81,158 @@ PIN SIGNAL(S)                                LanchPad Function
  31 PF3/CAN0TX/SSI1FSS/T1CCP1/TRCLK          LED_G, GPIO, J4 pin 2
  05 PF4/T2CCP0                               USR_SW1 (Low when pressed), GPIO, J4 pin 10
 
+AT24 Serial EEPROM
+==================
+
+  AT24 Connections
+  ----------------
+
+  A AT24C512 Serial EEPPROM was used for tested I2C.  There are no I2C
+  devices on-board the Launchpad, but an external serial EEPROM module 
+  module was used.
+
+  The Serial EEPROM was mounted on an external adaptor board and connected
+  to the LaunchPad thusly:
+
+    - VCC  J1 pin 1  3.3V
+           J3 pin 1  5.0V
+    - GND  J2 pin 1  GND
+           J3 pin 2  GND
+    - PB2  J2 pin 2  SCL
+    - PB3  J4 pin 3  SDA
+
+  Configuration Settings
+  ----------------------
+
+  The following configuration settings were used:
+
+    System Type -> Tiva/Stellaris Peripheral Support
+      CONFIG_TIVA_I2C0=y                    : Enable I2C
+
+    System Type -> I2C device driver options
+      TIVA_I2C_FREQUENCY=100000             : Select an I2C frequency
+
+    Device Drivers -> I2C Driver Support
+      CONFIG_I2C=y                          : Enable I2C support
+
+    Device Drivers -> Memory Technology Device (MTD) Support
+      CONFIG_MTD=y                          : Enable MTD support
+      CONFIG_MTD_AT24XX=y                   : Enable the AT24 driver
+      CONFIG_AT24XX_SIZE=512                : Specifies the AT 24C512 part
+      CONFIG_AT24XX_ADDR=0x53               : AT24 I2C address
+
+    Application Configuration -> NSH Library
+      CONFIG_NSH_ARCHINIT=y                 : NSH board-initialization
+
+    File systems
+      CONFIG_NXFFS=y                        : Enables the NXFFS file system
+      CONFIG_NXFFS_PREALLOCATED=y           : Required
+                                            : Other defaults are probably OK
+
+    Board Selection
+      CONFIG_TM4C123G_LAUNCHPAD_AT24_BLOCKMOUNT=y   : Mounts AT24 for NSH
+      CONFIG_TM4C123G_LAUNCHPAD_AT24_NXFFS=y        : Mount the AT24 using NXFFS
+
+  You can then format the AT24 EEPROM for a FAT file system and mount the
+  file system at /mnt/at24 using these NSH commands:
+
+    nsh> mkfatfs /dev/mtdblock0
+    nsh> mount -t vfat /dev/mtdblock0 /mnt/at24
+
+  Then you an use the FLASH as a normal FAT file system:
+
+    nsh> echo "This is a test" >/mnt/at24/atest.txt
+    nsh> ls -l /mnt/at24
+    /mnt/at24:
+     -rw-rw-rw-      16 atest.txt
+    nsh> cat /mnt/at24/atest.txt
+    This is a test
+
+  STATUS:
+  2014-12-12:  I was unsuccessful getting my AT24 module to work on the TM4C123G
+    LaunchPad.  I was unable to successuflly communication with the AT24 via
+    I2C.  I did verify I2C using the I2C tool and other I2C devices and I now
+    belive that my AT24 module is not fully functional.
+
+I2C Tool
+========
+
+  I2C Tool. NuttX supports an I2C tool at apps/system/i2c that can be used
+  to peek and poke I2C devices.  That tool can be enabled by setting the
+  following:
+
+    System Type -> TIVA Peripheral Support
+      CONFIG_TIVA_I2C0=y                   : Enable I2C0
+      CONFIG_TIVA_I2C1=y                   : Enable I2C1
+      CONFIG_TIVA_I2C2=y                   : Enable I2C2
+      ...
+
+    System Type -> I2C device driver options
+      CONFIG_TIVA_I2C0_FREQUENCY=100000    : Select an I2C0 frequency
+      CONFIG_TIVA_I2C1_FREQUENCY=100000    : Select an I2C1 frequency
+      CONFIG_TIVA_I2C2_FREQUENCY=100000    : Select an I2C2 frequency
+      ...
+
+    Device Drivers -> I2C Driver Support
+      CONFIG_I2C=y                          : Enable I2C support
+
+    Application Configuration -> NSH Library
+      CONFIG_SYSTEM_I2CTOOL=y               : Enable the I2C tool
+      CONFIG_I2CTOOL_MINBUS=0               : I2C0 has the minimum bus number 0
+      CONFIG_I2CTOOL_MAXBUS=2               : I2C2 has the maximum bus number 2
+      CONFIG_I2CTOOL_DEFFREQ=100000         : Pick a consistent frequency
+
+    The I2C tool has extensive help that can be accessed as follows:
+
+    nsh> i2c help
+    Usage: i2c <cmd> [arguments]
+    Where <cmd> is one of:
+
+      Show help     : ?
+      List busses   : bus
+      List devices  : dev [OPTIONS] <first> <last>
+      Read register : get [OPTIONS] [<repititions>]
+      Show help     : help
+      Write register: set [OPTIONS] <value> [<repititions>]
+      Verify access : verf [OPTIONS] [<value>] [<repititions>]
+
+    Where common "sticky" OPTIONS include:
+      [-a addr] is the I2C device address (hex).  Default: 03 Current: 03
+      [-b bus] is the I2C bus number (decimal).  Default: 0 Current: 0
+      [-r regaddr] is the I2C device register address (hex).  Default: 00 Current: 00
+      [-w width] is the data width (8 or 16 decimal).  Default: 8 Current: 8
+      [-s|n], send/don't send start between command and data.  Default: -n Current: -n
+      [-i|j], Auto increment|don't increment regaddr on repititions.  Default: NO Current: NO
+      [-f freq] I2C frequency.  Default: 100000 Current: 100000
+
+    NOTES:
+    o Arguments are "sticky".  For example, once the I2C address is
+      specified, that address will be re-used until it is changed.
+
+    WARNING:
+    o The I2C dev command may have bad side effects on your I2C devices.
+      Use only at your own risk.
+
+    As an example, the I2C dev command can be used to list all devices
+    responding on I2C0 (the default) like this:
+
+      nsh> i2c dev 0x03 0x77
+          0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+      00:          -- -- -- -- -- -- -- -- -- -- -- -- --
+      10: -- -- -- -- -- -- -- -- -- -- 1a -- -- -- -- --
+      20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+      30: -- -- -- -- -- -- -- -- -- 39 -- -- -- 3d -- --
+      40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+      50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+      60: 60 -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+      70: -- -- -- -- -- -- -- --
+      nsh>
+
+    NOTE:  This is output from a different board and shows I2C
+    devices responding at addresses 0x1a, 0x39, 0x3d, and 0x60.
+
 Using OpenOCD and GDB with an FT2232 JTAG emulator
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+==================================================
 
   Building OpenOCD under Cygwin:
 
@@ -184,7 +336,7 @@ Using OpenOCD and GDB with an FT2232 JTAG emulator
     3. The 'monitor' command can be abbreviated as just 'mon'.
 
 Development Environment
-^^^^^^^^^^^^^^^^^^^^^^^
+=======================
 
   Either Linux or Cygwin on Windows can be used for the development environment.
   The source has been built only using the GNU toolchain (see below).  Other
@@ -192,7 +344,7 @@ Development Environment
   environment.
 
 GNU Toolchain Options
-^^^^^^^^^^^^^^^^^^^^^
+=====================
 
   The NuttX make system has been modified to support the following different
   toolchain options.
@@ -242,12 +394,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -257,7 +403,7 @@ GNU Toolchain Options
   path or will get the wrong version of make.
 
 IDEs
-^^^^
+====
 
   NuttX is built using command-line make.  It can be used with an IDE, but some
   effort will be required to create the project.
@@ -287,14 +433,14 @@ IDEs
   is arch/arm/src/tiva/tiva_vectors.S.
 
 NuttX EABI "buildroot" Toolchain
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+================================
 
   A GNU GCC-based toolchain is assumed.  The files */setenv.sh should
   be modified to point to the correct path to the Cortex-M3 GCC toolchain (if
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -330,7 +476,7 @@ NuttX EABI "buildroot" Toolchain
   See instructions below.
 
 NuttX OABI "buildroot" Toolchain
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+================================
 
   The older, OABI buildroot toolchain is also available.  To use the OABI
   toolchain:
@@ -349,20 +495,20 @@ NuttX OABI "buildroot" Toolchain
     -NXFLATLDFLAGS2 = $(NXFLATLDFLAGS1) -T$(TOPDIR)/binfmt/libnxflat/gnu-nxflat-pcrel.ld -no-check-sections
 
 NXFLAT Toolchain
-^^^^^^^^^^^^^^^^
+================
 
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
 
      cd tools
-     ./configure.sh lpcxpresso-lpc1768/<sub-dir>
+     ./configure.sh tm4c123g-launchpad/<sub-dir>
 
   2. Download the latest buildroot package into <some-dir>
 
@@ -382,7 +528,7 @@ NXFLAT Toolchain
      the path to the newly builtNXFLAT binaries.
 
 LEDs
-^^^^
+====
   The TM4C123G has a single RGB LED.  If CONFIG_ARCH_LEDS is defined, then
   support for the LaunchPad LEDs will be included in the build.  See:
 
@@ -415,7 +561,7 @@ LEDs
     extinguished and the RED component will FLASH at a 2Hz rate.
 
 Serial Console
-^^^^^^^^^^^^^^
+==============
 
   By default, all configurations use UART0 which connects to the USB VCOM
   on the DEBUG port on the TM4C123G LaunchPad:
@@ -459,7 +605,7 @@ Serial Console
     UART7 TX - PE.1
 
 USB Device Controller Functions
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+===============================
 
   Device Overview
 
@@ -498,7 +644,7 @@ USB Device Controller Functions
     driver is installed, Windows assigns a COM port number to the VCP channel.
 
 TM4C123G LaunchPad Configuration Options
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+=======================================================
 
     CONFIG_ARCH - Identifies the arch/ subdirectory.  This should
        be set to:
@@ -565,25 +711,12 @@ TM4C123G LaunchPad Configuration Options
        the delay actually is 100 seconds.
 
   There are configurations for disabling support for interrupts GPIO ports.
-  GPIOJ must be disabled because it does not exist on the TM4C123G.
-  Additional interrupt support can be disabled if desired to reduce memory
-  footprint.
+  Only GPIOP and GPIOQ pins can be used as interrupting sources on the
+  TM4C129x.  Additional interrupt support can be disabled if desired to
+  reduce memory footprint.
 
-    CONFIG_TIVA_DISABLE_GPIOA_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOB_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOC_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOD_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOE_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOF_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOG_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOH_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOJ_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOK_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOL_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOM_IRQS=n
-    CONFIG_TIVA_DISABLE_GPION_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOP_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOQ_IRQS=n
+    CONFIG_TIVA_GPIOP_IRQS=y
+    CONFIG_TIVA_GPIOQ_IRQS=y
 
   TM4C123G specific device driver settings
 
@@ -598,8 +731,8 @@ TM4C123G LaunchPad Configuration Options
     CONFIG_UARTn_PARTIY - 0=no parity, 1=odd parity, 2=even parity
     CONFIG_UARTn_2STOP - Two stop bits
 
-    CONFIG_SSI0_DISABLE - Select to disable support for SSI0
-    CONFIG_SSI1_DISABLE - Select to disable support for SSI1
+    CONFIG_TIVA_SSI0 - Select to enable support for SSI0
+    CONFIG_TIVA_SSI1 - Select to enable support for SSI1
     CONFIG_SSI_POLLWAIT - Select to disable interrupt driven SSI support.
       Poll-waiting is recommended if the interrupt rate would be to
       high in the interrupt driven case.
@@ -622,7 +755,7 @@ TM4C123G LaunchPad Configuration Options
     CONFIG_TIVA_DUMPPACKET - Dump each packet received/sent to the console.
 
 Configurations
-^^^^^^^^^^^^^^
+==============
 
 Each TM4C123G LaunchPad configuration is maintained in a
 sub-directory and can be selected as follow:
@@ -647,7 +780,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.

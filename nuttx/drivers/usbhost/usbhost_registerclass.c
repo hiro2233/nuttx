@@ -43,7 +43,7 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <nuttx/usb/usbhost.h>
 
 #include "usbhost_registry.h"
@@ -83,8 +83,8 @@
  *   bind a struct usbhost_class_s instance for the device.
  *
  * Input Parameters:
- *   class - An write-able instance of struct usbhost_registry_s that will be
- *     maintained in a registry.
+ *   usbclass - An write-able instance of struct usbhost_registry_s that
+ *     will be maintained in a registry.
  *
  * Returned Values:
  *   On success, this function will return zero (OK).  Otherwise, a negated
@@ -92,11 +92,11 @@
  *
  ****************************************************************************/
 
-int usbhost_registerclass(struct usbhost_registry_s *class)
+int usbhost_registerclass(struct usbhost_registry_s *usbclass)
 {
   irqstate_t flags;
 
-  uvdbg("Registering class:%p nids:%d\n", class, class->nids);
+  uinfo("Registering class:%p nids:%d\n", usbclass, usbclass->nids);
 
   /* g_classregistry is a singly-linkedlist of class ID information added by
    * calls to usbhost_registerclass().  Since this list is accessed from USB
@@ -104,14 +104,14 @@ int usbhost_registerclass(struct usbhost_registry_s *class)
    * protected by disabling interrupts.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Add the new class ID info to the head of the list */
 
-  class->flink    = g_classregistry;
-  g_classregistry = class;
+  usbclass->flink = g_classregistry;
+  g_classregistry = usbclass;
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 

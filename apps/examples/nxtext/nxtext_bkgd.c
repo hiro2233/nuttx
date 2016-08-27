@@ -54,7 +54,7 @@
 #include "nxtext_internal.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -71,7 +71,7 @@ static void nxbg_position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
                           FAR const struct nxgl_point_s *pos,
                           FAR const struct nxgl_rect_s *bounds,
                           FAR void *arg);
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
 static void nxbg_mousein(NXWINDOW hwnd, FAR const struct nxgl_point_s *pos,
                          uint8_t buttons, FAR void *arg);
 #endif
@@ -99,7 +99,7 @@ const struct nx_callback_s g_nxtextcb =
 {
   nxbg_redraw,   /* redraw */
   nxbg_position  /* position */
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
   , nxbg_mousein /* mousein */
 #endif
 #ifdef CONFIG_NX_KBD
@@ -127,7 +127,7 @@ static void nxbg_redrawrect(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect)
   ret = nx_fill(hwnd, rect, g_bgstate.wcolor);
   if (ret < 0)
     {
-      message("nxbg_redrawrect: nx_fill failed: %d\n", errno);
+      printf("nxbg_redrawrect: nx_fill failed: %d\n", errno);
     }
 
   /* Fill each character on the display (Only the characters within rect
@@ -147,7 +147,7 @@ static void nxbg_redrawrect(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect)
 static void nxbg_redraw(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect,
                         bool more, FAR void *arg)
 {
-  gvdbg("hwnd=%p rect={(%d,%d),(%d,%d)} more=%s\n",
+  ginfo("hwnd=%p rect={(%d,%d),(%d,%d)} more=%s\n",
          hwnd, rect->pt1.x, rect->pt1.y, rect->pt2.x, rect->pt2.y,
          more ? "true" : "false");
 
@@ -167,7 +167,7 @@ static void nxbg_position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
 
   /* Report the position */
 
-  gvdbg("hwnd=%p size=(%d,%d) pos=(%d,%d) bounds={(%d,%d),(%d,%d)}\n",
+  ginfo("hwnd=%p size=(%d,%d) pos=(%d,%d) bounds={(%d,%d),(%d,%d)}\n",
         hwnd, size->w, size->h, pos->x, pos->y,
         bounds->pt1.x, bounds->pt1.y, bounds->pt2.x, bounds->pt2.y);
 
@@ -191,7 +191,7 @@ static void nxbg_position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
 
       b_haveresolution = true;
       sem_post(&g_semevent);
-      gvdbg("Have xres=%d yres=%d\n", g_xres, g_yres);
+      ginfo("Have xres=%d yres=%d\n", g_xres, g_yres);
     }
 }
 
@@ -199,12 +199,12 @@ static void nxbg_position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
  * Name: nxbg_mousein
  ****************************************************************************/
 
-#ifdef CONFIG_NX_MOUSE
+#ifdef CONFIG_NX_XYINPUT
 static void nxbg_mousein(NXWINDOW hwnd, FAR const struct nxgl_point_s *pos,
                          uint8_t buttons, FAR void *arg)
 {
-  message("nxbg_mousein: hwnd=%p pos=(%d,%d) button=%02x\n",
-          hwnd,  pos->x, pos->y, buttons);
+  printf("nxbg_mousein: hwnd=%p pos=(%d,%d) button=%02x\n",
+         hwnd,  pos->x, pos->y, buttons);
 }
 #endif
 
@@ -216,7 +216,7 @@ static void nxbg_mousein(NXWINDOW hwnd, FAR const struct nxgl_point_s *pos,
 static void nxbg_kbdin(NXWINDOW hwnd, uint8_t nch, FAR const uint8_t *ch,
                        FAR void *arg)
 {
-  gvdbg("hwnd=%p nch=%d\n", hwnd, nch);
+  ginfo("hwnd=%p nch=%d\n", hwnd, nch);
   nxbg_write(hwnd, ch, nch);
 }
 #endif
@@ -260,7 +260,7 @@ static inline void nxbg_movedisplay(NXWINDOW hwnd, int bottom, int lineheight)
       ret = nx_fill(hwnd, &rect, g_bgstate.wcolor);
       if (ret < 0)
         {
-          message("nxbg_movedisplay: nx_fill failed: %d\n", errno);
+          printf("nxbg_movedisplay: nx_fill failed: %d\n", errno);
         }
 
       /* Fill each character that might lie within in the bounding box */
@@ -283,7 +283,7 @@ static inline void nxbg_movedisplay(NXWINDOW hwnd, int bottom, int lineheight)
   ret = nx_fill(hwnd, &rect, g_bgstate.wcolor);
   if (ret < 0)
     {
-      message("nxbg_movedisplay: nx_fill failed: %d\n", errno);
+      printf("nxbg_movedisplay: nx_fill failed: %d\n", errno);
     }
 }
 

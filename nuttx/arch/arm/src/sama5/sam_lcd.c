@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sama5/sam_lcd.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -67,7 +67,7 @@
 #include "sam_lcd.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 
@@ -492,7 +492,7 @@
 
 /* Debug */
 
-#ifndef CONFIG_DEBUG
+#ifndef CONFIG_DEBUG_LCD_INFO
 #  undef CONFIG_SAMA5_LCDC_REGDEBUG
 #endif
 
@@ -570,14 +570,21 @@
 
 /* Layer helpers */
 
-#define LCDC_NLAYERS 5
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+#  define LCDC_NLAYERS 5
+#else
+#  define LCDC_NLAYERS 4
+#endif
 
 #define LAYER(i)     g_lcdc.layer[i]
 #define LAYER_BASE   g_lcdc.layer[LCDC_LAYER_BASE]
 #define LAYER_OVR1   g_lcdc.layer[LCDC_LAYER_OVR1]
 #define LAYER_OVR2   g_lcdc.layer[LCDC_LAYER_OVR2]
 #define LAYER_HEO    g_lcdc.layer[LCDC_LAYER_HEO]
-#define LAYER_HCR    g_lcdc.layer[LCDC_LAYER_HCR]
+
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+#  define LAYER_HCR  g_lcdc.layer[LCDC_LAYER_HCR]
+#endif
 
 /****************************************************************************
  * Private Types
@@ -589,8 +596,10 @@ enum sam_layer_e
   LCDC_LAYER_BASE = 0,     /* LCD base layer, display fixed size image */
   LCDC_LAYER_OVR1,         /* LCD Overlay 1 */
   LCDC_LAYER_OVR2,         /* LCD Overlay 2 */
-  LCDC_LAYER_HEO,          /* LCD HighEndOverlay, support resize */
-  LCDC_LAYER_HCR           /* LCD Cursor, max size 128x128 */
+  LCDC_LAYER_HEO           /* LCD HighEndOverlay, support resize */
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , LCDC_LAYER_HCR         /* LCD Cursor, max size 128x128 */
+#endif
 };
 
 /* Possible rotations supported by all layers */
@@ -657,7 +666,7 @@ struct sam_lcdc_s
  ****************************************************************************/
 /* Register operations ******************************************************/
 
-#if defined(CONFIG_SAMA5_LCDC_REGDEBUG) && defined(CONFIG_DEBUG)
+#ifdef CONFIG_SAMA5_LCDC_REGDEBUG
 static bool sam_checkreg(bool wr, uint32_t regval, uintptr_t address);
 static uint32_t sam_getreg(uintptr_t addr);
 static void sam_putreg(uintptr_t addr, uint32_t val);
@@ -718,7 +727,9 @@ static void sam_base_disable(void);
 static void sam_ovr1_disable(void);
 static void sam_ovr2_disable(void);
 static void sam_heo_disable(void);
+#ifdef SAMA5_HAVE_LCDC_HCRCH
 static void sam_hcr_disable(void);
+#endif
 static void sam_lcd_disable(void);
 static void sam_layer_orientation(void);
 static void sam_layer_color(void);
@@ -800,84 +811,149 @@ static pio_pinset_t g_lcdcpins[] =
 
 static const uintptr_t g_layerenable[LCDC_NLAYERS] =
 {
-  SAM_LCDC_BASECHER, SAM_LCDC_OVR1CHER, SAM_LCDC_OVR2CHER, SAM_LCDC_HEOCHER,
-  SAM_LCDC_HCRCHER
+  SAM_LCDC_BASECHER,
+  SAM_LCDC_OVR1CHER,
+  SAM_LCDC_OVR2CHER,
+  SAM_LCDC_HEOCHER
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRCHER
+#endif
 };
 
 static const uintptr_t g_layerdisable[LCDC_NLAYERS] =
 {
-  SAM_LCDC_BASECHDR, SAM_LCDC_OVR1CHDR, SAM_LCDC_OVR2CHDR, SAM_LCDC_HEOCHDR,
-  SAM_LCDC_HCRCHDR
+  SAM_LCDC_BASECHDR,
+  SAM_LCDC_OVR1CHDR,
+  SAM_LCDC_OVR2CHDR,
+  SAM_LCDC_HEOCHDR
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRCHDR
+#endif
 };
 
 static const uintptr_t g_layerstatus[LCDC_NLAYERS] =
 {
-  SAM_LCDC_BASECHSR, SAM_LCDC_OVR1CHSR, SAM_LCDC_OVR2CHSR, SAM_LCDC_HEOCHSR,
-  SAM_LCDC_HCRCHSR
+  SAM_LCDC_BASECHSR,
+  SAM_LCDC_OVR1CHSR,
+  SAM_LCDC_OVR2CHSR,
+  SAM_LCDC_HEOCHSR
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRCHSR
+#endif
 };
 
 static const uintptr_t g_layerblend[LCDC_NLAYERS] =
 {
-  SAM_LCDC_BASECFG4, SAM_LCDC_OVR1CFG9, SAM_LCDC_OVR2CFG9, SAM_LCDC_HEOCFG12,
-  SAM_LCDC_HCRCFG9
+  SAM_LCDC_BASECFG4,
+  SAM_LCDC_OVR1CFG9,
+  SAM_LCDC_OVR2CFG9,
+  SAM_LCDC_HEOCFG12
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRCFG9
+#endif
 };
 
 static const uintptr_t g_layerhead[LCDC_NLAYERS] =
 {
-  SAM_LCDC_BASEHEAD, SAM_LCDC_OVR1HEAD, SAM_LCDC_OVR2HEAD, SAM_LCDC_HEOHEAD,
-  SAM_LCDC_HCRHEAD
+  SAM_LCDC_BASEHEAD,
+  SAM_LCDC_OVR1HEAD,
+  SAM_LCDC_OVR2HEAD,
+  SAM_LCDC_HEOHEAD
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRHEAD
+#endif
 };
 
 static const uintptr_t g_layeraddr[LCDC_NLAYERS] =
 {
-  SAM_LCDC_BASEADDR, SAM_LCDC_OVR1ADDR, SAM_LCDC_OVR2ADDR, SAM_LCDC_HEOADDR,
-  SAM_LCDC_HCRADDR
+  SAM_LCDC_BASEADDR,
+  SAM_LCDC_OVR1ADDR,
+  SAM_LCDC_OVR2ADDR,
+  SAM_LCDC_HEOADDR
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRADDR
+#endif
 };
 
 static const uintptr_t g_layerctrl[LCDC_NLAYERS] =
 {
-  SAM_LCDC_BASECTRL, SAM_LCDC_OVR1CTRL, SAM_LCDC_OVR2CTRL, SAM_LCDC_HEOCTRL,
-  SAM_LCDC_HCRCTRL
+  SAM_LCDC_BASECTRL,
+  SAM_LCDC_OVR1CTRL,
+  SAM_LCDC_OVR2CTRL,
+  SAM_LCDC_HEOCTRL
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRCTRL
+#endif
 };
 
 static const uintptr_t g_layernext[LCDC_NLAYERS] =
 {
-  SAM_LCDC_BASENEXT, SAM_LCDC_OVR1NEXT, SAM_LCDC_OVR2NEXT, SAM_LCDC_HEONEXT,
-  SAM_LCDC_HCRNEXT
+  SAM_LCDC_BASENEXT,
+  SAM_LCDC_OVR1NEXT,
+  SAM_LCDC_OVR2NEXT,
+  SAM_LCDC_HEONEXT
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRNEXT
+#endif
 };
 
 static const uintptr_t g_layercfg[LCDC_NLAYERS] =
 {
-  SAM_LCDC_BASECFG0, SAM_LCDC_OVR1CFG0, SAM_LCDC_OVR2CFG0, SAM_LCDC_HEOCFG0,
-  SAM_LCDC_HCRCFG0
+  SAM_LCDC_BASECFG0,
+  SAM_LCDC_OVR1CFG0,
+  SAM_LCDC_OVR2CFG0,
+  SAM_LCDC_HEOCFG0
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRCFG0
+#endif
 };
 
 static const uintptr_t g_layercolor[LCDC_NLAYERS] =
 {
-  SAM_LCDC_BASECFG1, SAM_LCDC_OVR1CFG1, SAM_LCDC_OVR2CFG1, SAM_LCDC_HEOCFG1,
-  SAM_LCDC_HCRCFG1
+  SAM_LCDC_BASECFG1,
+  SAM_LCDC_OVR1CFG1,
+  SAM_LCDC_OVR2CFG1,
+  SAM_LCDC_HEOCFG1
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRCFG1
+#endif
 };
 
 #ifdef SAMA5_HAVE_POSITION
 static const uintptr_t g_layerpos[LCDC_NLAYERS] =
 {
-  0,                 SAM_LCDC_OVR1CFG2, SAM_LCDC_OVR2CFG2, SAM_LCDC_HEOCFG2,
-  SAM_LCDC_HCRCFG2
+  0,
+  SAM_LCDC_OVR1CFG2,
+  SAM_LCDC_OVR2CFG2,
+  SAM_LCDC_HEOCFG2
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRCFG2
+#endif
 };
 #endif
 
 #ifdef SAMA5_HAVE_SIZE
 static const uintptr_t g_layersize[LCDC_NLAYERS] =
 {
-  0,                 SAM_LCDC_OVR1CFG3, SAM_LCDC_OVR2CFG3, SAM_LCDC_HEOCFG3,
-  SAM_LCDC_HCRCFG3
+  0,
+  SAM_LCDC_OVR1CFG3,
+  SAM_LCDC_OVR2CFG3,
+  SAM_LCDC_HEOCFG3
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRCFG3
+#endif
 };
 #endif
 
 static const uintptr_t g_layerstride[LCDC_NLAYERS] =
 {
-  SAM_LCDC_BASECFG2, SAM_LCDC_OVR1CFG4, SAM_LCDC_OVR2CFG4, SAM_LCDC_HEOCFG5,
-  SAM_LCDC_HCRCFG4
+  SAM_LCDC_BASECFG2,
+  SAM_LCDC_OVR1CFG4,
+  SAM_LCDC_OVR2CFG4,
+  SAM_LCDC_HEOCFG5
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRCFG4
+#endif
 };
 
 #ifdef SAMA5_HAVE_PSTRIDE
@@ -891,14 +967,15 @@ static const uintptr_t g_layerpstride[LCDC_NLAYERS] =
 #ifdef CONFIG_FB_CMAP
 static const uintptr_t g_layerclut[LCDC_NLAYERS] =
 {
-  SAM_LCDC_BASECLUT, SAM_LCDC_OVR1CLUT, SAM_LCDC_OVR2CLUT, SAM_LCDC_HEOCLUT,
-  SAM_LCDC_HCRCLUT
+  SAM_LCDC_BASECLUT,
+  SAM_LCDC_OVR1CLUT,
+  SAM_LCDC_OVR2CLUT,
+  SAM_LCDC_HEOCLUT
+#ifdef SAMA5_HAVE_LCDC_HCRCH
+  , SAM_LCDC_HCRCLUT
+#endif
 };
 #endif
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -940,7 +1017,7 @@ static bool sam_checkreg(bool wr, uint32_t regval, uintptr_t address)
         {
           /* Yes... show how many times we did it */
 
-          lldbg("...[Repeats %d times]...\n", g_lcdc.ntimes);
+          lcdinfo("...[Repeats %d times]...\n", g_lcdc.ntimes);
         }
 
       /* Save information about the new access */
@@ -972,7 +1049,7 @@ static uint32_t sam_getreg(uintptr_t address)
 
   if (sam_checkreg(false, regval, address))
     {
-      lldbg("%08x->%08x\n", address, regval);
+      lcdinfo("%08x->%08x\n", address, regval);
     }
 
   return regval;
@@ -992,7 +1069,7 @@ static void sam_putreg(uintptr_t address, uint32_t regval)
 {
   if (sam_checkreg(true, regval, address))
     {
-      lldbg("%08x<-%08x\n", address, regval);
+      lcdinfo("%08x<-%08x\n", address, regval);
     }
 
   putreg32(regval, address);
@@ -1010,7 +1087,7 @@ static void sam_putreg(uintptr_t address, uint32_t regval)
 
 static void sam_wait_lcdstatus(uint32_t mask, uint32_t value)
 {
-   while ((sam_getreg(SAM_LCDC_LCDSR) & mask) != value);
+  while ((sam_getreg(SAM_LCDC_LCDSR) & mask) != value);
 }
 
 /****************************************************************************
@@ -1020,14 +1097,14 @@ static void sam_wait_lcdstatus(uint32_t mask, uint32_t value)
 static int sam_base_getvideoinfo(struct fb_vtable_s *vtable,
                                  struct fb_videoinfo_s *vinfo)
 {
-  gvdbg("vtable=%p vinfo=%p\n", vtable, vinfo);
+  lcdinfo("vtable=%p vinfo=%p\n", vtable, vinfo);
   if (vtable && vinfo)
     {
       memcpy(vinfo, &g_base_videoinfo, sizeof(struct fb_videoinfo_s));
       return OK;
     }
 
-  gdbg("ERROR: Returning EINVAL\n");
+  lcderr("ERROR: Returning EINVAL\n");
   return -EINVAL;
 }
 
@@ -1038,17 +1115,18 @@ static int sam_base_getvideoinfo(struct fb_vtable_s *vtable,
 static int sam_base_getplaneinfo(struct fb_vtable_s *vtable, int planeno,
                                  struct fb_planeinfo_s *pinfo)
 {
-  gvdbg("vtable=%p planeno=%d pinfo=%p\n", vtable, planeno, pinfo);
+  lcdinfo("vtable=%p planeno=%d pinfo=%p\n", vtable, planeno, pinfo);
   if (vtable && planeno == 0 && pinfo)
     {
-      pinfo->fbmem  = (void *)LAYER_BASE.framebuffer;
-      pinfo->fblen  = SAMA5_BASE_FBSIZE;
-      pinfo->stride = SAMA5_BASE_STRIDE,
-      pinfo->bpp    = LAYER_BASE.bpp;
+      pinfo->fbmem   = (void *)LAYER_BASE.framebuffer;
+      pinfo->fblen   = SAMA5_BASE_FBSIZE;
+      pinfo->stride  = SAMA5_BASE_STRIDE;
+      pinfo->display = 0;
+      pinfo->bpp     = LAYER_BASE.bpp;
       return OK;
     }
 
-  gdbg("Returning EINVAL\n");
+  lcderr("ERROR: Returning EINVAL\n");
   return -EINVAL;
 }
 
@@ -1084,27 +1162,27 @@ static int sam_base_putcmap(struct fb_vtable_s *vtable,
 static int sam_hcr_getcursor(struct fb_vtable_s *vtable,
                              struct fb_cursorattrib_s *attrib)
 {
-  gvdbg("vtable=%p attrib=%p\n", vtable, attrib);
+  lcdinfo("vtable=%p attrib=%p\n", vtable, attrib);
   if (vtable && attrib)
     {
 #ifdef CONFIG_FB_HWCURSORIMAGE
       attrib->fmt = SAMA5_HCR_COLOR_FMT;
 #endif
 
-      gvdbg("pos: (x=%d, y=%d)\n", g_lcdc.cpos.x, g_lcdc.cpos.y);
+      lcdinfo("pos: (x=%d, y=%d)\n", g_lcdc.cpos.x, g_lcdc.cpos.y);
       attrib->pos = g_lcdc.cpos;
 
 #ifdef CONFIG_FB_HWCURSORSIZE
       attrib->mxsize.h = CONFIG_SAMA5_LCDC_HCR_HEIGHT;
       attrib->mxsize.w = CONFIG_SAMA5_LCDC_HCR_WIDTH;
 
-      gvdbg("size: (h=%d, w=%d)\n", g_lcdc.csize.h, g_lcdc.csize.w);
+      lcdinfo("size: (h=%d, w=%d)\n", g_lcdc.csize.h, g_lcdc.csize.w);
       attrib->size = g_lcdc.csize;
 #endif
       return OK;
     }
 
-  gdbg("Returning EINVAL\n");
+  lcderr("ERROR: Returning EINVAL\n");
   return -EINVAL;
 }
 #endif
@@ -1117,26 +1195,26 @@ static int sam_hcr_getcursor(struct fb_vtable_s *vtable,
 static int sam_hcr_setcursor(struct fb_vtable_s *vtable,
                              struct fb_setcursor_s *setttings)
 {
-  gvdbg("vtable=%p setttings=%p\n", vtable, setttings);
+  lcdinfo("vtable=%p setttings=%p\n", vtable, setttings);
   if (vtable && setttings)
     {
-      gvdbg("flags: %02x\n", settings->flags);
+      lcdinfo("flags: %02x\n", settings->flags);
       if ((flags & FB_CUR_SETPOSITION) != 0)
         {
           g_lcdc.cpos = settings->pos;
-          gvdbg("pos: (h:%d, w:%d)\n", g_lcdc.cpos.x, g_lcdc.cpos.y);
+          lcdinfo("pos: (h:%d, w:%d)\n", g_lcdc.cpos.x, g_lcdc.cpos.y);
         }
 #ifdef CONFIG_FB_HWCURSORSIZE
       if ((flags & FB_CUR_SETSIZE) != 0)
         {
           g_lcdc.csize = settings->size;
-          gvdbg("size: (h:%d, w:%d)\n", g_lcdc.csize.h, g_lcdc.csize.w);
+          lcdinfo("size: (h:%d, w:%d)\n", g_lcdc.csize.h, g_lcdc.csize.w);
         }
 #endif
 #ifdef CONFIG_FB_HWCURSORIMAGE
       if ((flags & FB_CUR_SETIMAGE) != 0)
         {
-          gvdbg("image: (h:%d, w:%d) @ %p\n",
+          lcdinfo("image: (h:%d, w:%d) @ %p\n",
                 settings->img.height, settings->img.width,
                 settings->img.image);
         }
@@ -1144,7 +1222,7 @@ static int sam_hcr_setcursor(struct fb_vtable_s *vtable,
       return OK;
     }
 
-  gdbg("Returning EINVAL\n");
+  lcderr("ERROR: Returning EINVAL\n");
   return -EINVAL;
 }
 #endif
@@ -1200,8 +1278,8 @@ static void sam_dmasetup(int lid, struct sam_dscr_s *dscr, uint8_t *buffer)
       /* 31.6.2.2 Programming a DMA Channel:
        *
        * 4. Write the DSCR.CHXNEXT register with the address location
-       * of the descriptor structure and set DFETCH field of the
-       * DSCR.CHXCTRL register to one.
+       *    of the descriptor structure and set DFETCH field of the
+       *    DSCR.CHXCTRL register to one.
        */
 
       sam_putreg(g_layeraddr[lid], physbuffer);
@@ -1209,14 +1287,14 @@ static void sam_dmasetup(int lid, struct sam_dscr_s *dscr, uint8_t *buffer)
       sam_putreg(g_layernext[lid], physdscr);
     }
 
-#if defined(CONFIG_DEBUG_GRAPHICS) && defined(CONFIG_DEBUG_VERBOSE)
+#if defined(CONFIG_DEBUG_GRAPHICS) && defined(CONFIG_DEBUG_INFO)
   /* Dump the DMA setup */
 
-  gvdbg("DMA descriptor:   addr=%08x ctrl=%08x next=%08x\n",
-        dscr->addr, dscr->ctrl, dscr->next);
-  gvdbg("DMA registers[%d]: head=%08x addr=%08x ctrl=%08x next=%08x\n",
-        lid, sam_getreg(g_layerhead[lid]), sam_getreg(g_layeraddr[lid]),
-        sam_getreg(g_layerctrl[lid]), sam_getreg(g_layernext[lid]));
+  lcdinfo("DMA descriptor:   addr=%08x ctrl=%08x next=%08x\n",
+          dscr->addr, dscr->ctrl, dscr->next);
+  lcdinfo("DMA registers[%d]: head=%08x addr=%08x ctrl=%08x next=%08x\n",
+          lid, sam_getreg(g_layerhead[lid]), sam_getreg(g_layeraddr[lid]),
+          sam_getreg(g_layerctrl[lid]), sam_getreg(g_layernext[lid]));
 #endif
 }
 
@@ -1297,8 +1375,8 @@ static int sam_setclut(struct sam_layer_s *layer,
   unsigned int end;
   int i;
 
-  gvdbg("layer=%d cmap=%p first=%d len=%d\n",
-        layer->lid, cmap, cmap->first, cmap->len);
+  lcdinfo("layer=%d cmap=%p first=%d len=%d\n",
+          layer->lid, cmap, cmap->first, cmap->len);
 
   DEBUGASSERT(layer && cmap);
 
@@ -1309,7 +1387,7 @@ static int sam_setclut(struct sam_layer_s *layer,
 
   if (offset >= SAM_LCDC_NCLUT)
     {
-      gdbg("ERROR: CLUT offset is out of range: %d\n", offset);
+      lcderr("ERROR: CLUT offset is out of range: %d\n", offset);
       return -EINVAL;
     }
 
@@ -1328,7 +1406,7 @@ static int sam_setclut(struct sam_layer_s *layer,
   end = offset + len;
   if (end > (layer->offset + layer->nclut))
     {
-      layer->nclut = end - layer->offset;offset
+      layer->nclut = end - layer->offset;
     }
 
   /* Get the offset address to the first CLUT entry to modify */
@@ -1378,7 +1456,7 @@ static int sam_getclut(struct sam_layer_s *layer,
   uintptr_t regval;
   int i;
 
-  gvdbg("layer=%d cmap=%p first=%d len=%d\n",
+  lcdinfo("layer=%d cmap=%p first=%d len=%d\n",
         layer->lid, cmap, layer->offset, layer->nclut);
 
   DEBUGASSERT(layer && cmap);
@@ -1432,7 +1510,7 @@ static void sam_pio_config(void)
 {
   int i;
 
-  gvdbg("Configuring pins\n");
+  lcdinfo("Configuring pins\n");
 
   /* Configure each pin */
 
@@ -1718,6 +1796,7 @@ static void sam_heo_disable(void)
  *
  ****************************************************************************/
 
+#ifdef SAMA5_HAVE_LCDC_HCRCH
 static void sam_hcr_disable(void)
 {
   struct sam_dscr_s *dscr;
@@ -1762,6 +1841,7 @@ static void sam_hcr_disable(void)
 
   while ((sam_getreg(SAM_LCDC_HCRCHSR) & LCDC_HCRCHSR_CH) != 0);
 }
+#endif
 
 /****************************************************************************
  * Name: sam_lcd_disable
@@ -1779,7 +1859,9 @@ static void sam_lcd_disable(void)
   sam_ovr1_disable();
   sam_ovr2_disable();
   sam_heo_disable();
+#ifdef SAMA5_HAVE_LCDC_HCRCH
   sam_hcr_disable();
+#endif
 
   /* Disable DMA path */
 
@@ -1982,7 +2064,7 @@ static void sam_layer_color(void)
              LCDC_BASECFG1_16BPP_RGB565);
 
 #else
-#  error Support for this resolution is not yet supported
+#  error Support for this resolution is not yet implemented
 #endif
 
 #ifdef CONFIG_SAMA5_LCDC_OVR1
@@ -2011,7 +2093,7 @@ static void sam_layer_color(void)
              LCDC_OVR1CFG9_GA(0xff) | LCDC_OVR1CFG9_GAEN);
 
 #  else
-#    error Support for this resolution is not yet supported
+#    error Support for this resolution is not yet implemented
 #  endif
 #endif
 
@@ -2041,7 +2123,7 @@ static void sam_layer_color(void)
              LCDC_OVR2CFG9_GA(0xff) | LCDC_OVR2CFG9_GAEN);
 
 #  else
-#    error Support for this resolution is not yet supported
+#    error Support for this resolution is not yet implemented
 #  endif
 #endif
 
@@ -2071,10 +2153,11 @@ static void sam_layer_color(void)
              LCDC_HEOCFG9_GA(0xff) | LCDC_HEOCFG9_GAEN);
 
 #  else
-#    error Support for this resolution is not yet supported
+#    error Support for this resolution is not yet implemented
 #  endif
 #endif
 
+#ifdef SAMA5_HAVE_LCDC_HCRCH
 #ifdef CONFIG_SAMA5_LCDC_HCR
   /* Hardware Cursor color configuration, GA 0xff, Key #000000 */
 
@@ -2104,8 +2187,9 @@ static void sam_layer_color(void)
              LCDC_HCRCFG9_GA(0xff) | LCDC_HCRCFG9_GAEN);
 
 #  else
-#    error Support for this resolution is not yet supported
+#    error Support for this resolution is not yet implemented
 #  endif
+#endif
 #endif
 }
 
@@ -2180,6 +2264,7 @@ static void sam_lcd_enable(void)
   regval = LCDC_LCDCFG5_HSPOL | LCDC_LCDCFG5_VSPOL |
            LCDC_LCDCFG5_VSPDLYS | LCDC_LCDCFG5_DISPDLY |
            LCDC_LCDCFG5_GUARDTIME(BOARD_LCDC_GUARDTIME);
+
 #if BOARD_LCDC_OUTPUT_BPP == 16
   regval |= LCDC_LCDCFG5_MODE_12BPP;
 #elif BOARD_LCDC_OUTPUT_BPP == 16
@@ -2191,6 +2276,7 @@ static void sam_lcd_enable(void)
 #else
 #  error Unknown or undefined output resolution
 #endif
+
   sam_putreg(SAM_LCDC_LCDCFG5, regval);
 
   regval = BOARD_LCDC_PWMPS | BOARD_LCDC_PWMPOL |
@@ -2273,12 +2359,14 @@ static void sam_layer_configure(void)
   LAYER_HEO.framebuffer  = (uint8_t *)SAMA5_LCDC_BUFFER_HEO;
 #endif
 
+#ifdef SAMA5_HAVE_LCDC_HCRCH
   memset(&LAYER_HCR, 0, sizeof(struct sam_layer_s));
   LAYER_HCR.dscr         = (struct sam_dscr_s *)SAMA5_LCDC_HCR_DSCR;
   LAYER_HCR.lid          = LCDC_LAYER_HCR;
 #ifdef CONFIG_SAMA5_LCDC_HCR
   LAYER_HCR.framebuffer  = (uint8_t *)SAMA5_LCDC_BUFFER_HCR;
 #endif
+#endif /* SAMA5_HAVE_LCDC_HCRCH */
 }
 
 /****************************************************************************
@@ -2360,7 +2448,7 @@ static void sam_show_layer(struct sam_layer_s *layer,
       imgh = 1;
     }
 
-  /* Set display buffer and mode setup*/
+  /* Set display buffer and mode setup */
 
   bytespp   = (uint32_t)layer->bpp >> 3;
   bprow     = imgw * (uint32_t)layer->bpp;
@@ -2456,7 +2544,7 @@ static void sam_show_layer(struct sam_layer_s *layer,
       /* Pointer to Right,Top (x1,y0) */
 
       buffer = (uint8_t *)
-        ((uint32_t)layer->framebuffer + bytespp*(imgw - 1));
+        ((uint32_t)layer->framebuffer + bytespp * (imgw - 1));
     }
 
   /* Y mirror: Left,Down -> Right,Top */
@@ -2488,7 +2576,7 @@ static void sam_show_layer(struct sam_layer_s *layer,
       /* Pointer to Left,Down (x0,y1) */
 
       buffer = (uint8_t *)
-        ((uintptr_t)layer->framebuffer + (bytesprow+padding)*(imgh-1));
+        ((uintptr_t)layer->framebuffer + (bytesprow + padding) * (imgh - 1));
     }
 
   /* X,Y mirror: Right,Top -> Left,Down */
@@ -2521,8 +2609,8 @@ static void sam_show_layer(struct sam_layer_s *layer,
 
       buffer = (uint8_t *)
         ((uint32_t)layer->framebuffer +
-         (bytesprow + padding)*(imgh - 1) +
-         bytespp*(imgw -1 ));
+         (bytesprow + padding) * (imgh - 1) +
+         bytespp * (imgw - 1));
     }
 
   /* Rotate  90: Down,Left -> Top,Right (with w,h swap) */
@@ -2549,13 +2637,13 @@ static void sam_show_layer(struct sam_layer_s *layer,
       /* X ++ as rows */
 
       regaddr = g_layerstride[lid];
-      sam_putreg(regaddr, (bytesprow + padding)*(imgh - 1));
+      sam_putreg(regaddr, (bytesprow + padding) * (imgh - 1));
 
       /* Pointer to Bottom,Left */
 
       buffer = (uint8_t *)
         ((uint32_t)layer->framebuffer +
-         (bytesprow + padding)*(imgh - 1));
+         (bytesprow + padding) * (imgh - 1));
     }
 
   /* Rotate 270: Top,Right -> Down,Left (with w,h swap) */
@@ -2582,12 +2670,12 @@ static void sam_show_layer(struct sam_layer_s *layer,
       /* X -- as rows */
 
       regaddr = g_layerstride[lid];
-      sam_putreg(regaddr, 0 - 2*bytespp - (bytesprow + padding)*(imgh - 1));
+      sam_putreg(regaddr, 0 - 2*bytespp - (bytesprow + padding) * (imgh - 1));
 
       /* Pointer to top right */
 
       buffer = (uint8_t *)
-        ((uintptr_t)layer->framebuffer + bytespp*(imgw - 1));
+        ((uintptr_t)layer->framebuffer + bytespp * (imgw - 1));
     }
 
   /* Mirror X then Rotate 90: Down,Right -> Top,Left */
@@ -2614,20 +2702,20 @@ static void sam_show_layer(struct sam_layer_s *layer,
       /* X -- as rows */
 
       regaddr = g_layerstride[lid];
-      sam_putreg(regaddr, 0 - 2*bytespp + (bytesprow + padding)*(imgh - 1));
+      sam_putreg(regaddr, 0 - 2 * bytespp + (bytesprow + padding) * (imgh - 1));
 
       /* Pointer to down right (x1,y1) */
 
       buffer = (uint8_t *)
         ((uintptr_t)layer->framebuffer +
-         (bytesprow+padding)*(imgh - 1) +
-         (bytespp)*(imgw - 1));
+         (bytesprow + padding) * (imgh - 1) +
+         (bytespp) * (imgw - 1));
     }
 
   /* Mirror Y then Rotate 90: Top,Left -> Down,Right */
 
-  else if ((!rightleft &&  bottomup && layer->rotation ==  90)
-          ||(rightleft && !bottomup && layer->rotation == LCDC_ROT_270))
+  else if ((!rightleft &&  bottomup && layer->rotation ==  90) ||
+           ( rightleft && !bottomup && layer->rotation == LCDC_ROT_270))
     {
       /* No rotation optimization */
 
@@ -2648,7 +2736,7 @@ static void sam_show_layer(struct sam_layer_s *layer,
       /* X ++ as rows */
 
       regaddr = g_layerstride[lid];
-      sam_putreg(regaddr, 0 - (bytesprow + padding)*(imgh - 1));
+      sam_putreg(regaddr, 0 - (bytesprow + padding) * (imgh - 1));
 
       /* Pointer to top left (x0,y0) */
     }
@@ -2802,20 +2890,28 @@ static void sam_show_hcr(void)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: sam_fbinitialize
+ * Name: up_fbinitialize
  *
  * Description:
- *   Initialize the framebuffer video hardware
+ *   Initialize the framebuffer video hardware associated with the display.
+ *
+ * Input parameters:
+ *   display - In the case of hardware with multiple displays, this
+ *     specifies the display.  Normally this is zero.
+ *
+ * Returned Value:
+ *   Zero is returned on success; a negated errno value is returned on any
+ *   failure.
  *
  ****************************************************************************/
 
-int up_fbinitialize(void)
+int up_fbinitialize(int display)
 {
 #if defined(CONFIG_SAMA5_LCDC_OVR1) && defined(CONFIG_SAMA5_LCDC_HEO)
   uint32_t regval;
 #endif
 
-  gvdbg("Entry\n");
+  lcdinfo("Entry\n");
 
   /* Configure layer layer structures, DMA descriptor memory, and
    * framebuffers
@@ -2831,7 +2927,7 @@ int up_fbinitialize(void)
 
   sam_pio_config();
 
-  gvdbg("Configuring the LCD controller\n");
+  lcdinfo("Configuring the LCD controller\n");
 
   /* Enable the LCD peripheral clock */
 
@@ -2859,7 +2955,7 @@ int up_fbinitialize(void)
 
   /* And turn the LCD on */
 
-  gvdbg("Enabling the display\n");
+  lcdinfo("Enabling the display\n");
   sam_lcd_enable();
 
   /* Display base layer */
@@ -2893,23 +2989,26 @@ int up_fbinitialize(void)
 }
 
 /****************************************************************************
- * Name: sam_fbgetvplane
+ * Name: up_fbgetvplane
  *
  * Description:
  *   Return a a reference to the framebuffer object for the specified video
- *   plane.
+ *   plane of the specified plane.  Many OSDs support multiple planes of video.
  *
  * Input parameters:
- *   None
+ *   display - In the case of hardware with multiple displays, this
+ *     specifies the display.  Normally this is zero.
+ *   vplane - Identifies the plane being queried.
  *
- * Returned value:
- *   Reference to the framebuffer object (NULL on failure)
+ * Returned Value:
+ *   A non-NULL pointer to the frame buffer access structure is returned on
+ *   success; NULL is returned on any failure.
  *
- ***************************************************************************/
+ ****************************************************************************/
 
-struct fb_vtable_s *up_fbgetvplane(int vplane)
+FAR struct fb_vtable_s *up_fbgetvplane(int display, int vplane)
 {
-  gvdbg("vplane: %d\n", vplane);
+  lcdinfo("vplane: %d\n", vplane);
   if (vplane == 0)
     {
       return (struct fb_vtable_s *)&g_base_vtable;
@@ -2921,15 +3020,21 @@ struct fb_vtable_s *up_fbgetvplane(int vplane)
 }
 
 /****************************************************************************
- * Name: fb_uninitialize
+ * Name: up_fbuninitialize
  *
  * Description:
- *   Uninitialize the framebuffer driver.  Bad things will happen if you
- *   call this without first calling fb_initialize()!
+ *   Uninitialize the framebuffer support for the specified display.
+ *
+ * Input Parameters:
+ *   display - In the case of hardware with multiple displays, this
+ *     specifies the display.  Normally this is zero.
+ *
+ * Returned Value:
+ *   None
  *
  ****************************************************************************/
 
-void fb_uninitialize(void)
+void up_fbuninitialize(int display)
 {
   /* Disable the LCD controller */
 
@@ -2950,25 +3055,25 @@ void fb_uninitialize(void)
 void sam_lcdclear(nxgl_mxpixel_t color)
 {
 #if SAMA5_LCDC_BASE_BPP == 16
-  uint16_t *dest = (uint16_t*)LAYER_BASE.framebuffer;
+  uint16_t *dest = (uint16_t *)LAYER_BASE.framebuffer;
   int i;
 
-  gvdbg("Clearing display: BPP=16 color=%04x framebuffer=%08x size=%d\n",
-        color, LAYER_BASE.framebuffer, SAMA5_BASE_FBSIZE);
+  lcdinfo("Clearing display: BPP=16 color=%04x framebuffer=%08x size=%d\n",
+          color, LAYER_BASE.framebuffer, SAMA5_BASE_FBSIZE);
 
   for (i = 0; i < SAMA5_BASE_FBSIZE; i += sizeof(uint16_t))
     {
       *dest++ = (uint16_t)color;
     }
 #elif SAMA5_LCDC_BASE_BPP == 24
-  uint8_t *dest = (uint8_t*)LAYER_BASE.framebuffer;
+  uint8_t *dest = (uint8_t *)LAYER_BASE.framebuffer;
   uint8_t r;
   uint8_t g;
   uint8_t b;
   int i;
 
-  gvdbg("Clearing display: BPP=24 color=%06x framebuffer=%08x size=%d\n",
-        color, LAYER_BASE.framebuffer, SAMA5_BASE_FBSIZE);
+  lcdinfo("Clearing display: BPP=24 color=%06x framebuffer=%08x size=%d\n",
+          color, LAYER_BASE.framebuffer, SAMA5_BASE_FBSIZE);
 
   b =  color        & 0xff;
   g = (color >> 8)  & 0xff;
@@ -2981,11 +3086,11 @@ void sam_lcdclear(nxgl_mxpixel_t color)
       *dest++ = r;
     }
 #elif SAMA5_LCDC_BASE_BPP == 32
-  uint32_t *dest = (uint32_t*)LAYER_BASE.framebuffer;
+  uint32_t *dest = (uint32_t *)LAYER_BASE.framebuffer;
   int i;
 
-  gvdbg("Clearing display: BPP=32 color=%08x framebuffer=%08x size=%d\n",
-        color, LAYER_BASE.framebuffer, SAMA5_BASE_FBSIZE);
+  lcdinfo("Clearing display: BPP=32 color=%08x framebuffer=%08x size=%d\n",
+          color, LAYER_BASE.framebuffer, SAMA5_BASE_FBSIZE);
 
   for (i = 0; i < SAMA5_BASE_FBSIZE; i += sizeof(uint32_t))
     {

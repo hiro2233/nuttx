@@ -52,7 +52,7 @@
 #include "mount.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #define TEST_USE_STAT         1
@@ -571,7 +571,11 @@ static void succeed_stat(const char *path)
  * Name: mount_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int mount_main(int argc, char *argv[])
+#endif
 {
   int  ret;
 

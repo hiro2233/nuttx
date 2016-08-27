@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/binfs/fs_binfs.c
  *
- *   Copyright (C) 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -60,10 +60,6 @@
 #if !defined(CONFIG_DISABLE_MOUNTPOINT) && defined(CONFIG_FS_BINFS)
 
 /****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
@@ -84,7 +80,8 @@ static int     binfs_rewinddir(FAR struct inode *mountpt,
 
 static int     binfs_bind(FAR struct inode *blkdriver, FAR const void *data,
                           FAR void **handle);
-static int     binfs_unbind(FAR void *handle, FAR struct inode **blkdriver);
+static int     binfs_unbind(FAR void *handle, FAR struct inode **blkdriver,
+                            unsigned int flags);
 static int     binfs_statfs(FAR struct inode *mountpt,
                             FAR struct statfs *buf);
 
@@ -92,14 +89,10 @@ static int     binfs_stat(FAR struct inode *mountpt, FAR const char *relpath,
                           FAR struct stat *buf);
 
 /****************************************************************************
- * Private Variables
+ * Public Data
  ****************************************************************************/
 
-/****************************************************************************
- * Public Variables
- ****************************************************************************/
-
-/* See fs_mount.c -- this structure is explicitly externed there.
+/* See fs_mount.c -- this structure is explicitly extern'ed there.
  * We use the old-fashioned kind of initializers so that this will compile
  * with any compiler.
  */
@@ -145,7 +138,7 @@ static int binfs_open(FAR struct file *filep, FAR const char *relpath,
 {
   int index;
 
-  fvdbg("Open '%s'\n", relpath);
+  finfo("Open '%s'\n", relpath);
 
   /* BINFS is read-only.  Any attempt to open with any kind of write
    * access is not permitted.
@@ -153,7 +146,7 @@ static int binfs_open(FAR struct file *filep, FAR const char *relpath,
 
   if ((oflags & O_WRONLY) != 0 || (oflags & O_RDONLY) == 0)
     {
-      fdbg("ERROR: Only O_RDONLY supported\n");
+      ferr("ERROR: Only O_RDONLY supported\n");
       return -EACCES;
     }
 
@@ -164,13 +157,13 @@ static int binfs_open(FAR struct file *filep, FAR const char *relpath,
   index = builtin_isavail(relpath);
   if (index < 0)
     {
-      fdbg("ERROR: Builting %s does not exist\n", relpath);
+      ferr("ERROR: Builting %s does not exist\n", relpath);
       return -ENOENT;
     }
 
   /* Save the index as the open-specific state in filep->f_priv */
 
-  filep->f_priv = (FAR void *)index;
+  filep->f_priv = (FAR void *)((uintptr_t)index);
   return OK;
 }
 
@@ -180,7 +173,7 @@ static int binfs_open(FAR struct file *filep, FAR const char *relpath,
 
 static int binfs_close(FAR struct file *filep)
 {
-  fvdbg("Closing\n");
+  finfo("Closing\n");
   return OK;
 }
 
@@ -192,7 +185,7 @@ static ssize_t binfs_read(FAR struct file *filep, char *buffer, size_t buflen)
 {
   /* Reading is not supported.  Just return end-of-file */
 
-  fvdbg("Read %d bytes from offset %d\n", buflen, filep->f_pos);
+  finfo("Read %d bytes from offset %d\n", buflen, filep->f_pos);
   return 0;
 }
 
@@ -204,7 +197,7 @@ static int binfs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 {
   int ret;
 
-  fvdbg("cmd: %d arg: %08lx\n", cmd, arg);
+  finfo("cmd: %d arg: %08lx\n", cmd, arg);
 
   /* Only one IOCTL command is supported */
 
@@ -222,7 +215,7 @@ static int binfs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         }
       else
         {
-          *ptr = builtin_getname((int)filep->f_priv);
+          *ptr = builtin_getname((int)((uintptr_t)filep->f_priv));
           ret = OK;
         }
     }
@@ -244,7 +237,7 @@ static int binfs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
 static int binfs_dup(FAR const struct file *oldp, FAR struct file *newp)
 {
-  fvdbg("Dup %p->%p\n", oldp, newp);
+  finfo("Dup %p->%p\n", oldp, newp);
 
   /* Copy the index from the old to the new file structure */
 
@@ -263,7 +256,7 @@ static int binfs_dup(FAR const struct file *oldp, FAR struct file *newp)
 static int binfs_opendir(struct inode *mountpt, const char *relpath,
                          struct fs_dirent_s *dir)
 {
-  fvdbg("relpath: \"%s\"\n", relpath ? relpath : "NULL");
+  finfo("relpath: \"%s\"\n", relpath ? relpath : "NULL");
 
   /* The requested directory must be the volume-relative "root" directory */
 
@@ -301,14 +294,14 @@ static int binfs_readdir(struct inode *mountpt, struct fs_dirent_s *dir)
        * special error -ENOENT
        */
 
-      fvdbg("Entry %d: End of directory\n", index);
+      finfo("Entry %d: End of directory\n", index);
       ret = -ENOENT;
     }
   else
     {
       /* Save the filename and file type */
 
-      fvdbg("Entry %d: \"%s\"\n", index, name);
+      finfo("Entry %d: \"%s\"\n", index, name);
       dir->fd_dir.d_type = DTYPE_FILE;
       strncpy(dir->fd_dir.d_name, name, NAME_MAX+1);
 
@@ -338,7 +331,7 @@ static int binfs_readdir(struct inode *mountpt, struct fs_dirent_s *dir)
 
 static int binfs_rewinddir(struct inode *mountpt, struct fs_dirent_s *dir)
 {
-  fvdbg("Entry\n");
+  finfo("Entry\n");
 
   dir->u.binfs.fb_index = 0;
   return OK;
@@ -358,7 +351,7 @@ static int binfs_rewinddir(struct inode *mountpt, struct fs_dirent_s *dir)
 static int binfs_bind(FAR struct inode *blkdriver, const void *data,
                       void **handle)
 {
-  fvdbg("Entry\n");
+  finfo("Entry\n");
   return OK;
 }
 
@@ -370,9 +363,10 @@ static int binfs_bind(FAR struct inode *blkdriver, const void *data,
  *
  ****************************************************************************/
 
-static int binfs_unbind(void *handle, FAR struct inode **blkdriver)
+static int binfs_unbind(FAR void *handle, FAR struct inode **blkdriver,
+                        unsigned int flags)
 {
-  fvdbg("Entry\n");
+  finfo("Entry\n");
   return OK;
 }
 
@@ -385,7 +379,7 @@ static int binfs_unbind(void *handle, FAR struct inode **blkdriver)
 
 static int binfs_statfs(struct inode *mountpt, struct statfs *buf)
 {
-  fvdbg("Entry\n");
+  finfo("Entry\n");
 
   /* Fill in the statfs info */
 
@@ -408,7 +402,7 @@ static int binfs_statfs(struct inode *mountpt, struct statfs *buf)
 
 static int binfs_stat(struct inode *mountpt, const char *relpath, struct stat *buf)
 {
-  fvdbg("Entry\n");
+  finfo("Entry\n");
 
   /* The requested directory must be the volume-relative "root" directory */
 
@@ -423,13 +417,14 @@ static int binfs_stat(struct inode *mountpt, const char *relpath, struct stat *b
 
       /* It's a execute-only file name */
 
-      buf->st_mode = S_IFREG|S_IXOTH|S_IXGRP|S_IXUSR;
+      buf->st_mode = S_IFREG | S_IXOTH | S_IXGRP | S_IXUSR;
     }
   else
     {
       /* It's a read/execute-only directory name */
 
-      buf->st_mode = S_IFDIR|S_IROTH|S_IRGRP|S_IRUSR|S_IXOTH|S_IXGRP|S_IXUSR;
+      buf->st_mode = S_IFDIR | S_IROTH | S_IRGRP | S_IRUSR | S_IXOTH |
+                     S_IXGRP | S_IXUSR;
     }
 
   /* File/directory size, access block size */

@@ -51,6 +51,7 @@ fi
 # toolchain under windows.  You will also have to edit this if you install
 # the RIDE toolchain in any other location
 #export TOOLCHAIN_BIN="/cygdrive/c/Program Files (x86)/Raisonance/Ride/arm-gcc/bin"
+#export TOOLCHAIN_BIN="/cygdrive/c/Users/MyName/MentorGraphics/Sourcery_CodeBench_Lite_for_ARM_EABI/bin"
 
 # This is the Cygwin path to the location where I installed the CodeSourcery
 # toolchain under windows.  You will also have to edit this if you install
@@ -67,7 +68,7 @@ export TOOLCHAIN_BIN="/cygdrive/c/Program Files (x86)/CodeSourcery/Sourcery G++ 
 
 # This is the Cygwin path to the location where I build the buildroot
 # toolchain.
-#export TOOLCHAIN_BIN="${WD}/../misc/buildroot/build_arm_nofpu/staging_dir/bin"
+#export TOOLCHAIN_BIN="${WD}/../buildroot/build_arm_nofpu/staging_dir/bin"
 
 # Add the path to the toolchain to the PATH varialble
 export PATH="${TOOLCHAIN_BIN}:/sbin:/usr/sbin:${PATH_ORIG}"

@@ -44,7 +44,7 @@
 #include <time.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* mode_t bit settings (most of these do not apply to Nuttx). This assumes
@@ -71,13 +71,16 @@
 #define S_ISGID     0002000 /* Set group ID bit */
 #define S_ISUID     0004000 /* Set UID bit */
 
-#define S_IFIFO     0010000 /* File type bites */
+#define S_IFIFO     0010000 /* File type bytes */
 #define S_IFCHR     0020000
 #define S_IFDIR     0040000
 #define S_IFBLK     0060000
 #define S_IFREG     0100000
 #define S_IFLNK     0120000
 #define S_IFSOCK    0140000
+#define S_IFMQ      0150000
+#define S_IFSEM     0160000
+#define S_IFSHM     0170000
 #define S_IFMT      0170000
 
 /* File type macros that operate on an instance of mode_t */
@@ -89,13 +92,17 @@
 #define S_ISBLK(m)  (((m) & S_IFMT) == S_IFBLK)
 #define S_ISFIFO(m) (((m) & S_IFMT) == S_IFIFO)
 #define S_ISSOCK(m) (((m) & S_IFMT) == S_IFSOCK)
+#define S_ISMQ(m)   (((m) & S_IFMT) == S_IFMQ)
+#define S_ISSSEM(m) (((m) & S_IFMT) == S_IFSEM)
+#define S_ISSHM(m)  (((m) & S_IFMT) == S_IFSHM)
 
 /****************************************************************************
  * Type Definitions
  ****************************************************************************/
 
-/* This is the simplified struct stat as returned by fstat(). This structure
- * provides information about a specific file or directory in the file system.
+/* This is the simplified struct stat as returned by stat() and fstat().
+ * This structure provides information about a specific file or directory in
+ * the file system.
  */
 
 struct stat
@@ -110,21 +117,24 @@ struct stat
 };
 
 /****************************************************************************
- * Global Function Prototypes
+ * Public Function Prototypes
  ****************************************************************************/
 
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
 
-EXTERN int mkdir(FAR const char *pathname, mode_t mode);
-EXTERN int mkfifo(FAR const char *pathname, mode_t mode);
-EXTERN int stat(const char *path, FAR struct stat *buf);
-EXTERN int fstat(int fd, FAR struct stat *buf);
+int mkdir(FAR const char *pathname, mode_t mode);
+int mkfifo(FAR const char *pathname, mode_t mode);
+int stat(const char *path, FAR struct stat *buf);
+#if 0 /* Not yet supported */
+int fstat(int fd, FAR struct stat *buf);
+#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

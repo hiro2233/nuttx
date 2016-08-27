@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 if ARCH_BOARD_SAMA5D3X_EK
@@ -51,7 +51,7 @@ config SAMA5D3xEK_NOREDLED
 config SAMA5D3xEK_NOR_MAIN
 	bool "Build nor_main"
 	default n
-	depends on SAMA5_BOOT_ISRAM
+	depends on SAMA5_BOOT_ISRAM && BUILD_FLAT
 	---help---
 		nor_main is a tiny program that runs in ISRAM.  nor_main will enable
 		NOR flash then either (1) jump to the program in NOR flash or (2)
@@ -64,11 +64,11 @@ config SAMA5D3xEK_NOR_START
 	---help---
 		The default behavior of the NOR boot program is to initialize the
 		NOR FLASH at CS0, then patiently wait for you to break into the
-		program with GDB.  An alternative behvior is enabled with this
+		program with GDB.  An alternative behavior is enabled with this
 		option:  If SAMA5D3xEK_NOR_START is defined, then it will not wait but
 		will, instead, immediately start the program in NOR FLASH.
 
-config SAMA5_NAND_AUTOMOUNT
+config SAMA5D3XEK_NAND_BLOCKMOUNT
 	bool "NAND FLASH auto-mount"
 	default n
 	depends on NSH_ARCHINIT && SAMA5_EBICS3_NAND
@@ -78,7 +78,7 @@ config SAMA5_NAND_AUTOMOUNT
 choice
 	prompt "NAND FLASH configuration"
 	default SAMA5D3xEK_NAND_NXFFS
-	depends on SAMA5_NAND_AUTOMOUNT
+	depends on SAMA5D3XEK_NAND_BLOCKMOUNT
 
 config SAMA5D3xEK_NAND_FTL
 	bool "Create NAND FLASH block driver"
@@ -107,7 +107,7 @@ config SAMA5D3xEK_NAND_NXFFS
 
 endchoice # NAND FLASH configuration
 
-config SAMA5D3xEK_AT25_AUTOMOUNT
+config SAMA5D3xEK_AT25_BLOCKMOUNT
 	bool "AT25 serial FLASH auto-mount"
 	default n
 	depends on NSH_ARCHINIT && SAMA5_SPI0 && MTD_AT25
@@ -117,7 +117,7 @@ config SAMA5D3xEK_AT25_AUTOMOUNT
 choice
 	prompt "AT25 serial FLASH configuration"
 	default SAMA5D3xEK_AT25_FTL
-	depends on SAMA5D3xEK_AT25_AUTOMOUNT
+	depends on SAMA5D3xEK_AT25_BLOCKMOUNT
 
 config SAMA5D3xEK_AT25_FTL
 	bool "Create AT25 Serial FLASH block driver"
@@ -137,7 +137,7 @@ config SAMA5D3xEK_AT25_NXFFS
 
 endchoice # AT25 serial FLASH configuration
 
-config SAMA5D3xEK_AT24_AUTOMOUNT
+config SAMA5D3xEK_AT24_BLOCKMOUNT
 	bool "AT24 Serial EEPROM auto-mount"
 	default n
 	depends on NSH_ARCHINIT && SAMA5_TWI0 && MTD_AT24XX
@@ -158,7 +158,7 @@ config SAMA5D3xEK_AT24_AUTOMOUNT
 choice
 	prompt "AT24 serial EPPROM configuration"
 	default SAMA5D3xEK_AT24_FTL
-	depends on SAMA5D3xEK_AT24_AUTOMOUNT
+	depends on SAMA5D3xEK_AT24_BLOCKMOUNT
 
 config SAMA5D3xEK_AT24_FTL
 	bool "Create AT24 block driver"
@@ -177,6 +177,17 @@ config SAMA5D3xEK_AT24_NXFFS
 		NXFFS is that it can be very slow.
 
 endchoice # AT24 serial EPPROM configuration
+
+config SAMA5D3xEK_USBHOST_STACKSIZE
+	int "USB host waiter stack size"
+	default 1536 if USBHOST_HUB
+	default 1024 if !USBHOST_HUB
+	depends on USBHOST
+
+config SAMA5D3xEK_USBHOST_PRIO
+	int "USB host waiter task priority"
+	default 100
+	depends on USBHOST
 
 config SAMA5D3xEK_TSD_DEVMINOR
 	int "Touchscreen device minor"
@@ -247,4 +258,35 @@ config SAMA5D3xEK_OV2640_DEMO
 		Enable the SAMA5 OV2640 camera demo
 
 endif # VIDEO_OV2640
+
+config SAMA5D3xEK_SLOWCLOCK
+	bool
+	default y if SCHED_TICKLESS
+	default n if !SCHED_TICKLESS
+
+if AUDIO_WM8904
+
+config SAMA5D3xEK_WM8904_I2CFREQUENCY
+	int "WM8904 I2C Frequency"
+	default 400000
+	range 1 400000
+	---help---
+		This option selects the I2C frequency to use when communicating with
+		the WM8904 device.  The default, 400KHz, is the maximum supported by
+		the WM8904.  If you have problems communicating with the WM8904,
+		then you might want to try lowering this rate.
+
+choice
+	prompt "WM8904 MCLK source"
+	default SAMA5D3xEK_WM8904_SRCMAIN
+
+config SAMA5D3xEK_WM8904_SRCMAIN
+	bool "Main Clock (12MHz)"
+	select SAMA5D3xEK_SLOWCLOCK
+
+config SAMA5D3xEK_WM8904_SRCSCK
+	bool "Slow XTAL (32.768KHz)"
+
+endchoice # WM8904 MCLK source
+endif # AUDIO_WM8904
 endif # ARCH_BOARD_SAMA5D3X_EK

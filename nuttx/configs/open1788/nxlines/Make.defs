@@ -41,13 +41,13 @@ ifeq ($(WINTOOL),y)
   # Windows-native toolchains
   DIRLINK = $(TOPDIR)$(DELIM)tools$(DELIM)copydir.sh
   DIRUNLINK = $(TOPDIR)$(DELIM)tools$(DELIM)unlink.sh
-  MKDEP = $(TOPDIR)$(DELIM)tools$(DELIM)mknulldeps.sh
+  MKDEP = $(TOPDIR)$(DELIM)tools$(DELIM)mkwindeps.sh
   ARCHINCLUDES = -I. -isystem "${shell cygpath -w $(TOPDIR)$(DELIM)include}"
   ARCHXXINCLUDES = -I. -isystem "${shell cygpath -w $(TOPDIR)$(DELIM)include}" -isystem "${shell cygpath -w $(TOPDIR)$(DELIM)include$(DELIM)cxx}"
   ARCHSCRIPT = -T "${shell cygpath -w $(TOPDIR)$(DELIM)configs$(DELIM)$(CONFIG_ARCH_BOARD)$(DELIM)scripts$(DELIM)ld.script}"
 else
   # Linux/Cygwin-native toolchain
-  MKDEP = $(TOPDIR)$(DELIM)tools$(DELIM)mkdeps.sh
+  MKDEP = $(TOPDIR)$(DELIM)tools$(DELIM)mkdeps$(HOSTEXEEXT)
   ARCHINCLUDES = -I. -isystem $(TOPDIR)$(DELIM)include
   ARCHXXINCLUDES = -I. -isystem $(TOPDIR)$(DELIM)include -isystem $(TOPDIR)$(DELIM)include$(DELIM)cxx
   ARCHSCRIPT = -T$(TOPDIR)$(DELIM)configs$(DELIM)$(CONFIG_ARCH_BOARD)$(DELIM)scripts$(DELIM)ld.script
@@ -74,9 +74,9 @@ ifneq ($(CONFIG_DEBUG_NOOPT),y)
 endif
 
 ARCHCFLAGS = -fno-builtin
-ARCHCXXFLAGS = -fno-builtin -fno-exceptions
-ARCHWARNINGS = -Wall -Wstrict-prototypes -Wshadow
-ARCHWARNINGSXX = -Wall -Wshadow
+ARCHCXXFLAGS = -fno-builtin -fno-exceptions -fcheck-new
+ARCHWARNINGS = -Wall -Wstrict-prototypes -Wshadow -Wundef
+ARCHWARNINGSXX = -Wall -Wshadow -Wundef
 ARCHDEFINES =
 ARCHPICFLAGS = -fpic -msingle-pic-base -mpic-register=r10
 
@@ -91,6 +91,7 @@ NXFLATLDFLAGS1 = -r -d -warn-common
 NXFLATLDFLAGS2 = $(NXFLATLDFLAGS1) -T$(TOPDIR)$(DELIM)binfmt$(DELIM)libnxflat$(DELIM)gnu-nxflat-pcrel.ld -no-check-sections
 LDNXFLATFLAGS = -e main -s 2048
 
+ASMEXT = .S
 OBJEXT = .o
 LIBEXT = .a
 EXEEXT =
@@ -105,6 +106,6 @@ endif
 
 HOSTCC = gcc
 HOSTINCLUDES = -I.
-HOSTCFLAGS = -Wall -Wstrict-prototypes -Wshadow -g -pipe
+HOSTCFLAGS = -Wall -Wstrict-prototypes -Wshadow -Wundef -g -pipe
 HOSTLDFLAGS =
 

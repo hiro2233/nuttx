@@ -51,9 +51,9 @@
 
 static void free_getprogmeminfo(struct mallinfo * mem)
 {
-  uint16_t page = 0, stpage = 0xFFFF;
-  uint16_t pagesize = 0;
-  int status;
+  size_t page = 0, stpage = 0xFFFF;
+  size_t pagesize = 0;
+  ssize_t status;
 
   mem->arena    = 0;
   mem->fordblks = 0;
@@ -97,7 +97,11 @@ static void free_getprogmeminfo(struct mallinfo * mem)
  * Public Functions
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int free_main(int argc, char **argv)
+#endif
 {
   struct mallinfo data;
   struct mallinfo prog;

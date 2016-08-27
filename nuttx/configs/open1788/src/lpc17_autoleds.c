@@ -1,8 +1,7 @@
 /****************************************************************************
  * configs/open1788/src/lpc17_autoleds.c
- * arch/arm/src/board/lpc17_autoleds.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,6 +43,7 @@
 #include <stdbool.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -54,7 +54,7 @@
 #include "open1788.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* If CONFIG_ARCH_LEDS is not defined, then the user can control the LEDs in
  * any way.  The following definitions are used to access individual LEDs.
@@ -64,7 +64,7 @@
  * LED3 -- Connected to P1[13]
  * LED4 -- Connected to P4[27]
  *
- * These LEDs are connecte to ground so a high output value will illuminate them.
+ * These LEDs are connected to ground so a high output value will illuminate them.
  *
  * If CONFIG_ARCH_LEDs is defined, then NuttX will control the four LEDs
  * on the WaveShare Open1788K.  The following definitions describe how NuttX
@@ -75,7 +75,7 @@
  *   LED_HEAPALLOCATE           1  ON   OFF  OFF  OFF
  *   LED_IRQSENABLED            2  OFF   ON  OFF  OFF
  *   LED_STACKCREATED           3  ON    ON  OFF  OFF
- *   LED_INIRQ                  4  LED3 glows, on while in interupt
+ *   LED_INIRQ                  4  LED3 glows, on while in interrupt
  *   LED_SIGNAL                 4  LED3 glows, on while in signal handler
  *   LED_ASSERTION              4  LED3 glows, on while in assertion
  *   LED_PANIC                  4  LED3 Flashes at 2Hz
@@ -134,25 +134,9 @@
 #define LED_IDLE_OFF_SETBITS         ((OPEN1788_LED4) << OFF_SETBITS_SHIFT)
 #define LED_IDLE_OFF_CLRBITS         ((0) << OFF_CLRBITS_SHIFT)
 
-/* CONFIG_DEBUG_LEDS enables debug output from this file (needs CONFIG_DEBUG
- * with CONFIG_DEBUG_VERBOSE too)
- */
-
-#ifdef CONFIG_DEBUG_LEDS
-#  define leddbg lldbg
-#  ifdef CONFIG_DEBUG_VERBOSE
-#    define ledvdbg lldbg
-#  else
-#    define ledvdbg(x...)
-#  endif
-#else
-#  define leddbg(x...)
-#  define ledvdbg(x...)
-#endif
-
 /* Dump GPIO registers */
 
-#if defined(CONFIG_DEBUG_VERBOSE) && defined(CONFIG_DEBUG_LEDS)
+#ifdef CONFIG_DEBUG_LEDS_INFO
 #  define led_dumpgpio(m) lpc17_dumpgpio(???, m)
 #else
 #  define led_dumpgpio(m)
@@ -248,10 +232,10 @@ static void led_setonoff(unsigned int bits)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_led_initialize
+ * Name: board_autoled_initialize
  ****************************************************************************/
 
-void board_led_initialize(void)
+void board_autoled_initialize(void)
 {
   /* Configure LED1-4 GPIOs for output */
 
@@ -262,19 +246,19 @@ void board_led_initialize(void)
 }
 
 /****************************************************************************
- * Name: board_led_on
+ * Name: board_autoled_on
  ****************************************************************************/
 
-void board_led_on(int led)
+void board_autoled_on(int led)
 {
   led_setonoff(ON_BITS(g_ledbits[led]));
 }
 
 /****************************************************************************
- * Name: board_led_off
+ * Name: board_autoled_off
  ****************************************************************************/
 
-void board_led_off(int led)
+void board_autoled_off(int led)
 {
   led_setonoff(OFF_BITS(g_ledbits[led]));
 }

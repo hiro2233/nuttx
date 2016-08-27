@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sama5/sam3u_dmac.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,12 +48,11 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
-#include <arch/irq.h>
 
 #include "up_arch.h"
 #include "cache.h"
 #include "up_internal.h"
-#include "os_internal.h"
+#include "sched/sched.h"
 
 #include "chip.h"
 #include "sam_dmac.h"
@@ -658,7 +657,7 @@ static uint8_t sam_channel(uint8_t pid, const struct sam_pidmap_s *table,
         }
     }
 
-  dmadbg("No channel found for pid %d\n", pid);
+  dmaerr("ERROR: No channel found for pid %d\n", pid);
   DEBUGPANIC();
   return 0x3f;
 }
@@ -1365,7 +1364,7 @@ sam_allocdesc(struct sam_dmach_s *dmach, struct dma_linklist_s *prev,
    * Obviously setting it to zero would break that usage.
    */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   if (saddr != 0)
 #endif
     {
@@ -1426,7 +1425,7 @@ sam_allocdesc(struct sam_dmach_s *dmach, struct dma_linklist_s *prev,
                    * via AHB IF0.
                    */
 
-                  prev->dscr = (uint32_t)desc;
+                  prev->dscr = (uint32_t)sam_physramaddr((uintptr_t)desc);
                 }
 
               /* In any event, this is the new tail of the list.  The source
@@ -1440,7 +1439,7 @@ sam_allocdesc(struct sam_dmach_s *dmach, struct dma_linklist_s *prev,
                * that hardware will be accessing the descriptor via DMA.
                */
 
-              cp15_clean_dcache((uintptr_t)desc,
+              arch_clean_dcache((uintptr_t)desc,
                                 (uintptr_t)desc + sizeof(struct dma_linklist_s));
               break;
             }
@@ -1721,7 +1720,7 @@ static inline int sam_multiple(struct sam_dmach_s *dmach)
    * buffer transfer has completed.
    *
    * The DMAC transfer continues until the CTRLB register disables the
-   * descriptor (DSCR bits) registers at the final buffer tranfer.
+   * descriptor (DSCR bits) registers at the final buffer transfer.
    *
    * Enable error, buffer complete and transfer complete interrupts.  We
    * don't really need the buffer complete interrupts, but we will take them
@@ -1764,7 +1763,7 @@ static void sam_dmaterminate(struct sam_dmach_s *dmach, int result)
 
   if (dmach->rx)
     {
-      cp15_invalidate_dcache(dmach->rxaddr, dmach->rxaddr + dmach->rxsize);
+      arch_invalidate_dcache(dmach->rxaddr, dmach->rxaddr + dmach->rxsize);
     }
 
   /* Perform the DMA complete callback */
@@ -1819,14 +1818,14 @@ static int sam_dmac_interrupt(struct sam_dmac_s *dmac)
                 {
                    /* Yes... Terminate the transfer with an error? */
 
-                   dmalldbg("ERROR: DMA failed: %08x\n", regval);
+                   dmaerr("ERROR: DMA failed: %08x\n", regval);
                    sam_dmaterminate(dmach, -EIO);
                 }
 
               /* Is the transfer complete? */
 
               else if ((regval & DMAC_EBC_CBTC(chndx)) != 0)
-               {
+                {
                   /* Yes.. Terminate the transfer with success */
 
                   sam_dmaterminate(dmach, OK);
@@ -1895,7 +1894,7 @@ void sam_dmainitialize(struct sam_dmac_s *dmac)
 
   /* Enable the DMA controller */
 
-  sam_putdmac(dmac,DMAC_EN_ENABLE, SAM_DMAC_EN_OFFSET);
+  sam_putdmac(dmac, DMAC_EN_ENABLE, SAM_DMAC_EN_OFFSET);
 
   /* Initialize semaphores */
 
@@ -1921,7 +1920,7 @@ void sam_dmainitialize(struct sam_dmac_s *dmac)
 void weak_function up_dmainitialize(void)
 {
 #ifdef CONFIG_SAMA5_DMAC0
-  dmallvdbg("Initialize DMAC0\n");
+  dmainfo("Initialize DMAC0\n");
 
   /* Enable peripheral clock */
 
@@ -1941,7 +1940,7 @@ void weak_function up_dmainitialize(void)
 #endif
 
 #ifdef CONFIG_SAMA5_DMAC1
-  dmallvdbg("Initialize DMAC1\n");
+  dmainfo("Initialize DMAC1\n");
 
   /* Enable peripheral clock */
 
@@ -2003,7 +2002,7 @@ DMA_HANDLE sam_dmachannel(uint8_t dmacno, uint32_t chflags)
 #endif
 
     {
-      dmadbg("ERROR: Bad DMAC number: %d\n", dmacno);
+      dmaerr("ERROR: Bad DMAC number: %d\n", dmacno);
       DEBUGPANIC();
       return (DMA_HANDLE)NULL;
     }
@@ -2032,7 +2031,7 @@ DMA_HANDLE sam_dmachannel(uint8_t dmacno, uint32_t chflags)
            * disable register
            */
 
-          sam_putdmac(dmac,DMAC_CHDR_DIS(chndx), SAM_DMAC_CHDR_OFFSET);
+          sam_putdmac(dmac, DMAC_CHDR_DIS(chndx), SAM_DMAC_CHDR_OFFSET);
 
           /* Set the DMA channel flags. */
 
@@ -2047,12 +2046,12 @@ DMA_HANDLE sam_dmachannel(uint8_t dmacno, uint32_t chflags)
 
   if (dmach)
     {
-      dmavdbg("DMAC%d CH%d: chflags: %08x returning dmach: %p\n",
+      dmainfo("DMAC%d CH%d: chflags: %08x returning dmach: %p\n",
               (int)dmacno, dmach->chan, (int)chflags, dmach);
     }
   else
     {
-      dmadbg("ERROR: Failed allocate DMAC%d channel\n", (int)dmacno);
+      dmaerr("ERROR: Failed allocate DMAC%d channel\n", (int)dmacno);
     }
 
   return (DMA_HANDLE)dmach;
@@ -2083,13 +2082,13 @@ void sam_dmaconfig(DMA_HANDLE handle, uint32_t chflags)
   dmach->flags = chflags;
 
 #if defined(CONFIG_SAMA5_DMAC0) && defined(CONFIG_SAMA5_DMAC1)
-  dmavdbg("DMAC%d CH%d: chflags: %08x\n",
+  dmainfo("DMAC%d CH%d: chflags: %08x\n",
           dmach->dmac, dmach->chan, (int)chflags);
 #elif defined(CONFIG_SAMA5_DMAC0)
-  dmavdbg("DMAC0 CH%d: chflags: %08x\n",
+  dmainfo("DMAC0 CH%d: chflags: %08x\n",
           dmach->chan, (int)chflags);
 #else
-  dmavdbg("DMAC1 CH%d: chflags: %08x\n",
+  dmainfo("DMAC1 CH%d: chflags: %08x\n",
           dmach->chan, (int)chflags);
 #endif
 }
@@ -2111,7 +2110,7 @@ void sam_dmafree(DMA_HANDLE handle)
 {
   struct sam_dmach_s *dmach = (struct sam_dmach_s *)handle;
 
-  dmavdbg("dmach: %p\n", dmach);
+  dmainfo("dmach: %p\n", dmach);
   DEBUGASSERT((dmach != NULL) && (dmach->inuse));
 
   /* Mark the channel no longer in use.  Clearing the inuse flag is an atomic
@@ -2141,10 +2140,10 @@ int sam_dmatxsetup(DMA_HANDLE handle, uint32_t paddr, uint32_t maddr,
   size_t remaining;
   int ret = OK;
 
-  dmavdbg("dmach: %p paddr: %08x maddr: %08x nbytes: %d\n",
+  dmainfo("dmach: %p paddr: %08x maddr: %08x nbytes: %d\n",
           dmach, (int)paddr, (int)maddr, (int)nbytes);
   DEBUGASSERT(dmach);
-  dmavdbg("llhead: %p lltail: %p\n", dmach->llhead, dmach->lltail);
+  dmainfo("llhead: %p lltail: %p\n", dmach->llhead, dmach->lltail);
 
   /* The maximum transfer size in bytes depends upon the maximum number of
    * transfers and the number of bytes per transfer.
@@ -2160,7 +2159,7 @@ int sam_dmatxsetup(DMA_HANDLE handle, uint32_t paddr, uint32_t maddr,
       /* Set up the maximum size transfer */
 
       ret = sam_txbuffer(dmach, paddr, maddr, maxtransfer);
-      if (ret == OK);
+      if (ret == OK)
         {
           /* Decrement the number of bytes left to transfer */
 
@@ -2197,7 +2196,7 @@ int sam_dmatxsetup(DMA_HANDLE handle, uint32_t paddr, uint32_t maddr,
 
   /* Clean caches associated with the DMA memory */
 
-  cp15_clean_dcache(maddr, maddr + nbytes);
+  arch_clean_dcache(maddr, maddr + nbytes);
   return ret;
 }
 
@@ -2220,10 +2219,10 @@ int sam_dmarxsetup(DMA_HANDLE handle, uint32_t paddr, uint32_t maddr,
   size_t remaining;
   int ret = OK;
 
-  dmavdbg("dmach: %p paddr: %08x maddr: %08x nbytes: %d\n",
+  dmainfo("dmach: %p paddr: %08x maddr: %08x nbytes: %d\n",
           dmach, (int)paddr, (int)maddr, (int)nbytes);
   DEBUGASSERT(dmach);
-  dmavdbg("llhead: %p lltail: %p\n", dmach->llhead, dmach->lltail);
+  dmainfo("llhead: %p lltail: %p\n", dmach->llhead, dmach->lltail);
 
   /* The maximum transfer size in bytes depends upon the maximum number of
    * transfers and the number of bytes per transfer.
@@ -2239,7 +2238,7 @@ int sam_dmarxsetup(DMA_HANDLE handle, uint32_t paddr, uint32_t maddr,
       /* Set up the maximum size transfer */
 
       ret = sam_rxbuffer(dmach, paddr, maddr, maxtransfer);
-      if (ret == OK);
+      if (ret == OK)
         {
           /* Decrement the number of bytes left to transfer */
 
@@ -2278,7 +2277,7 @@ int sam_dmarxsetup(DMA_HANDLE handle, uint32_t paddr, uint32_t maddr,
 
   /* Clean caches associated with the DMA memory */
 
-  cp15_clean_dcache(maddr, maddr + nbytes);
+  arch_clean_dcache(maddr, maddr + nbytes);
   return ret;
 }
 
@@ -2295,7 +2294,7 @@ int sam_dmastart(DMA_HANDLE handle, dma_callback_t callback, void *arg)
   struct sam_dmach_s *dmach = (struct sam_dmach_s *)handle;
   int ret = -EINVAL;
 
-  dmavdbg("dmach: %p callback: %p arg: %p\n", dmach, callback, arg);
+  dmainfo("dmach: %p callback: %p arg: %p\n", dmach, callback, arg);
   DEBUGASSERT(dmach != NULL);
 
   /* Verify that the DMA has been setup (i.e., at least one entry in the
@@ -2309,7 +2308,7 @@ int sam_dmastart(DMA_HANDLE handle, dma_callback_t callback, void *arg)
       dmach->callback = callback;
       dmach->arg      = arg;
 
-      /* Is this a single block transfer?  Or a multiple block tranfer? */
+      /* Is this a single block transfer?  Or a multiple block transfer? */
 
       if (dmach->llhead == dmach->lltail)
         {
@@ -2339,12 +2338,12 @@ void sam_dmastop(DMA_HANDLE handle)
   struct sam_dmach_s *dmach = (struct sam_dmach_s *)handle;
   irqstate_t flags;
 
-  dmavdbg("dmach: %p\n", dmach);
+  dmainfo("dmach: %p\n", dmach);
   DEBUGASSERT(dmach != NULL);
 
-  flags = irqsave();
+  flags = enter_critical_section();
   sam_dmaterminate(dmach, -EINTR);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -2371,7 +2370,7 @@ void sam_dmasample(DMA_HANDLE handle, struct sam_dmaregs_s *regs)
    * cause lost interrupts.
    */
 
-  flags        = irqsave();
+  flags        = enter_critical_section();
   regs->gcfg   = sam_getdmac(dmac, SAM_DMAC_GCFG_OFFSET);
   regs->en     = sam_getdmac(dmac, SAM_DMAC_EN_OFFSET);
   regs->sreq   = sam_getdmac(dmac, SAM_DMAC_SREQ_OFFSET);
@@ -2393,7 +2392,7 @@ void sam_dmasample(DMA_HANDLE handle, struct sam_dmaregs_s *regs)
   regs->cfg    = sam_getdmach(dmach, SAM_DMAC_CH_CFG_OFFSET);
   regs->spip   = sam_getdmach(dmach, SAM_DMAC_CH_SPIP_OFFSET);
   regs->dpip   = sam_getdmach(dmach, SAM_DMAC_CH_DPIP_OFFSET);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 #endif /* CONFIG_DEBUG_DMA */
 
@@ -2415,27 +2414,27 @@ void sam_dmadump(DMA_HANDLE handle, const struct sam_dmaregs_s *regs,
   struct sam_dmach_s *dmach = (struct sam_dmach_s *)handle;
   struct sam_dmac_s *dmac = sam_controller(dmach);
 
-  dmadbg("%s\n", msg);
-  dmadbg("  DMA Global Registers:\n");
-  dmadbg("      GCFG[%08x]: %08x\n", dmac->base + SAM_DMAC_GCFG_OFFSET, regs->gcfg);
-  dmadbg("        EN[%08x]: %08x\n", dmac->base + SAM_DMAC_EN_OFFSET, regs->en);
-  dmadbg("      SREQ[%08x]: %08x\n", dmac->base + SAM_DMAC_SREQ_OFFSET, regs->sreq);
-  dmadbg("      CREQ[%08x]: %08x\n", dmac->base + SAM_DMAC_CREQ_OFFSET, regs->creq);
-  dmadbg("      LAST[%08x]: %08x\n", dmac->base + SAM_DMAC_LAST_OFFSET, regs->last);
-  dmadbg("    EBCIMR[%08x]: %08x\n", dmac->base + SAM_DMAC_EBCIMR_OFFSET, regs->ebcimr);
-  dmadbg("    EBCISR[%08x]: %08x\n", dmac->base + SAM_DMAC_EBCISR_OFFSET, regs->ebcisr);
-  dmadbg("      CHSR[%08x]: %08x\n", dmac->base + SAM_DMAC_CHSR_OFFSET, regs->chsr);
-  dmadbg("      WPMR[%08x]: %08x\n", dmac->base + SAM_DMAC_WPMR_OFFSET, regs->wpmr);
-  dmadbg("      WPSR[%08x]: %08x\n", dmac->base + SAM_DMAC_WPSR_OFFSET, regs->wpsr);
-  dmadbg("  DMA Channel Registers:\n");
-  dmadbg("     SADDR[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_SADDR_OFFSET, regs->saddr);
-  dmadbg("     DADDR[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_DADDR_OFFSET, regs->daddr);
-  dmadbg("      DSCR[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_DSCR_OFFSET, regs->dscr);
-  dmadbg("     CTRLA[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_CTRLA_OFFSET, regs->ctrla);
-  dmadbg("     CTRLB[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_CTRLB_OFFSET, regs->ctrlb);
-  dmadbg("       CFG[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_CFG_OFFSET, regs->cfg);
-  dmadbg("      SPIP[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_SPIP_OFFSET, regs->spip);
-  dmadbg("      DPIP[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_DPIP_OFFSET, regs->dpip);
+  dmainfo("%s\n", msg);
+  dmainfo("  DMA Global Registers:\n");
+  dmainfo("      GCFG[%08x]: %08x\n", dmac->base + SAM_DMAC_GCFG_OFFSET, regs->gcfg);
+  dmainfo("        EN[%08x]: %08x\n", dmac->base + SAM_DMAC_EN_OFFSET, regs->en);
+  dmainfo("      SREQ[%08x]: %08x\n", dmac->base + SAM_DMAC_SREQ_OFFSET, regs->sreq);
+  dmainfo("      CREQ[%08x]: %08x\n", dmac->base + SAM_DMAC_CREQ_OFFSET, regs->creq);
+  dmainfo("      LAST[%08x]: %08x\n", dmac->base + SAM_DMAC_LAST_OFFSET, regs->last);
+  dmainfo("    EBCIMR[%08x]: %08x\n", dmac->base + SAM_DMAC_EBCIMR_OFFSET, regs->ebcimr);
+  dmainfo("    EBCISR[%08x]: %08x\n", dmac->base + SAM_DMAC_EBCISR_OFFSET, regs->ebcisr);
+  dmainfo("      CHSR[%08x]: %08x\n", dmac->base + SAM_DMAC_CHSR_OFFSET, regs->chsr);
+  dmainfo("      WPMR[%08x]: %08x\n", dmac->base + SAM_DMAC_WPMR_OFFSET, regs->wpmr);
+  dmainfo("      WPSR[%08x]: %08x\n", dmac->base + SAM_DMAC_WPSR_OFFSET, regs->wpsr);
+  dmainfo("  DMA Channel Registers:\n");
+  dmainfo("     SADDR[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_SADDR_OFFSET, regs->saddr);
+  dmainfo("     DADDR[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_DADDR_OFFSET, regs->daddr);
+  dmainfo("      DSCR[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_DSCR_OFFSET, regs->dscr);
+  dmainfo("     CTRLA[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_CTRLA_OFFSET, regs->ctrla);
+  dmainfo("     CTRLB[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_CTRLB_OFFSET, regs->ctrlb);
+  dmainfo("       CFG[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_CFG_OFFSET, regs->cfg);
+  dmainfo("      SPIP[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_SPIP_OFFSET, regs->spip);
+  dmainfo("      DPIP[%08x]: %08x\n", dmach->base + SAM_DMAC_CH_DPIP_OFFSET, regs->dpip);
 }
 #endif /* CONFIG_DEBUG_DMA */
 #endif /* CONFIG_SAMA5_DMAC0 || CONFIG_SAMA5_DMAC1 */

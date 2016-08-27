@@ -49,7 +49,6 @@
 #include "nvic.h"
 #include "ram_vectors.h"
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 #include "chip.h"
@@ -62,9 +61,9 @@
 /* Get a 32-bit version of the default priority */
 
 #define DEFPRIORITY32 \
-  (NVIC_SYSH_PRIORITY_DEFAULT << 24 |\
-   NVIC_SYSH_PRIORITY_DEFAULT << 16 |\
-   NVIC_SYSH_PRIORITY_DEFAULT << 8  |\
+  (NVIC_SYSH_PRIORITY_DEFAULT << 24 | \
+   NVIC_SYSH_PRIORITY_DEFAULT << 16 | \
+   NVIC_SYSH_PRIORITY_DEFAULT << 8  | \
    NVIC_SYSH_PRIORITY_DEFAULT)
 
 /* Given the address of a NVIC ENABLE register, this is the offset to
@@ -78,7 +77,19 @@
  * Public Data
  ****************************************************************************/
 
-volatile uint32_t *current_regs;
+/* g_current_regs[] holds a references to the current interrupt level
+ * register storage structure.  If is non-NULL only during interrupt
+ * processing.  Access to g_current_regs[] must be through the macro
+ * CURRENT_REGS for portability.
+ */
+
+volatile uint32_t *g_current_regs[1];
+
+/* This is the address of the  exception vector table (determined by the
+ * linker script).
+ */
+
+extern uint32_t _vectors[];
 
 /****************************************************************************
  * Private Data
@@ -96,35 +107,78 @@ volatile uint32_t *current_regs;
  *
  ****************************************************************************/
 
-#if defined(CONFIG_DEBUG_IRQ)
+#if defined(CONFIG_DEBUG_IRQ_INFO)
 static void tiva_dumpnvic(const char *msg, int irq)
 {
   irqstate_t flags;
 
-  flags = irqsave();
-  lldbg("NVIC (%s, irq=%d):\n", msg, irq);
-  lldbg("  INTCTRL:    %08x VECTAB: %08x\n",
-        getreg32(NVIC_INTCTRL), getreg32(NVIC_VECTAB));
+  flags = enter_critical_section();
+  irqinfo("NVIC (%s, irq=%d):\n", msg, irq);
+  irqinfo("  INTCTRL:    %08x VECTAB: %08x\n",
+          getreg32(NVIC_INTCTRL), getreg32(NVIC_VECTAB));
 #if 0
-  lldbg("  SYSH ENABLE MEMFAULT: %08x BUSFAULT: %08x USGFAULT: %08x SYSTICK: %08x\n",
-        getreg32(NVIC_SYSHCON_MEMFAULTENA), getreg32(NVIC_SYSHCON_BUSFAULTENA),
-        getreg32(NVIC_SYSHCON_USGFAULTENA), getreg32(NVIC_SYSTICK_CTRL_ENABLE));
+  irqinfo("  SYSH ENABLE MEMFAULT: %08x BUSFAULT: %08x USGFAULT: %08x SYSTICK: %08x\n",
+          getreg32(NVIC_SYSHCON_MEMFAULTENA), getreg32(NVIC_SYSHCON_BUSFAULTENA),
+          getreg32(NVIC_SYSHCON_USGFAULTENA), getreg32(NVIC_SYSTICK_CTRL_ENABLE));
 #endif
-  lldbg("  IRQ ENABLE: %08x %08x\n",
-        getreg32(NVIC_IRQ0_31_ENABLE), getreg32(NVIC_IRQ32_63_ENABLE));
-  lldbg("  SYSH_PRIO:  %08x %08x %08x\n",
-        getreg32(NVIC_SYSH4_7_PRIORITY), getreg32(NVIC_SYSH8_11_PRIORITY),
-        getreg32(NVIC_SYSH12_15_PRIORITY));
-  lldbg("  IRQ PRIO:   %08x %08x %08x %08x\n",
-        getreg32(NVIC_IRQ0_3_PRIORITY), getreg32(NVIC_IRQ4_7_PRIORITY),
-        getreg32(NVIC_IRQ8_11_PRIORITY), getreg32(NVIC_IRQ12_15_PRIORITY));
-  lldbg("              %08x %08x %08x %08x\n",
-        getreg32(NVIC_IRQ16_19_PRIORITY), getreg32(NVIC_IRQ20_23_PRIORITY),
-        getreg32(NVIC_IRQ24_27_PRIORITY), getreg32(NVIC_IRQ28_31_PRIORITY));
-  lldbg("              %08x %08x %08x %08x\n",
-        getreg32(NVIC_IRQ32_35_PRIORITY), getreg32(NVIC_IRQ36_39_PRIORITY),
-        getreg32(NVIC_IRQ40_43_PRIORITY), getreg32(NVIC_IRQ44_47_PRIORITY));
-  irqrestore(flags);
+
+#if NR_VECTORS < 64
+  irqinfo("  IRQ ENABLE: %08x %08x\n",
+          getreg32(NVIC_IRQ0_31_ENABLE), getreg32(NVIC_IRQ32_63_ENABLE));
+#elif NR_VECTORS < 96
+  irqinfo("  IRQ ENABLE: %08x %08x %08x\n",
+          getreg32(NVIC_IRQ0_31_ENABLE), getreg32(NVIC_IRQ32_63_ENABLE),
+          getreg32(NVIC_IRQ64_95_ENABLE));
+#elif NR_VECTORS < 128
+  irqinfo("  IRQ ENABLE: %08x %08x %08x %08x\n",
+          getreg32(NVIC_IRQ0_31_ENABLE), getreg32(NVIC_IRQ32_63_ENABLE),
+          getreg32(NVIC_IRQ64_95_ENABLE), getreg32(NVIC_IRQ96_127_ENABLE));
+#endif
+#if NR_VECTORS > 127
+#  warning Missing output
+#endif
+
+  irqinfo("  SYSH_PRIO:  %08x %08x %08x\n",
+          getreg32(NVIC_SYSH4_7_PRIORITY), getreg32(NVIC_SYSH8_11_PRIORITY),
+          getreg32(NVIC_SYSH12_15_PRIORITY));
+  irqinfo("  IRQ PRIO:   %08x %08x %08x %08x\n",
+          getreg32(NVIC_IRQ0_3_PRIORITY), getreg32(NVIC_IRQ4_7_PRIORITY),
+          getreg32(NVIC_IRQ8_11_PRIORITY), getreg32(NVIC_IRQ12_15_PRIORITY));
+  irqinfo("              %08x %08x %08x %08x\n",
+          getreg32(NVIC_IRQ16_19_PRIORITY), getreg32(NVIC_IRQ20_23_PRIORITY),
+          getreg32(NVIC_IRQ24_27_PRIORITY), getreg32(NVIC_IRQ28_31_PRIORITY));
+  irqinfo("              %08x %08x %08x %08x\n",
+          getreg32(NVIC_IRQ32_35_PRIORITY), getreg32(NVIC_IRQ36_39_PRIORITY),
+          getreg32(NVIC_IRQ40_43_PRIORITY), getreg32(NVIC_IRQ44_47_PRIORITY));
+#if NR_VECTORS > 47
+  irqinfo("              %08x %08x %08x %08x\n",
+          getreg32(NVIC_IRQ48_51_PRIORITY), getreg32(NVIC_IRQ52_55_PRIORITY),
+          getreg32(NVIC_IRQ56_59_PRIORITY), getreg32(NVIC_IRQ60_63_PRIORITY));
+#endif
+#if NR_VECTORS > 63
+  irqinfo("              %08x %08x %08x %08x\n",
+        getreg32(NVIC_IRQ64_67_PRIORITY), getreg32(NVIC_IRQ68_71_PRIORITY),
+        getreg32(NVIC_IRQ72_75_PRIORITY), getreg32(NVIC_IRQ76_79_PRIORITY));
+#endif
+#if NR_VECTORS > 79
+  irqinfo("              %08x %08x %08x %08x\n",
+        getreg32(NVIC_IRQ80_83_PRIORITY), getreg32(NVIC_IRQ84_87_PRIORITY),
+        getreg32(NVIC_IRQ88_91_PRIORITY), getreg32(NVIC_IRQ92_95_PRIORITY));
+#endif
+#if NR_VECTORS > 95
+  irqinfo("              %08x %08x %08x %08x\n",
+        getreg32(NVIC_IRQ96_99_PRIORITY), getreg32(NVIC_IRQ100_103_PRIORITY),
+        getreg32(NVIC_IRQ104_107_PRIORITY), getreg32(NVIC_IRQ108_111_PRIORITY));
+#endif
+#if NR_VECTORS > 111
+  irqinfo("              %08x %08x %08x %08x\n",
+        getreg32(NVIC_IRQ112_115_PRIORITY), getreg32(NVIC_IRQ116_119_PRIORITY),
+        getreg32(NVIC_IRQ120_123_PRIORITY), getreg32(NVIC_IRQ124_127_PRIORITY));
+#endif
+#if NR_VECTORS > 127
+#  warning Missing output
+#endif
+  leave_critical_section(flags);
 }
 #else
 #  define tiva_dumpnvic(msg, irq)
@@ -141,51 +195,51 @@ static void tiva_dumpnvic(const char *msg, int irq)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 static int tiva_nmi(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! NMI received\n");
+  (void)up_irq_save();
+  _err("PANIC!!! NMI received\n");
   PANIC();
   return 0;
 }
 
 static int tiva_busfault(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! Bus fault recived\n");
+  (void)up_irq_save();
+  _err("PANIC!!! Bus fault recived\n");
   PANIC();
   return 0;
 }
 
 static int tiva_usagefault(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! Usage fault received\n");
+  (void)up_irq_save();
+  _err("PANIC!!! Usage fault received\n");
   PANIC();
   return 0;
 }
 
 static int tiva_pendsv(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! PendSV received\n");
+  (void)up_irq_save();
+  _err("PANIC!!! PendSV received\n");
   PANIC();
   return 0;
 }
 
 static int tiva_dbgmonitor(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! Debug Monitor receieved\n");
+  (void)up_irq_save();
+  _err("PANIC!!! Debug Monitor received\n");
   PANIC();
   return 0;
 }
 
 static int tiva_reserved(int irq, FAR void *context)
 {
-  (void)irqsave();
-  dbg("PANIC!!! Reserved interrupt\n");
+  (void)up_irq_save();
+  _err("PANIC!!! Reserved interrupt\n");
   PANIC();
   return 0;
 }
@@ -232,19 +286,41 @@ static int tiva_irqinfo(int irq, uintptr_t *regaddr, uint32_t *bit,
 
   if (irq >= TIVA_IRQ_INTERRUPTS)
     {
+      if (irq >= NR_IRQS)
+        {
+          return ERROR; /* Invalid IRQ number */
+        }
+
       if (irq < TIVA_IRQ_INTERRUPTS + 32)
         {
            *regaddr = (NVIC_IRQ0_31_ENABLE + offset);
            *bit     = 1 << (irq - TIVA_IRQ_INTERRUPTS);
         }
-      else if (irq < NR_IRQS)
+      else if (irq < TIVA_IRQ_INTERRUPTS + 64)
         {
            *regaddr = (NVIC_IRQ32_63_ENABLE + offset);
            *bit     = 1 << (irq - TIVA_IRQ_INTERRUPTS - 32);
         }
+#if NR_VECTORS > 63
+      else if (irq < TIVA_IRQ_INTERRUPTS + 96)
+        {
+           *regaddr = (NVIC_IRQ64_95_ENABLE + offset);
+           *bit     = 1 << (irq - TIVA_IRQ_INTERRUPTS - 64);
+        }
+#if NR_VECTORS > 95
+      else if (irq < TIVA_IRQ_INTERRUPTS + 128)
+        {
+           *regaddr = (NVIC_IRQ96_127_ENABLE + offset);
+           *bit     = 1 << (irq - TIVA_IRQ_INTERRUPTS - 96);
+        }
+#if NR_VECTORS > 127
+#  warning Missing logic
+#endif
+#endif
+#endif
       else
         {
-          return ERROR; /* Invalid interrupt */
+          return ERROR; /* Internal confusion */
         }
     }
 
@@ -252,8 +328,8 @@ static int tiva_irqinfo(int irq, uintptr_t *regaddr, uint32_t *bit,
 
   else
     {
-       *regaddr = NVIC_SYSHCON;
-       if (irq == TIVA_IRQ_MEMFAULT)
+      *regaddr = NVIC_SYSHCON;
+      if (irq == TIVA_IRQ_MEMFAULT)
         {
           *bit = NVIC_SYSHCON_MEMFAULTENA;
         }
@@ -316,12 +392,25 @@ void up_irqinitialize(void)
       putreg32(0, regaddr);
     }
 
+  /* Make sure that we are using the correct vector table.  The default
+   * vector address is 0x0000:0000 but if we are executing code that is
+   * positioned in SRAM or in external FLASH, then we may need to reset
+   * the interrupt vector so that it refers to the table in SRAM or in
+   * external FLASH.
+   */
+
+  putreg32((uint32_t)_vectors, NVIC_VECTAB);
+
+#ifdef CONFIG_ARCH_RAMVECTORS
   /* If CONFIG_ARCH_RAMVECTORS is defined, then we are using a RAM-based
    * vector table that requires special initialization.
    */
 
-#ifdef CONFIG_ARCH_RAMVECTORS
   up_ramvec_initialize();
+#endif
+
+#ifdef CONFIG_ARCH_CHIP_CC3200
+  putreg32((uint32_t)CONFIG_RAM_START, NVIC_VECTAB);
 #endif
 
   /* Set all interrupts (and exceptions) to the default priority */
@@ -343,16 +432,16 @@ void up_irqinitialize(void)
 
   /* currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  CURRENT_REGS = NULL;
 
   /* Initialize support for GPIO interrupts if included in this build */
 
-#ifndef CONFIG_TIVA_DISABLE_GPIO_IRQS
+#ifdef CONFIG_TIVA_GPIO_IRQS
 #ifdef CONFIG_HAVE_WEAKFUNCTIONS
-  if (gpio_irqinitialize != NULL)
+  if (tiva_gpioirqinitialize != NULL)
 #endif
     {
-      gpio_irqinitialize();
+      tiva_gpioirqinitialize();
     }
 #endif
 
@@ -368,26 +457,26 @@ void up_irqinitialize(void)
   /* Set the priority of the SVCall interrupt */
 
 #ifdef CONFIG_ARCH_IRQPRIO
-/* up_prioritize_irq(TIVA_IRQ_PENDSV, NVIC_SYSH_PRIORITY_MIN); */
+  /* up_prioritize_irq(TIVA_IRQ_PENDSV, NVIC_SYSH_PRIORITY_MIN); */
 #endif
 #ifdef CONFIG_ARMV7M_USEBASEPRI
-   tiva_prioritize_syscall(NVIC_SYSH_SVCALL_PRIORITY);
+  tiva_prioritize_syscall(NVIC_SYSH_SVCALL_PRIORITY);
 #endif
 
   /* If the MPU is enabled, then attach and enable the Memory Management
    * Fault handler.
    */
 
-#ifdef CONFIG_ARMV7M_MPU
+#ifdef CONFIG_ARM_MPU
   irq_attach(TIVA_IRQ_MEMFAULT, up_memfault);
   up_enable_irq(TIVA_IRQ_MEMFAULT);
 #endif
 
   /* Attach all other processor exceptions (except reset and sys tick) */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   irq_attach(TIVA_IRQ_NMI, tiva_nmi);
-#ifndef CONFIG_ARMV7M_MPU
+#ifndef CONFIG_ARM_MPU
   irq_attach(TIVA_IRQ_MEMFAULT, up_memfault);
 #endif
   irq_attach(TIVA_IRQ_BUSFAULT, tiva_busfault);
@@ -403,7 +492,7 @@ void up_irqinitialize(void)
 
   /* And finally, enable interrupts */
 
-  irqenable();
+  up_irq_enable();
 #endif
 }
 

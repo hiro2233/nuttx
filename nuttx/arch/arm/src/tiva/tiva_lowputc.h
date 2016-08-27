@@ -41,6 +41,7 @@
  ************************************************************************************/
 
 #include <nuttx/config.h>
+#include <arch/tiva/chip.h>
 
 /************************************************************************************
  * Pre-processor Definitions
@@ -105,7 +106,7 @@
 #  undef CONFIG_UART6_SERIAL_CONSOLE
 #  undef CONFIG_UART7_SERIAL_CONSOLE
 #  define HAVE_SERIAL_CONSOLE 1
-#elif defined(CONFIG_UART3_SERIAL_CONSOLE) && defined(CONFIG_TIVA_UART2)
+#elif defined(CONFIG_UART3_SERIAL_CONSOLE) && defined(CONFIG_TIVA_UART3)
 #  undef CONFIG_UART0_SERIAL_CONSOLE
 #  undef CONFIG_UART1_SERIAL_CONSOLE
 #  undef CONFIG_UART2_SERIAL_CONSOLE
@@ -114,7 +115,7 @@
 #  undef CONFIG_UART6_SERIAL_CONSOLE
 #  undef CONFIG_UART7_SERIAL_CONSOLE
 #  define HAVE_SERIAL_CONSOLE 1
-#elif defined(CONFIG_UART4_SERIAL_CONSOLE) && defined(CONFIG_TIVA_UART2)
+#elif defined(CONFIG_UART4_SERIAL_CONSOLE) && defined(CONFIG_TIVA_UART4)
 #  undef CONFIG_UART0_SERIAL_CONSOLE
 #  undef CONFIG_UART1_SERIAL_CONSOLE
 #  undef CONFIG_UART2_SERIAL_CONSOLE
@@ -123,7 +124,7 @@
 #  undef CONFIG_UART6_SERIAL_CONSOLE
 #  undef CONFIG_UART7_SERIAL_CONSOLE
 #  define HAVE_SERIAL_CONSOLE 1
-#elif defined(CONFIG_UART5_SERIAL_CONSOLE) && defined(CONFIG_TIVA_UART2)
+#elif defined(CONFIG_UART5_SERIAL_CONSOLE) && defined(CONFIG_TIVA_UART5)
 #  undef CONFIG_UART0_SERIAL_CONSOLE
 #  undef CONFIG_UART1_SERIAL_CONSOLE
 #  undef CONFIG_UART2_SERIAL_CONSOLE
@@ -132,7 +133,7 @@
 #  undef CONFIG_UART6_SERIAL_CONSOLE
 #  undef CONFIG_UART7_SERIAL_CONSOLE
 #  define HAVE_SERIAL_CONSOLE 1
-#elif defined(CONFIG_UART6_SERIAL_CONSOLE) && defined(CONFIG_TIVA_UART2)
+#elif defined(CONFIG_UART6_SERIAL_CONSOLE) && defined(CONFIG_TIVA_UART6)
 #  undef CONFIG_UART0_SERIAL_CONSOLE
 #  undef CONFIG_UART1_SERIAL_CONSOLE
 #  undef CONFIG_UART2_SERIAL_CONSOLE
@@ -141,7 +142,7 @@
 #  undef CONFIG_UART5_SERIAL_CONSOLE
 #  undef CONFIG_UART7_SERIAL_CONSOLE
 #  define HAVE_SERIAL_CONSOLE 1
-#elif defined(CONFIG_UART7_SERIAL_CONSOLE) && defined(CONFIG_TIVA_UART2)
+#elif defined(CONFIG_UART7_SERIAL_CONSOLE) && defined(CONFIG_TIVA_UART7)
 #  undef CONFIG_UART0_SERIAL_CONSOLE
 #  undef CONFIG_UART1_SERIAL_CONSOLE
 #  undef CONFIG_UART2_SERIAL_CONSOLE
@@ -162,7 +163,6 @@
 #  undef CONFIG_UART7_SERIAL_CONSOLE
 #  undef HAVE_SERIAL_CONSOLE
 #endif
-
 
 /************************************************************************************
  * Public Types

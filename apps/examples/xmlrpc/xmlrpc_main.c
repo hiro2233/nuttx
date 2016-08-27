@@ -2,6 +2,7 @@
  * apps/examples/xmlrpc/xmlrpc_main.c
  *
  *   Copyright (C) 2012 Max Holtzberg. All rights reserved.
+ *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
  *   Author: Max Holtzberg <mh@uvc.de>
  *
  * Based on the embeddable lightweight XML-RPC server code discussed
@@ -63,11 +64,11 @@
 #include <unistd.h>
 
 #include <net/if.h>
-#include <nuttx/net/uip/uip.h>
-#include <nuttx/net/arp.h>
+#include <netinet/in.h>
 
-#include <apps/netutils/uiplib.h>
-#include <apps/netutils/xmlrpc.h>
+#include <nuttx/net/arp.h>
+#include "netutils/netlib.h"
+#include "netutils/xmlrpc.h"
 
 #ifdef CONFIG_EXAMPLES_XMLRPC_DHCPC
 #  include <arpa/inet.h>
@@ -80,8 +81,7 @@
 /* DHCPC may be used in conjunction with any other feature (or not) */
 
 #ifdef CONFIG_EXAMPLES_XMLRPC_DHCPC
-#  include <apps/netutils/dnsclient.h>
-#  include <apps/netutils/dhcpc.h>
+#  include "netutils/dhcpc.h"
 #endif
 
 /****************************************************************************
@@ -193,16 +193,16 @@ static void xmlrpc_handler(int fd)
       tv.tv_sec = 1;
       tv.tv_usec = 0;
 
-      ndbg("[%d] select...\n", fd);
+      ninfo("[%d] select...\n", fd);
       ret = select(fd + 1, &rfds, NULL, NULL, &tv);
-      ndbg("[%d] data ready\n", fd);
+      ninfo("[%d] data ready\n", fd);
 
       if (ret > 0)
         {
           if (FD_ISSET(fd, &rfds))
             {
               len = recv(fd, &buffer[max], 1024, 0);
-              ndbg("[%d] %d bytes received\n", fd, len);
+              ninfo("[%d] %d bytes received\n", fd, len);
 
               if (len > 0)
                 {
@@ -225,7 +225,7 @@ static void xmlrpc_handler(int fd)
         {
           /* Timeout... */
 
-          ndbg("[%d] timeout\n", fd);
+          nerr("ERROR: [%d] timeout\n", fd);
           ret = -1;
           break;
         }
@@ -286,7 +286,7 @@ static int xmlrpc_netinit(void)
   mac[3] = 0xad;
   mac[4] = 0xbe;
   mac[5] = 0xef;
-  uip_setmacaddr("eth0", mac);
+  netlib_setmacaddr("eth0", mac);
 #endif
 
   /* Set up our host address */
@@ -296,26 +296,22 @@ static int xmlrpc_netinit(void)
 #else
   addr.s_addr = HTONL(CONFIG_EXAMPLES_XMLRPC_IPADDR);
 #endif
-  uip_sethostaddr("eth0", &addr);
+  netlib_set_ipv4addr("eth0", &addr);
 
   /* Set up the default router address */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_XMLRPC_DRIPADDR);
-  uip_setdraddr("eth0", &addr);
+  netlib_set_dripv4addr("eth0", &addr);
 
   /* Setup the subnet mask */
 
   addr.s_addr = HTONL(CONFIG_EXAMPLES_XMLRPC_NETMASK);
-  uip_setnetmask("eth0", &addr);
+  netlib_set_ipv4netmask("eth0", &addr);
 
 #ifdef CONFIG_EXAMPLES_XMLRPC_DHCPC
-  /* Set up the resolver */
-
-  dns_bind();
-
   /* Get the MAC address of the NIC */
 
-  uip_getmacaddr("eth0", mac);
+  netlib_getmacaddr("eth0", mac);
 
   /* Set up the DHCPC modules */
 
@@ -331,21 +327,21 @@ static int xmlrpc_netinit(void)
     {
       struct dhcpc_state ds;
       (void)dhcpc_request(handle, &ds);
-      uip_sethostaddr("eth1", &ds.ipaddr);
+      netlib_set_ipv4addr("eth0", &ds.ipaddr);
 
       if (ds.netmask.s_addr != 0)
         {
-          uip_setnetmask("eth0", &ds.netmask);
+          netlib_set_ipv4netmask("eth0", &ds.netmask);
         }
 
       if (ds.default_router.s_addr != 0)
         {
-          uip_setdraddr("eth0", &ds.default_router);
+          netlib_set_dripv4addr("eth0", &ds.default_router);
         }
 
       if (ds.dnsaddr.s_addr != 0)
         {
-          dns_setserver(&ds.dnsaddr);
+          netlib_set_ipv4dnsaddr(&ds.dnsaddr);
         }
 
       dhcpc_close(handle);
@@ -370,7 +366,11 @@ static int xmlrpc_netinit(void)
  *
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int xmlrpc_main(int argc, char *argv[])
+#endif
 {
   int listenfd, connfd, on = 1;
   socklen_t clilen;
@@ -378,7 +378,7 @@ int xmlrpc_main(int argc, char *argv[])
 
   if (xmlrpc_netinit() < 0)
     {
-      ndbg("Could not initialize the network interface\n");
+      nerr("ERROR: Could not initialize the network interface\n");
       return ERROR;
     }
 
@@ -407,11 +407,11 @@ int xmlrpc_main(int argc, char *argv[])
         {
           break;
         }
-      ndbg("Connection accepted: %d\n", connfd);
+      ninfo("Connection accepted: %d\n", connfd);
 
       xmlrpc_handler(connfd);
       close(connfd);
-      ndbg("[%d] connection closed\n", connfd);
+      ninfo("[%d] connection closed\n", connfd);
     }
 
   close(listenfd);

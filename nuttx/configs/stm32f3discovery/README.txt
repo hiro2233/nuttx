@@ -78,12 +78,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   The CodeSourcery Toolchain (2009q1)
   -----------------------------------
   The CodeSourcery toolchain (2009q1) does not work with default optimization
@@ -171,7 +165,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -231,8 +225,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -424,6 +418,30 @@ it.
 https://github.com/texane/stlink
 --------------------------------
 This is an open source server for the ST-Link that I have never used.
+
+It is also possible to use an external debugger such as the Segger JLink 
+(EDU or commercial models) provided:
+
+1) The CN4 jumpers are removed to disconnect the on-board STLinkV2 from 
+   the STM32F3.
+
+2) The appropriate (20 pin connector to flying wire) adapter is used to connect
+   the debugger to the required pins on the expansion headers (see below).
+
+   Note that the 1x6 header on the STLinkV2 side of the board labeled "SWD"
+   is for the STLink micro (STM32F1) and is not connected to the STM32F3.
+
+3) OpenOCD version 0.9.0 or later is used.  Earlier versions support either
+   JTAG only or are buggy for SWD.
+
+The signals used with external (SWD) debugging are:
+
+   VREF (3V) 
+   GROUND (GND)
+   SWCLK (PA14)
+   SWIO (PA13)
+   SWO (PB3)
+   RESET (NRST)
 
 Atollic GDB Server
 ------------------
@@ -619,7 +637,7 @@ STM32F3Discovery-specific Configuration Options
     CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2 is defined.
     CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
     CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
-    CONFIG_CAN_REGDEBUG - If CONFIG_DEBUG is set, this will generate an
+    CONFIG_STM32_CAN_REGDEBUG - If CONFIG_DEBUG_FEATURES is set, this will generate an
       dump of all CAN registers.
 
   STM32F3Discovery SPI Configuration
@@ -661,7 +679,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -740,7 +758,7 @@ Where <subdir> is one of the following:
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -760,7 +778,6 @@ Where <subdir> is one of the following:
        the system logging device:
 
        Device Drivers -> System Logging Device Options:
-         CONFIG_SYSLOG=y                    : Enable output to syslog, not console
          CONFIG_SYSLOG_CHAR=y               : Use a character device for system logging
          CONFIG_SYSLOG_DEVPATH="/dev/ttyS0" : USART2 will be /dev/ttyS0
 
@@ -789,15 +806,15 @@ Where <subdir> is one of the following:
           CONFIG_NSH_ARCHINIT=y                   : Automatically start the USB monitor
 
         Application Configuration -> System NSH Add-Ons:
-          CONFIG_SYSTEM_USBMONITOR=y              : Enable the USB monitor daemon
-          CONFIG_SYSTEM_USBMONITOR_STACKSIZE=2048 : USB monitor daemon stack size
-          CONFIG_SYSTEM_USBMONITOR_PRIORITY=50    : USB monitor daemon priority
-          CONFIG_SYSTEM_USBMONITOR_INTERVAL=1     : Dump trace data every second
-          CONFIG_SYSTEM_USBMONITOR_TRACEINIT=y    : Enable TRACE output
-          CONFIG_SYSTEM_USBMONITOR_TRACECLASS=y
-          CONFIG_SYSTEM_USBMONITOR_TRACETRANSFERS=y
-          CONFIG_SYSTEM_USBMONITOR_TRACECONTROLLER=y
-          CONFIG_SYSTEM_USBMONITOR_TRACEINTERRUPTS=y
+          CONFIG_USBMONITOR=y              : Enable the USB monitor daemon
+          CONFIG_USBMONITOR_STACKSIZE=2048 : USB monitor daemon stack size
+          CONFIG_USBMONITOR_PRIORITY=50    : USB monitor daemon priority
+          CONFIG_USBMONITOR_INTERVAL=1     : Dump trace data every second
+          CONFIG_USBMONITOR_TRACEINIT=y    : Enable TRACE output
+          CONFIG_USBMONITOR_TRACECLASS=y
+          CONFIG_USBMONITOR_TRACETRANSFERS=y
+          CONFIG_USBMONITOR_TRACECONTROLLER=y
+          CONFIG_USBMONITOR_TRACEINTERRUPTS=y
 
        NOTE: USB debug output also be enabled in this case.  Both will appear
        on the serial SYSLOG output.  However, the debug output will be

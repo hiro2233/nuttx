@@ -1,7 +1,7 @@
 /************************************************************************************
  * arch/arm/src/lpc43xx/lpc43_cgu.h
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -61,7 +61,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -69,6 +70,37 @@ extern "C" {
 /************************************************************************************
  * Public Functions
  ************************************************************************************/
+
+/****************************************************************************
+ * Name: lpc43_pll0usbdisable
+ *
+ * Description:
+ *   Take PLL0USB to power-down mode.
+ *
+ ****************************************************************************/
+
+EXTERN void lpc43_pll0usbdisable(void);
+
+/****************************************************************************
+ * Name: lpc43_pll0usbenable
+ *
+ * Description:
+ *   Take PLL0USB out of power-down mode and wait until it is locked onto the
+ *   input clock.
+ *
+ ****************************************************************************/
+
+EXTERN void lpc43_pll0usbenable(void);
+
+/************************************************************************************
+ * Name: lpc43_pll0usbconfig
+ *
+ * Description:
+ *   Config USB0 PLL
+ *
+ ************************************************************************************/
+
+EXTERN void lpc43_pll0usbconfig(void);
 
 /************************************************************************************
  * Name: lpc43_clockconfig
@@ -80,7 +112,7 @@ extern "C" {
  *
  ************************************************************************************/
 
-EXTERN void lpc43_clockconfig(void);
+void lpc43_clockconfig(void);
 
 #undef EXTERN
 #if defined(__cplusplus)

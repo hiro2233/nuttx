@@ -52,11 +52,16 @@
 #include "chip/sam_pit.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
-/* The PIT counter runs at a rate of the main clock (MCK) divided by 16 */
+/* The PIT counter runs at a rate of the main clock (MCK) divided by 16.
+ *
+ * On the SAMA5D4, the clocking to the PIC may be divided down from MCK.
+ * Perhaps because of H32MXDIV?  We will let the board.h tell us the correct
+ * PIT include clock by defining BOARD_PIT_FREQUENCY.
+ */
 
-#define PIT_CLOCK (BOARD_MCK_FREQUENCY >> 4)
+#define PIT_CLOCK (BOARD_PIT_FREQUENCY >> 4)
 
 /* The desired timer interrupt frequency is provided by the definition
  * CLK_TCK (see include/time.h).  CLK_TCK defines the desired number of
@@ -79,7 +84,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -97,7 +102,7 @@ int up_timerisr(int irq, uint32_t *regs)
    *  Interval Value Register (PIT_PIVR), the overflow counter (PICNT) is
    *  reset and the PITS is cleared, thus acknowledging the interrupt. The
    *  value of PICNT gives the number of periodic intervals elapsed since the
-   *  last read of PIT_PIVR.
+   *  last read of PIT_PIVR."
    */
 
   uint32_t picnt = getreg32(SAM_PIT_PIVR) >> PIT_PICNT_SHIFT;
@@ -113,7 +118,7 @@ int up_timerisr(int irq, uint32_t *regs)
 }
 
 /****************************************************************************
- * Function:  up_timerinit
+ * Function:  up_timer_initialize
  *
  * Description:
  *   This function is called during start-up to initialize
@@ -121,7 +126,7 @@ int up_timerisr(int irq, uint32_t *regs)
  *
  ****************************************************************************/
 
-void up_timerinit(void)
+void up_timer_initialize(void)
 {
   uint32_t regval;
 

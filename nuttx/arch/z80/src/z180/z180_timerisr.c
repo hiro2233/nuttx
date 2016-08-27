@@ -45,7 +45,7 @@
 
 #include <arch/board/board.h>
 
-#include "clock_internal.h"
+#include "clock/clock.h"
 #include "up_internal.h"
 
 #include "chip.h"
@@ -80,7 +80,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Global Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -94,16 +94,14 @@
 
 int up_timerisr(int irq, chipreg_t *regs)
 {
-  volatile uint8_t regval;
-
   /* "When TMDR0 decrements to 0, TIF0 is set to 1. This generates an interrupt
    * request if enabled by TIE0 = 1. TIF0 is reset to 0 when TCR is read and
    * the higher or lower byte of TMDR0 is read."
    */
 
-  regval = inp(Z180_PRT_TCR);
-  regval = inp(Z180_PRT0_DRL);
-  regval = inp(Z180_PRT0_DRH);
+  (void)inp(Z180_PRT_TCR);
+  (void)inp(Z180_PRT0_DRL);
+  (void)inp(Z180_PRT0_DRH);
 
   /* Process timer interrupt */
 
@@ -112,7 +110,7 @@ int up_timerisr(int irq, chipreg_t *regs)
 }
 
 /****************************************************************************
- * Function: up_timerinit
+ * Function: up_timer_initialize
  *
  * Description:
  *   This function is called during start-up to initialize the timer
@@ -120,7 +118,7 @@ int up_timerisr(int irq, chipreg_t *regs)
  *
  ****************************************************************************/
 
-void up_timerinit(void)
+void up_timer_initialize(void)
 {
   uint8_t regval;
 

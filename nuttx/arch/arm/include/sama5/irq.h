@@ -53,8 +53,12 @@
 
 /* Chip-Specific External interrupts */
 
-#if defined(ATSAMA5D3)
+#if defined(ATSAMA5D2)
+#  include <arch/sama5/sama5d2_irq.h>
+#elif defined(ATSAMA5D3)
 #  include <arch/sama5/sama5d3_irq.h>
+#elif defined(ATSAMA5D4)
+#  include <arch/sama5/sama5d4_irq.h>
 #else
 #  error Unrecognized SAMA5 family
 #endif
@@ -71,7 +75,8 @@
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

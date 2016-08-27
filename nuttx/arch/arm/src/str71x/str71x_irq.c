@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/st71x/st71x_irq.c
  *
- *   Copyright (C) 2008-2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2011, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,32 +41,27 @@
 
 #include <stdint.h>
 #include <errno.h>
+
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
+#include <arch/irq.h>
 
 #include "arm.h"
 #include "chip.h"
 #include "up_arch.h"
 #include "up_internal.h"
-#include "str71x_internal.h"
-
-/****************************************************************************
- * Pre-procesor Definitions
- ****************************************************************************/
+#include "str71x.h"
 
 /****************************************************************************
  * Public Data
  ****************************************************************************/
+/* g_current_regs[] holds a references to the current interrupt level
+ * register storage structure.  If is non-NULL only during interrupt
+ * processing.  Access to g_current_regs[] must be through the macro
+ * CURRENT_REGS for portability.
+ */
 
-volatile uint32_t *current_regs;
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
+volatile uint32_t *g_current_regs[1];
 
 /****************************************************************************
  * Public Functions
@@ -80,7 +75,7 @@ void up_irqinitialize(void)
 {
   /* Currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  CURRENT_REGS = NULL;
 
   /* The bulk of IRQ initialization if performed in str71x_head.S, so we
    * have very little to do here -- basically just enabling interrupts;
@@ -108,7 +103,7 @@ void up_irqinitialize(void)
   /* Enable global ARM interrupts */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
-  irqrestore(SVC_MODE | PSR_F_BIT);
+  up_irq_restore(SVC_MODE | PSR_F_BIT);
 #endif
 }
 
@@ -169,26 +164,20 @@ void up_enable_irq(int irq)
 }
 
 /****************************************************************************
- * Name: up_maskack_irq
+ * Name: up_ack_irq
  *
  * Description:
- *   Mask the IRQ and acknowledge it.  No XTI support.. only used in
- *   interrupt handling logic.
+ *   Acknowledge the interrupt.  No XTI support.. only used in interrupt
+ *   handling logic.
  *
  ****************************************************************************/
 
-void up_maskack_irq(int irq)
+void up_ack_irq(int irq)
 {
   uint32_t reg32;
 
   if ((unsigned)irq < STR71X_NBASEIRQS)
     {
-      /* Mask the IRQ by clearing the associated bit in the IER register */
-
-      reg32  = getreg32(STR71X_EIC_IER);
-      reg32 &= ~(1 << irq);
-      putreg32(reg32, STR71X_EIC_IER);
-
       /* Clear the interrupt by writing a one to the corresponding bit in the
        * IPR register.
        */
@@ -204,7 +193,7 @@ void up_maskack_irq(int irq)
  *
  * Description:
  *   Set interrupt priority.  Note, there is no way to prioritize
- *   individual XTI interrrupts.
+ *   individual XTI interrupts.
  *
  ****************************************************************************/
 

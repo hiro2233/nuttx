@@ -37,9 +37,9 @@
 #ifndef __CONFIGS_STM32VL_DISCOVERY_SRC_STM32VLDISCOVERY_H
 #define __CONFIGS_STM32VL_DISCOVERY_SRC_STM32VLDISCOVERY_H
 
-/*****************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- *****************************************************************************/
+ ****************************************************************************/
 
 /* LED - assume it is on PC8 */
 
@@ -60,7 +60,7 @@
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_LEDS
-void stm32_ledinit(void);
+void stm32_led_initialize(void);
 #endif
 
 #endif /* __CONFIGS_STM32VL_DISCOVERY_SRC_STM32VLDISCOVERY_H */

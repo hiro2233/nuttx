@@ -1,7 +1,7 @@
 /****************************************************************************
  * apps/nshlib/nsh_init.c
  *
- *   Copyright (C) 2007-2012, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2012, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,12 +39,15 @@
 
 #include <nuttx/config.h>
 
-#include <apps/nsh.h>
+#include <sys/boardctl.h>
+
+#include "system/readline.h"
+#include "nshlib/nshlib.h"
 
 #include "nsh.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -59,7 +62,16 @@
  * Private Data
  ****************************************************************************/
 
-/****************************************************************************
+#if defined(CONFIG_NSH_READLINE) && defined(CONFIG_READLINE_TABCOMPLETION) && \
+    defined(CONFIG_READLINE_HAVE_EXTMATCH)
+static const struct extmatch_vtable_s g_nsh_extmatch =
+{
+  nsh_extmatch_count,  /* count_matches */
+  nsh_extmatch_getname /* getname */
+};
+#endif
+
+  /**************************************************************************
  * Public Data
  ****************************************************************************/
 
@@ -89,16 +101,29 @@
 
 void nsh_initialize(void)
 {
+#if defined(CONFIG_NSH_READLINE) && defined(CONFIG_READLINE_TABCOMPLETION)
+  /* Configure the NSH prompt */
+
+  (void)readline_prompt(g_nshprompt);
+
+#ifdef CONFIG_READLINE_HAVE_EXTMATCH
+  /* Set up for tab completion on NSH commands */
+
+  (void)readline_extmatch(&g_nsh_extmatch);
+#endif
+#endif
+
   /* Mount the /etc filesystem */
 
   (void)nsh_romfsetc();
 
-  /* Perform architecture-specific initialization (if available) */
+#ifdef CONFIG_NSH_ARCHINIT
+  /* Perform architecture-specific initialization (if configured) */
 
-  (void)nsh_archinitialize();
+  (void)boardctl(BOARDIOC_INIT, 0);
+#endif
 
   /* Bring up the network */
 
   (void)nsh_netinit();
 }
-

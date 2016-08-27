@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/usbhost/usbhost_findclass.c
  *
- *   Copyright (C) 2010 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,29 +41,14 @@
 
 #include <sys/types.h>
 #include <stdbool.h>
+#include <assert.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/usb/usb.h>
 #include <nuttx/usb/usbhost.h>
-#include <arch/irq.h>
 
 #include "usbhost_registry.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -87,7 +72,7 @@
 static bool usbhost_idmatch(const struct usbhost_id_s *classid,
                             const struct usbhost_id_s *devid)
 {
-  uvdbg("Compare to class:%d subclass:%d protocol:%d vid:%04x pid:%04x\n",
+  uinfo("Compare to class:%d subclass:%d protocol:%d vid:%04x pid:%04x\n",
          classid->base, classid->subclass, classid->proto,
          classid->vid, classid->pid);
 
@@ -152,48 +137,48 @@ static bool usbhost_idmatch(const struct usbhost_id_s *classid,
 
 const struct usbhost_registry_s *usbhost_findclass(const struct usbhost_id_s *id)
 {
-  struct usbhost_registry_s *class;
+  struct usbhost_registry_s *usbclass;
   irqstate_t flags;
   int ndx;
 
   DEBUGASSERT(id);
-  uvdbg("Looking for class:%d subclass:%d protocol:%d vid:%04x pid:%04x\n",
+  uinfo("Looking for class:%d subclass:%d protocol:%d vid:%04x pid:%04x\n",
         id->base, id->subclass, id->proto, id->vid, id->pid);
 
-  /* g_classregistry is a singly-linkedlist of class ID information added by
+  /* g_classregistry is a singly-linked list of class ID information added by
    * calls to usbhost_registerclass().  Since this list is accessed from USB
    * host controller interrupt handling logic, accesses to this list must be
    * protected by disabling interrupts.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Examine each register class in the linked list */
 
-  for (class = g_classregistry; class; class = class->flink)
+  for (usbclass = g_classregistry; usbclass; usbclass = usbclass->flink)
     {
       /* If the registered class supports more than one ID, subclass, or
        * protocol, then try each.
        */
 
-     uvdbg("Checking class:%p nids:%d\n", class, class->nids);
-     for (ndx = 0; ndx < class->nids; ndx++)
+     uinfo("Checking class:%p nids:%d\n", usbclass, usbclass->nids);
+     for (ndx = 0; ndx < usbclass->nids; ndx++)
         {
           /* Did we find a matching ID? */
 
-          if (usbhost_idmatch(&class->id[ndx], id))
+          if (usbhost_idmatch(&usbclass->id[ndx], id))
             {
               /* Yes.. restore interrupts and return the class info */
 
-              irqrestore(flags);
-              return class;
+              leave_critical_section(flags);
+              return usbclass;
             }
         }
     }
 
   /* Not found... restore interrupts and return NULL */
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return NULL;
 }
 

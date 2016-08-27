@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/x86/src/i486/up_schedulesigaction.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,9 +43,10 @@
 #include <sched.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 #include "up_arch.h"
 
@@ -98,31 +99,31 @@
 
 void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
 {
-  /* Refuse to handle nested signal actions */
+  irqstate_t flags;
 
-  sdbg("tcb=0x%p sigdeliver=0x%p\n", tcb, sigdeliver);
+  sinfo("tcb=0x%p sigdeliver=0x%p\n", tcb, sigdeliver);
+
+  /* Make sure that interrupts are disabled */
+
+  flags = enter_critical_section();
+
+  /* Refuse to handle nested signal actions */
 
   if (!tcb->xcp.sigdeliver)
     {
-      irqstate_t flags;
-
-      /* Make sure that interrupts are disabled */
-
-      flags = irqsave();
-
       /* First, handle some special cases when the signal is being delivered
-	   * to the currently executing task.
+       * to the currently executing task.
        */
 
-      sdbg("rtcb=0x%p current_regs=0x%p\n", g_readytorun.head, current_regs);
+      sinfo("rtcb=0x%p g_current_regs=0x%p\n", this_task(), g_current_regs);
 
-      if (tcb == (struct tcb_s*)g_readytorun.head)
+      if (tcb == this_task())
         {
           /* CASE 1:  We are not in an interrupt handler and a task is
-		   * signalling itself for some reason.
+           * signalling itself for some reason.
            */
 
-          if (!current_regs)
+          if (!g_current_regs)
             {
               /* In this case just deliver the signal now. */
 
@@ -130,33 +131,33 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
             }
 
           /* CASE 2:  We are in an interrupt handler AND the interrupted task
-		   * is the same as the one that must receive the signal, then we will
-		   * have to modify the return state as well as the state in the TCB.
+           * is the same as the one that must receive the signal, then we will
+           * have to modify the return state as well as the state in the TCB.
            *
            * Hmmm... there looks like a latent bug here: The following logic
-		   * would fail in the strange case where we are in an interrupt
-		   * handler, the thread is signalling itself, but a context switch to
-		   * another task has occurred so that current_regs does not refer to
-		   * the thread at g_readytorun.head!
+           * would fail in the strange case where we are in an interrupt
+           * handler, the thread is signalling itself, but a context switch to
+           * another task has occurred so that g_current_regs does not refer to
+           * the thread of this_task()!
            */
 
           else
             {
               /* Save the return lr and cpsr and one scratch register. These
-			   * will be restored by the signal trampoline after the signals
-			   * have been delivered.
+               * will be restored by the signal trampoline after the signals
+               * have been delivered.
                */
 
               tcb->xcp.sigdeliver       = sigdeliver;
-              tcb->xcp.saved_eip        = current_regs[REG_EIP];
-              tcb->xcp.saved_eflags     = current_regs[REG_EFLAGS];
+              tcb->xcp.saved_eip        = g_current_regs[REG_EIP];
+              tcb->xcp.saved_eflags     = g_current_regs[REG_EFLAGS];
 
               /* Then set up to vector to the trampoline with interrupts
                * disabled
                */
 
-              current_regs[REG_EIP]     = (uint32_t)up_sigdeliver;
-              current_regs[REG_EFLAGS]  = 0;
+              g_current_regs[REG_EIP]     = (uint32_t)up_sigdeliver;
+              g_current_regs[REG_EFLAGS]  = 0;
 
               /* And make sure that the saved context in the TCB
                * is the same as the interrupt return context.
@@ -190,9 +191,9 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
           tcb->xcp.regs[REG_EIP]    = (uint32_t)up_sigdeliver;
           tcb->xcp.regs[REG_EFLAGS]  = 0;
         }
-
-      irqrestore(flags);
     }
+
+  leave_critical_section(flags);
 }
 
 #endif /* !CONFIG_DISABLE_SIGNALS */

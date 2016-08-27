@@ -50,26 +50,6 @@
 #include "nxbe.h"
 
 /****************************************************************************
- * Pre-Processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -81,20 +61,22 @@
  *
  ****************************************************************************/
 
-#if CONFIG_FB_CMAP
+#ifdef CONFIG_FB_CMAP
 int nxbe_colormap(FAR NX_DRIVERTYPE *dev)
 {
   struct fb_cmap_s cmap;
-  uint8_t *alloc;
-  uint8_t *red;
-  uint8_t *green;
-  uint8_t *blue;
+  FAR uint8_t *alloc;
+  FAR uint8_t *red;
+  FAR uint8_t *green;
+  FAR uint8_t *blue;
   uint8_t rval;
   uint8_t gval;
   int     size;
   int     ndx;
   int     ret;
-  int     i, j, k;
+  int     i;
+  int     j;
+  int     k;
 
   /* Allocate the color map tables in one allocation:
    *
@@ -102,7 +84,7 @@ int nxbe_colormap(FAR NX_DRIVERTYPE *dev)
    */
 
   size  = 3 * CONFIG_NX_NCOLORS * sizeof(uint8_t);
-  alloc = (uint8_t*)kmalloc(size);
+  alloc = (FAR uint8_t *)kmm_malloc(size);
   if (alloc == NULL)
     {
       return -ENOMEM;
@@ -152,7 +134,7 @@ int nxbe_colormap(FAR NX_DRIVERTYPE *dev)
 
   ret = dev->putcmap(dev, &cmap);
 
-  kfree(alloc);
+  kmm_free(alloc);
   return ret;
 }
 #endif

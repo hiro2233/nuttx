@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/pcduino-a10/src/a1x_buttons.c
  *
- *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,9 +42,10 @@
 #include <stdint.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/irq.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <arch/board/board.h>
 
 #include "pcduino_a10.h"
@@ -52,7 +53,7 @@
 #ifdef CONFIG_ARCH_BUTTONS
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -131,7 +132,7 @@ xcpt_t board_button_irq(int id, xcpt_t irqhandler)
        * following operations are atomic.
        */
 
-      flags = irqsave();
+      flags = enter_critical_section();
 
       /* Get the old button interrupt handler and save the new one */
 
@@ -143,7 +144,7 @@ xcpt_t board_button_irq(int id, xcpt_t irqhandler)
       a1x_pioirq(xxx);
       (void)irq_attach(xxx, irqhandler);
       a1x_pioirqenable(xxx);
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 
   /* Return the old button handler (so that it can be restored) */

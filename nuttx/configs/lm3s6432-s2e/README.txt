@@ -127,12 +127,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
   level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
   -Os.
@@ -179,7 +173,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   This port was tested with tools built using summon-arm-toolchain; available
@@ -243,8 +237,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -342,15 +336,15 @@ Stellaris MDL-S2E Reference Design Configuration Options
   Additional interrupt support can be disabled if desired to reduce memory
   footprint - GPIOs C-G are not pinned out on the MDL-S2E board.
 
-    CONFIG_TIVA_DISABLE_GPIOA_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOB_IRQS=n
-    CONFIG_TIVA_DISABLE_GPIOC_IRQS=y
-    CONFIG_TIVA_DISABLE_GPIOD_IRQS=y
-    CONFIG_TIVA_DISABLE_GPIOE_IRQS=y
-    CONFIG_TIVA_DISABLE_GPIOF_IRQS=y
-    CONFIG_TIVA_DISABLE_GPIOG_IRQS=y
-    CONFIG_TIVA_DISABLE_GPIOH_IRQS=y
-    CONFIG_TIVA_DISABLE_GPIOJ_IRQS=y
+    CONFIG_TIVA_GPIOA_IRQS=y
+    CONFIG_TIVA_GPIOB_IRQS=y
+    CONFIG_TIVA_GPIOC_IRQS=n << Always
+    CONFIG_TIVA_GPIOD_IRQS=n << Always
+    CONFIG_TIVA_GPIOE_IRQS=n << Always
+    CONFIG_TIVA_GPIOF_IRQS=n << Always
+    CONFIG_TIVA_GPIOG_IRQS=n << Always
+    CONFIG_TIVA_GPIOH_IRQS=n << Always
+    CONFIG_TIVA_GPIOJ_IRQS=n << Always
 
   LM3S6432 specific device driver settings
 
@@ -369,11 +363,11 @@ Stellaris MDL-S2E Reference Design Configuration Options
     CONFIG_UARTn_PARTIY - 0=no parity, 1=odd parity, 2=even parity
     CONFIG_UARTn_2STOP - Two stop bits
 
-    CONFIG_SSI0_DISABLE - Select to disable support for SSI0
+    CONFIG_TIVA_SSI0 - Select to enable support for SSI0
       The TX and RX pins for SSI0 share I/O pins with the TX and RX pins
       for UART1.  To avoid conflicts, only one of SSI0 and UART1 should
       be enabled in a configuration.
-    CONFIG_SSI1_DISABLE - Select to disable support for SSI1
+    CONFIG_TIVA_SSI1 - Select to enable support for SSI1
       Note that the LM3S6432 only has one SSI, so SSI1 should always be
       disabled.
     CONFIG_SSI_POLLWAIT - Select to disable interrupt driven SSI support.

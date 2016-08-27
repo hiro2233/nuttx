@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/viewtools-stm32f107/src/stm32_touchscreen.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,19 +45,22 @@
 #include <assert.h>
 #include <errno.h>
 
+#include <nuttx/irq.h>
+#include <nuttx/board.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/input/touchscreen.h>
 #include <nuttx/input/ads7843e.h>
 
 #include "up_arch.h"
 #include "stm32_gpio.h"
+#include "stm32_spi.h"
 
 #include "viewtool_stm32f107.h"
 
 #ifdef CONFIG_INPUT_ADS7843E
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 
@@ -170,12 +173,12 @@ static int tsc_attach(FAR struct ads7843e_config_s *state, xcpt_t isr)
        * be attached when the interrupt is next enabled.
        */
 
-      ivdbg("Attaching %p\n", isr);
+      iinfo("Attaching %p\n", isr);
       priv->handler = isr;
     }
   else
     {
-      ivdbg("Detaching %p\n", priv->handler);
+      iinfo("Detaching %p\n", priv->handler);
       tsc_enable(state, false);
       priv->handler = NULL;
     }
@@ -193,7 +196,7 @@ static void tsc_enable(FAR struct ads7843e_config_s *state, bool enable)
    * interrupts disabled during the reconfiguration.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (enable && priv->handler)
     {
       /* Configure the EXTI interrupt using the SAVED handler */
@@ -207,7 +210,7 @@ static void tsc_enable(FAR struct ads7843e_config_s *state, bool enable)
      (void)stm32_gpiosetevent(GPIO_LCDTP_IRQ, false, false, false, NULL);
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 static void tsc_clear(FAR struct ads7843e_config_s *state)
@@ -225,7 +228,7 @@ static bool tsc_pendown(FAR struct ads7843e_config_s *state)
   /* The /PENIRQ value is active low */
 
   bool pendown = !stm32_gpioread(GPIO_LCDTP_IRQ);
-  ivdbg("pendown=%d\n", pendown);
+  iinfo("pendown=%d\n", pendown);
   return pendown;
 }
 
@@ -234,7 +237,7 @@ static bool tsc_pendown(FAR struct ads7843e_config_s *state)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: arch_tcinitialize
+ * Name: board_tsc_setup
  *
  * Description:
  *   Each board that supports a touchscreen device must provide this function.
@@ -251,13 +254,13 @@ static bool tsc_pendown(FAR struct ads7843e_config_s *state)
  *
  ****************************************************************************/
 
-int arch_tcinitialize(int minor)
+int board_tsc_setup(int minor)
 {
   FAR struct spi_dev_s *dev;
   static bool initialized = false;
   int ret;
 
-  idbg("minor %d\n", minor);
+  iinfo("minor %d\n", minor);
   DEBUGASSERT(minor == 0);
 
   /* Have we already initialized?  Since we never uninitialize we must prevent
@@ -274,10 +277,10 @@ int arch_tcinitialize(int minor)
 
       /* Get an instance of the SPI interface for the touchscreen chip select */
 
-      dev = up_spiinitialize(TSC_DEVNUM);
+      dev = stm32_spibus_initialize(TSC_DEVNUM);
       if (!dev)
         {
-          idbg("Failed to initialize SPI%d\n", TSC_DEVNUM);
+          ierr("ERROR: Failed to initialize SPI%d\n", TSC_DEVNUM);
           return -ENODEV;
         }
 
@@ -286,7 +289,7 @@ int arch_tcinitialize(int minor)
       ret = ads7843e_register(dev, &g_tscinfo.config, CONFIG_ADS7843E_DEVMINOR);
       if (ret < 0)
         {
-          idbg("Failed to register touchscreen device\n");
+          ierr("ERROR: Failed to register touchscreen device\n");
           /* up_spiuninitialize(dev); */
           return -ENODEV;
         }
@@ -300,7 +303,7 @@ int arch_tcinitialize(int minor)
 }
 
 /****************************************************************************
- * Name: arch_tcuninitialize
+ * Name: board_tsc_teardown
  *
  * Description:
  *   Each board that supports a touchscreen device must provide this function.
@@ -315,7 +318,7 @@ int arch_tcinitialize(int minor)
  *
  ****************************************************************************/
 
-void arch_tcuninitialize(void)
+void board_tsc_teardown(void)
 {
   /* No support for un-initializing the touchscreen XPT2046 device.  It will
    * continue to run and process touch interrupts in the background.

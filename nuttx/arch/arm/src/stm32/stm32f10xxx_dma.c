@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/stm32/stm32f10xxx_dma.c
  *
- *   Copyright (C) 2009, 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011-2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,18 +47,17 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
-#include <arch/irq.h>
 
 #include "up_arch.h"
 #include "up_internal.h"
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "chip.h"
 #include "stm32_dma.h"
 #include "stm32.h"
 
 
 #if defined(CONFIG_STM32_STM32F10XX) || defined(CONFIG_STM32_STM32F30XX) || \
-    defined(CONFIG_STM32_STM32L15XX)
+    defined(CONFIG_STM32_STM32F37XX) || defined(CONFIG_STM32_STM32L15XX)
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -158,7 +157,7 @@ static struct stm32_dma_s g_dma[DMA_NCHANNELS] =
   {
     .chan     = 3,
 #if defined(CONFIG_STM32_CONNECTIVITYLINE) || defined(CONFIG_STM32_STM32F30XX) || \
-    defined(CONFIG_STM32_STM32L15XX)
+    defined(CONFIG_STM32_STM32F37XX) || defined(CONFIG_STM32_STM32L15XX)
     .irq      = STM32_IRQ_DMA2CH4,
 #else
     .irq      = STM32_IRQ_DMA2CH45,
@@ -168,7 +167,7 @@ static struct stm32_dma_s g_dma[DMA_NCHANNELS] =
   {
     .chan     = 4,
 #if defined(CONFIG_STM32_CONNECTIVITYLINE) || defined(CONFIG_STM32_STM32F30XX) || \
-    defined(CONFIG_STM32_STM32L15XX)
+    defined(CONFIG_STM32_STM32F37XX) || defined(CONFIG_STM32_STM32L15XX)
     .irq      = STM32_IRQ_DMA2CH5,
 #else
     .irq      = STM32_IRQ_DMA2CH45,
@@ -291,7 +290,7 @@ static int stm32_dmainterrupt(int irq, void *context)
   else
 #if STM32_NDMA > 1
 #if defined(CONFIG_STM32_CONNECTIVITYLINE) || defined(CONFIG_STM32_STM32F30XX) || \
-    defined(CONFIG_STM32_STM32L15XX)
+    defined(CONFIG_STM32_STM32F37XX) || defined(CONFIG_STM32_STM32L15XX)
   if (irq >= STM32_IRQ_DMA2CH1 && irq <= STM32_IRQ_DMA2CH5)
 #else
   if (irq >= STM32_IRQ_DMA2CH1 && irq <= STM32_IRQ_DMA2CH45)
@@ -502,10 +501,12 @@ void stm32_dmasetup(DMA_HANDLE handle, uint32_t paddr, uint32_t maddr,
    */
 
   regval  = dmachan_getreg(dmach, STM32_DMACHAN_CCR_OFFSET);
-  regval &= ~(DMA_CCR_MEM2MEM|DMA_CCR_PL_MASK|DMA_CCR_MSIZE_MASK|DMA_CCR_PSIZE_MASK|
-              DMA_CCR_MINC|DMA_CCR_PINC|DMA_CCR_CIRC|DMA_CCR_DIR);
-  ccr    &=  (DMA_CCR_MEM2MEM|DMA_CCR_PL_MASK|DMA_CCR_MSIZE_MASK|DMA_CCR_PSIZE_MASK|
-              DMA_CCR_MINC|DMA_CCR_PINC|DMA_CCR_CIRC|DMA_CCR_DIR);
+  regval &= ~(DMA_CCR_MEM2MEM | DMA_CCR_PL_MASK | DMA_CCR_MSIZE_MASK |
+              DMA_CCR_PSIZE_MASK | DMA_CCR_MINC | DMA_CCR_PINC | DMA_CCR_CIRC |
+              DMA_CCR_DIR);
+  ccr    &=  (DMA_CCR_MEM2MEM | DMA_CCR_PL_MASK | DMA_CCR_MSIZE_MASK |
+              DMA_CCR_PSIZE_MASK | DMA_CCR_MINC | DMA_CCR_PINC | DMA_CCR_CIRC |
+              DMA_CCR_DIR);
   regval |= ccr;
   dmachan_putreg(dmach, STM32_DMACHAN_CCR_OFFSET, regval);
 }
@@ -556,7 +557,7 @@ void stm32_dmastart(DMA_HANDLE handle, dma_callback_t callback,
        * Interrupt Enable bit (TCIE) is set.
        */
 
-      ccr |= (half ? (DMA_CCR_HTIE|DMA_CCR_TEIE) : (DMA_CCR_TCIE|DMA_CCR_TEIE));
+      ccr |= (half ? (DMA_CCR_HTIE | DMA_CCR_TEIE) : (DMA_CCR_TCIE | DMA_CCR_TEIE));
     }
   else
     {
@@ -706,19 +707,19 @@ bool stm32_dmacapable(uint32_t maddr, uint32_t count, uint32_t ccr)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_DMA
+#ifdef CONFIG_DEBUG_DMA_INFO
 void stm32_dmasample(DMA_HANDLE handle, struct stm32_dmaregs_s *regs)
 {
   struct stm32_dma_s *dmach = (struct stm32_dma_s *)handle;
   irqstate_t flags;
 
-  flags       = irqsave();
+  flags       = enter_critical_section();
   regs->isr   = dmabase_getreg(dmach, STM32_DMA_ISR_OFFSET);
   regs->ccr   = dmachan_getreg(dmach, STM32_DMACHAN_CCR_OFFSET);
   regs->cndtr = dmachan_getreg(dmach, STM32_DMACHAN_CNDTR_OFFSET);
   regs->cpar  = dmachan_getreg(dmach, STM32_DMACHAN_CPAR_OFFSET);
   regs->cmar  = dmachan_getreg(dmach, STM32_DMACHAN_CMAR_OFFSET);
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 #endif
 
@@ -733,19 +734,19 @@ void stm32_dmasample(DMA_HANDLE handle, struct stm32_dmaregs_s *regs)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_DMA
+#ifdef CONFIG_DEBUG_DMA_INFO
 void stm32_dmadump(DMA_HANDLE handle, const struct stm32_dmaregs_s *regs,
                    const char *msg)
 {
   struct stm32_dma_s *dmach = (struct stm32_dma_s *)handle;
   uint32_t dmabase = DMA_BASE(dmach->base);
 
-  dmadbg("DMA Registers: %s\n", msg);
-  dmadbg("   ISRC[%08x]: %08x\n", dmabase + STM32_DMA_ISR_OFFSET, regs->isr);
-  dmadbg("    CCR[%08x]: %08x\n", dmach->base + STM32_DMACHAN_CCR_OFFSET, regs->ccr);
-  dmadbg("  CNDTR[%08x]: %08x\n", dmach->base + STM32_DMACHAN_CNDTR_OFFSET, regs->cndtr);
-  dmadbg("   CPAR[%08x]: %08x\n", dmach->base + STM32_DMACHAN_CPAR_OFFSET, regs->cpar);
-  dmadbg("   CMAR[%08x]: %08x\n", dmach->base + STM32_DMACHAN_CMAR_OFFSET, regs->cmar);
+  dmainfo("DMA Registers: %s\n", msg);
+  dmainfo("   ISRC[%08x]: %08x\n", dmabase + STM32_DMA_ISR_OFFSET, regs->isr);
+  dmainfo("    CCR[%08x]: %08x\n", dmach->base + STM32_DMACHAN_CCR_OFFSET, regs->ccr);
+  dmainfo("  CNDTR[%08x]: %08x\n", dmach->base + STM32_DMACHAN_CNDTR_OFFSET, regs->cndtr);
+  dmainfo("   CPAR[%08x]: %08x\n", dmach->base + STM32_DMACHAN_CPAR_OFFSET, regs->cpar);
+  dmainfo("   CMAR[%08x]: %08x\n", dmach->base + STM32_DMACHAN_CMAR_OFFSET, regs->cmar);
 }
 #endif
 

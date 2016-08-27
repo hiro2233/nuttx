@@ -33,8 +33,8 @@
  *
  ************************************************************************************/
 
-#ifndef _ARCH_ARM_SRC_LPC214X_I2C_H
-#define _ARCH_ARM_SRC_LPC214X_I2C_H
+#ifndef __ARCH_ARM_SRC_LPC214X_LPC214X_I2C_H
+#define __ARCH_ARM_SRC_LPC214X_LPC214X_I2C_H
 
 /************************************************************************************
  * Included Files
@@ -43,7 +43,7 @@
 #include "chip.h"
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Register address Offsets *********************************************************/
@@ -73,7 +73,7 @@
 /* Control Set Register (CONSET) */
 
 #define I2C_CONSET_AA            (1 << 2)  /* Bit 2: Assert acknowledge flag */
-#define I2C_CONSET_SI            (1 << 3)  /* Bit 3: I2C interrrupt flag */
+#define I2C_CONSET_SI            (1 << 3)  /* Bit 3: I2C interrupt flag */
 #define I2C_CONSET_STO           (1 << 4)  /* Bit 4: STOP flag */
 #define I2C_CONSET_STA           (1 << 5)  /* Bit 5: START flag */
 #define I2C_CONSET_I2EN          (1 << 6)  /* Bit 6: I2C interface enable */
@@ -138,4 +138,4 @@
  * Public Function Prototypes
  ************************************************************************************/
 
-#endif  /* _ARCH_ARM_SRC_LPC214X_I2C_H */
+#endif  /* __ARCH_ARM_SRC_LPC214X_LPC214X_I2C_H */

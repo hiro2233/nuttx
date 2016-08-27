@@ -1,7 +1,7 @@
 /************************************************************************************
  * arch/arm/src/sama5/chip/sam_pinmap.h
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,8 +43,12 @@
 #include <nuttx/config.h>
 #include <arch/sama5/chip.h>
 
-#if defined(ATSAMA5D3)
-#  include "chip/sama5d3x_pinmap.h"
+#if defined(ATSAMA5D2)
+#  include "chip/_sama5d2x_pinmap.h"
+#elif defined(ATSAMA5D3)
+#  include "chip/_sama5d3x_pinmap.h"
+#elif defined(ATSAMA5D4)
+#  include "chip/_sama5d4x_pinmap.h"
 #else
 #  error Unrecognized SAMA5 architecture
 #endif

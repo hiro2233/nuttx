@@ -52,7 +52,7 @@ endif
 
 ARCHCPUFLAGS		= -fno-builtin -nostdinc -fno-stack-protector
 ARCHPICFLAGS		= -fpic
-ARCHWARNINGS		= -Wall -Wstrict-prototypes -Wshadow
+ARCHWARNINGS		= -Wall -Wstrict-prototypes -Wshadow -Wundef
 ARCHDEFINES		= -D__RGMP_KERNEL__ -D__RTOS_KERNEL__ -D__SHARE_KERNEL__
 ARCHINCLUDES		= -I. -isystem $(TOPDIR)/include -I$(RGMPINCDIR) \
 			  -I$(TOPDIR)/configs/rgmp/include -I$(TOPDIR)/arch/rgmp/include/x86
@@ -72,6 +72,7 @@ CFLAGS			= $(ARCHWARNINGS) $(ARCHOPTIMIZATION) \
 CPPFLAGS		= $(ARCHINCLUDES) $(ARCHDEFINES)
 AFLAGS			= $(CFLAGS) -D__ASSEMBLY__
 
+ASMEXT			= .S
 OBJEXT			= .o
 LIBEXT			= .a
 
@@ -85,7 +86,7 @@ LDFLAGS                 += -nostdlib
 EXTRA_LIBS		=
 
 
-MKDEP			= $(TOPDIR)/tools/mkdeps.sh
+MKDEP			= $(TOPDIR)/tools/mkdeps$(HOSTEXEEXT)
 
 HOSTCC			= gcc
 HOSTINCLUDES		= -I.

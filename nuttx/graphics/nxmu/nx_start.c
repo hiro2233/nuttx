@@ -1,7 +1,7 @@
 /****************************************************************************
  * graphics/nxmu/nx_start.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,28 +45,13 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <nuttx/kthread.h>
 #include <nuttx/nx/nx.h>
 
 #include "nxfe.h"
 
 #ifdef CONFIG_NX_NXSTART
-
-/****************************************************************************
- * Pre-Processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -96,29 +81,29 @@ int nx_server(int argc, char *argv[])
 #if defined(CONFIG_NXSTART_EXTERNINIT)
   /* Use external graphics driver initialization */
 
-  dev = up_nxdrvinit(CONFIG_NXSTART_DEVNO);
+  dev = board_graphics_setup(CONFIG_NXSTART_DEVNO);
   if (!dev)
     {
-      gdbg("ERROR: up_nxdrvinit failed, devno=%d\n", CONFIG_NXSTART_DEVNO);
+      gerr("ERROR: board_graphics_setup failed, devno=%d\n", CONFIG_NXSTART_DEVNO);
       return EXIT_FAILURE;
     }
 
 #elif defined(CONFIG_NX_LCDDRIVER)
   /* Initialize the LCD device */
 
-  ret = up_lcdinitialize();
+  ret = board_lcd_initialize();
   if (ret < 0)
     {
-      gdbg("ERROR: up_lcdinitialize failed: %d\n", ret);
+      gerr("ERROR: board_lcd_initialize failed: %d\n", ret);
       return EXIT_FAILURE;
     }
 
   /* Get the device instance */
 
-  dev = up_lcdgetdev(CONFIG_NXSTART_DEVNO);
+  dev = board_lcd_getdev(CONFIG_NXSTART_DEVNO);
   if (!dev)
     {
-      gdbg("ERROR: up_lcdgetdev failed, devno=%d\n", CONFIG_NXSTART_DEVNO);
+      gerr("ERROR: board_lcd_getdev failed, devno=%d\n", CONFIG_NXSTART_DEVNO);
       return EXIT_FAILURE;
     }
 
@@ -127,19 +112,21 @@ int nx_server(int argc, char *argv[])
   (void)dev->setpower(dev, ((3*CONFIG_LCD_MAXPOWER + 3)/4));
 
 #else /* CONFIG_NX_LCDDRIVER */
-  /* Initialize the frame buffer device */
+  /* Initialize the frame buffer device.
+   * REVISIT: display == 0 is assumed.
+   */
 
-  ret = up_fbinitialize();
+  ret = up_fbinitialize(0);
   if (ret < 0)
     {
-      gdbg("ERROR: up_fbinitialize failed: %d\n", ret);
+      gerr("ERROR: up_fbinitialize failed: %d\n", ret);
       return EXIT_FAILURE;
     }
 
-  dev = up_fbgetvplane(CONFIG_NXSTART_VPLANE);
+  dev = up_fbgetvplane(0, CONFIG_NXSTART_VPLANE);
   if (!dev)
     {
-      gdbg("ERROR: up_fbgetvplane failed, vplane=%d\n", CONFIG_NXSTART_VPLANE);
+      gerr("ERROR: up_fbgetvplane failed, vplane=%d\n", CONFIG_NXSTART_VPLANE);
       return EXIT_FAILURE;
     }
 
@@ -148,7 +135,7 @@ int nx_server(int argc, char *argv[])
   /* Then start the server (nx_run does not normally return) */
 
   ret = nx_run(dev);
-  gvdbg("nx_run returned: %d\n", ret);
+  ginfo("nx_run returned: %d\n", ret);
   return EXIT_FAILURE;
 }
 
@@ -187,15 +174,15 @@ int nx_start(void)
 
   /* Start the server kernel thread */
 
-  gvdbg("Starting server task\n");
-  server = KERNEL_THREAD("NX Server", CONFIG_NXSTART_SERVERPRIO,
+  ginfo("Starting server task\n");
+  server = kernel_thread("NX Server", CONFIG_NXSTART_SERVERPRIO,
                          CONFIG_NXSTART_SERVERSTACK, nx_server, NULL);
   if (server < 0)
     {
       int errcode = errno;
       DEBUGASSERT(errcode > 0);
 
-      gdbg("ERROR: Failed to create nx_server kernel thread: %d\n", errcode);
+      gerr("ERROR: Failed to create nx_server kernel thread: %d\n", errcode);
       return -errcode;
     }
 

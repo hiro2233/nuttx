@@ -1,11 +1,12 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 config EXAMPLES_BUTTONS
 	bool "Buttons example"
 	default n
+	depends on ARCH_BUTTONS && BUILD_FLAT
 	---help---
 		Enable the buttons example.  May require ARCH_BUTTONS on some boards.
 

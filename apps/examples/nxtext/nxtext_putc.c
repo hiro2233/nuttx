@@ -48,13 +48,12 @@
 #include <debug.h>
 
 #include <nuttx/nx/nx.h>
-#include <nuttx/nx/nxtk.h>
 #include <nuttx/nx/nxfonts.h>
 
 #include "nxtext_internal.h"
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Select renderer -- Some additional logic would be required to support
@@ -234,7 +233,7 @@ nxtext_renderglyph(FAR struct nxtext_state_s *st,
 
   /* Make sure that there is room for another glyph */
 
-  gvdbg("ch=%c [%02x]\n", isprint(ch) ? ch : '.', ch);
+  ginfo("ch=%c [%02x]\n", isprint(ch) ? ch : '.', ch);
 
   /* Allocate the glyph (always succeeds) */
 
@@ -313,7 +312,7 @@ nxtext_renderglyph(FAR struct nxtext_state_s *st,
         {
           /* Actually, the RENDERER never returns a failure */
 
-          message("nxtext_renderglyph: RENDERER failed\n");
+          printf("nxtext_renderglyph: RENDERER failed\n");
           nxtext_freeglyph(glyph);
           glyph = NULL;
         }
@@ -591,7 +590,7 @@ void nxtext_fillchar(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect,
                       &bm->pos, (unsigned int)glyph->stride);
       if (ret < 0)
         {
-          message("nxtext_fillchar: nx_bitmapwindow failed: %d\n", errno);
+          printf("nxtext_fillchar: nx_bitmapwindow failed: %d\n", errno);
         }
     }
 }

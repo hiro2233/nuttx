@@ -1,6 +1,5 @@
 /****************************************************************************
  * arch/z80/include/ez80/types.h
- * include/arch/chip/types.h
  *
  *   Copyright (C) 2008-2009 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -46,7 +45,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -100,7 +99,7 @@ typedef signed int         _intptr_t;
 typedef unsigned int       _uintptr_t;
 #endif
 
-/* This is the size of the interrupt state save returned by irqsave().
+/* This is the size of the interrupt state save returned by up_irq_save().
  * It holds the AF regiser pair + a zero pad byte
  */
 
@@ -109,7 +108,7 @@ typedef _uint24_t          irqstate_t;
 #endif /* __ASSEMBLY__ */
 
 /****************************************************************************
- * Global Function Prototypes
+ * Public Function Prototypes
  ****************************************************************************/
 
 #endif /* __ARCH_Z80_INCLUDE_EZ80_TYPES_H */

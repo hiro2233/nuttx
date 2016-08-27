@@ -47,7 +47,7 @@
 #include <nuttx/fs/fs.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* The architecture must provide up_putc for this driver */
@@ -65,19 +65,22 @@ static ssize_t lowconsole_write(struct file *filep, const char *buffer, size_t b
 static int     lowconsole_ioctl(struct file *filep, int cmd, unsigned long arg);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct file_operations g_consoleops =
 {
-  0,                /* open */
-  0,                /* close */
+  NULL,             /* open */
+  NULL,             /* close */
   lowconsole_read,  /* read */
   lowconsole_write, /* write */
-  0,                /* seek */
+  NULL,             /* seek */
   lowconsole_ioctl  /* ioctl */
 #ifndef CONFIG_DISABLE_POLL
-  , 0               /* poll */
+  , NULL            /* poll */
+#endif
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+  , NULL            /* unlink */
 #endif
 };
 
@@ -115,6 +118,7 @@ static ssize_t lowconsole_write(struct file *filep, const char *buffer, size_t b
     {
       up_putc(*buffer++);
     }
+
   return ret;
 }
 
@@ -124,7 +128,7 @@ static ssize_t lowconsole_write(struct file *filep, const char *buffer, size_t b
 
 /****************************************************************************
  * Name: lowconsole_init
-****************************************************************************/
+ ****************************************************************************/
 
 void lowconsole_init(void)
 {

@@ -1,13 +1,13 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 config NETUTILS_DISCOVER
 	bool "Network Discovery Utility"
 	default n
 	depends on NET_UDP
-	select NETUTILS_UIPLIB
+	select NETUTILS_NETLIB
 	---help---
 		Tool for discovering devices on the local network per UDP broadcast.
 

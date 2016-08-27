@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/armv7-a/arm_schedulesigaction.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,26 +43,15 @@
 #include <sched.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 
 #include "arm.h"
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 #include "up_arch.h"
 
 #ifndef CONFIG_DISABLE_SIGNALS
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -75,7 +64,7 @@
  *   This function is called by the OS when one or more
  *   signal handling actions have been queued for execution.
  *   The architecture specific code must configure things so
- *   that the 'igdeliver' callback is executed on the thread
+ *   that the 'sigdeliver' callback is executed on the thread
  *   specified by 'tcb' as soon as possible.
  *
  *   This function may be called from interrupt handling logic.
@@ -103,47 +92,47 @@
 
 void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
 {
-  /* Refuse to handle nested signal actions */
+  irqstate_t flags;
 
-  sdbg("tcb=0x%p sigdeliver=0x%p\n", tcb, sigdeliver);
+  sinfo("tcb=0x%p sigdeliver=0x%p\n", tcb, sigdeliver);
+
+  /* Make sure that interrupts are disabled */
+
+  flags = enter_critical_section();
+
+  /* Refuse to handle nested signal actions */
 
   if (!tcb->xcp.sigdeliver)
     {
-      irqstate_t flags;
-
-      /* Make sure that interrupts are disabled */
-
-      flags = irqsave();
-
-      /* First, handle some special cases when the signal is
-       * being delivered to the currently executing task.
+      /* First, handle some special cases when the signal is being delivered
+       * to the currently executing task.
        */
 
-      sdbg("rtcb=0x%p current_regs=0x%p\n", g_readytorun.head, current_regs);
+      sinfo("rtcb=0x%p CURRENT_REGS=0x%p\n", this_task(), CURRENT_REGS);
 
-      if (tcb == (struct tcb_s*)g_readytorun.head)
+      if (tcb == this_task())
         {
-          /* CASE 1:  We are not in an interrupt handler and
-           * a task is signalling itself for some reason.
+          /* CASE 1:  We are not in an interrupt handler and a task is
+           * signalling itself for some reason.
            */
 
-          if (!current_regs)
+          if (!CURRENT_REGS)
             {
               /* In this case just deliver the signal now. */
 
               sigdeliver(tcb);
             }
 
-          /* CASE 2:  We are in an interrupt handler AND the
-           * interrupted task is the same as the one that
-           * must receive the signal, then we will have to modify
-           * the return state as well as the state in the TCB.
+          /* CASE 2:  We are in an interrupt handler AND the interrupted
+           * task is the same as the one that must receive the signal, then
+           * we will have to modify the return state as well as the state
+           * in the TCB.
            *
-           * Hmmm... there looks like a latent bug here: The following
-           * logic would fail in the strange case where we are in an
-           * interrupt handler, the thread is signalling itself, but
-           * a context switch to another task has occurred so that
-           * current_regs does not refer to the thread at g_readytorun.head!
+           * Hmmm... there looks like a latent bug here: The following logic
+           * would fail in the strange case where we are in an interrupt
+           * handler, the thread is signalling itself, but a context switch
+           * to another task has occurred so that CURRENT_REGS does not
+           * refer to the thread of this_task()!
            */
 
           else
@@ -154,35 +143,34 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
                */
 
               tcb->xcp.sigdeliver       = sigdeliver;
-              tcb->xcp.saved_pc         = current_regs[REG_PC];
-              tcb->xcp.saved_cpsr       = current_regs[REG_CPSR];
+              tcb->xcp.saved_pc         = CURRENT_REGS[REG_PC];
+              tcb->xcp.saved_cpsr       = CURRENT_REGS[REG_CPSR];
 
               /* Then set up to vector to the trampoline with interrupts
                * disabled
                */
 
-              current_regs[REG_PC]      = (uint32_t)up_sigdeliver;
-              current_regs[REG_CPSR]    = PSR_MODE_SVC | PSR_I_BIT | PSR_F_BIT;
+              CURRENT_REGS[REG_PC]      = (uint32_t)up_sigdeliver;
+              CURRENT_REGS[REG_CPSR]    = (PSR_MODE_SVC | PSR_I_BIT | PSR_F_BIT);
 
-              /* And make sure that the saved context in the TCB
-               * is the same as the interrupt return context.
+              /* And make sure that the saved context in the TCB is the same
+               * as the interrupt return context.
                */
 
               up_savestate(tcb->xcp.regs);
             }
         }
 
-      /* Otherwise, we are (1) signaling a task is not running
-       * from an interrupt handler or (2) we are not in an
-       * interrupt handler and the running task is signalling
-       * some non-running task.
+      /* Otherwise, we are (1) signaling a task is not running from an
+       * interrupt handler or (2) we are not in an interrupt handler and the
+       * running task is signalling some non-running task.
        */
 
       else
         {
-          /* Save the return lr and cpsr and one scratch register
-           * These will be restored by the signal trampoline after
-           * the signals have been delivered.
+          /* Save the return lr and cpsr and one scratch register.  These
+           * will be restored by the signal trampoline after the signals
+           * have been delivered.
            */
 
           tcb->xcp.sigdeliver       = sigdeliver;
@@ -194,11 +182,11 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
            */
 
           tcb->xcp.regs[REG_PC]      = (uint32_t)up_sigdeliver;
-          tcb->xcp.regs[REG_CPSR]    = PSR_MODE_SVC | PSR_I_BIT | PSR_F_BIT;
+          tcb->xcp.regs[REG_CPSR]    = (PSR_MODE_SVC | PSR_I_BIT | PSR_F_BIT);
         }
-
-      irqrestore(flags);
     }
+
+  leave_critical_section(flags);
 }
 
 #endif /* !CONFIG_DISABLE_SIGNALS */

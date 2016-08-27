@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/mips/src/pic32mx/pic32mx-decodeirq.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2014-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,13 +46,15 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
 
 #include "pic32mx-int.h"
-#include "pic32mx-internal.h"
+#include "pic32mx.h"
+
+#include "group/group.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -78,7 +80,7 @@
  * Name: pic32mx_decodeirq
  *
  * Description:
- *   Called from assembly language logic when an interrrupt exception occurs.
+ *   Called from assembly language logic when an interrupt exception occurs.
  *   This function decodes and dispatches the interrupt.
  *
  ****************************************************************************/
@@ -95,23 +97,23 @@ uint32_t *pic32mx_decodeirq(uint32_t *regs)
    * processing an interrupt.
    */
 
-  board_led_on(LED_INIRQ);
+  board_autoled_on(LED_INIRQ);
 
-  /* Save the current value of current_regs (to support nested interrupt
-   * handling).  Then set current_regs to regs, indicating that this is
+  /* Save the current value of g_current_regs (to support nested interrupt
+   * handling).  Then set g_current_regs to regs, indicating that this is
    * the interrupted context that is being processed now.
    */
 
 #ifdef CONFIG_PIC32MX_NESTED_INTERRUPTS
-  savestate = (uint32_t*)current_regs;
+  savestate = (uint32_t *)g_current_regs;
 #else
-  DEBUGASSERT(current_regs == NULL);
+  DEBUGASSERT(g_current_regs == NULL);
 #endif
-  current_regs = regs;
+  g_current_regs = regs;
 
   /* Loop while there are pending interrupts with priority greater than zero */
 
-  for (;;)
+  for (; ; )
     {
       /* Read the INTSTAT register.  This register contains both the priority
        * and the interrupt vector number.
@@ -139,33 +141,59 @@ uint32_t *pic32mx_decodeirq(uint32_t *regs)
     }
 
   /* If a context switch occurred while processing the interrupt then
-   * current_regs may have change value.  If we return any value different
+   * g_current_regs may have change value.  If we return any value different
    * from the input regs, then the lower level will know that a context
    * switch occurred during interrupt processing.
    */
 
-  regs = (uint32_t*)current_regs;
+  regs = (uint32_t *)g_current_regs;
 
-  /* Restore the previous value of current_regs.  NULL would indicate that
-   * we are no longer in an interrupt handler.  It will be non-NULL if we
-   * are returning from a nested interrupt.
+#if defined(CONFIG_ARCH_FPU) || defined(CONFIG_ARCH_ADDRENV)
+  /* Check for a context switch.  If a context switch occurred, then
+   * g_current_regs will have a different value than it did on entry.  If an
+   * interrupt level context switch has occurred, then restore the floating
+   * point state and the establish the correct address environment before
+   * returning from the interrupt.
    */
+
+  if (regs != g_current_regs)
+    {
+#ifdef CONFIG_ARCH_FPU
+      /* Restore floating point registers */
+
+      up_restorefpu((uint32_t *)g_current_regs);
+#endif
+
+#ifdef CONFIG_ARCH_ADDRENV
+      /* Make sure that the address environment for the previously
+       * running task is closed down gracefully (data caches dump,
+       * MMU flushed) and set up the address environment for the new
+       * thread at the head of the ready-to-run list.
+       */
+
+      (void)group_addrenv(NULL);
+#endif
+    }
+#endif
 
 #ifdef CONFIG_PIC32MX_NESTED_INTERRUPTS
-  /* I think there are some task switching issues here.  You should not
-   * enable nested interrupts unless you are ready to deal with the
-   * complexities of nested context switching.  The logic here is probably
-   * insufficient.
+  /* Restore the previous value of g_current_regs.  NULL would indicate that
+   * we are no longer in an interrupt handler.  It will be non-NULL if we
+   * are returning from a nested interrupt.
+   *
+   * REVISIT: There are task switching issues!  You should not enable
+   * nested interrupts unless you are ready to deal with the complexities
+   * of fixing nested context switching.  The logic here is insufficient.
    */
 
-  current_regs = savestate;
-  if (current_regs == NULL)
+  g_current_regs = savestate;
+  if (g_current_regs == NULL)
     {
-      board_led_off(LED_INIRQ);
+      board_autoled_off(LED_INIRQ);
     }
 #else
-  current_regs = NULL;
-  board_led_off(LED_INIRQ);
+  g_current_regs = NULL;
+  board_autoled_off(LED_INIRQ);
 #endif
 
   return regs;

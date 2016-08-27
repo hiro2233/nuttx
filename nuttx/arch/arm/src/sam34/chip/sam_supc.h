@@ -2,7 +2,7 @@
  * arch/arm/src/sam34/chip/sam_supc.h
  * Supply Controller (SUPC) definitions for the SAM3U, SAM3X, SAM3A, SAM4E, and SAM4S
  *
- *   Copyright (C) 2009, 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -83,7 +83,8 @@
 #define SUPC_SMMR_SMTH_MASK             (15 << SUPC_SMMR_SMTH_SHIFT)
 #  define SUPC_SMMR_SMTH(n)             ((uint32_t)(n) << SUPC_SMMR_SMTH_SHIFT)
 
-#if defined(CONFIG_ARCH_CHIP_SAM4S) || defined(CONFIG_ARCH_CHIP_SAM4E)
+#if defined(CONFIG_ARCH_CHIP_SAM4CM) || defined(CONFIG_ARCH_CHIP_SAM4S) || \
+    defined(CONFIG_ARCH_CHIP_SAM4E)
 #  define SUPC_SMMR_SMTH_1p6V           (0  << SUPC_SMMR_SMTH_SHIFT) /* 1.56 < 1.6 < 1.64 */
 #  define SUPC_SMMR_SMTH_1p7V           (1  << SUPC_SMMR_SMTH_SHIFT) /* 1.68 < 1.72 < 1.76 */
 #  define SUPC_SMMR_SMTH_1p8V           (2  << SUPC_SMMR_SMTH_SHIFT) /* 1.79 < 1.84 < 1.89 */
@@ -132,6 +133,35 @@
 
 /* Supply Controller Mode Register */
 
+#if defined(CONFIG_ARCH_CHIP_SAM4CM)
+
+#define SUPC_MR_LCDVROUT_SHIFT          (0)
+#define SUPC_MR_LCDVROUT_MASK           (15 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_2p92V        (0 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_2p85V        (1 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_2p77V        (2 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_2p70V        (3 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_2p63V        (4 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_2p55V        (5 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_2p48V        (6 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_2p41V        (7 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_3p51V        (8 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_3p44V        (9 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_3p36V        (10 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_3p29V        (11 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_3p22V        (12 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_3p14V        (13 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_3p07V        (14 << SUPC_MR_LCDVROUT_SHIFT)
+#  define SUPC_MR_LCDVROUT_3p00V        (15 << SUPC_MR_LCDVROUT_SHIFT)
+
+#define SUPC_MR_LCDMODE_SHIFT           (4)
+#define SUPC_MR_LCDMODE_MASK            (3 << SUPC_MR_LCDMODE_SHIFT)
+#  define SUPC_MR_LCDMODE_LCDOFF        (0 << SUPC_MR_LCDMODE_SHIFT) /* The internal supply source and the external supply source are both deselected */
+#  define SUPC_MR_LCDMODE_LCDON_EXTVR   (2 << SUPC_MR_LCDMODE_SHIFT) /* The external supply source for LCD (VDDLCD) is selected (the LCD voltage regulator is in Hi-Z Mode) */
+#  define SUPC_MR_LCDMODE_LCDON_INVR    (3 << SUPC_MR_LCDMODE_SHIFT) /* The internal supply source for LCD (the LCD Voltage Regulator) is selected (Active Mode) */
+
+#endif
+
 #define SUPC_MR_BODRSTEN                (1 << 12) /* Bit 12: Brownout Detector Reset Enable */
 #define SUPC_MR_BODDIS                  (1 << 13) /* Bit 13: Brownout Detector Disable */
 
@@ -152,7 +182,7 @@
 
 /* Supply Controller Wake Up Mode Register */
 
-#if defined(CONFIG_ARCH_CHIP_SAM3U)  || defined(CONFIG_ARCH_CHIP_SAM4E)
+#if defined(CONFIG_ARCH_CHIP_SAM3U) || defined(CONFIG_ARCH_CHIP_SAM4E)
 #  define SUPC_WUMR_FWUPEN              (1 << 0)  /* Bit 0:  Force Wake Up Enable */
 #endif
 
@@ -223,6 +253,10 @@
 #define SUPC_SR_SMS                    (1 << 5)  /* Bit 5:  Supply Monitor Status */
 #define SUPC_SR_SMOS                   (1 << 6)  /* Bit 6:  Supply Monitor Output Status */
 #define SUPC_SR_OSCSEL                 (1 << 7)  /* Bit 7:  32-kHz Oscillator Selection Status */
+
+#if defined(CONFIG_ARCH_CHIP_SAM4CM)
+#  define SUPC_SR_LCDS                 (1 << 8)  /* Bit 8: LCD Status */
+#endif
 
 #if defined(CONFIG_ARCH_CHIP_SAM3U) || defined(CONFIG_ARCH_CHIP_SAM3X) || \
     defined(CONFIG_ARCH_CHIP_SAM3A) || defined(CONFIG_ARCH_CHIP_SAM4E)

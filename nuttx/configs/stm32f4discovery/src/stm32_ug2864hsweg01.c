@@ -41,17 +41,20 @@
 
 #include <debug.h>
 
+#include <nuttx/board.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/lcd/lcd.h>
 #include <nuttx/lcd/ssd1306.h>
 
 #include "stm32_gpio.h"
+#include "stm32_spi.h"
+
 #include "stm32f4discovery.h"
 
 #ifdef CONFIG_LCD_UG2864HSWEG01
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 /* The pin configurations here require that SPI1 is selected */
@@ -90,29 +93,19 @@
 
 /* Definitions in stm32f4discovery.h */
 
-/* Debug ********************************************************************/
-
-#ifdef CONFIG_DEBUG_LCD
-#  define lcddbg(format, ...)   dbg(format, ##__VA_ARGS__)
-#  define lcdvdbg(format, ...)  vdbg(format, ##__VA_ARGS__)
-#else
-#  define lcddbg(x...)
-#  define lcdvdbg(x...)
-#endif
-
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_nxdrvinit
+ * Name: board_graphics_setup
  *
  * Description:
  *   Called by NX initialization logic to configure the OLED.
  *
  ****************************************************************************/
 
-FAR struct lcd_dev_s *up_nxdrvinit(unsigned int devno)
+FAR struct lcd_dev_s *board_graphics_setup(unsigned int devno)
 {
   FAR struct spi_dev_s *spi;
   FAR struct lcd_dev_s *dev;
@@ -130,10 +123,10 @@ FAR struct lcd_dev_s *up_nxdrvinit(unsigned int devno)
 
   /* Get the SPI1 port interface */
 
-  spi = up_spiinitialize(1);
+  spi = stm32_spibus_initialize(1);
   if (!spi)
     {
-      lcddbg("Failed to initialize SPI port 1\n");
+      lcderr("ERROR: Failed to initialize SPI port 1\n");
     }
   else
     {
@@ -142,11 +135,11 @@ FAR struct lcd_dev_s *up_nxdrvinit(unsigned int devno)
       dev = ssd1306_initialize(spi, devno);
       if (!dev)
         {
-          lcddbg("Failed to bind SPI port 1 to OLED %d: %d\n", devno);
+          lcderr("ERROR: Failed to bind SPI port 1 to OLED %d: %d\n", devno);
         }
      else
         {
-          lcdvdbg("Bound SPI port 1 to OLED %d\n", devno);
+          lcdinfo("Bound SPI port 1 to OLED %d\n", devno);
 
           /* And turn the OLED on */
 

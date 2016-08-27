@@ -1,6 +1,5 @@
 /****************************************************************************
  * arch/z80/arch.h
- * arch/chip/arch.h
  *
  *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -65,19 +64,19 @@
  * of the base address are implicitly zero (hence the 4KB boundary alignment).
  */
 
-#ifdef CONFIG_ADDRENV
-typedef uint8_t hw_addrenv_t;
+#ifdef CONFIG_ARCH_ADDRENV
+typedef uint8_t save_addrenv_t;
 
 /* At the task-level, the z180 address environment is represented as struct
  * z180_cbr_s which is defined in irq.h.
  */
 
 struct z180_cbr_s;
-typedef FAR struct z180_cbr_s *task_addrenv_t;
+typedef FAR struct z180_cbr_s *group_addrenv_t;
 #endif
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -86,7 +85,8 @@ typedef FAR struct z180_cbr_s *task_addrenv_t;
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

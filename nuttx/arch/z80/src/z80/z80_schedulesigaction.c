@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z80/src/z80/z80_schedulesigaction.c
  *
- *   Copyright (C) 2007-2010 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2010, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,16 +44,16 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 
 #include "chip/switch.h"
-#include "os_internal.h"
+#include "sched/sched.h"
 #include "up_internal.h"
 
 #ifndef CONFIG_DISABLE_SIGNALS
 
 /****************************************************************************
- * Private Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -123,23 +123,23 @@ static void z80_sigsetup(FAR struct tcb_s *tcb, sig_deliver_t sigdeliver, FAR ch
 
 void up_schedule_sigaction(FAR struct tcb_s *tcb, sig_deliver_t sigdeliver)
 {
-  dbg("tcb=0x%p sigdeliver=0x%04x\n", tcb, (uint16_t)sigdeliver);
+  irqstate_t flags;
+
+  _info("tcb=0x%p sigdeliver=0x%04x\n", tcb, (uint16_t)sigdeliver);
+
+  /* Make sure that interrupts are disabled */
+
+  flags = enter_critical_section();
 
   /* Refuse to handle nested signal actions */
 
   if (tcb->xcp.sigdeliver == NULL)
     {
-      irqstate_t flags;
-
-      /* Make sure that interrupts are disabled */
-
-      flags = irqsave();
-
       /* First, handle some special cases when the signal is being delivered
        * to the currently executing task.
        */
 
-      if (tcb == (FAR struct tcb_s*)g_readytorun.head)
+      if (tcb == this_task())
         {
           /* CASE 1:  We are not in an interrupt handler and a task is
            * signalling itself for some reason.
@@ -183,10 +183,9 @@ void up_schedule_sigaction(FAR struct tcb_s *tcb, sig_deliver_t sigdeliver)
 
           z80_sigsetup(tcb, sigdeliver, tcb->xcp.regs);
         }
-
-      irqrestore(flags);
     }
+
+  leave_critical_section(flags);
 }
 
 #endif /* CONFIG_DISABLE_SIGNALS */
-

@@ -1,7 +1,7 @@
 /****************************************************************************
- * up_initialize.c
+ * arch/sim/src/up_initialize.c
  *
- *   Copyright (C) 2007-2009, 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,22 +42,118 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/fs/fs.h>
-#include <nuttx/syslog/ramlog.h>
+#include <nuttx/sched_note.h>
+#include <nuttx/drivers/drivers.h>
+#include <nuttx/fs/loop.h>
+#include <nuttx/fs/ioctl.h>
+#include <nuttx/net/loopback.h>
+#include <nuttx/net/tun.h>
+#include <nuttx/net/telnet.h>
+#include <nuttx/mtd/mtd.h>
+#include <nuttx/syslog/syslog.h>
+#include <nuttx/syslog/syslog_console.h>
+#include <nuttx/serial/pty.h>
+#include <nuttx/crypto/crypto.h>
+#include <nuttx/power/pm.h>
 
 #include "up_internal.h"
 
 /****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
  * Private Functions
  ****************************************************************************/
+
+/****************************************************************************
+ * Name: up_init_smartfs
+ *
+ * Description:
+ *   Initialize a simulated SPI FLASH block device m25p MTD driver and bind
+ *   it to a SMART Flash block device.
+ *
+ ****************************************************************************/
+
+#if defined(CONFIG_FS_SMARTFS) && (defined(CONFIG_SIM_SPIFLASH) || defined(CONFIG_SIM_QSPIFLASH))
+static void up_init_smartfs(void)
+{
+  FAR struct mtd_dev_s *mtd;
+  int minor = 0;
+#if defined(CONFIG_MTD_M25P) || defined(CONFIG_MTD_W25) || defined(CONFIG_MTD_SST26)
+  FAR struct spi_dev_s *spi;
+#endif
+#ifdef CONFIG_MTD_N25QXXX
+  FAR struct qspi_dev_s *qspi;
+#endif
+
+#ifdef CONFIG_SIM_SPIFLASH
+#ifdef CONFIG_MTD_M25P
+  /* Initialize a simulated SPI FLASH block device m25p MTD driver */
+
+  spi = up_spiflashinitialize("m25p");
+  if (spi != NULL)
+    {
+      mtd = m25p_initialize(spi);
+
+      /* Now initialize a SMART Flash block device and bind it to the MTD device */
+
+      if (mtd != NULL)
+        {
+          smart_initialize(minor++, mtd, "_m25p");
+        }
+    }
+#endif
+
+#ifdef CONFIG_MTD_SST26
+  /* Initialize a simulated SPI FLASH block device sst26 MTD driver */
+
+  spi = up_spiflashinitialize("sst26");
+  if (spi != NULL)
+    {
+      mtd = sst26_initialize_spi(spi);
+
+      /* Now initialize a SMART Flash block device and bind it to the MTD device */
+
+      if (mtd != NULL)
+        {
+          smart_initialize(minor++, mtd, "_sst26");
+        }
+    }
+#endif
+
+#ifdef CONFIG_MTD_W25
+  /* Initialize a simulated SPI FLASH block device w25 MTD driver */
+
+  spi = up_spiflashinitialize("w25");
+  if (spi != NULL)
+    {
+      mtd = w25_initialize(spi);
+
+      /* Now initialize a SMART Flash block device and bind it to the MTD device */
+
+      if (mtd != NULL)
+        {
+          smart_initialize(minor++, mtd, "_w25");
+        }
+    }
+#endif
+#endif      /* CONFIG_SIM_SPIFLASH */
+
+#if defined(CONFIG_MTD_N25QXXX) && defined(CONFIG_SIM_QSPIFLASH)
+  /* Initialize a simulated SPI FLASH block device n25qxxx MTD driver */
+
+  qspi = up_qspiflashinitialize();
+  if (qspi != NULL)
+    {
+      mtd = n25qxxx_initialize(qspi, 0);
+
+      /* Now initialize a SMART Flash block device and bind it to the MTD device */
+
+      if (mtd != NULL)
+        {
+          smart_initialize(minor++, mtd, "_n25q");
+        }
+    }
+#endif
+}
+#endif
 
 /****************************************************************************
  * Public Functions
@@ -85,49 +181,118 @@
 
 void up_initialize(void)
 {
+#ifdef CONFIG_NET
   /* The real purpose of the following is to make sure that syslog
    * is drawn into the link.  It is needed by up_tapdev which is linked
    * separately.
    */
 
-#ifdef CONFIG_NET
-  syslog("SIM: Initializing");
+  syslog(LOG_INFO, "SIM: Initializing");
 #endif
 
-  /* Register devices */
+#ifdef CONFIG_PM
+  /* Initialize the power management subsystem.  This MCU-specific function
+   * must be called *very* early in the initialization sequence *before* any
+   * other device drivers are initialized (since they may attempt to register
+   * with the power management subsystem).
+   */
+
+  up_pminitialize();
+#endif
 
 #if CONFIG_NFILE_DESCRIPTORS > 0
+  /* Register devices */
 
 #if defined(CONFIG_DEV_NULL)
-  devnull_register();   /* Standard /dev/null */
+  devnull_register();       /* Standard /dev/null */
+#endif
+
+#if defined(CONFIG_DEV_RANDOM)
+  devrandom_register(); /* Standard /dev/random */
+#endif
+
+#if defined(CONFIG_DEV_URANDOM)
+  devurandom_register();   /* Standard /dev/urandom */
 #endif
 
 #if defined(CONFIG_DEV_ZERO)
-  devzero_register();   /* Standard /dev/zero */
+  devzero_register();       /* Standard /dev/zero */
 #endif
 
+#if defined(CONFIG_DEV_LOOP)
+  loop_register();          /* Standard /dev/loop */
+#endif
 #endif /* CONFIG_NFILE_DESCRIPTORS */
+
+#if defined(CONFIG_SCHED_INSTRUMENTATION_BUFFER) && \
+    defined(CONFIG_DRIVER_NOTE)
+  note_register();          /* Non-standard /dev/note */
+#endif
+
+#if defined(USE_DEVCONSOLE)
+  /* Start the sumulated UART device */
+
+  simuart_start();
 
   /* Register a console (or not) */
 
-#if defined(USE_DEVCONSOLE)
   up_devconsole();          /* Our private /dev/console */
+#elif defined(CONFIG_CONSOLE_SYSLOG)
+  syslog_console_init();
 #elif defined(CONFIG_RAMLOG_CONSOLE)
   ramlog_consoleinit();
 #endif
 
-#ifdef CONFIG_SYSLOG_CHAR
-  syslog_initialize();
+#if CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_PSEUDOTERM_SUSV1)
+  /* Register the master pseudo-terminal multiplexor device */
+
+  (void)ptmx_register();
 #endif
-#ifdef CONFIG_RAMLOG_SYSLOG
-  ramlog_sysloginit();      /* System logging device */
+
+  /* Early initialization of the system logging device.  Some SYSLOG channel
+   * can be initialized early in the initialization sequence because they
+   * depend on only minimal OS initialization.
+   */
+
+  syslog_initialize(SYSLOG_INIT_EARLY);
+
+#if defined(CONFIG_CRYPTO)
+  /* Initialize the HW crypto and /dev/crypto */
+
+  up_cryptoinitialize();
+#endif
+
+#if CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_CRYPTO_CRYPTODEV)
+  devcrypto_register();
 #endif
 
 #if defined(CONFIG_FS_FAT) && !defined(CONFIG_DISABLE_MOUNTPOINT)
   up_registerblockdevice(); /* Our FAT ramdisk at /dev/ram0 */
 #endif
 
-#ifdef CONFIG_NET
-  uipdriver_init();         /* Our "real" network driver */
+#ifdef CONFIG_NET_ETHERNET
+  netdriver_init();         /* Our "real" network driver */
+#endif
+
+#ifdef CONFIG_NETDEV_LOOPBACK
+  /* Initialize the local loopback device */
+
+  (void)localhost_initialize();
+#endif
+
+#ifdef CONFIG_NET_TUN
+  /* Initialize the TUN device */
+
+  (void)tun_initialize();
+#endif
+
+#ifdef CONFIG_NETDEV_TELNET
+  /* Initialize the Telnet session factory */
+
+  (void)telnet_initialize();
+#endif
+
+#if defined(CONFIG_FS_SMARTFS) && (defined(CONFIG_SIM_SPIFLASH) || defined(CONFIG_SIM_QSPIFLASH))
+  up_init_smartfs();
 #endif
 }

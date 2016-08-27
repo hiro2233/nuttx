@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/fs/dirent.h
  *
- *   Copyright (C) 2007, 2009, 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2011-2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -102,6 +102,19 @@ struct fs_romfsdir_s
 };
 #endif /* CONFIG_FS_ROMFS */
 
+#ifdef CONFIG_FS_TMPFS
+/* For TMPFS, we need the directory object and an index into the directory
+ * entries.
+ */
+
+struct tmpfs_directory_s;              /* Forward reference */
+struct fs_tmpfsdir_s
+{
+  FAR struct tmpfs_directory_s *tf_tdo; /* Directory being enumerated */
+  unsigned int tf_index;               /* Directory index */
+};
+#endif /* CONFIG_FS_TMPFS */
+
 #ifdef CONFIG_FS_BINFS
 /* The apps/ pseudo bin/ directory.  The state value is simply an index */
 
@@ -144,7 +157,34 @@ struct fs_smartfsdir_s
 {
   uint16_t fs_firstsector;                    /* First sector of directory list */
   uint16_t fs_currsector;                     /* Current sector of directory list */
-  uint16_t fs_curroffset;                     /* Current offset withing current sector */
+  uint16_t fs_curroffset;                     /* Current offset within current sector */
+};
+#endif
+
+#ifdef CONFIG_FS_UNIONFS
+/* The Union File System can be used to merge to different mountpoints so
+ * that they appear as a single merged directory.
+ */
+
+struct fs_dirent_s;                           /* Forward reference */
+struct fs_unionfsdir_s
+{
+  uint8_t fu_ndx;                             /* Index of file system being enumerated */
+  bool fu_eod;                                /* True: At end of directory */
+  bool fu_prefix[2];                          /* True: Fake directory in prefix */
+  FAR char *fu_relpath;                       /* Path being enumerated */
+  FAR struct fs_dirent_s *fu_lower[2];        /* dirent struct used by contained file system */
+};
+#endif
+
+#ifdef CONFIG_FS_HOSTFS
+/* HOSTFS provides mapping to directories on the host machine in the
+ * sim environment.
+ */
+
+struct fs_hostfsdir_s
+{
+  FAR void *fs_dir;                           /* Opaque pointer to host DIR * */
 };
 #endif
 
@@ -193,6 +233,9 @@ struct fs_dirent_s
 #ifdef CONFIG_FS_ROMFS
       struct fs_romfsdir_s   romfs;
 #endif
+#ifdef CONFIG_FS_TMPFS
+      struct fs_tmpfsdir_s   tmpfs;
+#endif
 #ifdef CONFIG_FS_BINFS
       struct fs_binfsdir_s   binfs;
 #endif
@@ -208,6 +251,12 @@ struct fs_dirent_s
 #ifdef CONFIG_FS_SMARTFS
       struct fs_smartfsdir_s smartfs;
 #endif
+#ifdef CONFIG_FS_UNIONFS
+      struct fs_unionfsdir_s unionfs;
+#endif
+#ifdef CONFIG_FS_HOSTFS
+      struct fs_hostfsdir_s  hostfs;
+#endif
 #endif /* !CONFIG_DISABLE_MOUNTPOINT */
    } u;
 
@@ -217,7 +266,7 @@ struct fs_dirent_s
 };
 
 /****************************************************************************
- * Global Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -227,7 +276,8 @@ struct fs_dirent_s
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

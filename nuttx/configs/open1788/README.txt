@@ -36,7 +36,7 @@ LEDs
     LED_HEAPALLOCATE           ON   OFF  OFF  OFF
     LED_IRQSENABLED            OFF   ON  OFF  OFF
     LED_STACKCREATED           ON    ON  OFF  OFF
-    LED_INIRQ                  LED3 glows, on while in interupt
+    LED_INIRQ                  LED3 glows, on while in interrupt
     LED_SIGNAL                 LED3 glows, on while in signal handler
     LED_ASSERTION              LED3 glows, on while in assertion
     LED_PANIC                  LED3 Flashes at 2Hz
@@ -267,7 +267,7 @@ CONFIGURATION
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -365,7 +365,7 @@ CONFIGURATION
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools//README.txt.
+          see additional README.txt files in the NuttX tools repository./README.txt.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -422,7 +422,7 @@ CONFIGURATION
             CONFIG_SPI_EXCHANGE=n             : exchange() method is not supported
 
           System Type:
-            CONFIG_GPIO_IRQ=y                 : GPIO interrupt support
+            CONFIG_LPC17_GPIOIRQ=y                 : GPIO interrupt support
             CONFIG_LPC17_SSP1=y               : Enable support for SSP1
 
           RTOS Features:
@@ -438,8 +438,8 @@ CONFIGURATION
           debug output can be enabled with:
 
           Build Setup:
-            CONFIG_DEBUG=y                    : Enable debug features
-            CONFIG_DEBUG_VERBOSE=y            : Enable verbose debug output
+            CONFIG_DEBUG_FEATURES=y           : Enable debug features
+            CONFIG_DEBUG_INFO=y               : Enable verbose debug output
             CONFIG_DEBUG_INPUT=y              : Enable debug output from input devices
 
        c) You will also have to disable SD card support to use this test.  The
@@ -463,8 +463,8 @@ CONFIGURATION
           For touchscreen debug output:
 
           Build Setup:
-            CONFIG_DEBUG=y
-            CONFIG_DEBUG_VERBOSE=y
+            CONFIG_DEBUG_FEATURES=y
+            CONFIG_DEBUG_INFO=y
             CONFIG_DEBUG_INPUT=y
 
     7. The button test (apps/examples/buttons) can be built-in by adding
@@ -472,7 +472,7 @@ CONFIGURATION
        information about the button test.
 
        System Type:
-         CONFIG_GPIO_IRQ=y
+         CONFIG_LPC17_GPIOIRQ=y
 
        Board Selection:
         CONFIG_ARCH_BUTTONS=y
@@ -506,7 +506,7 @@ CONFIGURATION
        change this configuration using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools//README.txt.
+          see additional README.txt files in the NuttX tools repository./README.txt.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.

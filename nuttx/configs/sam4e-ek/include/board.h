@@ -44,13 +44,14 @@
 
 #ifndef __ASSEMBLY__
 #  include <stdint.h>
+#  include <stdbool.h>
 #  ifdef CONFIG_SAM34_GPIO_IRQ
 #    include <arch/irq.h>
 #  endif
 #endif
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
@@ -81,7 +82,7 @@
 /* PLLA configuration.
  *
  *   Divider = 1
- *   Multipler = 16 or 20
+ *   Multiplier = 16 or 20
  */
 
 #ifdef CONFIG_SAM4EEK_120MHZ
@@ -176,7 +177,7 @@
 
 /* FLASH wait states.
  *
- * SAM4E-EK documetion says:
+ * SAM4E-EK documentation says:
  * VDDCORE: "The voltage ranges from 1.08V to 1.32V."
  * VDDIO:   Looks like it is at 3.3V
  *
@@ -237,14 +238,14 @@
 #define LED_ASSERTION              6 /* LED0=TOG LED1=XXX LED2=XXX */
 #define LED_PANIC                  7 /* LED0=TOG LED1=XXX LED2=XXX */
 
-/* LED index values for use with sam_setled() */
+/* LED index values for use with board_userled() */
 
 #define BOARD_LED_D3               0
 #define BOARD_LED_D2               1
 #define BOARD_LED_D4               2
 #define BOARD_NLEDS                3
 
-/* LED bits for use with sam_setleds() */
+/* LED bits for use with board_userled_all() */
 
 #define BOARD_LED_D3_BIT           (1 << BOARD_LED_D3)
 #define BOARD_LED_D2_BIT           (1 << BOARD_LED_D2)
@@ -273,7 +274,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -285,7 +287,7 @@ extern "C" {
  * Name: sam_boardinitialize
  *
  * Description:
- *   All SAM3U architectures must provide the following entry point.  This entry point
+ *   All SAM4E architectures must provide the following entry point.  This entry point
  *   is called early in the initialization -- after all memory has been configured
  *   and mapped but before any devices have been initialized.
  *
@@ -293,32 +295,11 @@ extern "C" {
 
 void sam_boardinitialize(void);
 
-#undef EXTERN
-#if defined(__cplusplus)
-}
-#endif
-
 /************************************************************************************
- * Name:  sam_ledinit, sam_setled, and sam_setleds
+ * Name:  sam_lcdclear
  *
  * Description:
- *   If CONFIG_ARCH_LEDS is defined, then NuttX will control the on-board LEDs.  If
- *   CONFIG_ARCH_LEDS is not defined, then the following interfacesare available to
- *   control the LEDs from user applications.
- *
- ************************************************************************************/
-
-#ifndef CONFIG_ARCH_LEDS
-void sam_ledinit(void);
-void sam_setled(int led, bool ledon);
-void sam_setleds(uint8_t ledset);
-#endif
-
-/************************************************************************************
- * Name:  stm32_lcdclear
- *
- * Description:
- *   This is a non-standard LCD interface just for the Shenzhou board.  Because
+ *   This is a non-standard LCD interface just for the SAM4e-EK board.  Because
  *   of the various rotations, clearing the display in the normal way by writing a
  *   sequences of runs that covers the entire display can be very slow.  Here the
  *   display is cleared by simply setting all GRAM memory to the specified color.
@@ -327,8 +308,13 @@ void sam_setleds(uint8_t ledset);
 
 #if defined(CONFIG_SAM4EEK_LCD_RGB565)
 void sam_lcdclear(uint16_t color);
-#else /* if defined(CONFIG_SAM4EEK_LCD_RGB24) defined(CONFIG_SAM4EEK_LCD_RGB32) */
+#else /* CONFIG_SAM4EEK_LCD_RGB24 || CONFIG_SAM4EEK_LCD_RGB32 */
 void sam_lcdclear(uint32_t color);
+#endif
+
+#undef EXTERN
+#if defined(__cplusplus)
+}
 #endif
 
 #endif /* __ASSEMBLY__ */

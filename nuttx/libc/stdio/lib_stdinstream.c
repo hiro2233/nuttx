@@ -1,7 +1,7 @@
 /****************************************************************************
  * libc/stdio/lib_stdinstream.c
  *
- *   Copyright (C) 2007-2009, 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011-2012, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@
 
 #include <assert.h>
 
-#include "lib_internal.h"
+#include "libc.h"
 
 /****************************************************************************
  * Private Functions
@@ -64,7 +64,7 @@ static int stdinstream_getc(FAR struct lib_instream_s *this)
       this->nget++;
     }
 
- return ret;
+  return ret;
 }
 
 /****************************************************************************
@@ -78,22 +78,20 @@ static int stdinstream_getc(FAR struct lib_instream_s *this)
  *   Initializes a stream for use with a FILE instance.
  *
  * Input parameters:
- *   stdinstream - User allocated, uninitialized instance of struct
- *                 lib_stdinstream_s to be initialized.
- *   stream      - User provided stream instance (must have been opened for
- *                 read access).
+ *   instream - User allocated, uninitialized instance of struct
+ *              lib_stdinstream_s to be initialized.
+ *   stream   - User provided stream instance (must have been opened for
+ *              read access).
  *
  * Returned Value:
  *   None (User allocated instance initialized).
  *
  ****************************************************************************/
 
-void lib_stdinstream(FAR struct lib_stdinstream_s *stdinstream,
+void lib_stdinstream(FAR struct lib_stdinstream_s *instream,
                      FAR FILE *stream)
 {
-  stdinstream->public.get  = stdinstream_getc;
-  stdinstream->public.nget = 0;
-  stdinstream->stream      = stream;
+  instream->public.get  = stdinstream_getc;
+  instream->public.nget = 0;
+  instream->stream      = stream;
 }
-
-

@@ -59,10 +59,11 @@
  * Public Data
  ****************************************************************************/
 
- #ifndef __ASSEMBLY__
+#ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -84,13 +85,13 @@ extern "C" {
  *
  * Returned Value:
  *   Zero means that the STOP was successfully entered and the system has
- *   been re-awakened.  The internal volatage regulator is back to its
+ *   been re-awakened.  The internal voltage regulator is back to its
  *   original state.  Otherwise, STOP mode did not occur and a negated
  *   errno value is returned to indicate the cause of the failure.
  *
  ****************************************************************************/
 
-EXTERN int stm32_pmstop(bool lpds);
+int stm32_pmstop(bool lpds);
 
 /****************************************************************************
  * Name: stm32_pmstandby
@@ -109,7 +110,7 @@ EXTERN int stm32_pmstop(bool lpds);
  *
  ****************************************************************************/
 
-EXTERN int stm32_pmstandby(void);
+int stm32_pmstandby(void);
 
 /****************************************************************************
  * Name: stm32_pmsleep
@@ -125,13 +126,13 @@ EXTERN int stm32_pmstandby(void);
  *                        as soon as WFI or WFE instruction is executed.
  * Returned Value:
  *   Zero means that the STOP was successfully entered and the system has
- *   been re-awakened.  The internal volatage regulator is back to its
+ *   been re-awakened.  The internal voltage regulator is back to its
  *   original state.  Otherwise, STOP mode did not occur and a negated
  *   errno value is returned to indicate the cause of the failure.
  *
  ****************************************************************************/
 
-EXTERN void stm32_pmsleep(bool sleeponexit);
+void stm32_pmsleep(bool sleeponexit);
 
 #undef EXTERN
 #ifdef __cplusplus

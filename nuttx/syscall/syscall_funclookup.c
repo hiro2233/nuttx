@@ -1,7 +1,7 @@
 /****************************************************************************
  * syscall/syscall_funclookup.c
  *
- *   Copyright (C) 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,7 +44,7 @@
  * a kernel build.
  */
 
-#if defined(CONFIG_NUTTX_KERNEL) && defined(__KERNEL__)
+#if defined(CONFIG_LIB_SYSCALL) && defined(__KERNEL__)
 
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -57,6 +57,7 @@
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/mount.h>
+#include <sys/boardctl.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,8 +73,19 @@
 #include <mqueue.h>
 #include <spawn.h>
 #include <assert.h>
-#include <errno.h>
 
+/* Errno access is awkward. We need to generate get_errno() and set_errno()
+ * interfaces to support the system calls, even though we don't use them
+ * ourself.
+ *
+ * The "normal" pre-processor defintions for these functions is in errno.h
+ * but we need the internal function prototypes in nuttx/errno.h.
+ */
+
+#undef get_errno
+#undef set_errno
+
+#include <nuttx/errno.h>
 #include <nuttx/clock.h>
 
 /* clock_systimer is a special case:  In the kernel build, proxying for
@@ -87,10 +99,10 @@
  * have an address that can be included in the g_funclookup[] table.
  */
 
-uint32_t syscall_clock_systimer(void);
+systime_t syscall_clock_systimer(void);
 
 /****************************************************************************
- * Pre-processor definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -121,4 +133,4 @@ const uintptr_t g_funclookup[SYS_nsyscalls] =
  * Public Functions
  ****************************************************************************/
 
-#endif /* CONFIG_NUTTX_KERNEL && __KERNEL__ */
+#endif /* CONFIG_LIB_SYSCALL && __KERNEL__ */

@@ -2,7 +2,7 @@
  * include/nuttx/power/pm.h
  * NuttX Power Management Interfaces
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,8 +41,8 @@
  * IDLE    - This is still basically normal operational mode, the system is,
  *           however, IDLE and some simple simple steps to reduce power
  *           consumption provided that they do not interfere with normal
- *           Operation.  Simply dimming the a backlight might be an example
- *           somethat that would be done when the system is idle.
+ *           Operation.  Simply dimming a backlight might be an example
+ *           something that would be done when the system is idle.
  * STANDBY - Standby is a lower power consumption mode that may involve more
  *           extensive power management steps such has disabling clocking or
  *           setting the processor into reduced power consumption modes. In
@@ -75,25 +75,43 @@
 #ifdef CONFIG_PM
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
+/* CONFIG_PM_NDOMAINS. Defines the number of "domains" that activity may be
+ * monitored on.  For example, you may want to separately manage the power
+ * from the Network domain, shutting down the network when it is not be used,
+ * from the UI domain, shutting down the UI when it is not in use.
+ */
+
+#ifndef CONFIG_PM_NDOMAINS
+#  define CONFIG_PM_NDOMAINS 1
+#endif
+
+#if CONFIG_PM_NDOMAINS < 1
+#  error CONFIG_PM_NDOMAINS invalid
+#endif
+
 /* CONFIG_IDLE_CUSTOM. Some architectures support this definition.  This,
  * if defined, will allow you replace the default IDLE loop with your
  * own, custom idle loop to support board-specific IDLE time power management
  */
 
-/* Time slices.  The power management module collects activity counts in
- * time slices.  At the end of the time slice, the count accumulated during
- * that interval is applied to an averaging algorithm to determine the
- * activity level.
+/* CONFIG_PM_SLICEMS.  The power management module collects activity counts
+ * in time slices.  At the end of the time slice, the count accumulated
+ * during that interval is applied to an averaging algorithm to determine
+ * the activity level.
  *
- * CONFIG_PM_SLICEMS provides the duration of that time slice.  Default: 100
- * Milliseconds
+ * CONFIG_PM_SLICEMS provides the duration of that time slice in
+ * milliseconds.  Default: 100 Milliseconds
  */
 
 #ifndef CONFIG_PM_SLICEMS
 #  define CONFIG_PM_SLICEMS  100 /* Default is 100 msec */
+#endif
+
+#if CONFIG_PM_SLICEMS < 1
+#  error CONFIG_PM_SLICEMS invalid
 #endif
 
 /* The averaging algorithm is simply: Y = (An*X + SUM(Ai*Yi))/SUM(Aj), where
@@ -272,8 +290,9 @@ struct pm_callback_s
    *
    * Input Parameters:
    *   cb      - Returned to the driver.  The driver version of the callback
-   *             strucure may include additional, driver-specific state
+   *             structure may include additional, driver-specific state
    *             data at the end of the structure.
+   *   domain  - Identifies the activity domain of the state change
    *   pmstate - Identifies the new PM state
    *
    * Returned Value:
@@ -288,7 +307,8 @@ struct pm_callback_s
    *
    **************************************************************************/
 
-  int (*prepare)(FAR struct pm_callback_s *cb, enum pm_state_e pmstate);
+  int (*prepare)(FAR struct pm_callback_s *cb, int domain,
+                 enum pm_state_e pmstate);
 
   /**************************************************************************
    * Name: notify
@@ -300,8 +320,9 @@ struct pm_callback_s
    *
    * Input Parameters:
    *   cb      - Returned to the driver.  The driver version of the callback
-   *             strucure may include additional, driver-specific state
+   *             structure may include additional, driver-specific state
    *             data at the end of the structure.
+   *   domain  - Identifies the activity domain of the state change
    *   pmstate - Identifies the new PM state
    *
    * Returned Value:
@@ -312,7 +333,8 @@ struct pm_callback_s
    *
    **************************************************************************/
 
-  void (*notify)(FAR struct pm_callback_s *cb, enum pm_state_e pmstate);
+  void (*notify)(FAR struct pm_callback_s *cb, int domain,
+                 enum pm_state_e pmstate);
 };
 
 /****************************************************************************
@@ -323,7 +345,8 @@ struct pm_callback_s
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -336,8 +359,8 @@ extern "C" {
  *
  * Description:
  *   This function is called by MCU-specific logic at power-on reset in
- *   order to provide one-time initialization the power management subystem.
- *   This function must be called *very* early in the initializeation sequence
+ *   order to provide one-time initialization the power management subsystem.
+ *   This function must be called *very* early in the initialization sequence
  *   *before* any other device drivers are initialized (since they may
  *   attempt to register with the power management subsystem).
  *
@@ -349,7 +372,7 @@ extern "C" {
  *
  ****************************************************************************/
 
-EXTERN void pm_initialize(void);
+void pm_initialize(void);
 
 /****************************************************************************
  * Name: pm_register
@@ -367,18 +390,19 @@ EXTERN void pm_initialize(void);
  *
  ****************************************************************************/
 
-EXTERN int pm_register(FAR struct pm_callback_s *callbacks);
+int pm_register(FAR struct pm_callback_s *callbacks);
 
 /****************************************************************************
  * Name: pm_activity
  *
  * Description:
  *   This function is called by a device driver to indicate that it is
- *   performing meaningful activities (non-idle).  This increment an activty
+ *   performing meaningful activities (non-idle).  This increment an activity
  *   count and/or will restart a idle timer and prevent entering reduced
  *   power states.
  *
  * Input Parameters:
+ *   domain - The domain of the PM activity
  *   priority - Activity priority, range 0-9.  Larger values correspond to
  *     higher priorities.  Higher priority activity can prevent the system
  *     from entering reduced power states for a longer period of time.
@@ -395,7 +419,7 @@ EXTERN int pm_register(FAR struct pm_callback_s *callbacks);
  *
  ****************************************************************************/
 
-EXTERN void pm_activity(int priority);
+void pm_activity(int domain, int priority);
 
 /****************************************************************************
  * Name: pm_checkstate
@@ -408,7 +432,7 @@ EXTERN void pm_activity(int priority);
  *   not automatically changed, however.  The IDLE loop must call
  *   pm_changestate() in order to make the state change.
  *
- *   These two steps are separated because the plaform-specific IDLE loop may
+ *   These two steps are separated because the platform-specific IDLE loop may
  *   have additional situational information that is not available to the
  *   the PM sub-system.  For example, the IDLE loop may know that the
  *   battery charge level is very low and may force lower power states
@@ -421,24 +445,25 @@ EXTERN void pm_activity(int priority);
  *   is completed.
  *
  * Input Parameters:
- *   None
+ *   domain - The PM domain to check
  *
  * Returned Value:
  *   The recommended power management state.
  *
  ****************************************************************************/
 
-EXTERN enum pm_state_e pm_checkstate(void);
+enum pm_state_e pm_checkstate(int domain);
 
 /****************************************************************************
  * Name: pm_changestate
  *
  * Description:
- *   This function is used to platform-specific power managmeent logic.  It
+ *   This function is used to platform-specific power management logic.  It
  *   will announce the power management power management state change to all
  *   drivers that have registered for power management event callbacks.
  *
  * Input Parameters:
+ *   domain - Identifies the domain of the new PM state
  *   newstate - Identifies the new PM state
  *
  * Returned Value:
@@ -457,7 +482,7 @@ EXTERN enum pm_state_e pm_checkstate(void);
  *
  ****************************************************************************/
 
-EXTERN int pm_changestate(enum pm_state_e newstate);
+int pm_changestate(int domain, enum pm_state_e newstate);
 
 #undef EXTERN
 #ifdef __cplusplus
@@ -477,10 +502,10 @@ EXTERN int pm_changestate(enum pm_state_e newstate);
  */
 
 #  define pm_initialize()
-#  define pm_register(cb)       (0)
-#  define pm_activity(prio)
-#  define pm_checkstate()       (0)
-#  define pm_changestate(state)
+#  define pm_register(cb)             (0)
+#  define pm_activity(domain,prio)
+#  define pm_checkstate(domain)       (0)
+#  define pm_changestate(domain,state)
 
 #endif /* CONFIG_PM */
 #endif /* __INCLUDE_NUTTX_POWER_PM_H */

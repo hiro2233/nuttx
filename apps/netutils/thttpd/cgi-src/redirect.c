@@ -2,7 +2,7 @@
  * netutils/thttpd/cgi-src/redirect.c
  * Simple redirection CGI program
  *
- *   Copyright (C) 2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Derived from the file of the same name in the original THTTPD package:
@@ -147,14 +147,18 @@ The requested filename, %s, has moved to a new URL:\n\
  * Public Functions
  ****************************************************************************/
 
-int main(int argc, char **argv)
+#ifdef CONFIG_THTTPD_BINFS
+int redirect_main(int argc, char *argv[])
+#else
+int main(int argc, char *argv[])
+#endif
 {
   char *script_name;
   char *path_info;
   char *cp = 0;
   FILE *fp;
   char *star;
-  int  err = 0;
+  int  errcode = 0;
 
   /* Get the name that we were run as, which is the filename being **
    * redirected.
@@ -191,7 +195,7 @@ int main(int argc, char **argv)
   if (fp == (FILE *) 0)
     {
       internal_error("Couldn't open .redirects file.");
-      err = 3;
+      errcode = 3;
       goto errout_with_cp;
     }
 
@@ -256,7 +260,7 @@ int main(int argc, char **argv)
   /* No match found. */
 
   not_found(script_name);
-  err = 4;
+  errcode = 4;
 
 success_out:
   fclose(fp);
@@ -265,5 +269,6 @@ errout_with_cp:
     {
       free(cp);
     }
-  return err;
+
+  return errcode;
 }

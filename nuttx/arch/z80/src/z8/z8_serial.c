@@ -55,7 +55,6 @@
 #include <arch/serial.h>
 
 #include "chip/chip.h"
-#include "os_internal.h"
 #include "up_internal.h"
 
 #ifdef USE_SERIALDRIVER
@@ -63,7 +62,7 @@
 extern uint32_t get_freq(void);
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* System clock frequency value from ZDS target settings */
@@ -78,15 +77,15 @@ extern uint32_t get_freq(void);
 
 struct z8_uart_s
 {
-  uint8_t volatile far* uartbase;		/* Base address of UART registers */
-  uint32_t     baud;		/* Configured baud */
-  bool         rxenabled;	/* RX interrupt enabled */
-  bool         txenabled;	/* TX interrupt enabled */
-  uint8_t      rxirq;		/* RX IRQ associated with this UART */
-  uint8_t      txirq;		/* RX IRQ associated with this UART */
-  uint8_t      parity;		/* 0=none, 1=odd, 2=even */
-  bool         stopbits2;	/* true: Configure with 2 stop bits
-							 * (instead of 1) */
+  uint8_t volatile far* uartbase; /* Base address of UART registers */
+  uint32_t     baud;              /* Configured baud */
+  bool         rxenabled;         /* RX interrupt enabled */
+  bool         txenabled;         /* TX interrupt enabled */
+  uint8_t      rxirq;             /* RX IRQ associated with this UART */
+  uint8_t      txirq;             /* RX IRQ associated with this UART */
+  uint8_t      parity;            /* 0=none, 1=odd, 2=even */
+  bool         stopbits2;         /* true: Configure with 2 stop bits
+                                   * (instead of 1) */
 };
 
 /****************************************************************************
@@ -109,7 +108,7 @@ static bool z8_txready(FAR struct uart_dev_s *dev);
 static bool z8_txempty(FAR struct uart_dev_s *dev);
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 static const struct uart_ops_s g_uart_ops =
@@ -270,14 +269,14 @@ static inline uint8_t z8_getuart(FAR struct z8_uart_s *priv, uint8_t offset)
 static uint8_t z8_disableuartirq(FAR struct uart_dev_s *dev)
 {
   struct z8_uart_s *priv  = (struct z8_uart_s*)dev->priv;
-  irqstate_t          flags = irqsave();
+  irqstate_t          flags = enter_critical_section();
   uint8_t             state = priv->rxenabled ? STATE_RXENABLED : STATE_DISABLED | \
                               priv->txenabled ? STATE_TXENABLED : STATE_DISABLED;
 
   z8_txint(dev, false);
   z8_rxint(dev, false);
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return state;
 }
 
@@ -287,12 +286,12 @@ static uint8_t z8_disableuartirq(FAR struct uart_dev_s *dev)
 
 static void z8_restoreuartirq(FAR struct uart_dev_s *dev, uint8_t state)
 {
-  irqstate_t flags = irqsave();
+  irqstate_t flags = enter_critical_section();
 
   z8_txint(dev, (state & STATE_TXENABLED) ? true : false);
   z8_rxint(dev, (state & STATE_RXENABLED) ? true : false);
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -617,7 +616,7 @@ static int z8_receive(FAR struct uart_dev_s *dev, FAR uint32_t *status)
 static void z8_rxint(FAR struct uart_dev_s *dev, bool enable)
 {
   struct z8_uart_s *priv  = (struct z8_uart_s*)dev->priv;
-  irqstate_t          flags = irqsave();
+  irqstate_t          flags = enter_critical_section();
 
   if (enable)
     {
@@ -631,7 +630,7 @@ static void z8_rxint(FAR struct uart_dev_s *dev, bool enable)
     }
 
   priv->rxenabled = enable;
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -673,7 +672,7 @@ static void z8_send(FAR struct uart_dev_s *dev, int ch)
 static void z8_txint(FAR struct uart_dev_s *dev, bool enable)
 {
   struct z8_uart_s *priv  = (struct z8_uart_s*)dev->priv;
-  irqstate_t          flags = irqsave();
+  irqstate_t          flags = enter_critical_section();
 
   if (enable)
     {
@@ -687,7 +686,7 @@ static void z8_txint(FAR struct uart_dev_s *dev, bool enable)
     }
 
   priv->txenabled = enable;
-  irqrestore(flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -792,7 +791,7 @@ int up_putc(int ch)
 #else /* USE_SERIALDRIVER */
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 #ifdef CONFIG_UART1_SERIAL_CONSOLE
@@ -812,7 +811,7 @@ int up_putc(int ch)
  ****************************************************************************/
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 /****************************************************************************

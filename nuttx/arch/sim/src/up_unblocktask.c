@@ -1,7 +1,7 @@
 /****************************************************************************
- * up_unblocktask.c
+ * arch/sim/src/up_unblocktask.c
  *
- *   Copyright (C) 2007-2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2013, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,22 +42,11 @@
 #include <sched.h>
 #include <debug.h>
 #include <nuttx/arch.h>
+#include <nuttx/sched.h>
 
-#include "clock_internal.h"
-#include "os_internal.h"
+#include "clock/clock.h"
+#include "sched/sched.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -79,50 +68,46 @@
  *
  ****************************************************************************/
 
-void up_unblock_task(struct tcb_s *tcb)
+void up_unblock_task(FAR struct tcb_s *tcb)
 {
-  struct tcb_s *rtcb = (struct tcb_s*)g_readytorun.head;
+  FAR struct tcb_s *rtcb = this_task();
 
   /* Verify that the context switch can be performed */
 
   ASSERT((tcb->task_state >= FIRST_BLOCKED_STATE) &&
          (tcb->task_state <= LAST_BLOCKED_STATE));
 
-  sdbg("Unblocking TCB=%p\n", tcb);
+  sinfo("Unblocking TCB=%p\n", tcb);
 
   /* Remove the task from the blocked task list */
 
   sched_removeblocked(tcb);
 
-  /* Reset its timeslice.  This is only meaningful for round
-   * robin tasks but it doesn't here to do it for everything
-   */
-
-#if CONFIG_RR_INTERVAL > 0
-  tcb->timeslice = CONFIG_RR_INTERVAL / MSEC_PER_TICK;
-#endif
-
   /* Add the task in the correct location in the prioritized
-   * g_readytorun task list
+   * ready-to-run task list
    */
 
   if (sched_addreadytorun(tcb))
     {
-      /* The currently active task has changed! Copy the exception context
-       * into the TCB of the task that was previously active.  if
-       * up_setjmp returns a non-zero value, then this is really the
-       * previously running task restarting!
+      /* The currently active task has changed! */
+      /* Update scheduler parameters */
+
+      sched_suspend_scheduler(rtcb);
+
+      /* Copy the exception context into the TCB of the task that was
+       * previously active.  if up_setjmp returns a non-zero value, then
+       * this is really the previously running task restarting!
        */
 
       if (!up_setjmp(rtcb->xcp.regs))
         {
           /* Restore the exception context of the new task that is ready to
            * run (probably tcb).  This is the new rtcb at the head of the
-           * g_readytorun task list.
+           * ready-to-run task list.
            */
 
-          rtcb = (struct tcb_s*)g_readytorun.head;
-          sdbg("New Active Task TCB=%p\n", rtcb);
+          rtcb = this_task();
+          sinfo("New Active Task TCB=%p\n", rtcb);
 
           /* The way that we handle signals in the simulation is kind of
            * a kludge.  This would be unsafe in a truly multi-threaded, interrupt
@@ -131,10 +116,14 @@ void up_unblock_task(struct tcb_s *tcb)
 
           if (rtcb->xcp.sigdeliver)
             {
-              sdbg("Delivering signals TCB=%p\n", rtcb);
+              sinfo("Delivering signals TCB=%p\n", rtcb);
               ((sig_deliver_t)rtcb->xcp.sigdeliver)(rtcb);
               rtcb->xcp.sigdeliver = NULL;
             }
+
+          /* Update scheduler parameters */
+
+          sched_resume_scheduler(rtcb);
 
           /* Then switch contexts */
 

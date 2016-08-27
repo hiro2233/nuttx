@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/stm32f4discovery/src/stm32_idle.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2015-2016 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *            Diego Sanchez <dsanchez@nx-engineering.com>
  *
@@ -42,13 +42,14 @@
 #include <arch/board/board.h>
 #include <nuttx/config.h>
 
+#include <debug.h>
+
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/clock.h>
 #include <nuttx/power/pm.h>
 
-#include <debug.h>
-#include <nuttx/rtc.h>
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 
 #include "up_internal.h"
 #include "stm32_pm.h"
@@ -66,8 +67,8 @@
  */
 
 #if defined(CONFIG_ARCH_LEDS) && defined(LED_IDLE)
-#  define BEGIN_IDLE() board_led_on(LED_IDLE)
-#  define END_IDLE()   board_led_off(LED_IDLE)
+#  define BEGIN_IDLE() board_autoled_on(LED_IDLE)
+#  define END_IDLE()   board_autoled_off(LED_IDLE)
 #else
 #  define BEGIN_IDLE()
 #  define END_IDLE()
@@ -83,11 +84,13 @@
 #  define CONFIG_PM_ALARM_NSEC 0
 #endif
 
+#define PM_IDLE_DOMAIN 0 /* Revisit */
+
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-#if defined(CONFIG_PM) && defined(CONFIG_RTC_ALARM)
+#if 0 /* Not used */
 static void up_alarmcb(void);
 #endif
 
@@ -106,9 +109,6 @@ static void up_alarmcb(void);
 #ifdef CONFIG_PM
 static void stm32_idlepm(void)
 {
-#ifdef CONFIG_RTC_ALARM
-  struct timespec alarmtime;
-#endif
   static enum pm_state_e oldstate = PM_NORMAL;
   enum pm_state_e newstate;
   irqstate_t flags;
@@ -116,24 +116,24 @@ static void stm32_idlepm(void)
 
   /* Decide, which power saving level can be obtained */
 
-  newstate = pm_checkstate();
+  newstate = pm_checkstate(PM_IDLE_DOMAIN);
 
   /* Check for state changes */
 
   if (newstate != oldstate)
     {
-      lldbg("newstate= %d oldstate=%d\n", newstate, oldstate);
+      sinfo("newstate= %d oldstate=%d\n", newstate, oldstate);
 
-      flags = irqsave();
+      flags = enter_critical_section();
 
       /* Force the global state change */
 
-      ret = pm_changestate(newstate);
+      ret = pm_changestate(PM_IDLE_DOMAIN, newstate);
       if (ret < 0)
         {
           /* The new state change failed, revert to the preceding state */
 
-          (void)pm_changestate(oldstate);
+          (void)pm_changestate(PM_IDLE_DOMAIN, oldstate);
 
           /* No state change... */
 
@@ -189,7 +189,7 @@ static void stm32_idlepm(void)
 #endif
             /* Resume normal operation */
 
-            pm_changestate(PM_NORMAL);
+            pm_changestate(PM_IDLE_DOMAIN, PM_NORMAL);
             newstate = PM_NORMAL;
           }
           break;
@@ -213,7 +213,7 @@ static void stm32_idlepm(void)
       oldstate = newstate;
 
 errout:
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 }
 #else
@@ -228,14 +228,14 @@ errout:
  *
  ************************************************************************************/
 
-#if defined(CONFIG_PM) && defined(CONFIG_RTC_ALARM)
+#if 0 /* Not used */
 static void up_alarmcb(void)
 {
   /* This alarm occurs because there wasn't any EXTI interrupt during the
    * PM_STANDBY period. So just go to sleep.
    */
 
-  pm_changestate(PM_SLEEP);
+  pm_changestate(PM_IDLE_DOMAIN, PM_SLEEP);
 }
 #endif
 

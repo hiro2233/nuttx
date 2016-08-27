@@ -1,4 +1,4 @@
-/************************************************************************
+/****************************************************************************
  * libc/math/lib_atan2l.c
  *
  * This file is a part of NuttX:
@@ -23,65 +23,50 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- ************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <nuttx/compiler.h>
 
 #include <math.h>
 
-/************************************************************************
+/****************************************************************************
  * Public Functions
- ************************************************************************/
+ ****************************************************************************/
 
 #ifdef CONFIG_HAVE_LONG_DOUBLE
 long double atan2l(long double y, long double x)
 {
-
-  if (y == 0.0)
+  if (x > 0)
     {
-      if (x >= 0.0)
+      return atanl(y / x);
+    }
+  else if (y >= 0 && x < 0)
+    {
+      return atanl(y / x) + M_PI;
+    }
+  else if (y < 0)
+    {
+      if (x == 0)
         {
-          return 0.0;
+          return -M_PI_2;
         }
-      else
+      else /* Can only be x < 0 */
         {
-          return M_PI;
+          return atanl(y / x) - M_PI;
         }
     }
-  else if (y > 0.0)
+  else if (y > 0 && x == 0)
     {
-      if (x == 0.0)
-        {
-          return M_PI_2;
-        }
-      else if (x > 0.0)
-        {
-          return atanl(y / x);
-        }
-      else
-        {
-          return M_PI - atanl(y / x);
-        }
+      return M_PI_2;
     }
-  else
+  else /* if (y == 0 && x == 0) Undefined but returns normally 0 */
     {
-      if (x == 0.0)
-        {
-          return M_PI + M_PI_2;
-        }
-      else if (x > 0.0)
-        {
-          return 2 * M_PI - atanl(y / x);
-        }
-      else
-        {
-          return M_PI + atanl(y / x);
-        }
+      return 0;
     }
 }
 #endif

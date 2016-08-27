@@ -44,7 +44,7 @@
 #include <errno.h>
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -52,11 +52,11 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Global Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -114,7 +114,7 @@
  *
  *   nanosleep(), setitimer(), timer_create(), timer_delete(), timer_getoverrun(),
  *   timer_gettime(), timer_settime(), ualarm(), sleep()
-
+ *
  * Parameters:
  *   usec - the number of microseconds to wait.
  *
@@ -129,14 +129,16 @@
 int usleep(useconds_t usec)
 {
   struct timespec rqtp;
+  time_t sec;
   int ret = 0;
 
   if (usec)
     {
       /* Let nanosleep() do all of the work. */
 
-      rqtp.tv_sec  = usec / 1000000;
-      rqtp.tv_nsec = (usec % 1000000) * 1000;
+      sec          = usec / 1000000;
+      rqtp.tv_sec  = sec;
+      rqtp.tv_nsec = (usec - (sec * 1000000)) * 1000;
 
       ret = nanosleep(&rqtp, NULL);
     }

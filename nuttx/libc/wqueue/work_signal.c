@@ -1,7 +1,7 @@
 /****************************************************************************
  * libc/wqueue/work_signal.c
  *
- *   Copyright (C) 2009-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,11 +40,13 @@
 #include <nuttx/config.h>
 
 #include <signal.h>
-#include <assert.h>
+#include <errno.h>
 
 #include <nuttx/wqueue.h>
 
-#ifdef CONFIG_SCHED_WORKQUEUE
+#include "wqueue/wqueue.h"
+
+#if defined(CONFIG_LIB_USRWORK) && !defined(__KERNEL__)
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -55,11 +57,11 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Public Variables
+ * Public Data
  ****************************************************************************/
 
 /****************************************************************************
- * Private Variables
+ * Private Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -87,8 +89,25 @@
 
 int work_signal(int qid)
 {
-  DEBUGASSERT((unsigned)qid < NWORKERS);
-  return kill(g_work[qid].pid, SIGWORK);
+  int ret;
+
+  if (qid == USRWORK)
+    {
+      /* Signal the worker thread */
+
+      ret = kill(g_usrwork.pid, SIGWORK);
+      if (ret < 0)
+        {
+          int errcode = errno;
+          ret = -errcode;
+        }
+    }
+  else
+    {
+      ret = -EINVAL;
+    }
+
+  return ret;
 }
 
-#endif /* CONFIG_SCHED_WORKQUEUE */
+#endif /* CONFIG_LIB_USRWORK && !__KERNEL__ */

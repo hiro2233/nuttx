@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/sama5d3x-ek/src/sam_buttons.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,9 +57,10 @@
 #include <stdint.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/board.h>
 #include <nuttx/irq.h>
 
-#include <arch/irq.h>
+#include <nuttx/irq.h>
 #include <arch/board/board.h>
 
 #include "sam_pio.h"
@@ -68,7 +69,7 @@
 #ifdef CONFIG_ARCH_BUTTONS
 
 /****************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /****************************************************************************
@@ -91,10 +92,10 @@ static xcpt_t g_irquser1;
  * Name: board_button_initialize
  *
  * Description:
- *   board_button_initialize() must be called to initialize button resources.  After
- *   that, board_buttons() may be called to collect the current state of all
- *   buttons or board_button_irq() may be called to register button interrupt
- *   handlers.
+ *   board_button_initialize() must be called to initialize button resources.
+ *   After that, board_buttons() may be called to collect the current state
+ *   of all buttons or board_button_irq() may be called to register button
+ *   interrupt handlers.
  *
  ****************************************************************************/
 
@@ -107,10 +108,10 @@ void board_button_initialize(void)
  * Name: board_buttons
  *
  * Description:
- *   After board_button_initialize() has been called, board_buttons() may be called to
- *   collect the state of all buttons.  board_buttons() returns an 8-bit bit set
- *   with each bit associated with a button.  See the BUTTON* definitions
- *   above for the meaning of each bit in the returned value.
+ *   After board_button_initialize() has been called, board_buttons() may be
+ *   called to collect the state of all buttons.  board_buttons() returns an
+ *   8-bit bit set with each bit associated with a button.  See the BUTTON*
+ *   definitions above for the meaning of each bit in the returned value.
  *
  ****************************************************************************/
 
@@ -148,19 +149,32 @@ xcpt_t board_button_irq(int id, xcpt_t irqhandler)
        * following operations are atomic.
        */
 
-      flags = irqsave();
+      flags = enter_critical_section();
 
       /* Get the old button interrupt handler and save the new one */
 
       oldhandler = g_irquser1;
       g_irquser1 = irqhandler;
 
-      /* Configure the interrupt */
+      /* Are we attaching or detaching? */
 
-      sam_pioirq(IRQ_USER1);
-      (void)irq_attach(IRQ_USER1, irqhandler);
-      sam_pioirqenable(IRQ_USER1);
-      irqrestore(flags);
+      if (irqhandler != NULL)
+        {
+          /* Configure the interrupt */
+
+          sam_pioirq(PIO_USER1);
+          (void)irq_attach(IRQ_USER1, irqhandler);
+          sam_pioirqenable(IRQ_USER1);
+        }
+      else
+        {
+          /* Disable and detach the interrupt */
+
+          sam_pioirqdisable(IRQ_USER1);
+          (void)irq_detach(IRQ_USER1);
+        }
+
+      leave_critical_section(flags);
     }
 
   /* Return the old button handler (so that it can be restored) */

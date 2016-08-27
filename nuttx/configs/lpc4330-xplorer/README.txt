@@ -180,12 +180,6 @@ GNU Toolchain Options
 
      An alias in your .bashrc file might make that less painful.
 
-  3. Dependencies are not made when using Windows versions of the GCC.  This is
-     because the dependencies are generated using Windows pathes which do not
-     work with the Cygwin make.
-
-       MKDEP                = $(TOPDIR)/tools/mknulldeps.sh
-
   The CodeSourcery Toolchain (2009q1)
   -----------------------------------
   The CodeSourcery toolchain (2009q1) does not work with default optimization
@@ -368,14 +362,14 @@ Code Red IDE/Tools
   in debugging symbols.
 
   NOTE 3:  There are few things that NuttX has to do differently if you
-  are using a debugger.  Make sure that you also set CONFIG_DEBUG=y.  Nothing
+  are using a debugger.  Make sure that you also set CONFIG_DEBUG_FEATURES=y.  Nothing
   also is needed and no debug output will be generated; but NuttX will
-  use CONFIG_DEBUG=y to mean that a debugger is attached and will deal
+  use CONFIG_DEBUG_FEATURES=y to mean that a debugger is attached and will deal
   with certain resets and debug controls appropriately.
 
   So you should have:
 
-    CONFIG_DEBUG=y
+    CONFIG_DEBUG_FEATURES=y
     CONFIG_DEBUG_SYMBOLS=y
 
   NOTE 4: Every time that you control-C out of the command line GDB, you
@@ -464,7 +458,7 @@ NuttX EABI "buildroot" Toolchain
   different from the default in your PATH variable).
 
   If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot/).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
@@ -524,8 +518,8 @@ NXFLAT Toolchain
   If you are *not* using the NuttX buildroot toolchain and you want to use
   the NXFLAT tools, then you will still have to build a portion of the buildroot
   tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX SourceForge download site
-  (https://sourceforge.net/projects/nuttx/files/).
+  be downloaded from the NuttX Bitbucket download site
+  (https://bitbucket.org/nuttx/nuttx/downloads/).
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
@@ -823,12 +817,10 @@ LPC4330-Xplorer Configuration Options
     CONFIG_NET_NRXDESC - Configured number of Rx descriptors. Default: 18
     CONFIG_NET_WOL - Enable Wake-up on Lan (not fully implemented).
     CONFIG_NET_REGDEBUG - Enabled low level register debug.  Also needs
-      CONFIG_DEBUG.
+      CONFIG_DEBUG_FEATURES.
     CONFIG_NET_DUMPPACKET - Dump all received and transmitted packets.
-      Also needs CONFIG_DEBUG.
+      Also needs CONFIG_DEBUG_FEATURES.
     CONFIG_NET_HASH - Enable receipt of near-perfect match frames.
-    CONFIG_NET_MULTICAST - Enable receipt of multicast (and unicast) frames.
-      Automatically set if CONFIG_NET_IGMP is selected.
 
   LPC43xx USB Device Configuration
 
@@ -889,7 +881,7 @@ Where <subdir> is one of the following:
        change this configurations using that tool, you should:
 
        a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-          and misc/tools/
+          see additional README.txt files in the NuttX tools repository.
 
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
@@ -936,7 +928,7 @@ Where <subdir> is one of the following:
            from the SPI address space after each write.
          CONFIG_DEBUG_SPIFI_DUMP - Debug option to dump read/write buffers.  You
            probably do not want to enable this unless you want to dig through a
-           *lot* of debug output!  Also required CONFIG_DEBUG, CONFIG_DEBUG_VERBOSE,
+           *lot* of debug output!  Also required CONFIG_DEBUG_FEATURES, CONFIG_DEBUG_INFO,
            and CONFIG_DEBUG_FS,
 
     5. In my experience, there were some missing function pointers in the LPC43xx

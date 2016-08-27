@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/iob/iob_free.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@
 
 #include <nuttx/config.h>
 
-#if defined(CONFIG_DEBUG) && defined(CONFIG_IOB_DEBUG)
+#if defined(CONFIG_DEBUG_FEATURES) && defined(CONFIG_IOB_DEBUG)
 /* Force debug output (from this file only) */
 
 #  undef  CONFIG_DEBUG_NET
@@ -50,26 +50,11 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/net/iob.h>
 
 #include "iob.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -89,8 +74,8 @@ FAR struct iob_s *iob_free(FAR struct iob_s *iob)
   FAR struct iob_s *next = iob->io_flink;
   irqstate_t flags;
 
-  nllvdbg("iob=%p io_pktlen=%u io_len=%u next=%p\n",
-          iob, iob->io_pktlen, iob->io_len, next);
+  ninfo("iob=%p io_pktlen=%u io_len=%u next=%p\n",
+        iob, iob->io_pktlen, iob->io_len, next);
 
   /* Copy the data that only exists in the head of a I/O buffer chain into
    * the next entry.
@@ -119,8 +104,8 @@ FAR struct iob_s *iob_free(FAR struct iob_s *iob)
           DEBUGASSERT(next->io_len == 0 && next->io_flink == NULL);
         }
 
-      nllvdbg("next=%p io_pktlen=%u io_len=%u\n",
-               next, next->io_pktlen, next->io_len);
+      ninfo("next=%p io_pktlen=%u io_len=%u\n",
+            next, next->io_pktlen, next->io_len);
     }
 
   /* Free the I/O buffer by adding it to the head of the free list. We don't
@@ -128,7 +113,7 @@ FAR struct iob_s *iob_free(FAR struct iob_s *iob)
    * protect the free list:  We disable interrupts very briefly.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   iob->io_flink = g_iob_freelist;
   g_iob_freelist = iob;
 
@@ -138,7 +123,7 @@ FAR struct iob_s *iob_free(FAR struct iob_s *iob)
 #if CONFIG_IOB_THROTTLE > 0
   sem_post(&g_throttle_sem);
 #endif
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   /* And return the I/O buffer after the one that was freed */
 

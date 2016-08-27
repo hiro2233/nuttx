@@ -49,9 +49,10 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip.h>
-#include <apps/netutils/tftp.h>
+#include <arpa/inet.h>
+
+#include <nuttx/net/netconfig.h>
+#include "netutils/tftp.h"
 
 #include "tftpc_internal.h"
 
@@ -92,13 +93,13 @@ static inline ssize_t tftp_write(int fd, const uint8_t *buf, size_t len)
 
       if (nbyteswritten < 0)
         {
-          ndbg("write failed: %d\n", errno);
+          nerr("ERROR: write failed: %d\n", errno);
           return ERROR;
         }
 
       /* Handle partial writes */
 
-      nvdbg("Wrote %d bytes to file\n", nbyteswritten);
+      ninfo("Wrote %d bytes to file\n", nbyteswritten);
       left -= nbyteswritten;
       buf  += nbyteswritten;
     }
@@ -118,12 +119,13 @@ static inline int tftp_parsedatapacket(const uint8_t *packet,
        *blockno = (uint16_t)packet[2] << 8 | (uint16_t)packet[3];
        return OK;
     }
-#if defined(CONFIG_DEBUG) && defined(CONFIG_DEBUG_NET)
+#ifdef CONFIG_DEBUG_NET_WARN
   else if (*opcode == TFTP_ERR)
     {
       (void)tftp_parseerrpacket(packet);
     }
 #endif
+
   return ERROR;
 }
 
@@ -144,11 +146,12 @@ static inline int tftp_parsedatapacket(const uint8_t *packet,
  *
  ****************************************************************************/
 
-int tftpget(const char *remote, const char *local, in_addr_t addr, bool binary)
+int tftpget(FAR const char *remote, FAR const char *local, in_addr_t addr,
+            bool binary)
 {
   struct sockaddr_in server;  /* The address of the TFTP server */
   struct sockaddr_in from;    /* The address the last UDP message recv'd from */
-  uint8_t *packet;            /* Allocated memory to hold one packet */
+  FAR uint8_t *packet;        /* Allocated memory to hold one packet */
   uint16_t blockno = 0;       /* The current transfer block number */
   uint16_t opcode;            /* Received opcode */
   uint16_t rblockno;          /* Received block number */
@@ -163,10 +166,10 @@ int tftpget(const char *remote, const char *local, in_addr_t addr, bool binary)
 
   /* Allocate the buffer to used for socket/disk I/O */
 
-  packet = (uint8_t*)zalloc(TFTP_IOBUFSIZE);
+  packet = (FAR uint8_t*)zalloc(TFTP_IOBUFSIZE);
   if (!packet)
     {
-      ndbg("packet memory allocation failure\n");
+      nerr("ERROR: packet memory allocation failure\n");
       set_errno(ENOMEM);
       goto errout;
     }
@@ -176,7 +179,7 @@ int tftpget(const char *remote, const char *local, in_addr_t addr, bool binary)
   fd = open(local, O_WRONLY|O_CREAT|O_TRUNC, 0666);
   if (fd < 0)
     {
-      ndbg("open failed: %d\n", errno);
+      nerr("ERROR: open failed: %d\n", errno);
       goto errout_with_packet;
    }
 
@@ -240,14 +243,14 @@ int tftpget(const char *remote, const char *local, in_addr_t addr, bool binary)
 
               if (server.sin_addr.s_addr != from.sin_addr.s_addr)
                 {
-                  nvdbg("Invalid address in DATA\n");
+                  ninfo("Invalid address in DATA\n");
                   retry--;
                   continue;
                 }
 
               if (server.sin_port && server.sin_port != from.sin_port)
                 {
-                  nvdbg("Invalid port in DATA\n");
+                  ninfo("Invalid port in DATA\n");
                   len = tftp_mkerrpacket(packet, TFTP_ERR_UNKID, TFTP_ERRST_UNKID);
                   ret = tftp_sendto(sd, packet, len, &from);
                   retry--;
@@ -260,7 +263,7 @@ int tftpget(const char *remote, const char *local, in_addr_t addr, bool binary)
                 {
                   /* Packet is not big enough to be parsed */
 
-                  nvdbg("Tiny data packet ignored\n");
+                  ninfo("Tiny data packet ignored\n");
                   continue;
                 }
 
@@ -269,7 +272,7 @@ int tftpget(const char *remote, const char *local, in_addr_t addr, bool binary)
                 {
                   /* Opcode is not TFTP_DATA or the block number is unexpected */
 
-                  nvdbg("Parse failure\n");
+                  ninfo("Parse failure\n");
                   if (opcode > TFTP_MAXRFC1350)
                     {
                       len = tftp_mkerrpacket(packet, TFTP_ERR_ILLEGALOP, TFTP_ERRST_ILLEGALOP);
@@ -295,7 +298,7 @@ int tftpget(const char *remote, const char *local, in_addr_t addr, bool binary)
 
       if (retry == TFTP_RETRIES)
         {
-          nvdbg("Retry limit exceeded\n");
+          ninfo("Retry limit exceeded\n");
           goto errout_with_sd;
         }
 
@@ -316,7 +319,7 @@ int tftpget(const char *remote, const char *local, in_addr_t addr, bool binary)
         {
           goto errout_with_sd;
         }
-      nvdbg("ACK blockno %d\n", blockno);
+      ninfo("ACK blockno %d\n", blockno);
     }
   while (ndatabytes >= TFTP_DATASIZE);
 

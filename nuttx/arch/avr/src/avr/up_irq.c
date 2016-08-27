@@ -49,30 +49,13 @@
 #include <avr/io.h>
 
 #include "up_arch.h"
-#include "os_internal.h"
 #include "up_internal.h"
-
-/****************************************************************************
- * Definitions
- ****************************************************************************/
 
 /****************************************************************************
  * Public Data
  ****************************************************************************/
 
-volatile uint8_t *current_regs;
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
+volatile uint8_t *g_current_regs;
 
 /****************************************************************************
  * Public Functions
@@ -86,7 +69,7 @@ void up_irqinitialize(void)
 {
   /* currents_regs is non-NULL only while processing an interrupt */
 
-  current_regs = NULL;
+  g_current_regs = NULL;
 
   /* Initialize GPIO interrupt facilities */
 
@@ -102,6 +85,6 @@ void up_irqinitialize(void)
   /* And finally, enable interrupts */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
-  irqrestore(getsreg() | (1 << SREG_I));
+  up_irq_restore(getsreg() | (1 << SREG_I));
 #endif
 }

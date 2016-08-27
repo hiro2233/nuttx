@@ -1,21 +1,16 @@
 #
 # For a description of the syntax of this configuration file,
-# see misc/tools/kconfig-language.txt.
+# see the file kconfig-language.txt in the NuttX tools repository.
 #
 
 choice
 	prompt "CPU Architecture"
 	default ARCH_ARM
 
-config ARCH_8051
-	bool "8051"
-	select CUSTOM_STACK
-	---help---
-		Intel 8051 architectures and derivatives
-
 config ARCH_ARM
 	bool "ARM"
 	select ARCH_HAVE_INTERRUPTSTACK
+	select ARCH_HAVE_TLS
 	select ARCH_HAVE_VFORK
 	select ARCH_HAVE_STACKCHECK
 	select ARCH_HAVE_CUSTOMOPT
@@ -50,7 +45,7 @@ config ARCH_RGMP
 		RTOS and GPOS on Multi-Processor (RGMP) architecture.  See
 		http://rgmp.sourceforge.net/wiki/index.php/Main_Page.
 
-config ARCH_SH
+config ARCH_RENESAS
 	bool "Renesas"
 	select ARCH_NOINTC
 	select ARCH_HAVE_INTERRUPTSTACK
@@ -59,6 +54,11 @@ config ARCH_SH
 
 config ARCH_SIM
 	bool "Simulation"
+	select ARCH_HAVE_MULTICPU
+	select ARCH_HAVE_TLS
+	select ARCH_HAVE_TICKLESS
+	select ARCH_HAVE_POWEROFF
+	select SERIAL_CONSOLE
 	---help---
 		Linux/Cywgin user-mode simulation.
 
@@ -83,25 +83,23 @@ endchoice
 
 config ARCH
 	string
-	default "8051"	if ARCH_8051
-	default "arm"	if ARCH_ARM
-	default "avr"	if ARCH_AVR
-	default "hc"	if ARCH_HC
-	default "mips"	if ARCH_MIPS
-	default "rgmp"	if ARCH_RGMP
-	default "sh"	if ARCH_SH
-	default "sim"	if ARCH_SIM
-	default "x86"	if ARCH_X86
-	default "z16"	if ARCH_Z16
-	default "z80"	if ARCH_Z80
+	default "arm"     if ARCH_ARM
+	default "avr"     if ARCH_AVR
+	default "hc"      if ARCH_HC
+	default "mips"    if ARCH_MIPS
+	default "rgmp"    if ARCH_RGMP
+	default "renesas" if ARCH_RENESAS
+	default "sim"     if ARCH_SIM
+	default "x86"     if ARCH_X86
+	default "z16"     if ARCH_Z16
+	default "z80"     if ARCH_Z80
 
-source arch/8051/Kconfig
 source arch/arm/Kconfig
 source arch/avr/Kconfig
 source arch/hc/Kconfig
 source arch/mips/Kconfig
 source arch/rgmp/Kconfig
-source arch/sh/Kconfig
+source arch/renesas/Kconfig
 source arch/sim/Kconfig
 source arch/x86/Kconfig
 source arch/z16/Kconfig
@@ -125,11 +123,23 @@ config ARCH_HAVE_IRQPRIO
 	bool
 	default n
 
-config CUSTOM_STACK
+config ARCH_L2CACHE
 	bool
 	default n
 
-config ADDRENV
+config ARCH_HAVE_COHERENT_DCACHE
+	bool
+	default n
+
+config ARCH_HAVE_ADDRENV
+	bool
+	default n
+
+config ARCH_NEED_ADDRENV_MAPPING
+	bool
+	default n
+
+config ARCH_HAVE_MULTICPU
 	bool
 	default n
 
@@ -141,6 +151,10 @@ config ARCH_HAVE_MMU
 	bool
 	default n
 
+config ARCH_HAVE_MPU
+	bool
+	default n
+
 config ARCH_NAND_HWECC
 	bool
 	default n
@@ -149,10 +163,229 @@ config ARCH_HAVE_EXTCLK
 	bool
 	default n
 
+config ARCH_HAVE_POWEROFF
+	bool
+	default n
+
+config ARCH_HAVE_RESET
+	bool
+	default n
+
+config ARCH_USE_MMU
+	bool "Enable MMU"
+	default n
+	depends on ARCH_HAVE_MMU
+	---help---
+		The architecture supports supports an MMU.  Enable this option in
+		order to enable use of the MMU.  For most architectures, this is
+		not really an option:  It is required to use the MMU.  In those
+		cases, this selection will always be forced.
+
+config ARCH_USE_MPU
+	bool "Enable MPU"
+	default n
+	depends on ARCH_HAVE_MPU
+	---help---
+		The architecture supports supports an MPU.  Enable this option in
+		order to enable use of the MPU.  For most architectures, this option
+		is enabled by other, platform-specific logic.  In those cases, this
+		selection will always be forced.
+
+menuconfig ARCH_ADDRENV
+	bool "Address environments"
+	default n
+	depends on ARCH_HAVE_ADDRENV
+	---help---
+		Support per-task address environments using the MMU... i.e., support
+		"processes"
+
+if ARCH_ADDRENV && ARCH_NEED_ADDRENV_MAPPING
+
+config ARCH_TEXT_VBASE
+	hex "Virtual .text base"
+	---help---
+		The virtual address of the beginning the .text region
+
+config ARCH_DATA_VBASE
+	hex "Virtual .bss/.data base"
+	---help---
+		The virtual address of the beginning of the .bss/.data region.
+
+config ARCH_HEAP_VBASE
+	hex "Virtual heap base"
+	---help---
+		The virtual address of the beginning of the heap region.
+
+config ARCH_SHM_VBASE
+	hex "Shared memory base"
+	depends on MM_SHM
+	---help---
+		The virtual address of the beginning of the shared memory region.
+
+config ARCH_TEXT_NPAGES
+	int "Max .text pages"
+	default 1
+	---help---
+		The maximum number of pages that can allocated for the .text region.
+		This, along with knowledge of the page size, determines the size of
+		the .text virtual address space. Default is 1.
+
+config ARCH_DATA_NPAGES
+	int "Max .bss/.data pages"
+	default 1
+	---help---
+		The maximum number of pages that can allocated for the .bss/.data
+		region. This, along with knowledge of the page size, determines the
+		size of the .bss/.data virtual address space. Default is 1.
+
+config ARCH_HEAP_NPAGES
+	int "Max heap pages"
+	default 1
+	---help---
+		The maximum number of pages that can allocated for the heap region.
+		This, along with knowledge of the page size, determines the size of
+		the heap virtual address space. Default is 1.
+
+if MM_SHM
+
+config ARCH_SHM_MAXREGIONS
+	int "Max shared memory regions"
+	default 1
+	---help---
+		The maximum number of regions that can allocated for the shared
+		memory space.  This hard-coded value permits static allocation of
+		the shared memory data structures and serves no other purpose.
+		Default is 1.
+
+		The size of the virtual shared memory address space is then
+		determined by the product of the maximum number of regions, the
+		maximum number of pages per region, and the configured size of
+		each page.
+
+config ARCH_SHM_NPAGES
+	int "Max shared memory pages"
+	default 1
+	---help---
+		The maximum number of pages that can allocated per region for the shared memory
+		region. Default is 1.
+
+		The size of the virtual shared memory address space is then
+		determined by the product of the maximum number of regions, the
+		maximum number of pages per region, and the configured size of
+		each page.
+
+endif # MM_SHM
+
+config ARCH_STACK_DYNAMIC
+	bool "Dynamic user stack"
+	default n
+	depends on BUILD_KERNEL && EXPERIMENTAL
+	---help---
+		Select this option if the user process stack resides in its own
+		address space.  The naming of this selection implies that dynamic
+		stack allocation is supported.  Certainly this option must be set if
+		dynamic stack allocation is supported by a platform.  But the more
+		general meaning of this configuration environment is simply that the
+		stack has its own address space.
+
+		NOTE:  This option not yet fully implemented in the code base.
+		Hence, it is marked EXPERIMENTAL:  Do not enable it unless you plan
+		finish the implementation.
+
+if ARCH_STACK_DYNAMIC
+
+config ARCH_STACK_VBASE
+	hex "Virtual stack base"
+	---help---
+		The virtual address of the beginning the stack region
+
+config ARCH_STACK_NPAGES
+	int "Max. stack pages"
+	default 1
+	---help---
+		The maximum number of pages that can allocated for the stack region.
+		This, along with knowledge of the page size, determines the size of
+		the stack virtual address space. Default is 1.
+
+endif # ARCH_STACK_DYNAMIC
+
+config ARCH_KERNEL_STACK
+	bool "Kernel process stack"
+	default n if !LIBC_EXECFUNCS
+	default y if LIBC_EXECFUNCS
+	depends on BUILD_KERNEL
+	---help---
+		It this option is selected, then every user process will have two
+		stacks:  A large, potentially dynamically sized user stack and small
+		kernel stack that is used during system call process.
+
+		If this option is not selected, then kernel system calls will simply
+		use the caller's user stack.  So, in most cases, this option is not
+		required.  However, this option is *required* if both BUILD_KERNEL
+		and LIBC_EXECFUNCS are selected.  Why?  Because when we instantiate
+		and initialize the address environment of the new user process, we
+		will temporarily lose the address environment of the old user
+		process, including its stack contents.  The kernel C logic will
+		crash immediately with no valid stack in place.
+
+		When this option is selected, the smaller kernel stack stays in
+		place during system call processing event though the original user
+		stack may or may not be accessible.
+
+if ARCH_KERNEL_STACK
+
+config ARCH_KERNEL_STACKSIZE
+	int "Kernel stack size"
+	default 1568
+	---help---
+		The common size of each process' kernel stack
+
+endif # ARCH_KERNEL_STACK
+
+config ARCH_PGPOOL_MAPPING
+	bool "Have page pool mapping"
+	default n
+	---help---
+		If there is a MMU mapping in place for the page pool memory, then
+		this mapping can be utilized to simplify some page table operations.
+		Otherwise, a temporary mapping will have to be established each time
+		it is necessary to modify the contents of a page.
+
+if ARCH_PGPOOL_MAPPING
+
+config ARCH_PGPOOL_PBASE
+	hex "Page pool physical address"
+	default 0x0
+	---help---
+		The physical address of the start of the page pool memory.  This
+		setting is probably equivalent to other platform specific definitions
+		but is required again in order to modularize the common address
+		environment logic.
+
+config ARCH_PGPOOL_VBASE
+	hex "Page pool virtual address"
+	default 0x0
+	---help---
+		The virtual address of the start of the page pool memory.  This
+		setting is probably equivalent to other platform specific definitions
+		but is required again in order to modularize the common address
+		environment logic.
+
+config ARCH_PGPOOL_SIZE
+	int "Page pool size (byes)"
+	default 0
+	---help---
+		The size of the page pool memory in bytes.  This setting is probably
+		equivalent  to other platform specific definitions but is required again
+		in order to modularize the common address environment logic.
+
+endif # ARCH_PGPOOL_MAPPING
+endif # ARCH_ADDRENV && ARCH_NEED_ADDRENV_MAPPING
+
 menuconfig PAGING
 	bool "On-demand paging"
 	default n
-	depends on ARCH_HAVE_MMU && !ARCH_ROMPGTABLE
+	depends on ARCH_USE_MMU && !ARCH_ROMPGTABLE
 	---help---
 		If set =y in your configation file, this setting will enable the on-demand
 		paging feature as described in http://www.nuttx.org/NuttXDemandPaging.html.
@@ -293,6 +526,7 @@ config ARCH_IRQPRIO
 config ARCH_STACKDUMP
 	bool "Dump stack on assertions"
 	default n
+	select DEBUG_ALERT
 	---help---
 		Enable to do stack dumps after assertions
 
@@ -460,7 +694,7 @@ config ARCH_HIPRI_INTERRUPT
 
 			   int up_prioritize_irq(int irq, int priority)
 
-		NOTE: ARCH_INTERRUPTSTACK must be set in kernel mode (NUTTX_KERNEL).
+		NOTE: ARCH_INTERRUPTSTACK must be set in kernel mode (BUILD_KERNEL).
 		In kernel mode without an interrupt stack, the interrupt handler
 		will set the MSP to the stack pointer of the interrupted thread.  If
 		the interrupted thread was a privileged thread, that will be the MSP
@@ -489,7 +723,7 @@ config ARCH_INT_DISABLEALL
 		back into the game" via a PendSV interrupt).
 
 		In the normal course of things, interrupts must occasionally be
-		disabled using the irqsave() inline function to prevent contention
+		disabled using the up_irq_save() inline function to prevent contention
 		in use of resources that may be shared between interrupt level and
 		non-interrupt level logic.  Now the question arises, if
 		ARCH_HIPRI_INTERRUPT, do we disable all interrupts (except SVCall),
@@ -564,7 +798,7 @@ config RAM_START
 config RAM_VSTART
 	hex "Primary RAM start address (virtual)"
 	default 0x0
-	depends on ARCH_HAVE_MMU
+	depends on ARCH_USE_MMU
 	help
 		The virtual start address of installed primary RAM. "Primary" RAM
 		refers to the RAM that you link program code into.  If program code
@@ -580,7 +814,7 @@ config RAM_SIZE
 		does not execute out of RAM but from FLASH, then you may designate
 		any block of RAM as "primary."
 
-if BOOT_RUNFROMFLASH && ARCH_HAVE_MMU
+if BOOT_RUNFROMFLASH && ARCH_USE_MMU
 
 config FLASH_START
 	hex "Boot FLASH start address (physical)"
@@ -603,7 +837,7 @@ config FLASH_SIZE
 		The size in bytes of the installed boot FLASH.  "Boot" FLASH
 		refers to the FLASH that you link program code into.
 
-endif # BOOT_RUNFROMFLASH && ARCH_HAVE_MMU
+endif # BOOT_RUNFROMFLASH && ARCH_USE_MMU
 
 config ARCH_HAVE_SDRAM
 	bool

@@ -1,7 +1,7 @@
 /****************************************************************************
  * examples/buttons/buttons_main.c
  *
- *   Copyright (C) 2011, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2014, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,7 +37,8 @@
  * NOTE: This test exercises internal button driver interfaces.  As such, it
  * it relies on internal OS interfaces that are not normally available to a
  * user-space program.  As a result, this example cannot be used if a
- * NuttX is built as a protected, supervisor kernel (CONFIG_NUTTX_KERNEL).
+ * NuttX is built as a protected, supervisor kernel (CONFIG_BUILD_PROTECTED or
+ * CONFIG_BUILD_KERNEL).
  ****************************************************************************/
 
 /****************************************************************************
@@ -51,7 +52,8 @@
 #include <unistd.h>
 #include <debug.h>
 
-#include <nuttx/arch.h>
+#include <nuttx/irq.h>
+#include <nuttx/board.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -182,7 +184,7 @@ static int button7_handler(int irq, FAR void *context);
  * Private Data
  ****************************************************************************/
 
- /* Button Names */
+/* Button Names */
 
 static const struct button_info_s g_buttoninfo[NUM_BUTTONS] =
 {
@@ -300,11 +302,8 @@ static void show_buttons(uint8_t oldset, uint8_t newset)
               state = "released";
             }
 
-          /* Use lowsyslog() because we make be executing from an
-           * interrupt handler.
-           */
-
-          lowsyslog("  %s %s\n", g_buttoninfo[BUTTON_INDEX(i)].name, state);
+          syslog(LOG_INFO, "  %s %s\n",
+                 g_buttoninfo[BUTTON_INDEX(i)].name, state);
         }
     }
 }
@@ -314,8 +313,9 @@ static void button_handler(int id, int irq)
 {
   uint8_t newset = board_buttons();
 
-  lowsyslog("IRQ:%d Button %d:%s SET:%02x:\n",
-            irq, id, g_buttoninfo[BUTTON_INDEX(id)].name, newset);
+  syslog(LOG_INFO, "IRQ:%d Button %d:%s SET:%02x:\n",
+         irq, id, g_buttoninfo[BUTTON_INDEX(id)].name, newset);
+
   show_buttons(g_oldset, newset);
   g_oldset = newset;
 }
@@ -393,11 +393,17 @@ static int button7_handler(int irq, FAR void *context)
  * buttons_main
  ****************************************************************************/
 
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
 int buttons_main(int argc, char *argv[])
+#endif
 {
   uint8_t newset;
   irqstate_t flags;
+#ifdef CONFIG_ARCH_IRQBUTTONS
   int i;
+#endif
 
   /* If this example is configured as an NX add-on, then limit the number of
    * samples that we collect before returning.  Otherwise, we never return
@@ -410,25 +416,24 @@ int buttons_main(int argc, char *argv[])
     {
       maxbuttons = strtol(argv[1], NULL, 10);
     }
-  lowsyslog("maxbuttons: %d\n", maxbuttons);
+
+  syslog(LOG_INFO, "maxbuttons: %d\n", maxbuttons);
 #endif
 
   /* Initialize the button GPIOs */
 
   board_button_initialize();
 
-  /* Register to recieve button interrupts */
+  /* Register to receive button interrupts */
 
 #ifdef CONFIG_ARCH_IRQBUTTONS
   for (i = CONFIG_EXAMPLES_IRQBUTTONS_MIN; i <= CONFIG_EXAMPLES_IRQBUTTONS_MAX; i++)
     {
       xcpt_t oldhandler = board_button_irq(i, g_buttoninfo[BUTTON_INDEX(i)].handler);
 
-      /* Use lowsyslog() for compatibility with interrrupt handler output. */
-
-      lowsyslog("Attached handler at %p to button %d [%s], oldhandler:%p\n",
-                g_buttoninfo[BUTTON_INDEX(i)].handler, i,
-                g_buttoninfo[BUTTON_INDEX(i)].name, oldhandler);
+      syslog(LOG_INFO, "Attached handler at %p to button %d [%s], oldhandler:%p\n",
+             g_buttoninfo[BUTTON_INDEX(i)].handler, i,
+             g_buttoninfo[BUTTON_INDEX(i)].name, oldhandler);
 
       /* Some hardware multiplexes different GPIO button sources to the same
        * physical interrupt.  If we register multiple such multiplexed button
@@ -439,9 +444,9 @@ int buttons_main(int argc, char *argv[])
 
       if (oldhandler != NULL)
         {
-          lowsyslog("WARNING: oldhandler:%p is not NULL!  "
-                    "Button events may be lost or aliased!\n",
-                    oldhandler);
+          syslog(LOG_INFO, "WARNING: oldhandler:%p is not NULL!  "
+                 "Button events may be lost or aliased!\n",
+                 oldhandler);
         }
     }
 #endif
@@ -467,16 +472,12 @@ int buttons_main(int argc, char *argv[])
            * output from an interrupt handler.
            */
 
-          flags = irqsave();
+          flags = enter_critical_section();
 
-          /* Use lowsyslog() for compatibility with interrrupt handler
-           * output.
-           */
-
-          lowsyslog("POLL SET:%02x:\n", newset);
+          syslog(LOG_INFO, "POLL SET:%02x:\n", newset);
           show_buttons(g_oldset, newset);
           g_oldset = newset;
-          irqrestore(flags);
+          leave_critical_section(flags);
         }
 
       /* Sleep a little... but not long.  This will determine how fast we
@@ -488,7 +489,7 @@ int buttons_main(int argc, char *argv[])
 
   /* Un-register button handlers */
 
-#if defined(CONFIG_ARCH_IRQBUTTONS) && defined(CONFIG_NSH_BUILTIN_APPS)
+#ifdef CONFIG_ARCH_IRQBUTTONS
   for (i = CONFIG_EXAMPLES_IRQBUTTONS_MIN; i <= CONFIG_EXAMPLES_IRQBUTTONS_MAX; i++)
     {
       (void)board_button_irq(i, NULL);

@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/usbhost/usbhost_hidmouse.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2015-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,19 +45,23 @@
 #include <string.h>
 #include <poll.h>
 #include <semaphore.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <assert.h>
 #include <errno.h>
 #include <fixedmath.h>
 #include <debug.h>
 
+#include <nuttx/irq.h>
 #include <nuttx/kmalloc.h>
+#include <nuttx/kthread.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/wqueue.h>
 
 #include <nuttx/usb/usb.h>
 #include <nuttx/usb/usbhost.h>
 #include <nuttx/usb/hid.h>
+#include <nuttx/usb/usbhost_devaddr.h>
 
 #ifdef CONFIG_HIDMOUSE_TSCIF
 #  include <nuttx/input/touchscreen.h>
@@ -81,7 +85,7 @@
 #  warning "Worker thread support is required (CONFIG_SCHED_WORKQUEUE)"
 #endif
 
-/* Signals must not be disabled as they are needed by usleep.  Need to have
+/* Signals must not be disabled as they are needed for kill.  Need to have
  * CONFIG_DISABLE_SIGNALS=n
  */
 
@@ -193,14 +197,10 @@
  */
 
 #ifndef CONFIG_DEBUG_INPUT
-#  undef  idbg
-#  define idbg    udbg
-#  undef  illdbg
-#  define illdbg  ulldbg
-#  undef  ivdbg
-#  define ivdbg   uvdbg
-#  undef  illvdbg
-#  define illvdbg ullvdbg
+#  undef  ierr
+#  define ierr    uerr
+#  undef  iinfo
+#  define iinfo   uinfo
 #endif
 
 /****************************************************************************
@@ -253,7 +253,7 @@ struct usbhost_state_s
 {
   /* This is the externally visible portion of the state */
 
-  struct usbhost_class_s  class;
+  struct usbhost_class_s  usbclass;
 
   /* This is an instance of the USB host driver bound to this class instance */
 
@@ -320,7 +320,7 @@ static void usbhost_pollnotify(FAR struct usbhost_state_s *dev);
 /* Memory allocation services */
 
 static inline FAR struct usbhost_state_s *usbhost_allocclass(void);
-static inline void usbhost_freeclass(FAR struct usbhost_state_s *class);
+static inline void usbhost_freeclass(FAR struct usbhost_state_s *usbclass);
 
 /* Device name management */
 
@@ -350,7 +350,7 @@ static int usbhost_waitsample(FAR struct usbhost_state_s *priv,
 
 static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
                                   FAR const uint8_t *configdesc,
-                                  int desclen, uint8_t funcaddr);
+                                  int desclen);
 static inline int usbhost_devinit(FAR struct usbhost_state_s *priv);
 
 /* (Little Endian) Data helpers */
@@ -369,15 +369,15 @@ static inline int usbhost_tdfree(FAR struct usbhost_state_s *priv);
 
 /* struct usbhost_registry_s methods */
 
-static struct usbhost_class_s *usbhost_create(FAR struct usbhost_driver_s *drvr,
-                                              FAR const struct usbhost_id_s *id);
+static struct usbhost_class_s *
+  usbhost_create(FAR struct usbhost_hubport_s *hport,
+                 FAR const struct usbhost_id_s *id);
 
 /* struct usbhost_class_s methods */
 
-static int usbhost_connect(FAR struct usbhost_class_s *class,
-                           FAR const uint8_t *configdesc, int desclen,
-                           uint8_t funcaddr);
-static int usbhost_disconnected(FAR struct usbhost_class_s *class);
+static int usbhost_connect(FAR struct usbhost_class_s *usbclass,
+                           FAR const uint8_t *configdesc, int desclen);
+static int usbhost_disconnected(FAR struct usbhost_class_s *usbclass);
 
 /* Driver methods.  We export the mouse as a standard character driver */
 
@@ -487,7 +487,7 @@ static void usbhost_pollnotify(FAR struct usbhost_state_s *priv)
           fds->revents |= (fds->events & POLLIN);
           if (fds->revents != 0)
             {
-              uvdbg("Report events: %02x\n", fds->revents);
+              uinfo("Report events: %02x\n", fds->revents);
               sem_post(fds->sem);
             }
         }
@@ -519,8 +519,8 @@ static inline FAR struct usbhost_state_s *usbhost_allocclass(void)
   FAR struct usbhost_state_s *priv;
 
   DEBUGASSERT(!up_interrupt_context());
-  priv = (FAR struct usbhost_state_s *)kmalloc(sizeof(struct usbhost_state_s));
-  uvdbg("Allocated: %p\n", priv);;
+  priv = (FAR struct usbhost_state_s *)kmm_malloc(sizeof(struct usbhost_state_s));
+  uinfo("Allocated: %p\n", priv);
   return priv;
 }
 
@@ -531,21 +531,21 @@ static inline FAR struct usbhost_state_s *usbhost_allocclass(void)
  *   Free a class instance previously allocated by usbhost_allocclass().
  *
  * Input Parameters:
- *   class - A reference to the class instance to be freed.
+ *   usbclass - A reference to the class instance to be freed.
  *
  * Returned Values:
  *   None
  *
  ****************************************************************************/
 
-static inline void usbhost_freeclass(FAR struct usbhost_state_s *class)
+static inline void usbhost_freeclass(FAR struct usbhost_state_s *usbclass)
 {
-  DEBUGASSERT(class != NULL);
+  DEBUGASSERT(usbclass != NULL);
 
   /* Free the class instance. */
 
-  uvdbg("Freeing: %p\n", class);;
-  kfree(class);
+  uinfo("Freeing: %p\n", usbclass);
+  sched_kfree(usbclass);
 }
 
 /****************************************************************************
@@ -561,7 +561,7 @@ static int usbhost_allocdevno(FAR struct usbhost_state_s *priv)
   irqstate_t flags;
   int devno;
 
-  flags = irqsave();
+  flags = enter_critical_section();
   for (devno = 0; devno < 26; devno++)
     {
       uint32_t bitno = 1 << devno;
@@ -569,12 +569,12 @@ static int usbhost_allocdevno(FAR struct usbhost_state_s *priv)
         {
           g_devinuse |= bitno;
           priv->devno = devno;
-          irqrestore(flags);
+          leave_critical_section(flags);
           return OK;
         }
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return -EMFILE;
 }
 
@@ -584,9 +584,9 @@ static void usbhost_freedevno(FAR struct usbhost_state_s *priv)
 
   if (devno >= 0 && devno < 26)
     {
-      irqstate_t flags = irqsave();
+      irqstate_t flags = enter_critical_section();
       g_devinuse &= ~(1 << devno);
-      irqrestore(flags);
+      leave_critical_section(flags);
     }
 }
 
@@ -615,14 +615,17 @@ static inline void usbhost_mkdevname(FAR struct usbhost_state_s *priv,
 static void usbhost_destroy(FAR void *arg)
 {
   FAR struct usbhost_state_s *priv = (FAR struct usbhost_state_s *)arg;
+  FAR struct usbhost_hubport_s *hport;
   char devname[DEV_NAMELEN];
 
-  DEBUGASSERT(priv != NULL);
-  uvdbg("crefs: %d\n", priv->crefs);
+  DEBUGASSERT(priv != NULL && priv->usbclass.hport != NULL);
+  uinfo("crefs: %d\n", priv->crefs);
+
+  hport = priv->usbclass.hport;
 
   /* Unregister the driver */
 
-  uvdbg("Unregister driver\n");
+  uinfo("Unregister driver\n");
   usbhost_mkdevname(priv, devname);
   (void)unregister_driver(devname);
 
@@ -634,7 +637,7 @@ static void usbhost_destroy(FAR void *arg)
 
   if (priv->epin)
     {
-      DRVR_EPFREE(priv->drvr, priv->epin);
+      DRVR_EPFREE(hport->drvr, priv->epin);
     }
 
   /* Free any transfer buffers */
@@ -648,13 +651,14 @@ static void usbhost_destroy(FAR void *arg)
 
   /* Disconnect the USB host device */
 
-  DRVR_DISCONNECT(priv->drvr);
+  DRVR_DISCONNECT(hport->drvr, hport);
 
-  /* And free the class instance.  Hmmm.. this may execute on the worker
-   * thread and the work structure is part of what is getting freed.  That
-   * should be okay because once the work contained is removed from the
-   * queue, it should not longer be accessed by the worker thread.
-   */
+  /* Free the function address assigned to this device */
+
+  usbhost_devaddr_destroy(hport, hport->funcaddr);
+  hport->funcaddr = 0;
+
+  /* And free the class instance. */
 
   usbhost_freeclass(priv);
 }
@@ -701,7 +705,7 @@ static void usbhost_notify(FAR struct usbhost_state_s *priv)
       if (fds)
         {
           fds->revents |= POLLIN;
-          ivdbg("Report events: %02x\n", fds->revents);
+          iinfo("Report events: %02x\n", fds->revents);
           sem_post(fds->sem);
         }
     }
@@ -1035,38 +1039,42 @@ static bool usbhost_threshold(FAR struct usbhost_state_s *priv)
 static int usbhost_mouse_poll(int argc, char *argv[])
 {
   FAR struct usbhost_state_s *priv;
+  FAR struct usbhost_hubport_s *hport;
   FAR struct usbhid_mousereport_s *rpt;
+  irqstate_t flags;
 #ifndef CONFIG_HIDMOUSE_TSCIF
   uint8_t buttons;
 #endif
-#if defined(CONFIG_DEBUG_USB) && defined(CONFIG_DEBUG_VERBOSE)
+#if defined(CONFIG_DEBUG_USB) && defined(CONFIG_DEBUG_INFO)
   unsigned int npolls = 0;
 #endif
   unsigned int nerrors = 0;
-  int ret;
+  ssize_t nbytes;
+  int ret = OK;
 
-  uvdbg("Started\n");
+  uinfo("Started\n");
 
   /* Synchronize with the start-up logic.  Get the private instance, re-start
    * the start-up logic, and wait a bit to make sure that all of the class
    * creation logic has a chance to run to completion.
    *
-   * NOTE: that the reference count is incremented here.  Therefore, we know
-   * that the driver data structure will remain stable while this thread is
-   * running.
+   * NOTE: that the reference count is *not* incremented here.  When the driver
+   * structure was created, it was created with a reference count of one.  This
+   * thread is responsible for that count.  The count will be decrement when
+   * this thread exits.
    */
 
   priv = g_priv;
-  DEBUGASSERT(priv != NULL);
+  DEBUGASSERT(priv != NULL  && priv->usbclass.hport != NULL);
+  hport = priv->usbclass.hport;
 
   priv->polling = true;
-  priv->crefs++;
   usbhost_givesem(&g_syncsem);
   sleep(1);
 
   /* Loop here until the device is disconnected */
 
-  uvdbg("Entering poll loop\n");
+  uinfo("Entering poll loop\n");
 
   while (!priv->disconnected)
     {
@@ -1074,14 +1082,14 @@ static int usbhost_mouse_poll(int argc, char *argv[])
        * sends data.
        */
 
-      ret = DRVR_TRANSFER(priv->drvr, priv->epin,
-                          priv->tbuffer, priv->tbuflen);
+      nbytes = DRVR_TRANSFER(hport->drvr, priv->epin,
+                             priv->tbuffer, priv->tbuflen);
 
-      /* Check for errors -- Bail if an excessive number of errors
-       * are encountered.
+      /* Check for errors -- Bail if an excessive number of consecutive
+       * errors are encountered.
        */
 
-      if (ret != OK)
+      if (nbytes < 0)
         {
           /* If DRVR_TRANSFER() returns EAGAIN, that simply means that
            * the devices was not ready and has NAK'ed the transfer.  That
@@ -1089,91 +1097,102 @@ static int usbhost_mouse_poll(int argc, char *argv[])
            * long time).
            */
 
-          udbg("ERROR: DRVR_TRANSFER returned: %d/%d\n", ret, nerrors);
-          if (ret != -EAGAIN)
+          uerr("ERROR: DRVR_TRANSFER returned: %d/%u\n",
+               (int)nbytes, nerrors);
+
+          if (nbytes != -EAGAIN)
             {
               if (++nerrors > 200)
                 {
-                  udbg("Too many errors... aborting: %d\n", nerrors);
+                  uerr("  Too many errors... aborting: %d\n", nerrors);
+                  ret = (int)nbytes;
                   break;
                 }
             }
         }
 
-      /* The report was received correctly.  But ignore the mouse data if no
-       * task has opened the driver.
-       */
+      /* The report was received correctly. */
 
-      else if (priv->open)
+      else
         {
-          /* Get exclusive access to the mouse state data */
+          /* Success, reset the error counter */
 
-          usbhost_takesem(&priv->exclsem);
+          nerrors = 0;
 
-          /* Get the HID mouse report */
+          /* Ignore the mouse data if no task has opened the driver. */
 
-          rpt = (FAR struct usbhid_mousereport_s *)priv->tbuffer;
+          if (priv->open)
+            {
+              /* Get exclusive access to the mouse state data */
 
-          /* Get the updated mouse position */
+              usbhost_takesem(&priv->exclsem);
 
-          usbhost_position(priv, rpt);
+              /* Get the HID mouse report */
+
+              rpt = (FAR struct usbhid_mousereport_s *)priv->tbuffer;
+
+              /* Get the updated mouse position */
+
+              usbhost_position(priv, rpt);
 
 #ifdef CONFIG_HIDMOUSE_TSCIF
-          /* Execute the touchscreen state machine */
+              /* Execute the touchscreen state machine */
 
-          if (usbhost_touchscreen(priv, rpt))
+              if (usbhost_touchscreen(priv, rpt))
 #else
-          /* Check if any buttons have changed.  If so, then report the
-           * new mouse data.
-           *
-           * If not, then perform a thresholding operation so that the
-           * results will be more stable.  If the difference from the
-           * last sample is small, then ignore the event.
-           */
-
-          buttons = rpt->buttons & USBHID_MOUSEIN_BUTTON_MASK;
-          if (buttons != priv->buttons || usbhost_threshold(priv))
-#endif
-            {
-              /* We get here when either there is a meaning button change
-               * and/or a significant movement of the mouse.  We are going
-               * to report the mouse event.
+              /* Check if any buttons have changed.  If so, then report the
+               * new mouse data.
                *
-               * Snap to the new x/y position for subsequent thresholding
+               * If not, then perform a thresholding operation so that the
+               * results will be more stable.  If the difference from the
+               * last sample is small, then ignore the event.
                */
 
-              priv->xlast = priv->xaccum;
-              priv->ylast = priv->yaccum;
-#ifdef CONFIG_MOUSE_WHEEL
-              priv->wlast = priv->waccum;
+              buttons = rpt->buttons & USBHID_MOUSEIN_BUTTON_MASK;
+              if (buttons != priv->buttons || usbhost_threshold(priv))
 #endif
-              /* Update the sample X/Y positions */
+                {
+                  /* We get here when either there is a meaning button
+                   * change and/or a significant movement of the mouse.  We
+                   * are going to report the mouse event.
+                   *
+                   * Snap to the new x/y position for subsequent
+                   * thresholding
+                   */
 
-              priv->sample.x = b16toi(priv->xaccum);
-              priv->sample.y = b16toi(priv->yaccum);
+                  priv->xlast = priv->xaccum;
+                  priv->ylast = priv->yaccum;
 #ifdef CONFIG_MOUSE_WHEEL
-              priv->sample.wheel = b16toi(priv->waccum);
+                  priv->wlast = priv->waccum;
+#endif
+                  /* Update the sample X/Y positions */
+
+                  priv->sample.x = b16toi(priv->xaccum);
+                  priv->sample.y = b16toi(priv->yaccum);
+#ifdef CONFIG_MOUSE_WHEEL
+                  priv->sample.wheel = b16toi(priv->waccum);
 #endif
 
 #ifdef CONFIG_HIDMOUSE_TSCIF
-              /* The X/Y positional data is now valid */
+                  /* The X/Y positional data is now valid */
 
-              priv->sample.valid = true;
+                  priv->sample.valid = true;
 
-              /* Indicate the availability of new sample data for this ID */
+                  /* Indicate the availability of new sample data for this ID */
 
-              priv->sample.id = priv->id;
+                  priv->sample.id = priv->id;
 #else
-              /* Report and remember the new button state */
+                  /* Report and remember the new button state */
 
-              priv->sample.buttons = buttons;
-              priv->buttons = buttons;
+                  priv->sample.buttons = buttons;
+                  priv->buttons = buttons;
 #endif
-              priv->valid = true;
+                  priv->valid = true;
 
-              /* Notify any waiters that new HIDMOUSE data is available */
+                  /* Notify any waiters that new HIDMOUSE data is available */
 
-              usbhost_notify(priv);
+                  usbhost_notify(priv);
+                }
             }
         }
 
@@ -1185,11 +1204,11 @@ static int usbhost_mouse_poll(int argc, char *argv[])
        * polling is still happening.
        */
 
-#if defined(CONFIG_DEBUG_USB) && defined(CONFIG_DEBUG_VERBOSE)
+#if defined(CONFIG_DEBUG_USB) && defined(CONFIG_DEBUG_INFO)
       npolls++;
       if ((npolls & 31) == 0)
         {
-          udbg("Still polling: %d\n", npolls);
+          uinfo("Still polling: %d\n", npolls);
         }
 #endif
     }
@@ -1205,27 +1224,50 @@ static int usbhost_mouse_poll(int argc, char *argv[])
   usbhost_takesem(&priv->exclsem);
 
   /* Indicate that we are no longer running and decrement the reference
-   * count help by this thread.  If there are no other users of the class,
+   * count held by this thread.  If there are no other users of the class,
    * we can destroy it now.  Otherwise, we have to wait until the all
    * of the file descriptors are closed.
    */
 
-  udbg("Mouse removed, polling halted\n");
+  uinfo("Mouse removed, polling halted\n");
+
+  flags = enter_critical_section();
   priv->polling = false;
-  if (--priv->crefs < 2)
+
+  /* Decrement the reference count held by this thread. */
+
+  DEBUGASSERT(priv->crefs > 0);
+  priv->crefs--;
+
+  /* There are two possibilities:
+   * 1) The reference count is greater than zero.  This means that there
+   *    are still open references to the mouse driver.  In this case
+   *    we need to wait until usbhost_close() is called and all of the
+   *    open driver references are decremented.  Then usbhost_destroy() can
+   *    be called from usbhost_close().
+   * 2) The reference count is now zero.  This means that there are no
+   *    further open references and we can call usbhost_destroy() now.
+   */
+
+  if (priv->crefs < 1)
     {
-      /* Destroy the instance (while we hold the semaphore!) */
+      /* Unregister the driver and destroy the instance (while we hold
+       * the semaphore!)
+       */
 
       usbhost_destroy(priv);
     }
   else
     {
-      /* No, we will destroy the driver instance when it is finally closed */
+      /* No, we will destroy the driver instance when it is final open
+       * reference is closed
+       */
 
       usbhost_givesem(&priv->exclsem);
     }
 
-  return 0;
+  leave_critical_section(flags);
+  return ret;
 }
 
 /****************************************************************************
@@ -1247,7 +1289,7 @@ static int usbhost_sample(FAR struct usbhost_state_s *priv,
    * from changing until it has been reported.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Is there new mouse data available? */
 
@@ -1255,7 +1297,7 @@ static int usbhost_sample(FAR struct usbhost_state_s *priv,
     {
       /* Return a copy of the sampled data. */
 
-      memcpy(sample, &priv->sample, sizeof(struct mouse_sample_s ));
+      memcpy(sample, &priv->sample, sizeof(struct mouse_sample_s));
 
 #ifdef CONFIG_HIDMOUSE_TSCIF
       /* Now manage state transitions */
@@ -1284,7 +1326,7 @@ static int usbhost_sample(FAR struct usbhost_state_s *priv,
       ret = OK;
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
   return ret;
 }
 
@@ -1315,7 +1357,7 @@ static int usbhost_waitsample(FAR struct usbhost_state_s *priv,
    */
 
   sched_lock();
-  flags = irqsave();
+  flags = enter_critical_section();
 
   /* Now release the semaphore that manages mutually exclusive access to
    * the device structure.  This may cause other tasks to become ready to
@@ -1332,7 +1374,7 @@ static int usbhost_waitsample(FAR struct usbhost_state_s *priv,
     {
       /* Wait for a change in the HIDMOUSE state */
 
-      ivdbg("Waiting..\n");
+      iinfo("Waiting..\n");
       priv->nwaiters++;
       ret = sem_wait(&priv->waitsem);
       priv->nwaiters--;
@@ -1343,7 +1385,7 @@ static int usbhost_waitsample(FAR struct usbhost_state_s *priv,
            * the failure now.
            */
 
-          idbg("sem_wait: %d\n", errno);
+          ierr("ERROR: sem_wait: %d\n", errno);
           DEBUGASSERT(errno == EINTR);
           ret = -EINTR;
           goto errout;
@@ -1358,9 +1400,9 @@ static int usbhost_waitsample(FAR struct usbhost_state_s *priv,
         }
     }
 
-  ivdbg("Sampled\n");
+  iinfo("Sampled\n");
 
-   /* Re-acquire the semaphore that manages mutually exclusive access to
+  /* Re-acquire the semaphore that manages mutually exclusive access to
    * the device structure.  We may have to wait here.  But we have our sample.
    * Interrupts and pre-emption will be re-enabled while we wait.
    */
@@ -1373,7 +1415,7 @@ errout:
    * have pre-emption disabled.
    */
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   /* Restore pre-emption.  We might get suspended here but that is okay
    * because we already have our sample.  Note:  this means that if there
@@ -1399,8 +1441,6 @@ errout:
  *   configdesc - A pointer to a uint8_t buffer container the configuration
  *     descriptor.
  *   desclen - The length in bytes of the configuration descriptor.
- *   funcaddr - The USB address of the function containing the endpoint that EP0
- *     controls
  *
  * Returned Values:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
@@ -1412,9 +1452,9 @@ errout:
  ****************************************************************************/
 
 static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
-                                  FAR const uint8_t *configdesc, int desclen,
-                                  uint8_t funcaddr)
+                                  FAR const uint8_t *configdesc, int desclen)
 {
+  FAR struct usbhost_hubport_s *hport;
   FAR struct usb_cfgdesc_s *cfgdesc;
   FAR struct usb_desc_s *desc;
   FAR struct usbhost_epdesc_s epindesc;
@@ -1423,9 +1463,9 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
   bool done = false;
   int ret;
 
-  DEBUGASSERT(priv != NULL &&
-              configdesc != NULL &&
-              desclen >= sizeof(struct usb_cfgdesc_s));
+  DEBUGASSERT(priv != NULL && priv->usbclass.hport != NULL &&
+              configdesc != NULL && desclen >= sizeof(struct usb_cfgdesc_s));
+  hport = priv->usbclass.hport;
 
   /* Keep the compiler from complaining about uninitialized variables */
 
@@ -1441,7 +1481,7 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
 
   /* Get the total length of the configuration descriptor (little endian).
    * It might be a good check to get the number of interfaces here too.
-  */
+   */
 
   remaining = (int)usbhost_getle16(cfgdesc->totallen);
 
@@ -1465,7 +1505,7 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
 
         case USB_DESC_TYPE_INTERFACE:
           {
-            uvdbg("Interface descriptor\n");
+            uinfo("Interface descriptor\n");
             DEBUGASSERT(remaining >= USB_SIZEOF_IFDESC);
 
             /* Did we already find what we needed from a preceding interface? */
@@ -1490,7 +1530,7 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
         /* HID descriptor */
 
         case USBHID_DESCTYPE_HID:
-            uvdbg("HID descriptor\n");
+            uinfo("HID descriptor\n");
             break;
 
         /* Endpoint descriptor.  We expect one or two interrupt endpoints,
@@ -1501,7 +1541,7 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
           {
             FAR struct usb_epdesc_s *epdesc = (FAR struct usb_epdesc_s *)configdesc;
 
-            uvdbg("Endpoint descriptor\n");
+            uinfo("Endpoint descriptor\n");
             DEBUGASSERT(remaining >= USB_SIZEOF_EPDESC);
 
             /* Check for an interrupt endpoint. */
@@ -1529,14 +1569,14 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
 
                     /* Save the interrupt IN endpoint information */
 
+                    epindesc.hport        = hport;
                     epindesc.addr         = epdesc->addr & USB_EP_ADDR_NUMBER_MASK;
                     epindesc.in           = true;
-                    epindesc.funcaddr     = funcaddr;
                     epindesc.xfrtype      = USB_EP_ATTR_XFER_INT;
                     epindesc.interval     = epdesc->interval;
                     epindesc.mxpacketsize = usbhost_getle16(epdesc->mxpacketsize);
 
-                    uvdbg("Interrupt IN EP addr:%d mxpacketsize:%d\n",
+                    uinfo("Interrupt IN EP addr:%d mxpacketsize:%d\n",
                           epindesc.addr, epindesc.mxpacketsize);
                   }
               }
@@ -1546,7 +1586,7 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
         /* Other descriptors are just ignored for now */
 
         default:
-          uvdbg("Other descriptor: %d\n", desc->type);
+          uinfo("Other descriptor: %d\n", desc->type);
           break;
         }
 
@@ -1569,22 +1609,22 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
 
   if ((found & USBHOST_ALLFOUND) != USBHOST_ALLFOUND)
     {
-      ulldbg("ERROR: Found IF:%s EPIN:%s\n",
-             (found & USBHOST_IFFOUND) != 0  ? "YES" : "NO",
-             (found & USBHOST_EPINFOUND) != 0 ? "YES" : "NO");
+      uerr("ERROR: Found IF:%s EPIN:%s\n",
+           (found & USBHOST_IFFOUND) != 0  ? "YES" : "NO",
+           (found & USBHOST_EPINFOUND) != 0 ? "YES" : "NO");
       return -EINVAL;
     }
 
   /* We are good... Allocate the interrupt IN endpoint. */
 
-  ret = DRVR_EPALLOC(priv->drvr, &epindesc, &priv->epin);
-  if (ret != OK)
+  ret = DRVR_EPALLOC(hport->drvr, &epindesc, &priv->epin);
+  if (ret < 0)
     {
-      udbg("ERROR: Failed to allocate interrupt IN endpoint\n");
+      uerr("ERROR: Failed to allocate interrupt IN endpoint\n");
       return ret;
     }
 
-  ullvdbg("Endpoint allocated\n");
+  uinfo("Endpoint allocated\n");
   return OK;
 }
 
@@ -1615,9 +1655,9 @@ static inline int usbhost_devinit(FAR struct usbhost_state_s *priv)
   /* Set aside a transfer buffer for exclusive use by the mouse class driver */
 
   ret = usbhost_tdalloc(priv);
-  if (ret != OK)
+  if (ret < 0)
     {
-      udbg("ERROR: Failed to allocate transfer buffer\n");
+      uerr("ERROR: Failed to allocate transfer buffer\n");
       return ret;
     }
 
@@ -1635,9 +1675,9 @@ static inline int usbhost_devinit(FAR struct usbhost_state_s *priv)
    * memory resources, primarily for the dedicated stack (CONFIG_HIDMOUSE_STACKSIZE).
    */
 
-  uvdbg("user_start: Start poll task\n");
+  uinfo("Start poll task\n");
 
-  /* The inputs to a task started by task_create() are very awkward for this
+  /* The inputs to a task started by kernel_thread() are very awkward for this
    * purpose.  They are really designed for command line tasks (argc/argv). So
    * the following is kludge pass binary data when the mouse poll task
    * is started.
@@ -1649,14 +1689,9 @@ static inline int usbhost_devinit(FAR struct usbhost_state_s *priv)
   usbhost_takesem(&g_exclsem);
   g_priv = priv;
 
-#ifndef CONFIG_CUSTOM_STACK
-  priv->pollpid = task_create("mouse", CONFIG_HIDMOUSE_DEFPRIO,
-                              CONFIG_HIDMOUSE_STACKSIZE,
-                              (main_t)usbhost_mouse_poll, (FAR char * const *)NULL);
-#else
-  priv->pollpid = task_create("mouse", CONFIG_HIDMOUSE_DEFPRIO,
-                              (main_t)usbhost_mouse_poll, (FAR char * const *)NULL);
-#endif
+  priv->pollpid = kernel_thread("mouse", CONFIG_HIDMOUSE_DEFPRIO,
+                                CONFIG_HIDMOUSE_STACKSIZE,
+                                (main_t)usbhost_mouse_poll, (FAR char * const *)NULL);
   if (priv->pollpid == ERROR)
     {
       /* Failed to started the poll thread... probably due to memory resources */
@@ -1673,7 +1708,7 @@ static inline int usbhost_devinit(FAR struct usbhost_state_s *priv)
 
   /* Register the driver */
 
-  uvdbg("Register driver\n");
+  uinfo("Register driver\n");
   usbhost_mkdevname(priv, devname);
   ret = register_driver(devname, &g_hidmouse_fops, 0666, priv);
 
@@ -1745,7 +1780,7 @@ static void usbhost_putle16(uint8_t *dest, uint16_t val)
 
 static inline uint32_t usbhost_getle32(const uint8_t *val)
 {
- /* Little endian means LS halfword first in byte stream */
+  /* Little endian means LS halfword first in byte stream */
 
   return (uint32_t)usbhost_getle16(&val[2]) << 16 | (uint32_t)usbhost_getle16(val);
 }
@@ -1792,8 +1827,13 @@ static void usbhost_putle32(uint8_t *dest, uint32_t val)
 
 static inline int usbhost_tdalloc(FAR struct usbhost_state_s *priv)
 {
-  DEBUGASSERT(priv && priv->tbuffer == NULL);
-  return DRVR_ALLOC(priv->drvr, &priv->tbuffer, &priv->tbuflen);
+  FAR struct usbhost_hubport_s *hport;
+
+  DEBUGASSERT(priv != NULL && priv->usbclass.hport != NULL &&
+              priv->tbuffer == NULL);
+  hport = priv->usbclass.hport;
+
+  return DRVR_ALLOC(hport->drvr, &priv->tbuffer, &priv->tbuflen);
 }
 
 /****************************************************************************
@@ -1813,13 +1853,15 @@ static inline int usbhost_tdalloc(FAR struct usbhost_state_s *priv)
 
 static inline int usbhost_tdfree(FAR struct usbhost_state_s *priv)
 {
+  FAR struct usbhost_hubport_s *hport;
   int result = OK;
   DEBUGASSERT(priv);
 
   if (priv->tbuffer)
     {
-      DEBUGASSERT(priv->drvr);
-      result         = DRVR_FREE(priv->drvr, priv->tbuffer);
+      DEBUGASSERT(priv->usbclass.hport);
+      hport         = priv->usbclass.hport;
+      result        = DRVR_FREE(hport->drvr, priv->tbuffer);
       priv->tbuffer = NULL;
       priv->tbuflen = 0;
     }
@@ -1843,9 +1885,7 @@ static inline int usbhost_tdfree(FAR struct usbhost_state_s *priv)
  *   USB ports and multiple USB devices simultaneously connected.
  *
  * Input Parameters:
- *   drvr - An instance of struct usbhost_driver_s that the class
- *     implementation will "bind" to its state structure and will
- *     subsequently use to communicate with the USB host driver.
+ *   hport - The hub port that manages the new class instance.
  *   id - In the case where the device supports multiple base classes,
  *     subclasses, or protocols, this specifies which to configure for.
  *
@@ -1853,13 +1893,13 @@ static inline int usbhost_tdfree(FAR struct usbhost_state_s *priv)
  *   On success, this function will return a non-NULL instance of struct
  *   usbhost_class_s that can be used by the USB host driver to communicate
  *   with the USB host class.  NULL is returned on failure; this function
- *   will fail only if the drvr input parameter is NULL or if there are
+ *   will fail only if the hport input parameter is NULL or if there are
  *   insufficient resources to create another USB host class instance.
  *
  ****************************************************************************/
 
 static FAR struct usbhost_class_s *
-  usbhost_create(FAR struct usbhost_driver_s *drvr,
+  usbhost_create(FAR struct usbhost_hubport_s *hport,
                  FAR const struct usbhost_id_s *id)
 {
   FAR struct usbhost_state_s *priv;
@@ -1879,27 +1919,24 @@ static FAR struct usbhost_class_s *
         {
          /* Initialize class method function pointers */
 
-          priv->class.connect      = usbhost_connect;
-          priv->class.disconnected = usbhost_disconnected;
+          priv->usbclass.hport        = hport;
+          priv->usbclass.connect      = usbhost_connect;
+          priv->usbclass.disconnected = usbhost_disconnected;
 
           /* The initial reference count is 1... One reference is held by
-           * the driver.
+           * the driver's usbhost_mouse_poll() task.
            */
 
-          priv->crefs              = 1;
+          priv->crefs = 1;
 
           /* Initialize semaphores */
 
           sem_init(&priv->exclsem, 0, 1);
           sem_init(&priv->waitsem, 0, 0);
 
-          /* Bind the driver to the storage class instance */
-
-          priv->drvr               = drvr;
-
           /* Return the instance of the USB mouse class driver */
 
-          return &priv->class;
+          return &priv->usbclass;
         }
     }
 
@@ -1926,12 +1963,11 @@ static FAR struct usbhost_class_s *
  *   descriptor to the class so that the class may initialize properly
  *
  * Input Parameters:
- *   class - The USB host class entry previously obtained from a call to create().
+ *   usbclass - The USB host class entry previously obtained from a call to
+ *     create().
  *   configdesc - A pointer to a uint8_t buffer container the configuration
  *     descriptor.
  *   desclen - The length in bytes of the configuration descriptor.
- *   funcaddr - The USB address of the function containing the endpoint that EP0
- *     controls
  *
  * Returned Values:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
@@ -1948,32 +1984,30 @@ static FAR struct usbhost_class_s *
  *
  ****************************************************************************/
 
-static int usbhost_connect(FAR struct usbhost_class_s *class,
-                           FAR const uint8_t *configdesc, int desclen,
-                           uint8_t funcaddr)
+static int usbhost_connect(FAR struct usbhost_class_s *usbclass,
+                           FAR const uint8_t *configdesc, int desclen)
 {
-  FAR struct usbhost_state_s *priv = (FAR struct usbhost_state_s *)class;
+  FAR struct usbhost_state_s *priv = (FAR struct usbhost_state_s *)usbclass;
   int ret;
 
-  DEBUGASSERT(priv != NULL &&
-              configdesc != NULL &&
+  DEBUGASSERT(priv != NULL && configdesc != NULL &&
               desclen >= sizeof(struct usb_cfgdesc_s));
 
   /* Parse the configuration descriptor to get the endpoints */
 
-  ret = usbhost_cfgdesc(priv, configdesc, desclen, funcaddr);
-  if (ret != OK)
+  ret = usbhost_cfgdesc(priv, configdesc, desclen);
+  if (ret < 0)
     {
-      udbg("usbhost_cfgdesc() failed: %d\n", ret);
+      uerr("ERROR: usbhost_cfgdesc() failed: %d\n", ret);
     }
   else
     {
       /* Now configure the device and register the NuttX driver */
 
       ret = usbhost_devinit(priv);
-      if (ret != OK)
+      if (ret < 0)
         {
-          udbg("usbhost_devinit() failed: %d\n", ret);
+          uerr("ERROR: usbhost_devinit() failed: %d\n", ret);
         }
     }
 
@@ -2000,7 +2034,7 @@ static int usbhost_connect(FAR struct usbhost_class_s *class,
  *   been disconnected.
  *
  * Input Parameters:
- *   class - The USB host class entry previously obtained from a call to
+ *   usbclass - The USB host class entry previously obtained from a call to
  *     create().
  *
  * Returned Values:
@@ -2012,9 +2046,9 @@ static int usbhost_connect(FAR struct usbhost_class_s *class,
  *
  ****************************************************************************/
 
-static int usbhost_disconnected(struct usbhost_class_s *class)
+static int usbhost_disconnected(struct usbhost_class_s *usbclass)
 {
-  FAR struct usbhost_state_s *priv = (FAR struct usbhost_state_s *)class;
+  FAR struct usbhost_state_s *priv = (FAR struct usbhost_state_s *)usbclass;
   int i;
 
   DEBUGASSERT(priv != NULL);
@@ -2024,7 +2058,7 @@ static int usbhost_disconnected(struct usbhost_class_s *class)
    */
 
   priv->disconnected = true;
-  ullvdbg("Disconnected\n");
+  uinfo("Disconnected\n");
 
   /* Are there a thread(s) waiting for mouse data that will never come? */
 
@@ -2086,7 +2120,7 @@ static int usbhost_open(FAR struct file *filep)
   irqstate_t flags;
   int ret;
 
-  uvdbg("Entry\n");
+  uinfo("Entry\n");
   DEBUGASSERT(filep && filep->f_inode);
   inode = filep->f_inode;
   priv  = inode->i_private;
@@ -2101,7 +2135,7 @@ static int usbhost_open(FAR struct file *filep)
    * events.
    */
 
-  flags = irqsave();
+  flags = enter_critical_section();
   if (priv->disconnected)
     {
       /* No... the driver is no longer bound to the class.  That means that
@@ -2141,7 +2175,7 @@ static int usbhost_open(FAR struct file *filep)
       ret        = OK;
     }
 
-  irqrestore(flags);
+  leave_critical_section(flags);
 
   usbhost_givesem(&priv->exclsem);
   return ret;
@@ -2157,58 +2191,83 @@ static int usbhost_open(FAR struct file *filep)
 
 static int usbhost_close(FAR struct file *filep)
 {
-  FAR struct inode           *inode;
+  FAR struct inode *inode;
   FAR struct usbhost_state_s *priv;
+  irqstate_t flags;
 
-  uvdbg("Entry\n");
+  uinfo("Entry\n");
   DEBUGASSERT(filep && filep->f_inode);
   inode = filep->f_inode;
   priv  = inode->i_private;
 
   /* Decrement the reference count on the driver */
 
-  DEBUGASSERT(priv->crefs > 1);
+  DEBUGASSERT(priv->crefs >= 1);
   usbhost_takesem(&priv->exclsem);
-  priv->crefs--;
 
-  /* Is this the last reference (other than the one held by the USB host
-   * controller driver)
+  /* We need to disable interrupts momentarily to assure that there are no
+   * asynchronous poll or disconnect events.
    */
 
-  if (priv->crefs <= 1)
+  flags = enter_critical_section();
+  priv->crefs--;
+
+  /* Check if the USB mouse device is still connected.  If the device is
+   * no longer connected, then unregister the driver and free the driver
+   * class instance.
+   */
+
+  if (priv->disconnected)
     {
-      irqstate_t flags;
-
-      /* Yes.. then the driver is no longer open */
-
-      priv->open = false;
-
-      /* We need to disable interrupts momentarily to assure that there are
-       * no asynchronous disconnect events.
+      /* If the reference count is one or less then there are two
+       * possibilities:
+       *
+       * 1) It might be zero meaning that the polling thread has already
+       *    exited and decremented its count.
+       * 2) If might be one meaning either that (a) the polling thread is still
+       *    running and still holds a count, or (b) the polling thread has exited,
+       *    but there is still an outstanding open reference.
        */
 
-      flags = irqsave();
-
-      /* Check if the USB mouse device is still connected.  If the device is
-       * no longer connected, then unregister the driver and free the driver
-       * class instance.
-       */
-
-      if (priv->disconnected)
+     if (priv->crefs == 0 || (priv->crefs == 1 && priv->polling))
         {
-          /* Destroy the class instance (we can't use priv after this; we can't
-           * 'give' the semaphore)
-           */
+          /* Yes.. In either case, then the driver is no longer open */
 
-          usbhost_destroy(priv);
-          irqrestore(flags);
-          return OK;
+          priv->open = false;
+
+          /* Check if the USB keyboard device is still connected. */
+
+          if (priv->crefs == 0)
+            {
+              /* The polling thread is no longer running */
+
+              DEBUGASSERT(!priv->polling);
+
+              /* If the device is no longer connected, unregister the driver
+               * and free the driver class instance.
+               */
+
+              usbhost_destroy(priv);
+
+              /* Skip giving the semaphore... it is no longer valid */
+
+              leave_critical_section(flags);
+              return OK;
+            }
+          else /* if (priv->crefs == 1) */
+            {
+              /* The polling thread is still running.  Signal it so that it
+               * will wake up and call usbhost_destroy().  The particular
+               * signal that we use does not matter in this case.
+               */
+
+              (void)kill(priv->pollpid, SIGALRM);
+            }
         }
-
-      irqrestore(flags);
     }
 
   usbhost_givesem(&priv->exclsem);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -2232,7 +2291,7 @@ static ssize_t usbhost_read(FAR struct file *filep, FAR char *buffer, size_t len
   struct mouse_sample_s       sample;
   int                         ret;
 
-  uvdbg("Entry\n");
+  uinfo("Entry\n");
   DEBUGASSERT(filep && filep->f_inode && buffer);
   inode = filep->f_inode;
   priv  = inode->i_private;
@@ -2282,7 +2341,7 @@ static ssize_t usbhost_read(FAR struct file *filep, FAR char *buffer, size_t len
         {
           /* We might have been awakened by a signal */
 
-          idbg("usbhost_waitsample: %d\n", ret);
+          ierr("ERROR: usbhost_waitsample: %d\n", ret);
           goto errout;
         }
     }
@@ -2329,10 +2388,10 @@ static ssize_t usbhost_read(FAR struct file *filep, FAR char *buffer, size_t len
       report->point[0].flags  = TOUCH_MOVE | TOUCH_ID_VALID | TOUCH_POS_VALID;
     }
 
-  ivdbg("  id:      %d\n", report->point[0].id);
-  ivdbg("  flags:   %02x\n", report->point[0].flags);
-  ivdbg("  x:       %d\n", report->point[0].x);
-  ivdbg("  y:       %d\n", report->point[0].y);
+  iinfo("  id:      %d\n", report->point[0].id);
+  iinfo("  flags:   %02x\n", report->point[0].flags);
+  iinfo("  x:       %d\n", report->point[0].x);
+  iinfo("  y:       %d\n", report->point[0].y);
 
   ret = SIZEOF_TOUCH_SAMPLE_S(1);
 #else
@@ -2351,7 +2410,7 @@ static ssize_t usbhost_read(FAR struct file *filep, FAR char *buffer, size_t len
 
 errout:
   usbhost_givesem(&priv->exclsem);
-  ivdbg("Returning: %d\n", ret);
+  iinfo("Returning: %d\n", ret);
   return (ssize_t)ret;
 }
 
@@ -2388,7 +2447,7 @@ static int usbhost_poll(FAR struct file *filep, FAR struct pollfd *fds,
   int                         ret = OK;
   int                         i;
 
-  uvdbg("Entry\n");
+  uinfo("Entry\n");
   DEBUGASSERT(filep && filep->f_inode && fds);
   inode = filep->f_inode;
   priv  = inode->i_private;

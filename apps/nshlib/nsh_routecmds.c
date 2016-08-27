@@ -43,7 +43,10 @@
 #include <string.h>
 #include <net/route.h>
 
-#include <apps/netutils/uiplib.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#include "netutils/netlib.h"
 
 #include "nsh.h"
 #include "nsh_console.h"
@@ -108,7 +111,7 @@ int cmd_addroute(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 
   /* We need to have a socket (any socket) in order to perform the ioctl */
 
-  sockfd = socket(PF_INET, UIPLIB_SOCK_IOCTL, 0);
+  sockfd = socket(PF_INET, NETLIB_SOCK_IOCTL, 0);
   if (sockfd < 0)
     {
       nsh_output(vtbl, g_fmtcmdfailed, argv[0], "socket", NSH_ERRNO);
@@ -132,7 +135,7 @@ int cmd_addroute(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 
   memset(&target, 0, sizeof(target));
 #ifdef CONFIG_NET_IPv6
-  target.sin_family = AF_INET6;
+  target.sin6_family = AF_INET6;
   memcpy(&target.sin6_addr, &inaddr, sizeof(struct in6_addr));
 #else
   target.sin_family = AF_INET;
@@ -156,11 +159,11 @@ int cmd_addroute(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 
   memset(&netmask, 0, sizeof(netmask));
 #ifdef CONFIG_NET_IPv6
-  netmask.sin_family = AF_INET6;
+  netmask.sin6_family = AF_INET6;
   memcpy(&netmask.sin6_addr, &inaddr, sizeof(struct in6_addr));
 #else
-  netmask.sin_family = AF_INET;
-  netmask.sin_addr   = inaddr;
+  netmask.sin_family  = AF_INET;
+  netmask.sin_addr    = inaddr;
 #endif
 
    /* Convert the router IP address string into its binary form */
@@ -180,11 +183,11 @@ int cmd_addroute(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 
   memset(&router, 0, sizeof(router));
 #ifdef CONFIG_NET_IPv6
-  router.sin_family = AF_INET6;
+  router.sin6_family = AF_INET6;
   memcpy(&router.sin6_addr, &inaddr, sizeof(struct in6_addr));
 #else
-  router.sin_family = AF_INET;
-  router.sin_addr   = inaddr;
+  router.sin_family  = AF_INET;
+  router.sin_addr    = inaddr;
 #endif
 
   /* Then add the route */
@@ -236,7 +239,7 @@ int cmd_delroute(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 
   /* We need to have a socket (any socket) in order to perform the ioctl */
 
-  sockfd = socket(PF_INET, UIPLIB_SOCK_IOCTL, 0);
+  sockfd = socket(PF_INET, NETLIB_SOCK_IOCTL, 0);
   if (sockfd < 0)
     {
       nsh_output(vtbl, g_fmtcmdfailed, argv[0], "socket", NSH_ERRNO);
@@ -260,11 +263,11 @@ int cmd_delroute(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 
   memset(&target, 0, sizeof(target));
 #ifdef CONFIG_NET_IPv6
-  target.sin_family = AF_INET6;
+  target.sin6_family = AF_INET6;
   memcpy(&target.sin6_addr, &inaddr, sizeof(struct in6_addr));
 #else
-  target.sin_family = AF_INET;
-  target.sin_addr   = inaddr;
+  target.sin_family  = AF_INET;
+  target.sin_addr    = inaddr;
 #endif
 
    /* Convert the netmask IP address string into its binary form */
@@ -284,11 +287,11 @@ int cmd_delroute(FAR struct nsh_vtbl_s *vtbl, int argc, char **argv)
 
   memset(&netmask, 0, sizeof(netmask));
 #ifdef CONFIG_NET_IPv6
-  netmask.sin_family = AF_INET6;
+  netmask.sin6_family = AF_INET6;
   memcpy(&netmask.sin6_addr, &inaddr, sizeof(struct in6_addr));
 #else
-  netmask.sin_family = AF_INET;
-  netmask.sin_addr   = inaddr;
+  netmask.sin_family  = AF_INET;
+  netmask.sin_addr    = inaddr;
 #endif
 
   /* Then delete the route */
@@ -318,11 +321,14 @@ errout:
  *
  ****************************************************************************/
 
-#if !defined(CONFIG_NSH_DISABLE_DELROUTE) && !defined(CONFIG_NUTTX_KERNEL)
+#if !defined(CONFIG_NSH_DISABLE_DELROUTE) && \
+    !defined(CONFIG_BUILD_PROTECTED) && \
+    !defined(CONFIG_BUILD_KERNEL)
+
 /* Perhaps... someday.  This would current depend on using the internal
- * OS interface net_foreachroute and internal OS data structrues defined
+ * OS interface net_foreachroute and internal OS data structures defined
  * in nuttx/net/net_route.h
  */
-#endif /* !CONFIG_NSH_DISABLE_DELROUTE && !CONFIG_NUTTX_KERNEL */
+#endif /* !CONFIG_NSH_DISABLE_DELROUTE && !CONFIG_BUILD_PROTECTED && !CONFIG_BUILD_KERNEL */
 
 #endif /* CONFIG_NET && CONFIG_NET_ROUTE */

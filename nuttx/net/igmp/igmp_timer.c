@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/igmp/igmp_timer.c
  *
- *   Copyright (C) 2010-2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010-2011, 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * The NuttX implementation of IGMP was inspired by the IGMP add-on for the
@@ -44,15 +44,18 @@
 #include <nuttx/config.h>
 #include <nuttx/compiler.h>
 
-#include <wdog.h>
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/net/uip/uipopt.h>
-#include <nuttx/net/uip/uip.h>
-#include <nuttx/net/uip/uip-igmp.h>
+#include <nuttx/wdog.h>
+#include <nuttx/net/netconfig.h>
+#include <nuttx/net/net.h>
+#include <nuttx/net/netstats.h>
+#include <nuttx/net/igmp.h>
 
-#include "uip/uip_internal.h"
+#include "devif/devif.h"
+#include "igmp/igmp.h"
+#include "utils/utils.h"
 
 #ifdef CONFIG_NET_IGMP
 
@@ -70,27 +73,19 @@
 
 #ifdef CONFIG_CPP_HAVE_VARARGS
 #  ifdef IGMP_GTMRDEBUG
-#    define gtmrdbg(format, ...)    ndbg(format, ##__VA_ARGS__)
-#    define gtmrlldbg(format, ...)  nlldbg(format, ##__VA_ARGS__)
-#    define gtmrvdbg(format, ...)   nvdbg(format, ##__VA_ARGS__)
-#    define gtmrllvdbg(format, ...) nllvdbg(format, ##__VA_ARGS__)
+#    define gtmrerr(format, ...)    nerr(format, ##__VA_ARGS__)
+#    define gtmrinfo(format, ...)   ninfo(format, ##__VA_ARGS__)
 #  else
-#    define gtmrdbg(x...)
-#    define gtmrlldbg(x...)
-#    define gtmrvdbg(x...)
-#    define gtmrllvdbg(x...)
+#    define gtmrerr(x...)
+#    define gtmrinfo(x...)
 #  endif
 #else
 #  ifdef IGMP_GTMRDEBUG
-#    define gtmrdbg    ndbg
-#    define gtmrlldbg  nlldbg
-#    define gtmrvdbg   nvdbg
-#    define gtmrllvdbg nllvdbg
+#    define gtmrerr    nerr
+#    define gtmrinfo   ninfo
 #  else
-#    define gtmrdbg    (void)
-#    define gtmrlldbg  (void)
-#    define gtmrvdbg   (void)
-#    define gtmrllvdbg (void)
+#    define gtmrerr    (void)
+#    define gtmrinfo   (void)
 #  endif
 #endif
 
@@ -99,7 +94,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name:  uip_igmptimeout
+ * Name:  igmp_timeout
  *
  * Description:
  *   Timeout watchdog handler.
@@ -110,13 +105,13 @@
  *
  ****************************************************************************/
 
-static void uip_igmptimeout(int argc, uint32_t arg, ...)
+static void igmp_timeout(int argc, uint32_t arg, ...)
 {
   FAR struct igmp_group_s *group;
 
   /* If the state is DELAYING_MEMBER then we send a report for this group */
 
-  nllvdbg("Timeout!\n");
+  ninfo("Timeout!\n");
   group = (FAR struct igmp_group_s *)arg;
   DEBUGASSERT(argc == 1 && group);
 
@@ -133,8 +128,8 @@ static void uip_igmptimeout(int argc, uint32_t arg, ...)
        * for the message to be sent.
        */
 
-      IGMP_STATINCR(uip_stat.igmp.report_sched);
-      uip_igmpschedmsg(group, IGMPv2_MEMBERSHIP_REPORT);
+      IGMP_STATINCR(g_netstats.igmp.report_sched);
+      igmp_schedmsg(group, IGMPv2_MEMBERSHIP_REPORT);
 
       /* Also note:  The Membership Report is sent at most two times becasue
        * the timer is not reset here.  Hmm.. does this mean that the group
@@ -151,29 +146,7 @@ static void uip_igmptimeout(int argc, uint32_t arg, ...)
  ****************************************************************************/
 
 /****************************************************************************
- * Name:  uip_igmpstarttimer
- *
- * Description:
- *   Start the IGMP timer.
- *
- * Assumptions:
- *   This function may be called from most any context.
- *
- ****************************************************************************/
-
-int uip_decisec2tick(int decisecs)
-{
-  /* Convert the deci-second comparison value to clock ticks.  The CLK_TCK
-   * value is the number of clock ticks per second; decisecs argument is the
-   * maximum delay in 100's of milliseconds.  CLK_TCK/10 is then the number
-   * of clock ticks in 100 milliseconds.
-   */
-
-  return CLK_TCK * decisecs / 10;
-}
-
-/****************************************************************************
- * Name:  uip_igmpstartticks and uip_igmpstarttimer
+ * Name:  igmp_startticks and igmp_starttimer
  *
  * Description:
  *   Start the IGMP timer with differing time units (ticks or deciseconds).
@@ -183,32 +156,32 @@ int uip_decisec2tick(int decisecs)
  *
  ****************************************************************************/
 
-void uip_igmpstartticks(FAR struct igmp_group_s *group, int ticks)
+void igmp_startticks(FAR struct igmp_group_s *group, unsigned int ticks)
 {
   int ret;
 
   /* Start the timer */
 
-  gtmrlldbg("ticks: %d\n", ticks);
+  gtmrinfo("ticks: %d\n", ticks);
 
-  ret = wd_start(group->wdog, ticks, uip_igmptimeout, 1, (uint32_t)group);
+  ret = wd_start(group->wdog, ticks, igmp_timeout, 1, (uint32_t)group);
 
   DEBUGASSERT(ret == OK);
   UNUSED(ret);
 }
 
-void uip_igmpstarttimer(FAR struct igmp_group_s *group, uint8_t decisecs)
+void igmp_starttimer(FAR struct igmp_group_s *group, uint8_t decisecs)
 {
   /* Convert the decisec value to system clock ticks and start the timer.
    * Important!! this should be a random timer from 0 to decisecs
    */
 
-  gtmrdbg("decisecs: %d\n", decisecs);
-  uip_igmpstartticks(group, uip_decisec2tick(decisecs));
+  gtmrinfo("decisecs: %d\n", decisecs);
+  igmp_startticks(group, net_dsec2tick(decisecs));
 }
 
 /****************************************************************************
- * Name:  uip_igmpcmptimer
+ * Name:  igmp_cmptimer
  *
  * Description:
  *   Compare the timer remaining on the watching timer to the deci-second
@@ -217,20 +190,20 @@ void uip_igmpstarttimer(FAR struct igmp_group_s *group, uint8_t decisecs)
  *
  * Assumptions:
  *   This function may be called from most any context.  If true is returned
- *   then the caller must call uip_igmpstartticks() to restart the timer
+ *   then the caller must call igmp_startticks() to restart the timer
  *
  ****************************************************************************/
 
-bool uip_igmpcmptimer(FAR struct igmp_group_s *group, int maxticks)
+bool igmp_cmptimer(FAR struct igmp_group_s *group, int maxticks)
 {
-  uip_lock_t flags;
+  net_lock_t flags;
   int remaining;
 
   /* Disable interrupts so that there is no race condition with the actual
    * timer expiration.
    */
 
-  flags = uip_lock();
+  flags = net_lock();
 
   /* Get the timer remaining on the watchdog.  A time of <= zero means that
    * the watchdog was never started.
@@ -243,17 +216,17 @@ bool uip_igmpcmptimer(FAR struct igmp_group_s *group, int maxticks)
    * test as well.
    */
 
-  gtmrdbg("maxticks: %d remaining: %d\n", maxticks, remaining);
+  gtmrinfo("maxticks: %d remaining: %d\n", maxticks, remaining);
   if (maxticks > remaining)
     {
       /* Cancel the watchdog timer and return true */
 
       wd_cancel(group->wdog);
-      uip_unlock(flags);
+      net_unlock(flags);
       return true;
     }
 
-  uip_unlock(flags);
+  net_unlock(flags);
   return false;
 }
 

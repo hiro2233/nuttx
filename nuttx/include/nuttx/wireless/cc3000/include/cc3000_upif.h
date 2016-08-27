@@ -56,10 +56,10 @@
 #include <nuttx/irq.h>
 #include <nuttx/wireless/wireless.h>
 
-#if defined(CONFIG_WIRELESS) && defined(CONFIG_WL_CC3000)
+#if defined(CONFIG_DRIVERS_WIRELESS) && defined(CONFIG_WL_CC3000)
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
 /* Configuration ************************************************************/
@@ -127,15 +127,15 @@ struct cc3000_config_s
    * interrupts should be configured on falling edges to detect the Ready Condition
    * At T2: The normal master SPI write sequence is SPI_CS low, followed by SPI_IRQ low
    * CC3000 to host, indicating that the CC3000 core module is ready to accept data.
-   *  T2 duration is approximately 7 ms.
+   * T2 duration is approximately 7 ms.
    *
-   *   irq_attach   - Attach the CC3000 interrupt handler to the GPIO interrupt
-   *   irq_enable   - Enable or disable the GPIO interrupt
-   *   clear_irq    - Acknowledge/clear any pending GPIO interrupt
-   *   power_enable - Enable or disable Module enable.
-   *   chip_select  - The Chip Select
-   *   busy         - Return the state of the interrupt GPIO input
-   *
+   *   irq_attach       - Attach the CC3000 interrupt handler to the GPIO interrupt
+   *   irq_enable       - Enable or disable the GPIO interrupt
+   *   irq_clear        - Acknowledge/clear any pending GPIO interrupt
+   *   power_enable     - Enable or disable Module enable.
+   *   chip_chip_select - The Chip Select
+   *   irq_read         - Return the state of the interrupt GPIO input
+   *   probe            - Debug support
    */
 
   int  (*irq_attach)(FAR struct cc3000_config_s *state, xcpt_t isr);
@@ -155,7 +155,8 @@ struct cc3000_config_s
 
 #ifdef __cplusplus
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -187,5 +188,5 @@ int cc3000_register(FAR struct spi_dev_s *spi,
 }
 #endif
 
-#endif /* CONFIG_WIRELESS && CONFIG_INPUT_CC3000 */
+#endif /* CONFIG_DRIVERS_WIRELESS && CONFIG_INPUT_CC3000 */
 #endif /* __INCLUDE_NUTTX_WIRELESS_CC3000_INCLUDE_CC3000_UPIFL_H */

@@ -47,10 +47,12 @@
 #include "sam_tsd.h"
 #include "sama5d3x-ek.h"
 
+#include <nuttx/board.h>
+
 #ifdef CONFIG_SAMA5_TSD
 
 /****************************************************************************
- * Pre-Processor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
 
@@ -83,7 +85,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: arch_tcinitialize
+ * Name: board_tsc_setup
  *
  * Description:
  *   Each board that supports a touchscreen device must provide this
@@ -100,13 +102,13 @@
  *
  ****************************************************************************/
 
-int arch_tcinitialize(int minor)
+int board_tsc_setup(int minor)
 {
   struct sam_adc_s *adc;
   static bool initialized = false;
   int ret;
 
-  idbg("initialized:%d minor:%d\n", initialized, minor);
+  iinfo("initialized:%d minor:%d\n", initialized, minor);
   DEBUGASSERT(minor == 0);
 
   /* Since there is no uninitialized logic, this initialization can be
@@ -120,7 +122,7 @@ int arch_tcinitialize(int minor)
       adc = sam_adc_initialize();
       if (!adc)
         {
-          idbg("ERROR: Failed to initialize the ADC driver\n");
+          ierr("ERROR: Failed to initialize the ADC driver\n");
           return -ENODEV;
         }
 
@@ -129,7 +131,7 @@ int arch_tcinitialize(int minor)
       ret = sam_tsd_register(adc, CONFIG_SAMA5D3xEK_TSD_DEVMINOR);
       if (ret < 0)
         {
-          idbg("ERROR: Failed to register touchscreen device /dev/input%d: %d\n",
+          ierr("ERROR: Failed to register touchscreen device /dev/input%d: %d\n",
                CONFIG_SAMA5D3xEK_TSD_DEVMINOR, ret);
           return -ENODEV;
         }
@@ -141,7 +143,7 @@ int arch_tcinitialize(int minor)
 }
 
 /****************************************************************************
- * Name: arch_tcuninitialize
+ * Name: board_tsc_teardown
  *
  * Description:
  *   Each board that supports a touchscreen device must provide this function.
@@ -156,7 +158,7 @@ int arch_tcinitialize(int minor)
  *
  ****************************************************************************/
 
-void arch_tcuninitialize(void)
+void board_tsc_teardown(void)
 {
   /* No support for un-initializing the touchscreen  yet */
 }

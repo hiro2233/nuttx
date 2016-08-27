@@ -1,8 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lpc43xx/lpc43_start.c
- * arch/arm/src/chip/lpc43_start.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,8 +32,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  ****************************************************************************/
-/*
- * Power-Up Reset Overview
+/* Power-Up Reset Overview
  * -----------------------
  *
  * The ARM core starts executing code on reset with the program counter set
@@ -63,6 +61,7 @@
 
 #include <nuttx/init.h>
 #include <arch/board/board.h>
+#include <arch/irq.h>
 
 #include "up_arch.h"
 #include "up_internal.h"
@@ -77,10 +76,10 @@
 #include "lpc43_userspace.h"
 
 /****************************************************************************
- * Preprocessor Definitions
+ * Pre-processor Definitions
  ****************************************************************************/
 
- /****************************************************************************
+/****************************************************************************
  * Name: showprogress
  *
  * Description:
@@ -88,7 +87,7 @@
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
 #  define showprogress(c) up_lowputc(c)
 #else
 #  define showprogress(c)
@@ -187,7 +186,7 @@ static inline void lpc43_enabuffering(void)
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_FPU
-#ifdef CONFIG_ARMV7M_CMNVECTOR
+#if defined(CONFIG_ARMV7M_CMNVECTOR) && !defined(CONFIG_ARMV7M_LAZYFPU)
 
 static inline void lpc43_fpuconfig(void)
 {
@@ -272,12 +271,12 @@ void __start(void)
 
   /* Reset as many of the LPC43 peripherals as possible. This is necessary
    * because the LPC43 does not provide any way of performing a full system
-   * reset under debugger control.  So, if CONFIG_DEBUG is set (indicating
+   * reset under debugger control.  So, if CONFIG_DEBUG_FEATURES is set (indicating
    * that a debugger is being used?), the boot logic will call this
    * function on all restarts.
    */
 
-#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_FEATURES
   lpc43_softreset();
 #endif
 
@@ -339,7 +338,7 @@ void __start(void)
    * segments.
    */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
   lpc43_userspace();
   showprogress('F');
 #endif
@@ -357,5 +356,5 @@ void __start(void)
 
   /* Shouldn't get here */
 
-  for (;;);
+  for (; ; );
 }

@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/bch/bchlib_write.c
  *
- *   Copyright (C) 2008-2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2011, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,23 +49,7 @@
 
 #include <nuttx/fs/fs.h>
 
-#include "bch_internal.h"
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
+#include "bch.h"
 
 /****************************************************************************
  * Public Functions
@@ -80,7 +64,8 @@
  *
  ****************************************************************************/
 
-ssize_t bchlib_write(FAR void *handle, FAR const char *buffer, size_t offset, size_t len)
+ssize_t bchlib_write(FAR void *handle, FAR const char *buffer, size_t offset,
+        size_t len)
 {
   FAR struct bchlib_s *bch = (FAR struct bchlib_s *)handle;
   size_t   nsectors;
@@ -132,7 +117,6 @@ ssize_t bchlib_write(FAR void *handle, FAR const char *buffer, size_t offset, si
 
       /* Adjust pointers and counts */
 
-      sectoffset    = 0;
       sector++;
 
       if (sector >= bch->nsectors)
@@ -149,7 +133,7 @@ ssize_t bchlib_write(FAR void *handle, FAR const char *buffer, size_t offset, si
    * directly from the user buffer.
    */
 
-  if (len >= bch->sectsize )
+  if (len >= bch->sectsize)
     {
       nsectors = len / bch->sectsize;
       if (sector + nsectors > bch->nsectors)
@@ -163,15 +147,13 @@ ssize_t bchlib_write(FAR void *handle, FAR const char *buffer, size_t offset, si
                                         sector, nsectors);
       if (ret < 0)
         {
-          fdbg("Write failed: %d\n", ret);
+          ferr("ERROR: Write failed: %d\n", ret);
           return ret;
         }
 
       /* Adjust pointers and counts */
 
-      sectoffset    = 0;
       sector       += nsectors;
-
       nbytes        = nsectors * bch->sectsize;
       byteswritten += nbytes;
 
@@ -207,7 +189,7 @@ ssize_t bchlib_write(FAR void *handle, FAR const char *buffer, size_t offset, si
   ret = bchlib_flushsector(bch);
   if (ret < 0)
     {
-      fdbg("Flush failed: %d\n", ret);
+      ferr("ERROR: Flush failed: %d\n", ret);
       return ret;
     }
 

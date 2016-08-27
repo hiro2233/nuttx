@@ -2,7 +2,7 @@
  * arch/arm/src/kinetis/kinetis_vectors.S
  * arch/arm/src/chip/kinetis_vectors.S
  *
- *   Copyright (C) 2011, 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013-2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,10 +42,11 @@
 
 #include <arch/irq.h>
 
+#include "chip.h"
 #include "exc_return.h"
 
 /************************************************************************************************
- * Preprocessor Definitions
+ * Pre-processor Definitions
  ************************************************************************************************/
 /* Configuration ********************************************************************************/
 
@@ -63,7 +64,7 @@
    * nested interrupt, the interrupt stack if no privileged task has run.
    */
 
-#  if defined(CONFIG_NUTTX_KERNEL) && CONFIG_ARCH_INTERRUPTSTACK < 4
+#  if defined(CONFIG_BUILD_PROTECTED) && CONFIG_ARCH_INTERRUPTSTACK < 4
 #    error Interrupt stack must be used with high priority interrupts in kernel mode
 #  endif
 
@@ -92,7 +93,7 @@
 #define HEAP_BASE		(_ebss+CONFIG_IDLETHREAD_STACKSIZE)
 
 /************************************************************************************************
- * Global Symbols
+ * Public Symbols
  ************************************************************************************************/
 
 	.syntax		unified
@@ -154,15 +155,116 @@ _vectors:
 	.word	kinetis_systick		/* Vector 15: System tick */
 
 /* External Interrupts **************************************************************************/
+/* K20 Family ***********************************************************************************
+ *
+ * The interrupt vectors  for the following parts is defined in Freescale document
+ * K20P64M72SF1RM
+ */
+
+#if defined(KINETIS_K20)
+	.word	kinetis_dmach0		/* Vector 16: DMA channel 0 transfer complete */
+	.word	kinetis_dmach1		/* Vector 17: DMA channel 1 transfer complete */
+	.word	kinetis_dmach2		/* Vector 18: DMA channel 2 transfer complete */
+	.word	kinetis_dmach3		/* Vector 19: DMA channel 3 transfer complete */
+	.word	kinetis_dmach4		/* Vector 20: DMA channel 4 transfer complete */
+	.word	kinetis_dmach5		/* Vector 21: DMA channel 5 transfer complete */
+	.word	kinetis_dmach6		/* Vector 22: DMA channel 6 transfer complete */
+	.word	kinetis_dmach7		/* Vector 23: DMA channel 7 transfer complete */
+	.word	kinetis_dmach8		/* Vector 24: DMA channel 8 transfer complete */
+	.word	kinetis_dmach9		/* Vector 25: DMA channel 9 transfer complete */
+	.word	kinetis_dmach10		/* Vector 26: DMA channel 10 transfer complete */
+	.word	kinetis_dmach11		/* Vector 27: DMA channel 11 transfer complete */
+	.word	kinetis_dmach12		/* Vector 28: DMA channel 12 transfer complete */
+	.word	kinetis_dmach13		/* Vector 29: DMA channel 13 transfer complete */
+	.word	kinetis_dmach14		/* Vector 30: DMA channel 14 transfer complete */
+	.word	kinetis_dmach15		/* Vector 31: DMA channel 15 transfer complete */
+	.word	kinetis_dmaerr		/* Vector 32: DMA error interrupt channels 0-15 */
+	.word	kinetis_reserved	/* Vector 33: Reserved */
+	.word	kinetis_flashcc		/* Vector 34: Flash memory command complete */
+	.word	kinetis_flashrc		/* Vector 35: Flash memory read collision */
+	.word	kinetis_smclvd		/* Vector 36: Mode Controller low-voltage detect, low-voltage warning */
+	.word	kinetis_llwu		/* Vector 37: LLWU Normal Low Leakage Wakeup */
+	.word	kinetis_wdog		/* Vector 38: Watchdog */
+	.word	kinetis_reserved	/* Vector 39: Reserved */
+	.word	kinetis_i2c0		/* Vector 40: I2C0 */
+	.word	kinetis_i2c1		/* Vector 41: I2C1 */
+	.word	kinetis_spi0		/* Vector 42: SPI0 all sources */
+	.word	kinetis_spi1		/* Vector 43: SPI1 all sources */
+	.word	kinetis_reserved	/* Vector 44: Reserved */
+	.word	kinetis_can0mb		/* Vector 45: CAN0 OR'ed Message buffer (0-15) */
+	.word	kinetis_can0bo		/* Vector 46: CAN0 Bus Off */
+	.word	kinetis_can0err		/* Vector 47: CAN0 Error */
+	.word	kinetis_can0tw		/* Vector 48: CAN0 Transmit Warning */
+	.word	kinetis_can0rw		/* Vector 49: CAN0 Receive Warning */
+	.word	kinetis_can0wu		/* Vector 50: CAN0 Wake UP */
+	.word	kinetis_reserved	/* Vector 51: Reserved */
+	.word	kinetis_reserved	/* Vector 52: Reserved */
+	.word	kinetis_reserved	/* Vector 53: Reserved */
+	.word	kinetis_reserved	/* Vector 54: Reserved */
+	.word	kinetis_reserved	/* Vector 55: Reserved */
+	.word	kinetis_reserved	/* Vector 56: Reserved */
+	.word	kinetis_reserved	/* Vector 57: Reserved */
+	.word	kinetis_reserved	/* Vector 58: Reserved */
+	.word	kinetis_reserved	/* Vector 59: Reserved */
+	.word	kinetis_reserved	/* Vector 60: Reserved */
+	.word	kinetis_uart0s		/* Vector 61: UART0 status */
+	.word	kinetis_uart0e		/* Vector 62: UART0 error */
+	.word	kinetis_uart1s		/* Vector 63: UART1 status */
+	.word	kinetis_uart1e		/* Vector 64: UART1 error */
+	.word	kinetis_uart2s		/* Vector 65: UART2 status */
+	.word	kinetis_uart2e		/* Vector 66: UART2 error */
+	.word	kinetis_reserved	/* Vector 67: Reserved */
+	.word	kinetis_reserved	/* Vector 68: Reserved */
+	.word	kinetis_reserved	/* Vector 69: Reserved */
+	.word	kinetis_reserved	/* Vector 70: Reserved */
+	.word	kinetis_reserved	/* Vector 71: Reserved */
+	.word	kinetis_reserved	/* Vector 72: Reserved */
+	.word	kinetis_adc0		/* Vector 73: ADC0 */
+	.word	kinetis_adc1		/* Vector 74: ADC1 */
+	.word	kinetis_cmp0		/* Vector 75: CMP0 */
+	.word	kinetis_cmp1		/* Vector 76: CMP1 */
+	.word	kinetis_cmp2		/* Vector 77: CMP2 */
+	.word	kinetis_ftm0		/* Vector 78: FTM0 all sources */
+	.word	kinetis_ftm1		/* Vector 79: FTM1 all sources */
+	.word	kinetis_ftm2		/* Vector 80: FTM2 all sources */
+	.word	kinetis_cmt			/* Vector 81: CMT */
+	.word	kinetis_rtc			/* Vector 82: RTC alarm interrupt */
+	.word	kinetis_reserved	/* Vector 83: Reserved */
+	.word	kinetis_pitch0		/* Vector 84: PIT channel 0 */
+	.word	kinetis_pitch1		/* Vector 85: PIT channel 1 */
+	.word	kinetis_pitch2		/* Vector 86: PIT channel 2 */
+	.word	kinetis_pitch3		/* Vector 87: PIT channel 3 */
+	.word	kinetis_pdb			/* Vector 88: PDB */
+	.word	kinetis_usbotg		/* Vector 88: USB OTG */
+	.word	kinetis_usbcd		/* Vector 90: USB charger detect */
+	.word	kinetis_reserved	/* Vector 91: Reserved */
+	.word	kinetis_reserved	/* Vector 92: Reserved */
+	.word	kinetis_reserved	/* Vector 93: Reserved */
+	.word	kinetis_reserved	/* Vector 94: Reserved */
+	.word	kinetis_reserved	/* Vector 95: Reserved */
+	.word	kinetis_reserved	/* Vector 96: Reserved */
+	.word	kinetis_dac0		/* Vector 97: DAC0 */
+	.word	kinetis_reserved	/* Vector 98: Reserved */
+	.word	kinetis_tsi			/* Vector 99: TSI all sources */
+	.word	kinetis_mcg			/* Vector 100: MCG */
+	.word	kinetis_lpt			/* Vector 101: Low power timer */
+	.word	kinetis_reserved	/* Vector 102: Reserved */
+	.word	kinetis_porta		/* Vector 103: Pin detect port A */
+	.word	kinetis_portb		/* Vector 104: Pin detect port B */
+	.word	kinetis_portc		/* Vector 105: Pin detect port C */
+	.word	kinetis_portd		/* Vector 106: Pin detect port D */
+	.word	kinetis_porte		/* Vector 107: Pin detect port E */
+	.word	kinetis_reserved	/* Vector 108: Reserved */
+	.word	kinetis_reserved	/* Vector 109: Reserved */
+	.word	kinetis_swi			/* Vector 110: Software interrupt */
+
 /* K40 Family ***********************************************************************************
  *
  * The interrupt vectors  for the following parts is defined in Freescale document
  * K40P144M100SF2RM
  */
 
-#if defined(CONFIG_ARCH_CHIP_MK40X128VLQ100) || defined(CONFIG_ARCH_CHIP_MK40X128VMD100) || \
-    defined(CONFIG_ARCH_CHIP_MK40X256VLQ100) || defined(CONFIG_ARCH_CHIP_MK40X256VMD100) || \
-    defined(CONFIG_ARCH_CHIP_MK40N512VLQ100) || defined(CONFIG_ARCH_CHIP_MK40N512VMD100)
+#elif defined(KINETIS_K40)
 
 	.word	kinetis_dmach0		/* Vector 16: DMA channel 0 transfer complete */
 	.word	kinetis_dmach1		/* Vector 17: DMA channel 1 transfer complete */
@@ -266,9 +368,7 @@ _vectors:
  * K60P144M100SF2RM
  */
 
-#elif defined(CONFIG_ARCH_CHIP_MK60N256VLQ100) || defined(CONFIG_ARCH_CHIP_MK60X256VLQ100) || \
-      defined(CONFIG_ARCH_CHIP_MK60N512VLQ100) || defined(CONFIG_ARCH_CHIP_MK60N256VMD100) || \
-      defined(CONFIG_ARCH_CHIP_MK60X256VMD100) || defined(CONFIG_ARCH_CHIP_MK60N512VMD100)
+#elif defined(KINETIS_K60)
 
 	.word	kinetis_dmach0		/* Vector 16: DMA channel 0 transfer complete */
 	.word	kinetis_dmach1		/* Vector 17: DMA channel 1 transfer complete */
@@ -374,6 +474,102 @@ _vectors:
 	.word	kinetis_reserved	/* Vector 117: Reserved */
 	.word	kinetis_reserved	/* Vector 118: Reserved */
 	.word	kinetis_reserved	/* Vector 119: Reserved */
+
+/* K64 Family ***********************************************************************************
+ *
+ * The memory map for the following parts is defined in Freescale document
+ * MK64FX512VLL12
+ */
+
+#elif defined(KINETIS_K64)
+
+	.word	kinetis_dmach0		/* Vector 16: DMA channel 0 transfer complete */
+	.word	kinetis_dmach1		/* Vector 17: DMA channel 1 transfer complete */
+	.word	kinetis_dmach2		/* Vector 18: DMA channel 2 transfer complete */
+	.word	kinetis_dmach3		/* Vector 19: DMA channel 3 transfer complete */
+	.word	kinetis_dmach4		/* Vector 20: DMA channel 4 transfer complete */
+	.word	kinetis_dmach5		/* Vector 21: DMA channel 5 transfer complete */
+	.word	kinetis_dmach6		/* Vector 22: DMA channel 6 transfer complete */
+	.word	kinetis_dmach7		/* Vector 23: DMA channel 7 transfer complete */
+	.word	kinetis_dmach8		/* Vector 24: DMA channel 8 transfer complete */
+	.word	kinetis_dmach9		/* Vector 25: DMA channel 9 transfer complete */
+	.word	kinetis_dmach10		/* Vector 26: DMA channel 10 transfer complete */
+	.word	kinetis_dmach11		/* Vector 27: DMA channel 11 transfer complete */
+	.word	kinetis_dmach12		/* Vector 28: DMA channel 12 transfer complete */
+	.word	kinetis_dmach13		/* Vector 29: DMA channel 13 transfer complete */
+	.word	kinetis_dmach14		/* Vector 30: DMA channel 14 transfer complete */
+	.word	kinetis_dmach15		/* Vector 31: DMA channel 15 transfer complete */
+	.word	kinetis_dmaerr		/* Vector 32: DMA error interrupt channels 0-15 */
+	.word	kinetis_mcm			/* Vector 33: MCM Normal interrupt */
+	.word	kinetis_flashcc		/* Vector 34: Flash memory command complete */
+	.word	kinetis_flashrc		/* Vector 35: Flash memory read collision */
+	.word	kinetis_smclvd		/* Vector 36: Mode Controller low-voltage detect, low-voltage warning */
+	.word	kinetis_llwu		/* Vector 37: LLWU Normal Low Leakage Wakeup */
+	.word	kinetis_wdog		/* Vector 38: Watchdog */
+	.word	kinetis_rngb		/* Vector 39: Random number generator */
+	.word	kinetis_i2c0		/* Vector 40: I2C0 */
+	.word	kinetis_i2c1		/* Vector 41: I2C1 */
+	.word	kinetis_spi0		/* Vector 42: SPI0 all sources */
+	.word	kinetis_spi1		/* Vector 43: SPI1 all sources */
+	.word	kinetis_i2s0		/* Vector 44: Transmit */
+	.word	kinetis_i2s1		/* Vector 45: Transmit */
+	.word   kinetis_reserved	/* Vector 46: Reserved */
+	.word	kinetis_uart0s		/* Vector 47: UART0 status */
+	.word	kinetis_uart0e		/* Vector 48: UART0 error */
+	.word	kinetis_uart1s		/* Vector 49: UART1 status */
+	.word	kinetis_uart1e		/* Vector 50: UART1 error */
+	.word	kinetis_uart2s		/* Vector 51: UART2 status */
+	.word	kinetis_uart2e		/* Vector 52: UART2 error */
+	.word	kinetis_uart3s		/* Vector 53: UART3 status */
+	.word	kinetis_uart3e		/* Vector 54: UART3 error */
+	.word	kinetis_adc0		/* Vector 55: ADC0 */
+	.word	kinetis_cmp0		/* Vector 56: CMP0 */
+	.word	kinetis_cmp1		/* Vector 57: CMP1 */
+	.word	kinetis_ftm0		/* Vector 58: FTM0 all sources */
+	.word	kinetis_ftm1		/* Vector 59: FTM1 all sources */
+	.word	kinetis_ftm2		/* Vector 60: FTM2 all sources */
+	.word	kinetis_cmt			/* Vector 61: CMT */
+	.word	kinetis_rtc0		/* Vector 62: RTC alarm interrupt */
+	.word	kinetis_rtc1		/* Vector 63: RTC seconds interrupt */
+	.word	kinetis_pitch0		/* Vector 64: PIT channel 0 */
+	.word	kinetis_pitch1		/* Vector 65: PIT channel 1 */
+	.word	kinetis_pitch2		/* Vector 66: PIT channel 2 */
+	.word	kinetis_pitch3		/* Vector 67: PIT channel 3 */
+	.word	kinetis_pdb			/* Vector 68: PDB */
+	.word	kinetis_usbotg		/* Vector 68: USB OTG */
+	.word	kinetis_usbcd		/* Vector 70: USB charger detect */
+	.word	kinetis_reserved	/* Vector 71: Reserved */
+	.word	kinetis_dac0		/* Vector 72: DAC0 */
+	.word	kinetis_mcg			/* Vector 73: MCG */
+	.word	kinetis_lpt			/* Vector 74: Low power timer */
+	.word	kinetis_porta		/* Vector 75: Pin detect port A */
+	.word	kinetis_portb		/* Vector 76: Pin detect port B */
+	.word	kinetis_portc		/* Vector 77: Pin detect port C */
+	.word	kinetis_portd		/* Vector 78: Pin detect port D */
+	.word	kinetis_porte		/* Vector 79: Pin detect port E */
+	.word	kinetis_software	/* Vector 80: Software interrupt */
+	.word	kinetis_spi2		/* Vector 81: SPI2 all sources */
+	.word	kinetis_uart4s		/* Vector 82: UART4 status */
+	.word	kinetis_uart4e		/* Vector 83: UART4 error */
+	.word	kinetis_uart5s		/* Vector 84: UART5 status */
+	.word	kinetis_uart5e		/* Vector 85: UART5 error */
+	.word	kinetis_cmp2		/* Vector 86: CMP2 */
+	.word	kinetis_ftm3		/* Vector 87: FTM3 all sources */
+	.word	kinetis_dac1		/* Vector 88: DAC1 */
+	.word	kinetis_adc1		/* Vector 89: ADC1 */
+	.word	kinetis_i2c2		/* Vector 90: I2C2 */
+	.word	kinetis_can0mb		/* Vector 91: CAN0 ORed Message buffer (0-15) */
+	.word	kinetis_can0bo		/* Vector 92: CAN0 Bus Off */
+	.word	kinetis_can0err		/* Vector 93: CAN0 Error */
+	.word	kinetis_can0tw		/* Vector 94: CAN0 Transmit Warning */
+	.word	kinetis_can0rw		/* Vector 95: CAN0 Receive Warning */
+	.word	kinetis_can0wu		/* Vector 96: CAN0 Wake UP */
+	.word	kinetis_sdhc		/* Vector 97: SDHC */
+	.word	kinetis_emactmr		/* Vector 91: Ethernet MAC IEEE 1588 timer interrupt */
+	.word	kinetis_emactx		/* Vector 92: Ethernet MAC transmit interrupt */
+	.word	kinetis_emacrx		/* Vector 93: Ethernet MAC receive interrupt */
+	.word	kinetis_emacmisc	/* Vector 94: Ethernet MAC error and misc interrupt */
+
 #else
 #  error "No vectors for this Kinetis part"
 #endif
@@ -401,15 +597,87 @@ handlers:
 	HANDLER	kinetis_systick, KINETIS_IRQ_SYSTICK		/* Vector 15: System tick */
 
 /* External Interrupts **************************************************************************/
+/* K20 Family ***********************************************************************************
+ *
+ * The interrupt vectors  for the following parts is defined in Freescale document
+ * K20P64M72SF1RM
+ */
+
+#if defined(KINETIS_K20)
+
+	HANDLER kinetis_dmach0, KINETIS_IRQ_DMACH0		/* Vector 16: DMA channel 0 transfer complete */
+	HANDLER kinetis_dmach1, KINETIS_IRQ_DMACH1		/* Vector 17: DMA channel 1 transfer complete */
+	HANDLER kinetis_dmach2, KINETIS_IRQ_DMACH2		/* Vector 18: DMA channel 2 transfer complete */
+	HANDLER kinetis_dmach3, KINETIS_IRQ_DMACH3		/* Vector 19: DMA channel 3 transfer complete */
+	HANDLER kinetis_dmach4, KINETIS_IRQ_DMACH4		/* Vector 20: DMA channel 4 transfer complete */
+	HANDLER kinetis_dmach5, KINETIS_IRQ_DMACH5		/* Vector 21: DMA channel 5 transfer complete */
+	HANDLER kinetis_dmach6, KINETIS_IRQ_DMACH6		/* Vector 22: DMA channel 6 transfer complete */
+	HANDLER kinetis_dmach7, KINETIS_IRQ_DMACH7		/* Vector 23: DMA channel 7 transfer complete */
+	HANDLER kinetis_dmach8, KINETIS_IRQ_DMACH8		/* Vector 24: DMA channel 8 transfer complete */
+	HANDLER kinetis_dmach9, KINETIS_IRQ_DMACH9		/* Vector 25: DMA channel 9 transfer complete */
+	HANDLER kinetis_dmach10, KINETIS_IRQ_DMACH10	/* Vector 26: DMA channel 10 transfer complete */
+	HANDLER kinetis_dmach11, KINETIS_IRQ_DMACH11	/* Vector 27: DMA channel 11 transfer complete */
+	HANDLER kinetis_dmach12, KINETIS_IRQ_DMACH12	/* Vector 28: DMA channel 12 transfer complete */
+	HANDLER kinetis_dmach13, KINETIS_IRQ_DMACH13	/* Vector 29: DMA channel 13 transfer complete */
+	HANDLER kinetis_dmach14, KINETIS_IRQ_DMACH14	/* Vector 30: DMA channel 14 transfer complete */
+	HANDLER kinetis_dmach15, KINETIS_IRQ_DMACH15	/* Vector 31: DMA channel 15 transfer complete */
+	HANDLER kinetis_dmaerr, KINETIS_IRQ_DMAERR		/* Vector 32: DMA error interrupt channels 0-15 */
+	HANDLER kinetis_flashcc, KINETIS_IRQ_FLASHCC	/* Vector 34: Flash memory command complete */
+	HANDLER kinetis_flashrc, KINETIS_IRQ_FLASHRC	/* Vector 35: Flash memory read collision */
+	HANDLER kinetis_smclvd, KINETIS_IRQ_SMCLVD		/* Vector 36: Mode Controller low-voltage detect, low-voltage warning */
+	HANDLER kinetis_llwu, KINETIS_IRQ_LLWU			/* Vector 37: LLWU Normal Low Leakage Wakeup */
+	HANDLER kinetis_wdog, KINETIS_IRQ_WDOG			/* Vector 38: Watchdog */
+	HANDLER kinetis_i2c0, KINETIS_IRQ_I2C0			/* Vector 40: I2C0 */
+	HANDLER kinetis_i2c1, KINETIS_IRQ_I2C1			/* Vector 41: I2C1 */
+	HANDLER kinetis_spi0, KINETIS_IRQ_SPI0			/* Vector 42: SPI0 all sources */
+	HANDLER kinetis_spi1, KINETIS_IRQ_SPI1			/* Vector 43: SPI1 all sources */
+	HANDLER kinetis_can0mb, KINETIS_IRQ_CAN0MB		/* Vector 45: CAN0 OR'ed Message buffer (0-15) */
+	HANDLER kinetis_can0bo, KINETIS_IRQ_CAN0BO		/* Vector 46: CAN0 Bus Off */
+	HANDLER kinetis_can0err, KINETIS_IRQ_CAN0ERR	/* Vector 47: CAN0 Error */
+	HANDLER kinetis_can0tw, KINETIS_IRQ_CAN0TW		/* Vector 48: CAN0 Transmit Warning */
+	HANDLER kinetis_can0rw, KINETIS_IRQ_CAN0RW		/* Vector 49: CAN0 Receive Warning */
+	HANDLER kinetis_can0wu, KINETIS_IRQ_CAN0WU		/* Vector 50: CAN0 Wake UP */
+	HANDLER kinetis_uart0s, KINETIS_IRQ_UART0S		/* Vector 61: UART0 status */
+	HANDLER kinetis_uart0e, KINETIS_IRQ_UART0E		/* Vector 62: UART0 error */
+	HANDLER kinetis_uart1s, KINETIS_IRQ_UART1S		/* Vector 63: UART1 status */
+	HANDLER kinetis_uart1e, KINETIS_IRQ_UART1E		/* Vector 64: UART1 error */
+	HANDLER kinetis_uart2s, KINETIS_IRQ_UART2S		/* Vector 65: UART2 status */
+	HANDLER kinetis_uart2e, KINETIS_IRQ_UART2E		/* Vector 66: UART2 error */
+	HANDLER kinetis_adc0, KINETIS_IRQ_ADC0			/* Vector 73: ADC0 */
+	HANDLER kinetis_adc1, KINETIS_IRQ_ADC1			/* Vector 74: ADC1 */
+	HANDLER kinetis_cmp0, KINETIS_IRQ_CMP0			/* Vector 75: CMP0 */
+	HANDLER kinetis_cmp1, KINETIS_IRQ_CMP1			/* Vector 76: CMP1 */
+	HANDLER kinetis_cmp2, KINETIS_IRQ_CMP2			/* Vector 77: CMP2 */
+	HANDLER kinetis_ftm0, KINETIS_IRQ_FTM0			/* Vector 78: FTM0 all sources */
+	HANDLER kinetis_ftm1, KINETIS_IRQ_FTM1			/* Vector 79: FTM1 all sources */
+	HANDLER kinetis_ftm2, KINETIS_IRQ_FTM2			/* Vector 80: FTM2 all sources */
+	HANDLER kinetis_cmt, KINETIS_IRQ_CMT			/* Vector 81: CMT */
+	HANDLER kinetis_rtc, KINETIS_IRQ_RTC			/* Vector 82: RTC alarm interrupt */
+	HANDLER kinetis_pitch0, KINETIS_IRQ_PITCH0		/* Vector 84: PIT channel 0 */
+	HANDLER kinetis_pitch1, KINETIS_IRQ_PITCH1		/* Vector 85: PIT channel 1 */
+	HANDLER kinetis_pitch2, KINETIS_IRQ_PITCH2		/* Vector 86: PIT channel 2 */
+	HANDLER kinetis_pitch3, KINETIS_IRQ_PITCH3		/* Vector 87: PIT channel 3 */
+	HANDLER kinetis_pdb, KINETIS_IRQ_PDB			/* Vector 88: PDB */
+	HANDLER kinetis_usbotg, KINETIS_IRQ_USBOTG		/* Vector 88: USB OTG */
+	HANDLER kinetis_usbcd, KINETIS_IRQ_USBCD		/* Vector 90: USB charger detect */
+	HANDLER kinetis_dac0, KINETIS_IRQ_DAC0			/* Vector 97: DAC0 */
+	HANDLER kinetis_tsi, KINETIS_IRQ_TSI			/* Vector 97: TSI all sources */
+	HANDLER kinetis_mcg, KINETIS_IRQ_MCG			/* Vector 100: MCG */
+	HANDLER kinetis_lpt, KINETIS_IRQ_LPT			/* Vector 101: Low power timer */
+	HANDLER kinetis_porta, KINETIS_IRQ_PORTA		/* Vector 103: Pin detect port A */
+	HANDLER kinetis_portb, KINETIS_IRQ_PORTB		/* Vector 104: Pin detect port B */
+	HANDLER kinetis_portc, KINETIS_IRQ_PORTC		/* Vector 105: Pin detect port C */
+	HANDLER kinetis_portd, KINETIS_IRQ_PORTD		/* Vector 106: Pin detect port D */
+	HANDLER kinetis_porte, KINETIS_IRQ_PORTE		/* Vector 107: Pin detect port E */
+	HANDLER kinetis_swi, KINETIS_IRQ_SWI			/* Vector 110: Software interrupt */
+
 /* K40 Family ***********************************************************************************
  *
  * The interrupt vectors  for the following parts is defined in Freescale document
  * K40P144M100SF2RM
  */
 
-#if defined(CONFIG_ARCH_CHIP_MK40X128VLQ100) || defined(CONFIG_ARCH_CHIP_MK40X128VMD100) || \
-    defined(CONFIG_ARCH_CHIP_MK40X256VLQ100) || defined(CONFIG_ARCH_CHIP_MK40X256VMD100) || \
-    defined(CONFIG_ARCH_CHIP_MK40N512VLQ100) || defined(CONFIG_ARCH_CHIP_MK40N512VMD100)
+#elif defined(KINETIS_K40)
 
 	HANDLER kinetis_dmach0, KINETIS_IRQ_DMACH0		/* Vector 16: DMA channel 0 transfer complete */
 	HANDLER kinetis_dmach1, KINETIS_IRQ_DMACH1		/* Vector 17: DMA channel 1 transfer complete */
@@ -501,9 +769,7 @@ handlers:
  * K60P144M100SF2RM
  */
 
-#elif defined(CONFIG_ARCH_CHIP_MK60N256VLQ100) || defined(CONFIG_ARCH_CHIP_MK60X256VLQ100) || \
-      defined(CONFIG_ARCH_CHIP_MK60N512VLQ100) || defined(CONFIG_ARCH_CHIP_MK60N256VMD100) || \
-      defined(CONFIG_ARCH_CHIP_MK60X256VMD100) || defined(CONFIG_ARCH_CHIP_MK60N512VMD100)
+#elif defined(KINETIS_K60)
 
 	HANDLER kinetis_dmach0, KINETIS_IRQ_DMACH0		/* Vector 16: DMA channel 0 transfer complete */
 	HANDLER kinetis_dmach1, KINETIS_IRQ_DMACH1		/* Vector 17: DMA channel 1 transfer complete */
@@ -592,6 +858,99 @@ handlers:
 	HANDLER kinetis_portd, KINETIS_IRQ_PORTD		/* Vector 106: Pin detect port D */
 	HANDLER kinetis_porte, KINETIS_IRQ_PORTE		/* Vector 107: Pin detect port E */
 
+/* K64 Family ***********************************************************************************
+ *
+ * The memory map for the following parts is defined in Freescale document
+ * MK64FX512VLL12
+ */
+
+#elif defined(KINETIS_K64)
+
+	HANDLER kinetis_dmach0, KINETIS_IRQ_DMACH0		/* Vector 16: DMA channel 0 transfer complete */
+	HANDLER kinetis_dmach1, KINETIS_IRQ_DMACH1		/* Vector 17: DMA channel 1 transfer complete */
+	HANDLER kinetis_dmach2, KINETIS_IRQ_DMACH2		/* Vector 18: DMA channel 2 transfer complete */
+	HANDLER kinetis_dmach3, KINETIS_IRQ_DMACH3		/* Vector 19: DMA channel 3 transfer complete */
+	HANDLER kinetis_dmach4, KINETIS_IRQ_DMACH4		/* Vector 20: DMA channel 4 transfer complete */
+	HANDLER kinetis_dmach5, KINETIS_IRQ_DMACH5		/* Vector 21: DMA channel 5 transfer complete */
+	HANDLER kinetis_dmach6, KINETIS_IRQ_DMACH6		/* Vector 22: DMA channel 6 transfer complete */
+	HANDLER kinetis_dmach7, KINETIS_IRQ_DMACH7		/* Vector 23: DMA channel 7 transfer complete */
+	HANDLER kinetis_dmach8, KINETIS_IRQ_DMACH8		/* Vector 24: DMA channel 8 transfer complete */
+	HANDLER kinetis_dmach9, KINETIS_IRQ_DMACH9		/* Vector 25: DMA channel 9 transfer complete */
+	HANDLER kinetis_dmach10, KINETIS_IRQ_DMACH10	/* Vector 26: DMA channel 10 transfer complete */
+	HANDLER kinetis_dmach11, KINETIS_IRQ_DMACH11	/* Vector 27: DMA channel 11 transfer complete */
+	HANDLER kinetis_dmach12, KINETIS_IRQ_DMACH12	/* Vector 28: DMA channel 12 transfer complete */
+	HANDLER kinetis_dmach13, KINETIS_IRQ_DMACH13	/* Vector 29: DMA channel 13 transfer complete */
+	HANDLER kinetis_dmach14, KINETIS_IRQ_DMACH14	/* Vector 30: DMA channel 14 transfer complete */
+	HANDLER kinetis_dmach15, KINETIS_IRQ_DMACH15	/* Vector 31: DMA channel 15 transfer complete */
+	HANDLER kinetis_dmaerr, KINETIS_IRQ_DMAERR		/* Vector 32: DMA error interrupt channels 0-15 */
+	HANDLER kinetis_mcm, KINETIS_IRQ_MCM			/* Vector 33: MCM Normal interrupt */
+	HANDLER kinetis_flashcc, KINETIS_IRQ_FLASHCC	/* Vector 34: Flash memory command complete */
+	HANDLER kinetis_flashrc, KINETIS_IRQ_FLASHRC	/* Vector 35: Flash memory read collision */
+	HANDLER kinetis_smclvd, KINETIS_IRQ_SMCLVD		/* Vector 36: Mode Controller low-voltage detect, low-voltage warning */
+	HANDLER kinetis_llwu, KINETIS_IRQ_LLWU			/* Vector 37: LLWU Normal Low Leakage Wakeup */
+	HANDLER kinetis_wdog, KINETIS_IRQ_WDOG			/* Vector 38: Watchdog */
+	HANDLER kinetis_rngb, KINETIS_IRQ_RNGB			/* Vector 39: Random number generator */
+	HANDLER kinetis_i2c0, KINETIS_IRQ_I2C0			/* Vector 40: I2C0 */
+	HANDLER kinetis_i2c1, KINETIS_IRQ_I2C1			/* Vector 41: I2C1 */
+	HANDLER kinetis_spi0, KINETIS_IRQ_SPI0			/* Vector 42: SPI0 all sources */
+	HANDLER kinetis_spi1, KINETIS_IRQ_SPI1			/* Vector 43: SPI1 all sources */
+	HANDLER kinetis_i2s0, KINETIS_IRQ_I2S0			/* Vector 44: Transmit */
+	HANDLER kinetis_i2s1, KINETIS_IRQ_I2S1			/* Vector 45: Transmit */
+	HANDLER kinetis_uart0s, KINETIS_IRQ_UART0S		/* Vector 47: UART0 status */
+	HANDLER kinetis_uart0e, KINETIS_IRQ_UART0E		/* Vector 48: UART0 error */
+	HANDLER kinetis_uart1s, KINETIS_IRQ_UART1S		/* Vector 49: UART1 status */
+	HANDLER kinetis_uart1e, KINETIS_IRQ_UART1E		/* Vector 50: UART1 error */
+	HANDLER kinetis_uart2s, KINETIS_IRQ_UART2S		/* Vector 51: UART2 status */
+	HANDLER kinetis_uart2e, KINETIS_IRQ_UART2E		/* Vector 52: UART2 error */
+	HANDLER kinetis_uart3s, KINETIS_IRQ_UART3S		/* Vector 53: UART3 status */
+	HANDLER kinetis_uart3e, KINETIS_IRQ_UART3E		/* Vector 54: UART3 error */
+	HANDLER kinetis_adc0, KINETIS_IRQ_ADC0			/* Vector 55: ADC0 */
+	HANDLER kinetis_cmp0, KINETIS_IRQ_CMP0			/* Vector 56: CMP0 */
+	HANDLER kinetis_cmp1, KINETIS_IRQ_CMP1			/* Vector 57: CMP1 */
+	HANDLER kinetis_ftm0, KINETIS_IRQ_FTM0			/* Vector 58: FTM0 all sources */
+	HANDLER kinetis_ftm1, KINETIS_IRQ_FTM1			/* Vector 59: FTM1 all sources */
+	HANDLER kinetis_ftm2, KINETIS_IRQ_FTM2			/* Vector 60: FTM2 all sources */
+	HANDLER kinetis_cmt, KINETIS_IRQ_CMT			/* Vector 61: CMT */
+	HANDLER kinetis_rtc0, KINETIS_IRQ_RTC0			/* Vector 62: RTC alarm interrupt */
+	HANDLER kinetis_rtc1, KINETIS_IRQ_RTC1			/* Vector 63: RTC seconds interrupt */
+	HANDLER kinetis_pitch0, KINETIS_IRQ_PITCH0		/* Vector 64: PIT channel 0 */
+	HANDLER kinetis_pitch1, KINETIS_IRQ_PITCH1		/* Vector 65: PIT channel 1 */
+	HANDLER kinetis_pitch2, KINETIS_IRQ_PITCH2		/* Vector 66: PIT channel 2 */
+	HANDLER kinetis_pitch3, KINETIS_IRQ_PITCH3		/* Vector 67: PIT channel 3 */
+	HANDLER kinetis_pdb, KINETIS_IRQ_PDB			/* Vector 68: PDB */
+	HANDLER kinetis_usbotg, KINETIS_IRQ_USBOTG		/* Vector 68: USB OTG */
+	HANDLER kinetis_usbcd, KINETIS_IRQ_USBCD		/* Vector 70: USB charger detect */
+	HANDLER kinetis_dac0, KINETIS_IRQ_DAC0			/* Vector 72: DAC0 */
+	HANDLER kinetis_mcg, KINETIS_IRQ_MCG			/* Vector 73: MCG */
+	HANDLER kinetis_lpt, KINETIS_IRQ_LPT			/* Vector 74: Low power timer */
+	HANDLER kinetis_porta, KINETIS_IRQ_PORTA		/* Vector 75: Pin detect port A */
+	HANDLER kinetis_portb, KINETIS_IRQ_PORTB		/* Vector 76: Pin detect port B */
+	HANDLER kinetis_portc, KINETIS_IRQ_PORTC		/* Vector 77: Pin detect port C */
+	HANDLER kinetis_portd, KINETIS_IRQ_PORTD		/* Vector 78: Pin detect port D */
+	HANDLER kinetis_porte, KINETIS_IRQ_PORTE		/* Vector 79: Pin detect port E */
+	HANDLER kinetis_software, KINETIS_IRQ_SOFTWARE	/* Vector 80: Software interrupt */
+	HANDLER kinetis_spi2, KINETIS_IRQ_SPI2			/* Vector 81: SPI2 all sources */
+	HANDLER kinetis_uart4s, KINETIS_IRQ_UART4S		/* Vector 82: UART4 status */
+	HANDLER kinetis_uart4e, KINETIS_IRQ_UART4E		/* Vector 83: UART4 error */
+	HANDLER kinetis_uart5s, KINETIS_IRQ_UART5S		/* Vector 84: UART5 status */
+	HANDLER kinetis_uart5e, KINETIS_IRQ_UART5E		/* Vector 85: UART5 error */
+	HANDLER kinetis_cmp2, KINETIS_IRQ_CMP2			/* Vector 86: CMP2 */
+	HANDLER kinetis_ftm3, KINETIS_IRQ_FTM3			/* Vector 87: FTM3 all sources */
+	HANDLER kinetis_dac1, KINETIS_IRQ_DAC1			/* Vector 88: DAC1 */
+	HANDLER kinetis_adc1, KINETIS_IRQ_ADC1			/* Vector 89: ADC1 */
+	HANDLER kinetis_i2c2, KINETIS_IRQ_I2C2			/* Vector 90: I2C2 */
+	HANDLER kinetis_can0mb, KINETIS_IRQ_CAN0MB		/* Vector 91: CAN0 ORed Message buffer (0-15) */
+	HANDLER kinetis_can0bo, KINETIS_IRQ_CAN0BO		/* Vector 92: CAN0 Bus Off */
+	HANDLER kinetis_can0err, KINETIS_IRQ_CAN0ERR	/* Vector 93: CAN0 Error */
+	HANDLER kinetis_can0tw, KINETIS_IRQ_CAN0TW		/* Vector 94: CAN0 Transmit Warning */
+	HANDLER kinetis_can0rw, KINETIS_IRQ_CAN0RW		/* Vector 95: CAN0 Receive Warning */
+	HANDLER kinetis_can0wu, KINETIS_IRQ_CAN0WU		/* Vector 96: CAN0 Wake UP */
+	HANDLER kinetis_sdhc, KINETIS_IRQ_SDHC			/* Vector 97: SDHC */
+	HANDLER kinetis_emactmr, KINETIS_IRQ_EMACTMR	/* Vector 91: Ethernet MAC IEEE 1588 timer interrupt */
+	HANDLER kinetis_emactx, KINETIS_IRQ_EMACTX		/* Vector 92: Ethernet MAC transmit interrupt */
+	HANDLER kinetis_emacrx, KINETIS_IRQ_EMACRX		/* Vector 93: Ethernet MAC receive interrupt */
+	HANDLER kinetis_emacmisc, KINETIS_IRQ_EMACMISC	/* Vector 94: Ethernet MAC error and misc interrupt */
+
 #else
 #  error "No handlers for this Kinetis part"
 #endif
@@ -621,7 +980,7 @@ exception_common:
 
 	/* Complete the context save */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 	/* The EXC_RETURN value will be 0xfffffff9 (privileged thread) or 0xfffffff1
 	 * (handler mode) if the stack is on the MSP.  It can only be on the PSP if
 	 * EXC_RETURN is 0xfffffffd (unprivileged thread)
@@ -635,7 +994,7 @@ exception_common:
 1:
 #endif
 
-	/* r1 holds the value of the stack pointer AFTER the excption handling logic
+	/* r1 holds the value of the stack pointer AFTER the exception handling logic
 	 * pushed the various registers onto the stack.  Get r2 = the value of the
 	 * stack pointer BEFORE the interrupt modified it.
 	 */
@@ -663,7 +1022,7 @@ exception_common:
 	 * r14=register values.
 	 */
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 	stmdb	sp!, {r2-r11,r14}		/* Save the remaining registers plus the SP value */
 #else
 	stmdb	sp!, {r2-r11}			/* Save the remaining registers plus the SP value */
@@ -693,16 +1052,17 @@ exception_common:
 
 	mov		r1, sp
 
-#if CONFIG_ARCH_INTERRUPTSTACK > 3
+	/* Also save the top of the stack in a preserved register */
+
+	mov		r4, sp
+
+#if CONFIG_ARCH_INTERRUPTSTACK > 7
 	/* If CONFIG_ARCH_INTERRUPTSTACK is defined, we will set the MSP to use
 	 * a special special interrupt stack pointer.  The way that this is done
 	 * here prohibits nested interrupts without some additional logic!
 	 */
 
 	ldr		sp, =g_intstackbase
-	str		r1, [sp, #-4]!			/* Save the MSP on the interrupt stack */
-	bl		up_doirq				/* R0=IRQ, R1=register save (msp) */
-	ldr		r1, [sp, #+4]!			/* Recover R1=main stack pointer */
 
 #else
 	/* Otherwise, we will re-use the interrupted thread's stack.  That may
@@ -710,9 +1070,13 @@ exception_common:
 	 * kernel mode).
 	 */
 
-	bl		up_doirq				/* R0=IRQ, R1=register save (msp) */
-	mov		r1, sp					/* Recover R1=main stack pointer */
+	bic		r2, r4, #7				/* Get the stack pointer with 8-byte alignment */
+	mov		sp, r2					/* Instantiate the aligned stack */
+
 #endif
+
+	bl		up_doirq				/* R0=IRQ, R1=register save (msp) */
+	mov		r1, r4					/* Recover R1=main stack pointer */
 
 	/* On return from up_doirq, R0 will hold a pointer to register context
 	 * array to use for the interrupt return.  If that return value is the same
@@ -751,7 +1115,7 @@ exception_common:
 	ldmia	r1, {r4-r11}			/* Fetch eight registers in HW save area */
 	ldr		r1, [r0, #(4*REG_SP)]	/* R1=Value of SP before interrupt */
 	stmdb	r1!, {r4-r11}			/* Store eight registers in HW save area */
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 	ldmia	r0, {r2-r11,r14}		/* Recover R4-R11, r14 + 2 temp values */
 #else
 	ldmia	r0, {r2-r11}			/* Recover R4-R11 + 2 temp values */
@@ -766,7 +1130,7 @@ exception_common:
 	 */
 
 2:
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 	ldmia	r1!, {r2-r11,r14}		/* Recover R4-R11, r14 + 2 temp values */
 #else
 	ldmia	r1!, {r2-r11}			/* Recover R4-R11 + 2 temp values */
@@ -791,7 +1155,7 @@ exception_common:
 
 3:
 
-#ifdef CONFIG_NUTTX_KERNEL
+#ifdef CONFIG_BUILD_PROTECTED
 	/* The EXC_RETURN value will be 0xfffffff9 (privileged thread) or 0xfffffff1
 	 * (handler mode) if the stack is on the MSP.  It can only be on the PSP if
 	 * EXC_RETURN is 0xfffffffd (unprivileged thread)
@@ -846,13 +1210,13 @@ exception_common:
  *
  ************************************************************************************************/
 
-#if CONFIG_ARCH_INTERRUPTSTACK > 3
+#if CONFIG_ARCH_INTERRUPTSTACK > 7
 	.bss
 	.global	g_intstackalloc
 	.global	g_intstackbase
-	.align	4
+	.align	8
 g_intstackalloc:
-	.skip	(CONFIG_ARCH_INTERRUPTSTACK & ~3)
+	.skip	(CONFIG_ARCH_INTERRUPTSTACK & ~7)
 g_intstackbase:
 	.size	g_intstackalloc, .-g_intstackalloc
 #endif

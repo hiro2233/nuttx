@@ -115,7 +115,7 @@ NuttX Buildroot Toolchain
   different from the default in your PATH variable).
 
   If you have no HC12 toolchain, one can be downloaded from the NuttX
-  SourceForge download site (https://sourceforge.net/projects/nuttx/files/buildroot).
+  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin
   environments.
 
@@ -315,7 +315,7 @@ HCS12/DEMO9S12NEC64-specific Configuration Options
 
   GPIO Interrupts
 
-    CONFIG_GPIO_IRQ - Enable general support for GPIO IRQs
+    CONFIG_HCS12_GPIOIRQ - Enable general support for GPIO IRQs
     CONFIG_HCS12_PORTG_INTS - Enable PortG IRQs
     CONFIG_HCS12_PORTH_INTS - Enable PortH IRQs
     CONFIG_HCS12_PORTJ_INTS - Enable PortJ IRQs
@@ -376,7 +376,7 @@ Common Configuration Notes
      change a configurations using that tool, you should:
 
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
-        and misc/tools/
+        see additional README.txt files in the NuttX tools repository.
 
      b. Execute 'make menuconfig' in nuttx/ in order to start the
         reconfiguration process.

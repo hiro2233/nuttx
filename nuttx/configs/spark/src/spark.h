@@ -45,9 +45,10 @@
 #include <nuttx/config.h>
 #include <nuttx/compiler.h>
 #include <stdint.h>
+#include <arch/chip/chip.h>
 
 /************************************************************************************
- * Definitions
+ * Pre-processor Definitions
  ************************************************************************************/
 /* During the development of the SparkCore, the hardware was in limited supply
  * As a work around david_s5 created a SparkCore Big board (http://nscdg.com/spark/sparkBB.png)
@@ -246,14 +247,14 @@
  ************************************************************************************/
 
 /************************************************************************************
- * Name: stm32_spiinitialize
+ * Name: stm32_spidev_initialize
  *
  * Description:
  *   Called to configure SPI chip select GPIO pins.
  *
  ************************************************************************************/
 
-void stm32_spiinitialize(void);
+void stm32_spidev_initialize(void);
 
 /************************************************************************************
  * Name: stm32_usbinitialize

@@ -47,7 +47,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include <nuttx/net/uip/uipopt.h>
+#include <nuttx/net/netconfig.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -84,15 +84,20 @@
 #define TFTP_ERRHEADERSIZE  4
 #define TFTP_DATAHEADERSIZE 4
 
-/* The maximum size for TFTP data is determined by the configured uIP packet
- * size (but cannot exceed 512 + sizeof(TFTP_DATA header).
+/* The maximum size for TFTP data is determined by the configured UDP packet
+ * payload size (UDP_MSS), but cannot exceed 512 + sizeof(TFTP_DATA header).
+ *
+ * In the case where there are multiple network devices with different
+ * link layer protocols (CONFIG_NET_MULTILINK), each network device
+ * may support a different UDP MSS value.  Here we arbitrarily select
+ * the minimum MSS for that case.
  */
 
 #define TFTP_DATAHEADERSIZE 4
 #define TFTP_MAXPACKETSIZE  (TFTP_DATAHEADERSIZE+512)
 
-#if UIP_UDP_MSS < TFTP_MAXPACKETSIZE
-#  define TFTP_PACKETSIZE   UIP_UDP_MSS
+#if MIN_UDP_MSS < TFTP_MAXPACKETSIZE
+#  define TFTP_PACKETSIZE   MIN_UDP_MSS
 #  ifdef CONFIG_CPP_HAVE_WARNING
 #    warning "uIP MSS is too small for TFTP"
 #  endif
@@ -157,7 +162,7 @@ extern int tftp_sockinit(struct sockaddr_in *server, in_addr_t addr);
 extern int tftp_mkreqpacket(uint8_t *buffer, int opcode, const char *path, bool binary);
 extern int tftp_mkackpacket(uint8_t *buffer, uint16_t blockno);
 extern int tftp_mkerrpacket(uint8_t *buffer, uint16_t errorcode, const char *errormsg);
-#if defined(CONFIG_DEBUG) && defined(CONFIG_DEBUG_NET)
+#ifdef CONFIG_DEBUG_NET_WARN
 extern int tftp_parseerrpacket(const uint8_t *packet);
 #endif
 
@@ -165,7 +170,7 @@ extern ssize_t tftp_recvfrom(int sd, void *buf, size_t len, struct sockaddr_in *
 extern ssize_t tftp_sendto(int sd, const void *buf, size_t len, struct sockaddr_in *to);
 
 #ifdef CONFIG_NETUTILS_TFTP_DUMPBUFFERS
-# define tftp_dumpbuffer(msg, buffer, nbytes) nvdbgdumpbuffer(msg, buffer, nbytes)
+# define tftp_dumpbuffer(msg, buffer, nbytes) ninfodumpbuffer(msg, buffer, nbytes)
 #else
 # define tftp_dumpbuffer(msg, buffer, nbytes)
 #endif
