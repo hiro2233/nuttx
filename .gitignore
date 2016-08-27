@@ -1,12 +1,1 @@
-.depend
-Make.dep
-*.o
-*.a
-*.d
-*.i
-*~
-.swp
-.*.swp
-core
-.gdbinit
-cscope.out
+
